@@ -16,6 +16,7 @@ import {
   type TaskWork,
 } from '../../../shared/task-pending.js';
 import type { OnlineTool } from '../../online-agent/executor.js';
+import { toolInput } from '../../online-agent/errors.js';
 import { pageData } from './web-tool.js';
 
 const input = z.strictObject({
@@ -188,7 +189,7 @@ export function dailyAnalysisTool(
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
-      const value = input.parse(args);
+      const value = toolInput(input, args);
       return pageData(
         analysisForAgent(await read(), value.day, link, await readTasks()),
         value.offset,

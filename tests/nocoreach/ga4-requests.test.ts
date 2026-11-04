@@ -1,7 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Ga4Requests } from '../../server/nocoreach/ga4-requests.js';
-import { WebsiteReport } from '../../server/nocoreach/website-report.js';
+import {
+  RETRY_429_MS,
+  WebsiteReport,
+  withGa4RetryDeadline,
+} from '../../server/nocoreach/website-report.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -38,7 +42,7 @@ it('counts reports inside batches, shares property limits across projects and pr
       ['1'],
       '123',
       'batchRunReports',
-      { requests: Array(5).fill({}) },
+      { requests: Array(9).fill({}) },
       async () => {
         seen.push(context.getStore());
         await release.promise;
@@ -131,7 +135,7 @@ it('coalesces whole realtime refreshes even when some parts have already finishe
   expect(f.calls).toHaveLength(14);
 });
 
-it('coalesces concurrent historical reports and never runs more than five core reports at once', async () => {
+it('coalesces concurrent historical reports and runs nine core reports at once, in batches of five and four', async () => {
   vi.useFakeTimers();
   const f = fixture();
   const window = {
@@ -147,7 +151,11 @@ it('coalesces concurrent historical reports and never runs more than five core r
   await vi.runAllTimersAsync();
   await results;
   expect(f.calls).toHaveLength(4);
-  expect(f.reportPeak()).toBe(5);
+  expect(
+    f.calls.map((c) => (c.body.requests as unknown[] | undefined)?.length),
+  ).toEqual([5, 4, 5, 4]);
+  // One fewer than GA4's ten, for what reaches it outside this queue.
+  expect(f.reportPeak()).toBe(9);
 });
 
 it('does not reuse realtime results after the simulated network scope changes', async () => {
@@ -192,4 +200,99 @@ it('coalesces today and row reads independently and reuses their completed cache
   expect(f.calls).toHaveLength(2);
   await read();
   expect(f.calls).toHaveLength(2);
+});
+
+it('asks GA4 again three times after a 429, waiting outside the queue, then fails; other errors fail at once', async () => {
+  vi.useFakeTimers();
+  const warn = vi.fn();
+  const service = new WebsiteReport({ app: { logger: { warn } } } as never);
+  const internals = service as unknown as {
+    token: () => Promise<string>;
+    json: ReturnType<typeof vi.fn>;
+  };
+  internals.token = async () => 'token';
+  const busy = Object.assign(
+    new Error('Exhausted concurrent requests quota.'),
+    {
+      status: 429,
+      code: 'google_api_error',
+    },
+  );
+  const nine = { requests: Array(9).fill({}) };
+  // The batch is refused twice; anything else is answered.
+  let refusals = 2;
+  internals.json = vi.fn(
+    async (_id: string, _url: string, init: { body: string }) => {
+      if (JSON.parse(init.body).requests && refusals-- > 0) throw busy;
+      return { rows: [] };
+    },
+  );
+  const answered = service.post('1', '123', 'batchRunReports', nine);
+  await vi.advanceTimersByTimeAsync(1);
+  // While it waits, its nine slots are free for the property's other reads.
+  expect(await service.post('1', '123', 'runReport', { other: 1 })).toEqual({
+    rows: [],
+  });
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0] - 2);
+  expect(internals.json).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(2);
+  expect(internals.json).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[1]);
+  expect(await answered).toEqual({ rows: [] });
+  expect(internals.json).toHaveBeenCalledTimes(4);
+  expect(warn).toHaveBeenCalledTimes(2);
+  internals.json = vi.fn().mockRejectedValue(busy);
+  const failed = service
+    .post('1', '123', 'runReport', { b: 1 })
+    .catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(
+    RETRY_429_MS.reduce((total, wait) => total + wait, 0),
+  );
+  expect(await failed).toBe(busy);
+  expect(internals.json).toHaveBeenCalledTimes(4);
+  const refused = Object.assign(new Error('Invalid dimension'), {
+    status: 400,
+    code: 'google_api_error',
+  });
+  internals.json = vi.fn().mockRejectedValue(refused);
+  await expect(service.post('1', '123', 'runReport', { c: 1 })).rejects.toBe(
+    refused,
+  );
+  expect(internals.json).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
+});
+
+it("fails at once when the hourly token quota is used up, and stops waiting at a reader's deadline", async () => {
+  vi.useFakeTimers();
+  const service = new WebsiteReport({} as never);
+  const internals = service as unknown as {
+    token: () => Promise<string>;
+    json: ReturnType<typeof vi.fn>;
+  };
+  internals.token = async () => 'token';
+  const tokens = Object.assign(
+    new Error('Exhausted property tokens per project per hour.'),
+    { status: 429, code: 'google_api_error' },
+  );
+  internals.json = vi.fn().mockRejectedValue(tokens);
+  await expect(service.post('1', '123', 'runReport', { a: 1 })).rejects.toBe(
+    tokens,
+  );
+  expect(internals.json).toHaveBeenCalledTimes(1);
+  const busy = Object.assign(
+    new Error('Exhausted concurrent requests quota.'),
+    {
+      status: 429,
+      code: 'google_api_error',
+    },
+  );
+  internals.json = vi.fn().mockRejectedValue(busy);
+  // 15 seconds allow the first wait (10) but not the second (30).
+  const failed = withGa4RetryDeadline(Date.now() + 15000, () =>
+    service.post('1', '123', 'runReport', { b: 1 }),
+  ).catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0]);
+  expect(await failed).toBe(busy);
+  expect(internals.json).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
 });

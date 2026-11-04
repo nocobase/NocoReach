@@ -37,11 +37,13 @@ export class Ga4Requests {
     const laneKey = JSON.stringify([property, realtime]);
     const lane = this.lanes.get(laneKey) ?? {
       active: 0,
-      limit: realtime ? 4 : 5,
+      // GA4 runs ten core requests at once per property. Nine here leave one for the daily sync and the preliminary reads,
+      // which reach GA4 directly; Realtime has its own quota.
+      limit: realtime ? 4 : 9,
       waiting: [],
     };
     this.lanes.set(laneKey, lane);
-    // Batch reports each consume concurrency; keep a full batch within five slots.
+    // Batch reports each consume concurrency; a full batch takes five of the nine slots.
     const weight = Math.max(
       1,
       Math.min(lane.limit, body.requests?.length ?? 1),

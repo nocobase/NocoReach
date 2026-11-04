@@ -178,6 +178,26 @@ test('menu counts: personal waiting tasks and all pending opportunities',async()
  tasks.push({id:7,evidence:{work:work(1,{humanOwnerId:'2',snooze:{until:'2099-01-01T01:00:00Z',day:'2099-01-01',at:'x',by:'2'}})}});
  assert.equal((await s.badges('1',as(2,'member'))).tasks,1);
 });
+test('menu counts: an Agent step that failed or waits to be started again waits for its owner',async()=>{
+ const {StrategyService}=__strategy_service;
+ // The badge reads the raw records the task list reads (nrTaskWork list): latestRun and the reopen marker in evidence.work.
+ const stages=[{key:'build',name:'Edit',kind:'agent'},{key:'review',name:'Review',kind:'review'}],work=(extra={})=>({schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],flow:{stages},stageIndex:0,humanOwnerId:'1',...extra});
+ const reopen=note=>[{at:'a',actor:'1',action:'cancelTask'},{at:'b',actor:'1',action:'unarchiveTask',stageKey:'build',note}];
+ const tasks=[
+  {id:1,evidence:{work:work({latestRun:{id:'r1',status:'failed'}})}},
+  {id:2,evidence:{work:work({latestRun:{id:'r2',status:'failed'},history:reopen('stopped')})}},
+  {id:3,evidence:{work:work({latestRun:{id:'c3',status:'succeeded'},history:reopen('withdrawn')})}},
+  {id:4,evidence:{work:work({latestRun:{id:'r4',status:'running'}})}},
+  {id:5,evidence:{work:work({latestRun:{id:'r5',status:'queued'},history:[...reopen('stopped'),{at:'c',actor:'1',action:'runQueued',runId:'r5'}]})}},
+  {id:6,evidence:{work:work({latestRun:{id:'r6',status:'failed'},cancelledAt:'x'})}},
+  {id:7,evidence:{work:work({latestRun:{id:'r7',status:'failed'},humanOwnerId:'2'})}},
+ ];
+ const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async()=>tasks}:{findOne:async()=>({get:()=>({revision:1,proposals:[]})})}}});
+ s.p.taskExecution={tasks:async()=>tasks};
+ // 1 failed, 2 was stopped and 3 withdrawn by a closing then reopened; 4 and 5 are at work, 6 is closed, 7 is Lin's.
+ assert.equal((await s.badges('1',{auth:{user:{id:1}},state:{nrRole:'member'}})).tasks,3);
+ assert.equal((await s.badges('1',{auth:{user:{id:2}},state:{nrRole:'member'}})).tasks,1);
+});
 test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
  const {number}=__opportunity_board;
  const state={insights:{generatedAt:'2026-10-02',items:[{id:'b',firstSeenAt:'2026-09-28'},{id:'c'}]},insightHistory:[{generatedAt:'2026-09-28',items:[{id:'b'},{id:'a',firstSeenAt:'2026-09-20'}]}]};

@@ -5,7 +5,7 @@ import type { LegacyApp } from './legacy/app.js';
 import type { Connections } from './plugin.js';
 import type { LegacyDatabase, LegacyRecord } from './legacy/database.js';
 import { projectWork, type Artifact } from './execution/model.js';
-import { windows, type EffectResult } from './execution/effect.js';
+import { judge, windows, type EffectResult } from './execution/effect.js';
 import { DEMO_DOCUMENTS, DEMO_PRODUCT, DEMO_STORIES } from './demo-content.js';
 
 export const DEMO_EDITION = 'nocobase-editorial-v1';
@@ -341,16 +341,11 @@ export async function installEditorialDemo(
           const [before, after] = pairs[story.outcome];
           const impressions: [number, number] =
             story.outcome === 'down' ? [4200, 4850] : [3600, 4100];
-          const result: EffectResult = {
+          // Judged as a real result is, so the story's numbers lead to its outcome.
+          const measured: Omit<EffectResult, keyof ReturnType<typeof judge>> = {
             day: 7,
             ...windows(work.observeFrom, 7),
             pages: [DEMO_PRODUCT.origin + story.path],
-            primary: 'clicks',
-            conclusion: story.outcome,
-            change:
-              story.outcome === 'insufficient'
-                ? null
-                : Math.round(((after - before) / before) * 1000) / 1000,
             gsc: {
               clicks: [before, after],
               impressions,
@@ -368,7 +363,13 @@ export async function installEditorialDemo(
               ga4: { baselineDays: 0, afterDays: 0 },
             },
             computedAt: at(4),
+          };
+          const judged = judge(measured);
+          const result: EffectResult = {
+            ...measured,
+            ...judged,
             notes: [
+              ...judged.notes,
               '人工编写的历史观察样例，不是实际发布效果，不据此推断因果。',
             ],
           };

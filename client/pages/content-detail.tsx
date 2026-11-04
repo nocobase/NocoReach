@@ -26,21 +26,22 @@ import {DraftHandOffDialog} from './keyword-hand-off';
 import {HandOffNotice,type HandOffResult} from './strategy/hand-off';
 import {contentPageDraft} from './seo-hand-off';
 import { formatDate } from '#lib/format';
+import { pageKey, type PageIdentity } from '../../shared/page-identity.js';
 // 内容 详情 (SPEC §5): the page's daily views and search clicks with each change's go-live day marked, and the tasks
 // that worked on it with their effect checks.
 export type ContentTask={id:number;title:string;status:string;evidence?:{no?:number;work?:Work}};
 type PageView={connected:boolean;window?:{start:string;end:string;days:number}|null;gscCutoff?:string|null;ga4Cutoff?:string|null;daily?:{date:string;views?:number;clicks?:number;impressions?:number}[]};
-const pageKey=(u?:string)=>{try{const x=new URL(String(u));return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
 const getStateNames = () => ({todo:$t('contentDetail.notStarted'),doing:$t('common.inProgress'),review:$t('common.needsAction'),done:$t('common.completed')} as const);
-// Tasks that changed or are changing this page: its released pages, the published page or the linked page.
-export function tasksForPage(tasks:ContentTask[],url:string){const key=pageKey(url);return tasks.filter(t=>{const w=t.evidence?.work;return w&&!w.archivedAt&&[...effectPages(w),w.page?.url].some(u=>pageKey(u)===key);});}
+// Tasks that changed or are changing this page: its released pages, the published page or the linked page, at any
+// address the project's page identity gives the page (shared/page-identity.ts).
+export function tasksForPage(tasks:ContentTask[],url:string,identity?:PageIdentity|null){const key=pageKey(url,identity);return tasks.filter(t=>{const w=t.evidence?.work;return w&&!w.archivedAt&&[...effectPages(w),w.page?.url].some(u=>pageKey(u,identity)===key);});}
 export const activeTasks=(list:ContentTask[])=>list.filter(t=>{const w=t.evidence?.work;return w&&!w.cancelledAt&&workState(w,t.status)!=='done';});
-export function ContentDetail({projectId,googleScope,page,tasks,range,from,to,rangeLabel=$t('common.selectedPeriod'),onClose}:{projectId:number;googleScope?:string;page:{url:string;title?:string;type:string;lastmod?:string|null;views?:number|null;clicks?:number|null;impressions?:number|null;position?:number|null;words?:number|null};tasks:ContentTask[];range:string;from?:string;to?:string;rangeLabel?:string;onClose:()=>void}){
+export function ContentDetail({projectId,googleScope,page,tasks,identity,range,from,to,rangeLabel=$t('common.selectedPeriod'),onClose}:{projectId:number;googleScope?:string;page:{url:string;title?:string;type:string;lastmod?:string|null;views?:number|null;clicks?:number|null;impressions?:number|null;position?:number|null;words?:number|null};tasks:ContentTask[];identity?:PageIdentity;range:string;from?:string;to?:string;rangeLabel?:string;onClose:()=>void}){
  const [handing,setHanding]=useState(false),[handed,setHanded]=useState<HandOffResult>(),navigate=useNavigate();
  // At least 90 days, so a change and the weeks after it fit on one chart.
  const span=['7','28'].includes(range)?'90':range;
  const {data,error}=useFreshData<PageView>(`data-view:content-page:${projectId}:${googleScope||''}:${page.url}:${span}:${from||''}:${to||''}`,()=>api.action<PageView>('nrDataViews','page',{method:'POST',body:{projectId:String(projectId),url:page.url,range:span,from,to},unwrap:'data'}),googleLocalFreshness);
- const linked=useMemo(()=>tasksForPage(tasks,page.url).sort((a,b)=>String(b.evidence?.work?.observeFrom||'9').localeCompare(String(a.evidence?.work?.observeFrom||'9'))),[tasks,page.url]);
+ const linked=useMemo(()=>tasksForPage(tasks,page.url,identity).sort((a,b)=>String(b.evidence?.work?.observeFrom||'9').localeCompare(String(a.evidence?.work?.observeFrom||'9'))),[tasks,page.url,identity]);
  const releases=linked.filter(t=>t.evidence?.work?.observeFrom).map(t=>({id:t.id,no:t.evidence?.no,date:new Date(t.evidence!.work!.observeFrom!).toISOString().slice(0,10)}));
  const hasData=Boolean(data?.daily?.some(d=>d.views!==undefined||d.clicks!==undefined));
  return <DetailDrawer open onClose={onClose} title={page.title||page.url} description={`${getTypeLabels()[page.type]||page.type}${page.lastmod?$t('contentDetail.updated',{0:formatDate(page.lastmod)}):''}`} actions={<Button size="sm" onClick={()=>setHanding(true)}><Bot data-icon="inline-start"/>{$t('common.handOffAgent')}</Button>}>

@@ -94,21 +94,26 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
       ? [
           'build 成功必须返回 pr：{url,number,branch,headSha,files:[{path,additions,deletions}],checks:{ok,summary},release,verifyText,pages:[string],changes:[{path,before,after,truncated?:boolean}],visibleChanges:[{page,label,before,after}]}。',
           'visibleChanges 给不看代码的负责人审核：用读者的话列出访客或搜索结果能看到的变化。page 是页面路径或 URL；label 说明是哪一处，如“搜索标题”“搜索描述”“页面开头”“新增链接”；before/after 是改动前后读者看到的文字，原来没有就写空字符串。最多 20 项，每段不超过 1000 字符；不写代码、标签或文件路径。读者看不到变化时返回空数组。',
-          'release 是给负责人看的发布说明，最多三行，用读者能懂的话说改了什么，不写时间戳和规则名；verifyText 是改动后可在公开页面找到的独特短句（最多 200 字符）；pages 是待验证的页面 URL。无法通过页面文字验证时，verifyText 返回空字符串、pages 返回空数组，并在 release 说明原因，不得编造。',
+          // The release note is the publish record Results shows as What was done (2026-11-04, T-33): what changed on
+          // the page, never where the review stands.
+          'release 是发布记录里的说明，负责人在任务页和成果页都会看到：最多三行，用读者能懂的话说页面上改了什么，不写时间戳和规则名，也不写审核和流程（如“等待人工审核”“已提交审核”“按你的意见”）；verifyText 是改动后可在公开页面找到的独特短句（最多 200 字符）；pages 是待验证的页面 URL。无法通过页面文字验证时，verifyText 返回空字符串、pages 返回空数组，并在 release 说明原因，不得编造。',
           'changes 提供实际修改文本的前后对比，最多 10 个文件，正文合计不超过 40000 字符，截断时标记 truncated=true；二进制文件只列在 files。完整 JSON 不超过 90000 字符。',
+          '文字要求放进页面的图片：从 images.json 解码出原图，放到仓库里网站存放图片的位置，按仓库现有的写法在页面里引用，随 PR 一起提交；visibleChanges 里写明新增或替换了哪张图片。只用来指出问题的截图不要提交。',
         ]
       : []),
     ...(mode === 'article'
       ? [
           'article 是文章写作：不需要仓库，不提交、不推送、不开 PR，也不要调用任何 CMS、网站或发布接口；审核通过后由 NocoReach 发布。',
           'data.article.source 是当前源稿文件（JSON：id、slug、status 和 locales 下各语言的 title、description、body，body 为 Markdown），先完整读取，改写时在源稿基础上修改。data.article.action 为 create 时 source 为 null，是新文章。',
-          'article 成功必须返回 article:{slug?,status?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}；verifyText 和 summary 都放在 article 里面。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
+          'article 成功必须返回 article:{slug?,status?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?,release?}；verifyText、summary 和 release 都放在 article 里面。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
           'status 只能是 draft 或 published，仅在 data.article.target.status 为 true 时有效：新文章默认 draft，任务明确要求直接公开时才写 published；改写已有文章时不要改变状态，除非任务明确要求。提交前先用 JSON 解析器检查结果是合法 JSON。',
           '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及主语言 data.article.languages.primary 的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
           'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。',
+          // An image placed in the article stays a task image until publishing uploads it (2026-11-03).
+          '文字要求放进文章的图片：在正文对应位置写 Markdown 图片 ![简短说明](ref)，ref 原样使用这张图片在 notes 或 feedback 里的 ref（以 /uploads/task-media/ 开头），说明用文章的语言写；不要改写地址、不要写成 base64、不要自己上传。审核通过后由 NocoReach 把文章用到的图片上传到发布目标，再换成正式地址。源稿和上一版正文里已有的 /uploads/task-media/ 图片保持原样。',
           // The article's language is never the project's (2026-10-27, T-47: with the project, the brief and the
           // outline in Chinese, the Agent wrote a Chinese-only article for a target whose first language is English).
-          '文章用哪种语言写只看 data.article.languages，和 data.language 无关。data.language 是项目语言，只用于 content、summary 这些给审核人看的说明；任务标题和说明、大纲、上一步的成果、留言和资料用什么语言，都不改变文章的语言，需要时先理解其中的意思，再用文章的语言来写。locales 的键是语言代码，每种语言的 title、description、body 都要真的用这种语言写，例如 en 用英语、zh 用中文、ja 用日语。',
+          '文章用哪种语言写只看 data.article.languages，和 data.language 无关。data.language 是项目语言，只用于 content、summary、release 这些说明；任务标题和说明、大纲、上一步的成果、留言和资料用什么语言，都不改变文章的语言，需要时先理解其中的意思，再用文章的语言来写。locales 的键是语言代码，每种语言的 title、description、body 都要真的用这种语言写，例如 en 用英语、zh 用中文、ja 用日语。',
           'phase 为 primary 时只写主语言 languages.primary，其他语言（languages.others）在审核通过后再翻译，这次不要写、不要返回；按审核意见修改时也只改主语言。phase 为 all 时一次写 languages.write 里需要的语言，新文章至少要有主语言。',
           // 2026-10-30 (T-58): asked for another primary language, the Agent told the person to change it in an article
           // setting that does not exist. The primary is changed on the review card, which reruns the step in it.
@@ -120,6 +125,10 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           'phase 为 update 时，这是一篇已有文章：主语言已经改好并审核通过，languages.update 里的语言文章原来就有，要把主语言的改动同样做到这些语言上，不是重新翻译。每种语言以 data.article.source 里它现在的文字为底稿。languages.changes 是主语言改了的字段：title、description 给出改前 before 和改后 after；body 的 edits 逐处列出改前 before 和改后 after（before 为空是新增，after 为空是删除），near 是这处改动前面没有变的一段主语言原文，用来在底稿里找到对应的位置；truncated 为 true 时没有逐处列出，请自己对比 source 里主语言的正文和 languages.approved.body。在每种语言里做对应的修改：只改 changes 里的字段，正文只增加、删除或改写对应的段落，新写的内容按上面的翻译要求译成这种语言；其余段落和原来的译法保持原样，不要润色或重新翻译没有改动的部分。主语言只改了标题或摘要时，只改这些字段，不要返回正文。每种语言只返回改过的字段，值是改后的完整内容（body 是完整正文，不是片段）。languages.translate 里的语言文章还没有，把 languages.approved 整篇翻译成这些语言。只返回 languages.write 里的语言，不要改主语言。summary 按语言写改了哪些地方，以及需要人留意的地方。',
           '提交前确认 article.locales 里是这一步要写的语言（languages.write）。task result 提示没有要写的语言时，说明交的不是这次写的结果（例如之前留下的文件）：用这次写好的内容重新提交。',
           'summary 必填，是审核人最先看到的说明：纯文本，最多三行，用读者能懂的话说这次改了什么；按审核意见修改时先说按意见做了什么，例如“按你的意见换了 5 张截图（NocoBase、Teable）；标题和摘要沿用上一版”。不要写时间戳、规则名、证据细节，也不要重复改前改后的标题和摘要，审核页会显示文章预览和逐项对比。',
+          // The summary answers the reviewer; the release is the publish record Results shows as What was done
+          // (2026-11-04, T-33: the record copied a summary ending "awaiting human review"). The system adds the
+          // languages translated or updated afterwards, so those steps write none.
+          'release 必填，是发布记录里“做了什么”的一两句话，审核通过后负责人在成果页会看到：纯文本，用 data.language 写，只说这一版让读者在页面上看到的文章改了什么，例如“重写了英文标题和摘要，正文新增选型对比表和 4 个常见问题”。不写审核和流程（如“等待人工审核”“已提交审核”“按你的意见”“审核通过后再同步”），不写给审核人的提醒、建议和时间戳，也不写没有改的部分。phase 为 translate 或 update 时不用写 release，系统会记下翻译或同步了哪些语言。',
           'content 是完整的修改说明（Markdown），审核人需要时才展开：列出改动的语言、字段、理由和依据。',
         ]
       : []),

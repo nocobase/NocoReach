@@ -84,6 +84,7 @@ export function TargetRows({ data, r }: { data: TaskData; r?: Release }) {
 
 const STEP_KEY: Record<NonNullable<ReleaseArticle['errorStep']>, string> = {
   read: 'articleTask.failedStepRead',
+  images: 'articleTask.failedStepImages',
   downstream: 'articleTask.failedStepDownstream',
   write: 'articleTask.failedStepWrite',
   verify: 'articleTask.failedStepVerify',

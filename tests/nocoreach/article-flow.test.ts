@@ -28,7 +28,11 @@ const article = () => ({
 });
 
 // The task-flow.test.ts fixture, with a CMS publishing target (and optionally its Git export) attached.
-async function fixture({ downstream = false, news = null } = {}) {
+async function fixture({
+  downstream = false,
+  news = null,
+  language = '',
+} = {}) {
   const state = {
     nrTasks: [
       {
@@ -163,7 +167,11 @@ async function fixture({ downstream = false, news = null } = {}) {
     articles: new ArticleDelivery(articleTargets),
     project: async (id) => {
       if (id !== '1') throw Object.assign(Error('project'), { status: 404 });
-      return { name: 'Synthetic', writingStyle: 'Plain' };
+      return {
+        name: 'Synthetic',
+        writingStyle: 'Plain',
+        ...(language ? { language } : {}),
+      };
     },
     db: {
       getRepository: repo,
@@ -1894,6 +1902,23 @@ test('task pages: each page is read as an article or a page of the site, with it
   expect(run.input.pagesToChange).toEqual([pricing, missing]);
 });
 
+test('task pages: the titles alone are read without asking the publishing targets, for a started task', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [pricing, hello] };
+  f.state.nrSnapshots.push({
+    id: 902,
+    key: 'site-content:1',
+    payload: { pages: [{ url: pricing, title: 'Pricing' }] },
+  });
+  const match = vi.spyOn(f.s.p.articleTargets, 'match');
+  expect(await f.s.pagePlaces('1', '1', false)).toEqual({
+    article: null,
+    unchecked: false,
+    pages: [{ url: pricing, title: 'Pricing' }, { url: hello }],
+  });
+  expect(match).not.toHaveBeenCalled();
+});
+
 test('task pages: the tasks split off a task are listed as its siblings, with their pages', async () => {
   const f = await fixture();
   f.state.nrTasks[0].evidence = { proposalId: 'p1', pages: [pricing, hello] };
@@ -1925,4 +1950,385 @@ test('task pages: the tasks split off a task are listed as its siblings, with th
       pages: [pricing, hello],
     }),
   ]);
+});
+
+// 2026-11-04 (T-33): the record of a published article (Results › What was done) copied the Agent's summary for the
+// reviewer, "awaiting human review" included.
+test('release note: the record says what the approved version changed, not where the review stood; a note the owner writes wins', async () => {
+  const draft = {
+    locales: { zh: { body: '# 你好\n\n改写后的中文正文，包含新的内链。' } },
+    verifyText: '改写后的中文正文',
+    summary: '按你的意见改写了中文正文。保留其他语言，等待人工审核。',
+  };
+  let f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  let { d } = await draftAndApprove(f, {
+    ...draft,
+    release: '改写了中文正文，新增一处内链。',
+  });
+  expect(d.work.release.note).toBe('改写了中文正文，新增一处内链。');
+  // The summary stays the reviewer's.
+  expect(
+    d.work.results.find((x) => x?.id === d.work.release.article.artifactId)
+      .article.draft.summary,
+  ).toBe(draft.summary);
+  // Without a release sentence (a Runner from before), the summary without the review.
+  f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  ({ d } = await draftAndApprove(f, draft));
+  expect(d.work.release.note).toBe('改写了中文正文。');
+  // The owner's own note is kept as written.
+  f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: draft,
+  });
+  d = await f.view();
+  d = await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+    release: { note: '负责人写的发布说明' },
+  });
+  expect(d.work.release.note).toBe('负责人写的发布说明');
+});
+
+// 2026-11-04 (T-52): with several languages the record held the last step's summary, about translating, and nothing of
+// what the approved primary version changed.
+async function updateInLanguages(f, primary, others) {
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', {
+    playbookId: 'optimize-page',
+    delivery: { locales: ['en', 'zh', 'ja'] },
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Changed the English title.',
+    article: { locales: { en: { title: 'Hello, world' } }, ...primary },
+  });
+  await approveCurrent(f);
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    phase: 'update',
+    update: ['zh'],
+    translate: ['ja'],
+  });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Updated Chinese and translated Japanese.',
+    article: {
+      locales: {
+        zh: { title: '你好，世界' },
+        ja: { title: 'こんにちは、世界', body: '# こんにちは\n\n本文' },
+      },
+      ...others,
+    },
+  });
+  return approveCurrent(f);
+}
+test('release note: with several languages, the primary version approved and a line for the languages updated or translated, in the project language', async () => {
+  const f = await fixture({ language: 'en-US' });
+  const d = await updateInLanguages(
+    f,
+    {
+      summary:
+        'Per your feedback, a shorter English title. Chinese and Japanese follow once it is approved.',
+      release: 'Shortened the English title.',
+    },
+    {
+      summary: 'Updated the Chinese title and translated Japanese.',
+      release: 'Translated the title.',
+    },
+  );
+  expect(d.work.release.note).toBe(
+    'Shortened the English title.\nMade the same changes in Chinese. Translated into Japanese.',
+  );
+});
+
+test('release note: notes copied from a summary before are written again once by the same rule; a note the owner wrote stays', async () => {
+  const f = await fixture();
+  const primary = '按你的意见改写了英文标题。中文、日文在审核通过后再同步。';
+  let d = await updateInLanguages(
+    f,
+    { summary: primary },
+    { summary: '把英文标题的改动同步到了中文，并翻译成日语。' },
+  );
+  const shipped = d.work.results.find(
+    (x) => x?.id === d.work.release.article.artifactId,
+  );
+  const expected =
+    '改写了英文标题。\n已在中文版本中做了相同修改。已翻译成日语。';
+  expect(d.work.release.note).toBe(expected);
+  // As recorded before: the translation step's summary, in the release and the receipt.
+  const work = () => f.state.nrTasks[0].evidence.work;
+  const old = shipped.article.draft.summary;
+  work().release.note = old;
+  work().receipt = {
+    note: old,
+    url: '',
+    recordedAt: '2026-11-01T00:00:00.000Z',
+    recordedBy: 'system',
+  };
+  const history = work().history.length;
+  expect(await f.s.articleFlow.repairNotes()).toBe(1);
+  d = await f.view();
+  expect(d.work.release.note).toBe(expected);
+  expect(d.work.receipt.note).toBe(expected);
+  expect(d.work.history).toHaveLength(history);
+  // Once only.
+  work().release.note = old;
+  expect(await f.s.articleFlow.repairNotes()).toBe(0);
+  expect((await f.view()).work.release.note).toBe(old);
+  // A note the owner wrote is never rewritten, nor a receipt that is not a copy of the note.
+  f.state.nrSnapshots = f.state.nrSnapshots.filter(
+    (r) => r.key !== 'nr-migrations:release-notes-1',
+  );
+  work().release.note = 'Typed by the owner';
+  work().receipt.note = old;
+  expect(await f.s.articleFlow.repairNotes()).toBe(0);
+  d = await f.view();
+  expect(d.work.release.note).toBe('Typed by the owner');
+  expect(d.work.receipt.note).toBe(old);
+});
+
+// Images on a started task (2026-11-03): a stand-in for the task media store (manual-tasks.ts), with the person's
+// uploads linked to a task when a message or an edit uses them.
+function fakeTaskImages() {
+  const files = new Map<
+    string,
+    { name: string; bytes: Buffer; taskId: string | null }
+  >();
+  return {
+    files,
+    add(name: string) {
+      const id = randomUUID();
+      files.set(id, {
+        name,
+        bytes: Buffer.from(`bytes of ${name}`),
+        taskId: null,
+      });
+      return id;
+    },
+    linkImages: async (
+      _conn,
+      _actor,
+      _project,
+      taskId: string,
+      ids: string[],
+    ) =>
+      ids.map((id) => {
+        const file = files.get(id);
+        if (!file || (file.taskId && file.taskId !== taskId))
+          throw Object.assign(new Error('unavailable'), {
+            reason: 'TASK_IMAGE_UNAVAILABLE',
+          });
+        file.taskId = taskId;
+        return { id, name: file.name, ref: `/uploads/task-media/${id}.png` };
+      }),
+    forAgent: async (_conn, _project, taskId: string, ids: string[]) =>
+      ids.flatMap((id) => {
+        const file = files.get(id);
+        return file?.taskId === taskId
+          ? [
+              {
+                id,
+                name: file.name,
+                type: 'image/png',
+                size: file.bytes.length,
+                ext: 'png',
+                read: async () => file.bytes,
+              },
+            ]
+          : [];
+      }),
+  };
+}
+
+test('message images reach the run numbered; publishing uploads only the images the article shows, at their CMS address', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  const circled = images.add('circled.png'),
+    workspace = images.add('nocobase-3-workspace.png');
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  const text =
+    'Image 1 circles a line to delete. Put Image 2 in the NocoBase 3 section.';
+  let d = await f.command('comment', {
+    comment: text,
+    imageIds: [circled, workspace],
+  });
+  const ref = (id: string) => `/uploads/task-media/${id}.png`;
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'comment',
+    comment: text,
+    images: [
+      { id: circled, name: 'circled.png', ref: ref(circled) },
+      { id: workspace, name: 'nocobase-3-workspace.png', ref: ref(workspace) },
+    ],
+  });
+  expect(d.work.images).toEqual([circled, workspace]);
+  // At most ten images a message, each once, and only the person's own uploads that are still there.
+  for (const [imageIds, status] of [
+    [Array.from({ length: 11 }, () => randomUUID()), 400],
+    [[circled, circled], 400],
+    [['not-an-id'], 400],
+    [[randomUUID()], 409],
+  ] as const)
+    await expect(
+      f.command('comment', { comment: 'x', imageIds }),
+    ).rejects.toMatchObject({ status });
+
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  // The run reads the message with its images numbered as the text calls them.
+  expect(run.input.notes).toEqual([
+    {
+      text,
+      images: [
+        { number: 1, name: 'circled.png', ref: ref(circled) },
+        { number: 2, name: 'nocobase-3-workspace.png', ref: ref(workspace) },
+      ],
+    },
+  ]);
+  const body = `# 你好\n\nNocoBase 3 的工作台如下图所示。\n\n![NocoBase 3 工作台](${ref(workspace)})`;
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '放了图 2。',
+    article: {
+      locales: { zh: { body } },
+      verifyText: 'NocoBase 3 的工作台如下图所示',
+    },
+  });
+  d = await f.view();
+  await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  // Only the image the article shows is uploaded, into the body field's storage; the screenshot pointing at a problem is not.
+  expect(
+    f.cms.state.uploads.map((u) => [
+      u.name,
+      u.type,
+      u.bytes.toString(),
+      u.params.get('attachmentField'),
+    ]),
+  ).toEqual([
+    [
+      'nocobase-3-workspace.png',
+      'image/png',
+      'bytes of nocobase-3-workspace.png',
+      'articles.content',
+    ],
+  ]);
+  const address =
+    'https://cms.example.com/storage/uploads/1-nocobase-3-workspace.png';
+  const write = f.cms.state.requests.filter((r) => r.action === 'update');
+  expect(write).toHaveLength(1);
+  expect(write[0].body).toEqual({
+    content_cn: `# 你好\n\nNocoBase 3 的工作台如下图所示。\n\n![NocoBase 3 工作台](${address})`,
+  });
+  expect(d.work.imageUrls).toEqual({ cms: { [workspace]: address } });
+});
+
+test('an image the CMS key may not upload stops publishing before the article; a retry uploads it once', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  const shot = images.add('shot.png');
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('comment', { comment: 'Use Image 1.', imageIds: [shot] });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  f.cms.state.uploadDenied = true;
+  await draftAndApprove(f, {
+    locales: {
+      zh: {
+        body: `# 你好\n\n新的截图放在这一段的下面。\n\n![截图](/uploads/task-media/${shot}.png)`,
+      },
+    },
+    verifyText: '新的截图放在这一段的下面',
+    summary: 'Added the screenshot',
+  });
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'publish_failed',
+    article: { error: 'image_upload_denied', errorStep: 'images' },
+  });
+  expect(f.cms.state.requests.some((r) => r.action === 'update')).toBe(false);
+  f.cms.state.uploadDenied = false;
+  await f.command('retryPublish', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  expect(f.cms.state.uploads).toHaveLength(1);
+  // A retry after the upload reuses the address kept on the task.
+  expect(Object.values(d.work.imageUrls.cms)).toEqual([
+    'https://cms.example.com/storage/uploads/1-shot.png',
+  ]);
+});
+
+test('Edit directly: an image pasted into the body is linked when the edit is saved; one of another task is refused', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: { locales: { zh: { body: '# 你好\n\n第一版' } } },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  const pasted = images.add('pasted.png'),
+    elsewhere = images.add('elsewhere.png');
+  images.files.get(elsewhere)!.taskId = '2';
+  const edit = (id: string) =>
+    f.command('editArticleDraft', {
+      stageKey,
+      artifactId: review(d).id,
+      article: {
+        locales: {
+          zh: {
+            body: `# 你好\n\n第二版正文由人工直接修改。\n\n![pasted](/uploads/task-media/${id}.png)`,
+          },
+        },
+        verifyText: '第二版正文由人工直接修改',
+      },
+    });
+  await expect(edit(elsewhere)).rejects.toMatchObject({ status: 409 });
+  d = await edit(pasted);
+  expect(images.files.get(pasted)!.taskId).toBe('1');
+  expect(d.work.images).toEqual([pasted]);
+  await f.command('approveStage', {
+    stageKey,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  expect((await f.view()).work.release.state).toBe('verifying');
+  expect(f.cms.state.uploads.map((u) => u.name)).toEqual(['pasted.png']);
 });

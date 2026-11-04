@@ -13,6 +13,7 @@ import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { createNocoReachOnlineHost } from '../../server/nocoreach/online-agent/host.js';
 import type { OnlineRun } from '../../shared/online-agent.js';
+import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog.js';
 import { discoverAgents } from './runner-fixture.js';
 
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
@@ -130,6 +131,10 @@ test('online tools isolate users/projects, paginate, link tasks and recheck revo
   expect((await call('task_list', { scope: 'accessible' })).items).toHaveLength(
     3,
   );
+  // More than a page holds reads a full page instead of failing.
+  expect(
+    (await call('task_list', { scope: 'accessible', limit: 500 })).items,
+  ).toHaveLength(3);
   await expect(
     call('task_execute', {
       projectId: String(projects[0].id),
@@ -143,6 +148,400 @@ test('online tools isolate users/projects, paginate, link tasks and recheck revo
   expect(
     await connection.repository('nrTasks').findOne({ filter: { id: ids[2] } }),
   ).toBeTruthy();
+});
+
+test("task_list reads a project conversation's tasks in one call, with their pages and opportunity, and says which input to fix", async ({
+  testApp,
+}) => {
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const container = testApp.application.container;
+  const host = container.resolve(nocoReachToken);
+  await host.ready;
+  const user = await container.resolve(userAdministrationServiceToken).create({
+    email: 'online-duplicates@example.test',
+    password: 'test-password-123',
+    name: 'Duplicate finder',
+  });
+  await container.resolve(authorizationToken).permissionSets.assign({
+    permissionSet: 'nr.member',
+    subject: { type: 'user', id: user.id },
+  });
+  const [project, other] = [
+    await host.plugin.projects.create({
+      name: 'NocoBase',
+      domain: 'duplicates.example.test',
+    }),
+    await host.plugin.projects.create({
+      name: 'Other',
+      domain: 'other-duplicates.example.test',
+    }),
+  ];
+  const projectId = String(project.id);
+  for (const id of [projectId, String(other.id)])
+    await host.legacy.db.access!.joinCreatedProject(user.id, id);
+  const work = (extra: Record<string, unknown> = {}) => ({
+    schemaVersion: 2,
+    revision: 0,
+    stage: 'plan',
+    plan: null,
+    planVersion: 0,
+    step: 0,
+    results: [],
+    history: [],
+    operations: [],
+    receipt: null,
+    verification: null,
+    playbookId: 'optimize-page',
+    humanOwnerId: user.id,
+    humanOwnerName: 'Duplicate finder',
+    ...extra,
+  });
+  const create = (values: Record<string, unknown>, into = projectId) =>
+    host.plugin.db.getRepository('nrTasks').create({
+      values: {
+        projectId: into,
+        taskKey: randomUUID(),
+        status: '待处理',
+        ...values,
+      },
+    });
+  // Enough long tasks that a full page would pass the executor's tool output limit.
+  for (let index = 0; index < 60; index++)
+    await create({
+      title: `Long ${index} ${'x'.repeat(190)}`,
+      evidence: {
+        createdBy: { id: user.id },
+        no: 10 + index,
+        pages: Array.from(
+          { length: 8 },
+          (_, n) =>
+            `https://duplicates.example.test/${index}/${n}/${'p'.repeat(120)}`,
+        ),
+        work: work(),
+      },
+    });
+  const page = 'https://duplicates.example.test/docs/install';
+  // Two open tasks change the same page from the same opportunity and place; a third one is closed. Tasks list newest
+  // first.
+  const first = await create({
+    title: 'Optimize page: install guide',
+    evidence: {
+      createdBy: { id: user.id },
+      no: 1,
+      pages: [page],
+      insight: { id: randomUUID(), no: 12, title: 'Install guide' },
+      part: { key: 'page:x', kind: 'page', label: 'Install guide' },
+      work: work(),
+    },
+  });
+  await create({
+    title: 'Optimize page: install guide again',
+    evidence: {
+      createdBy: { id: user.id },
+      no: 2,
+      page,
+      insight: { id: randomUUID(), no: 12, title: 'Install guide' },
+      part: { key: 'page:x', kind: 'page', label: 'Install guide' },
+      work: work({ startedPages: [page, `${page}/linux`] }),
+    },
+  });
+  await create({
+    title: 'Closed before it started',
+    evidence: {
+      createdBy: { id: user.id },
+      no: 3,
+      page,
+      work: work({ cancelledAt: new Date().toISOString() }),
+    },
+  });
+  await create(
+    {
+      title: 'In another project',
+      evidence: { createdBy: { id: user.id }, work: work() },
+    },
+    String(other.id),
+  );
+  const signal = new AbortController().signal;
+  const context = await createNocoReachOnlineHost(() => host, '')(
+    {
+      id: randomUUID(),
+      ownerId: user.id,
+      projectId,
+      instructions: '',
+      locale: 'zh-CN',
+    } as OnlineRun,
+    signal,
+  );
+  const tool = (name: string) =>
+    context.tools.find((candidate) => candidate.name === name)!;
+  const call = async (name: string, input: unknown): Promise<any> =>
+    tool(name).execute(input, signal);
+  const status = vi.spyOn(host.plugin.taskExecution.agents, 'status');
+  expect((await call('project_data', { section: 'project' })).text).toContain(
+    `"projectId":"${projectId}"`,
+  );
+
+  // The model asked for 500: it reads the largest page, of the conversation's project only, without Runner lookups.
+  const open = await call('task_list', {
+    scope: 'accessible',
+    status: 'open',
+    limit: 500,
+  });
+  expect(open.projects).toEqual([{ projectId, name: 'NocoBase' }]);
+  const byNo = (no: string) =>
+    open.items.find((item: { no: string }) => item.no === no);
+  expect(open.items.slice(0, 2).map((item: { no: string }) => item.no)).toEqual(
+    ['T-2', 'T-1'],
+  );
+  expect(byNo('T-1')).toEqual({
+    taskId: String(first.id),
+    projectId,
+    no: 'T-1',
+    title: 'Optimize page: install guide',
+    url: `/actions/${first.id}?projectId=${projectId}`,
+    state: 'todo',
+    stateName: '待处理',
+    playbookId: 'optimize-page',
+    playbook: '优化现有页面',
+    ownerName: 'Duplicate finder',
+    pages: [page],
+    opportunity: 'O-12',
+    place: 'Install guide',
+  });
+  expect(byNo('T-2')).toMatchObject({
+    pages: [page, `${page}/linux`],
+    opportunity: 'O-12',
+  });
+  expect(open.items.map((item: { no: string }) => item.no)).not.toContain(
+    'T-3',
+  );
+  expect(open.items[2]).toMatchObject({ morePages: 3 });
+  expect(open.items[2].pages).toHaveLength(5);
+  // A page that would pass the output limit ends early and says where to go on.
+  expect(open.items.length).toBeLessThan(50);
+  expect(JSON.stringify(open).length).toBeLessThan(24000);
+  expect(open.nextOffset).toBe(open.items.length);
+  const listed = [...open.items];
+  for (let offset = open.nextOffset; offset !== null;) {
+    const page = await call('task_list', {
+      scope: 'accessible',
+      status: 'open',
+      offset,
+    });
+    expect(JSON.stringify(page).length).toBeLessThan(24000);
+    listed.push(...page.items);
+    offset = page.nextOffset;
+  }
+  expect(new Set(listed.map((item) => item.taskId)).size).toBe(62);
+  expect(status).not.toHaveBeenCalled();
+
+  const closed = await call('task_list', { status: 'closed' });
+  expect(closed.items.map((item: { no: string }) => item.no)).toEqual(['T-3']);
+  expect(closed.items[0]).toMatchObject({
+    state: 'closed',
+    stateName: '已关闭',
+  });
+  const everywhere: { title: string }[] = [];
+  let read: { projectId: string }[] = [];
+  for (let offset: number | null = 0; offset !== null;) {
+    const page = await call('task_list', {
+      allProjects: true,
+      status: 'open',
+      offset,
+    });
+    everywhere.push(...page.items);
+    read = page.projects;
+    offset = page.nextOffset;
+  }
+  expect(everywhere).toHaveLength(63);
+  expect(everywhere.map((item) => item.title)).toContain('In another project');
+  expect(read.map((item) => item.projectId).sort()).toEqual(
+    [projectId, String(other.id)].sort(),
+  );
+  expect(
+    (await call('task_list', { projectId: Number(other.id) })).items,
+  ).toHaveLength(1);
+  await call('task_list', { scope: 'executable', limit: 1 });
+  expect(status).toHaveBeenCalled();
+
+  // Input the schema refuses comes back as a ToolInputError naming the field and the rule.
+  await expect(
+    call('task_list', { projectId: 'nocobase', limit: 20 }),
+  ).rejects.toMatchObject({
+    message: expect.stringContaining(
+      'projectId: must be the numeric project id, such as "1"',
+    ),
+  });
+  await expect(
+    call('task_list', { projectId, allProjects: true }),
+  ).rejects.toThrow('allProjects: give projectId or allProjects, not both');
+  await expect(call('task_list', { status: 'done' })).rejects.toThrow(
+    'status: Invalid option: expected one of "open"|"closed"',
+  );
+  await expect(call('task_get', { projectId, taskId: 'T-1' })).rejects.toThrow(
+    'taskId: must be the numeric task id',
+  );
+  for (const [name, input, field] of [
+    ['project_data', { section: 'everything' }, 'section'],
+    ['daily_analysis', { day: 'yesterday' }, 'day'],
+    ['query_data', { source: 'nowhere' }, 'source'],
+    ['read_page', { url: 'http://duplicates.example.test/' }, 'url'],
+    ['analysis_rules', { offset: -1 }, 'offset'],
+    ['propose_keyword_run', { mode: 'all' }, 'mode'],
+  ] as const)
+    await expect(call(name, input)).rejects.toThrow(
+      new RegExp(`^Invalid input: ${field}: `),
+    );
+  expect(await call('propose_rule_changes', { changes: [] })).toMatchObject({
+    rejected: true,
+    reason: expect.stringMatching(/^changes: /),
+  });
+});
+
+test("task tools name playbooks, steps and states as the task page does, in the turn's language", async ({
+  testApp,
+}) => {
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const container = testApp.application.container;
+  const host = container.resolve(nocoReachToken);
+  await host.ready;
+  const user = await container.resolve(userAdministrationServiceToken).create({
+    email: 'online-names@example.test',
+    password: 'test-password-123',
+    name: 'Name reader',
+  });
+  await container.resolve(authorizationToken).permissionSets.assign({
+    permissionSet: 'nr.member',
+    subject: { type: 'user', id: user.id },
+  });
+  const project = await host.plugin.projects.create({
+    name: 'Names',
+    domain: 'names.example.test',
+  });
+  const projectId = String(project.id);
+  await host.legacy.db.access!.joinCreatedProject(user.id, projectId);
+  const builtIn = SYSTEM_PLAYBOOKS.find((p) => p.id === 'optimize-page')!;
+  // A started task keeps the playbook it started with: the built-in as it was, or a copy someone edited.
+  const started = (edited: boolean) => {
+    const stages = stagesFor(builtIn).map((stage) =>
+      edited ? { ...stage, name: `${stage.name} (ours)` } : stage,
+    );
+    const name = edited ? 'Our page rewrite' : builtIn.name;
+    return {
+      stage: 'flow',
+      stageIndex: 1,
+      flow: { id: builtIn.id, name, version: 3, system: true, edited, stages },
+      playbook: {
+        id: builtIn.id,
+        name,
+        kind: builtIn.kind,
+        version: 3,
+        next: [],
+        system: true,
+        edited,
+      },
+    };
+  };
+  const tasks: Record<string, string> = {};
+  for (const [no, extra] of [
+    [1, {}],
+    [2, started(false)],
+    [3, started(true)],
+    [4, { playbookId: 'removed-playbook' }],
+  ] as const) {
+    const task = await host.plugin.db.getRepository('nrTasks').create({
+      values: {
+        projectId,
+        taskKey: randomUUID(),
+        title: `Task ${no}`,
+        status: '待处理',
+        evidence: {
+          createdBy: { id: user.id },
+          no,
+          work: {
+            schemaVersion: 2,
+            revision: 0,
+            stage: 'plan',
+            plan: null,
+            planVersion: 0,
+            step: 0,
+            results: [],
+            history: [],
+            operations: [],
+            receipt: null,
+            verification: null,
+            playbookId: 'optimize-page',
+            humanOwnerId: user.id,
+            ...extra,
+          },
+        },
+      },
+    });
+    tasks[`T-${no}`] = String(task.id);
+  }
+  const signal = new AbortController().signal;
+  const read = async (locale?: string) => {
+    const context = await createNocoReachOnlineHost(() => host, '')(
+      {
+        id: randomUUID(),
+        ownerId: user.id,
+        projectId,
+        instructions: '',
+        ...(locale ? { locale } : {}),
+      } as OnlineRun,
+      signal,
+    );
+    const call = async (name: string, input: unknown): Promise<any> =>
+      context.tools.find((tool) => tool.name === name)!.execute(input, signal);
+    const list = await call('task_list', { scope: 'accessible' });
+    return {
+      item: (no: string) =>
+        list.items.find((item: { no: string }) => item.no === no),
+      get: (no: string) => call('task_get', { projectId, taskId: tasks[no] }),
+    };
+  };
+
+  const english = await read('en-US');
+  expect(english.item('T-1')).toMatchObject({
+    state: 'todo',
+    stateName: 'To do',
+    playbookId: 'optimize-page',
+    playbook: 'Improve existing page',
+  });
+  expect(english.item('T-1')).not.toHaveProperty('step');
+  expect(english.item('T-2')).toMatchObject({
+    state: 'review',
+    stateName: 'Needs you',
+    playbook: 'Improve existing page',
+    step: 'Review',
+  });
+  // An edited copy keeps its own words.
+  expect(english.item('T-3')).toMatchObject({
+    playbook: 'Our page rewrite',
+    step: '审核 (ours)',
+  });
+  expect(english.item('T-4')).toMatchObject({
+    playbookId: 'removed-playbook',
+    playbook: null,
+  });
+  expect(await english.get('T-2')).toMatchObject({
+    state: 'review',
+    stateName: 'Needs you',
+    stageKey: 'review',
+    stageName: 'Review',
+    playbook: 'Improve existing page',
+  });
+  // A language loaded on demand.
+  const traditional = await read('zh-TW');
+  expect(traditional.item('T-1')).toMatchObject({
+    stateName: '待處理',
+    playbook: '最佳化現有頁面',
+  });
+  expect(traditional.item('T-2')).toMatchObject({ step: '審核' });
+  // A turn sent before turns kept their language.
+  expect((await read()).item('T-1')).toMatchObject({
+    playbook: 'Improve existing page',
+  });
 });
 
 test('online start enqueues the selected Runner exactly once and never becomes the executor', async ({

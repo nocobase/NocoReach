@@ -3,7 +3,7 @@ import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,7 @@ import {
   useNocoReachLocale,
 } from '../../client/i18n';
 import locales from '../../client/locales';
+import { nocobaseClient } from '../../client/lib/nocoreach-api';
 import {
   categories,
   getCatalog,
@@ -49,11 +50,18 @@ vi.mock('../../client/hooks/use-business-access', () => ({
 vi.mock('../../client/components/collector-connection', () => ({
   CollectorConnection: ({
     onSavingChange,
+    health,
   }: {
     onSavingChange: (saving: boolean) => void;
+    health?: ReactNode;
   }) => {
     collector.onSavingChange = onSavingChange;
-    return <Link to='/elsewhere'>Leave source page</Link>;
+    return (
+      <>
+        <Link to='/elsewhere'>Leave source page</Link>
+        <p data-collector-health>{health}</p>
+      </>
+    );
   },
 }));
 vi.mock('../../client/pages/youtube-connect', () => ({
@@ -283,6 +291,79 @@ describe('NocoReach language integration', () => {
     ).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it.each([
+    [true, '连接正常', true],
+    [false, '无法连接小红书采集器，请检查采集器是否运行', false],
+    // A mock deployment's project with no mock profile is paused; the row says so instead of the code.
+    [
+      'paused',
+      '请先选择模拟网络 Profile，再采集数据。此隔离部署不会回退到真实连接',
+      false,
+    ],
+  ])(
+    'checks a saved collector no read has gone through as its drawer opens; the row and the tick agree (answers: %s)',
+    async (answers, text, ticked) => {
+      const action = vi.mocked(nocobaseClient.action);
+      const original = action.getMockImplementation()!;
+      const before = action.mock.calls.length;
+      action.mockImplementation(async (resource: string, name?: string) => {
+        // The status load needs an article list to finish.
+        if (resource === 'nrArticles') return { targets: [] };
+        if (resource !== 'nrXiaohongshu') return original(resource);
+        if (name === 'test') {
+          if (answers === true) return {};
+          throw Object.assign(new Error('unreachable'), {
+            status: answers ? 409 : 502,
+            payload: {
+              error: answers
+                ? {
+                    reason: 'NOCOREACH_409',
+                    message: 'NR_MOCK_PROFILE_REQUIRED',
+                  }
+                : { message: '无法连接小红书采集器，请检查采集器是否运行。' },
+            },
+          });
+        }
+        return {
+          configured: true,
+          connected: false,
+          verifiedAt: null,
+          lastRun: null,
+          collectors: [{ id: 'team', name: 'Team browser' }],
+        };
+      });
+      try {
+        const i18n = await runtime('zh-CN');
+        render(
+          <I18nProvider runtime={i18n}>
+            <MemoryRouter initialEntries={['/?source=xiaohongshu']}>
+              <Page />
+            </MemoryRouter>
+          </I18nProvider>,
+        );
+        const health = await screen.findByText(text, { exact: false });
+        expect(health.closest('[data-collector-health]')).toHaveTextContent(
+          `· ${text}`,
+        );
+        expect(
+          action.mock.calls
+            .slice(before)
+            .filter(
+              ([resource, name]) =>
+                resource === 'nrXiaohongshu' && name === 'test',
+            ),
+        ).toHaveLength(1);
+        const need = screen.getByText($t('collectorConnection.needCollector'), {
+          exact: false,
+        });
+        if (ticked) expect(need).toHaveTextContent('（已具备）');
+        else expect(need).not.toHaveTextContent('（已具备）');
+      } finally {
+        action.mockImplementation(original);
+      }
+    },
+  );
 
   it('describes the connection at the top of the drawer with what to prepare, and no AI', async () => {
     const i18n = await runtime('zh-CN');

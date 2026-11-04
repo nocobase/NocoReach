@@ -17,6 +17,8 @@ import { PagePicker, RestNotice } from './task-detail/start-pages.js';
 import { request } from './strategy/service';
 import type { StrategyState } from './strategy/model';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
+import { StartedCard } from './task-detail/started-card.js';
+import { startBrief } from './task-detail/started-model.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
 import { canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
@@ -29,6 +31,9 @@ import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag, TaskStandingTag } from './task-status-tag';
 import { choiceRepo, startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
+import { AddImageButton, ComposerImages, ImageHint, ImageProblem, MessageImages } from './task-detail/task-images.js';
+import { TaskImageContext, readImages, useComposerImages } from './task-detail/task-images-model.js';
+import { TASK_IMAGES_PER_MESSAGE } from '../../shared/task-images.js';
 import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { SnoozeDialog, SnoozedCard } from './task-detail/task-snooze.js';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -47,6 +52,7 @@ import {Reveal} from '#components/reach/reveal';
 import {Button} from '#components/ui/button';
 import {Input} from '#components/ui/input';
 import {Textarea} from '#components/ui/textarea';
+import {InputGroup,InputGroupAddon,InputGroupTextarea} from '#components/ui/input-group';
 import {Select,SelectContent,SelectGroup,SelectItem,SelectLabel,SelectTrigger,SelectValue} from '#components/ui/select';
 import {cn} from '#lib/utils';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
@@ -100,7 +106,8 @@ const Reading=({children}:{children:ReactNode})=><div className="max-w-[45em] mi
 // the result after going live), and what has happened (activity). Developer material — pull requests, code, checks,
 // Runner and model details, the execution transcript — is behind Technical details.
 export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
- return <TaskDraftScope scope={`${projectId}:${taskId}`}><TaskDetailContent key={`${projectId}:${taskId}`} projectId={projectId} taskId={taskId} initial={initial}/></TaskDraftScope>;
+ const images=useMemo(()=>({projectId,taskId}),[projectId,taskId]);
+ return <TaskImageContext.Provider value={images}><TaskDraftScope scope={`${projectId}:${taskId}`}><TaskDetailContent key={`${projectId}:${taskId}`} projectId={projectId} taskId={taskId} initial={initial}/></TaskDraftScope></TaskImageContext.Provider>;
 }
 function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
  const {dirty,clear}=useTaskDraftStatus();
@@ -148,7 +155,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  usePageBreadcrumb(resultParams.has('resultDay')?[{label:$t('results.title'),to:`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`},{label:heading}]:[{label:$t('common.tasks'),to:'/actions'},{label:heading}]);
  // One skeleton for every state (2026-10-22 user decision): the two-line header, then the card for what to do now and
  // the activity on the left, and on the right why the task exists, its properties and its performance, always in that
- // order. Below 1280px the two columns become one: why, properties, now, performance, activity.
+ // order. Below 1280px the two columns become one: why, properties, now (with what the task was started with under it
+// once it has started), performance, activity.
  return <TaskAccess.Provider value={access}><TaskActions.Provider value={actions}><PageContainer className="nr-task-page">
   <TaskHeading data={data} title={title} list={list} pick={pick} busy={busy} members={members} update={update} onPage={()=>setPageOpen(true)}/>
   <div className={cn('flex flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start',GAP)}>
@@ -160,6 +168,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
      {/* Snoozed (task-detail/task-snooze.tsx): named first; the card below stays usable and acting on it ends it. */}
      {isSnoozed(w)&&<SnoozedCard data={data} busy={busy} allowed={access.allowed} onChange={()=>setSnoozeOpen(true)} update={update}/>}
      {w.cancelledAt||w.archivedAt?<ClosedCard data={data} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} reload={()=>call<Data>(projectId,taskId,'get').then(setStoredData)} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
+     {/* What the task was started with (task-detail/started-card.tsx), read-only under the card for now, closed or not. */}
+     {started&&<StartedCard data={data} list={list} projectId={projectId} taskId={taskId}/>}
     </div>
     <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded} error={composerFailed?error:''} onFailed={()=>setComposerFailed(true)}/>
    </div>
@@ -288,7 +298,7 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
 function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;reload:()=>Promise<unknown>;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
  const {allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
- const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
+ const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=startBrief(data,false);
  const options=data.agent?.options||[],agent=startAgent(data),ready=agent.ready;
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
  // Where the change goes (article-start.tsx, start-pages.tsx): shown for playbooks that change something; the choice
@@ -333,12 +343,11 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
  const splitOff=async(groups:PageGroup[])=>{setSplitting(true);setSplitError('');try{const state=await request<StrategyState>(projectId,'state');await request(projectId,'splitTask',{taskId,groups,playbookId:pick,revision:state.revision,requestId:createUuid()});refreshNavBadges();await reload();}catch(e){setSplitError(()=>e instanceof Error?$legacyText(e.message):$t('common.operationFailed'));}finally{setSplitting(false);}};
  const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{}),...(startWith?{pages:startWith}:{}),...(repoId?{repoId}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
- const briefText=brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim();
  // Top to bottom, every field the card's full width (2026-10-22 user decision): the brief as plain text, the playbook
  // with its description, the article where the change goes, and the note.
  return <StageCard title={$t('taskDetail.startAfterReview')} sub={handoff?$t(blockers.length?'taskDetail.handoffNotStarted':'taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={<Button disabled={busy||!p||!ready||!plan.ready||finding||repoMissing} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
-  {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
+  {brief.text&&<Field label={brief.title}><Clamped long={brief.long} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{brief.text}</Clamped></Field>}
   <Field label={$t('common.playbook')} id={`${taskId}-playbook`}>
    <Select value={pick} disabled={busy||!list||!allowed} onValueChange={v=>{if(v!=null)setPick(String(v));}}>
     <SelectTrigger className="w-full" aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const n=playbookNameOf(v,list);return n?`${n}${v===data.playbookDefault?$t('taskDetail.recommended'):''}`:'';}}</SelectValue></SelectTrigger>
@@ -352,7 +361,7 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
   </Field>
   {changes&&(picking?<PagePicker data={data} projectId={projectId} taskId={taskId} allowed={allowed} busy={busy} onPage={url=>void update('linkPage',{url})} onArticle={(targetId,articleId)=>void link(targetId,articleId)} onChange={()=>setChoosing(true)}/>
    :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} hidePlace={showWhere} onChange={()=>setChoosing(true)}>
-    {plan.ready&&split.rest.length>0&&<RestNotice rest={split.rest} related={data.related} allowed={allowed} busy={busy||splitting} error={splitError} onSplit={groups=>void splitOff(groups)}/>}
+    {plan.ready&&split.rest.length>0&&<RestNotice rest={split.rest} related={data.related} identity={data.pageIdentity} allowed={allowed} busy={busy||splitting} error={splitError} onSplit={groups=>void splitOff(groups)}/>}
    </DeliverySummary>)}
   {/* Changes go to (2026-10-30 user decision, merging #322 and #324): with more than one place a change can go, the
       select follows the page list and replaces its line; while the card asks which page, the page decides first. */}
@@ -626,17 +635,21 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
 }
 // What one delivered version changes, as its owner reviewed it: a page change's visible changes, or an article's fields
-// against the version it was written from. The activity's View and the live card's View changes both show it.
-function VersionChange({data,artifact,notes}:{data:Data;artifact:Artifact;notes:boolean}){
+// against the version it was written from. The activity's View and the live card's View changes both show it; the live
+// card leads with the publish record instead of the Agent's summary for the reviewer (2026-11-04, T-33: it ended with
+// "awaiting human review").
+function VersionChange({data,artifact,notes,record}:{data:Data;artifact:Artifact;notes:boolean;record?:string}){
  if(artifact.pr)return <PageChange pr={artifact.pr} content={artifact.content}/>;
- if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} settled/>;
+ if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} summary={record} settled/>;
  return null;
 }
 // Once live, the card names what changed in one line; the change itself opens on demand.
 function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  const [open,setOpen]=useState(false);
  if(!artifact||(!artifact.pr&&!artifact.article))return null;
- const a=artifact.article,visible=artifact.pr?.visibleChanges||[];
+ const a=artifact.article,visible=artifact.pr?.visibleChanges||[],note=data.work.release?.note||'';
+ // The record falls back to the task title, which says nothing about the change.
+ const record=a?(note===data.task.title?'':note):undefined;
  const paths=a?(a.changes.length?a.changes:a.carried||[]):[];
  const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
  // A new article went live as a whole: it is named as one, not as fields it "changed" (2026-10-24 user report).
@@ -644,7 +657,7 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  return <div className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}>
   {created?<span>{$t('articleTask.newArticle')}</span>:count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
   <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{created?$t('taskDetail.viewArticle'):$t('taskDetail.viewChanges')}<ChevronRight/></Button>
-  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false} record={record}/></DocReader>
  </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.
@@ -683,20 +696,30 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  const hint=review?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor}):!w.flow?$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')}):stage?.kind==='release'||stage?.kind==='publish'?$t('taskDetail.leaveNoteRecorded'):$t('taskDetail.leaveNoteNextRunReads',{0:executor});
  const rows=(w.history||[]).map((e,i)=>({e,i,t:shownInActivity(e)?eventText(e,nameOf,executor,w.snooze,w.observation?.results):null})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
- async function send(){const d=review?await update('requestStageChanges',{...review,comment:message}):await update('comment',{comment:message});if(d)clearMessage();else onFailed();}
- const composer=(!done&&!closed)||Boolean(message);
+ // Images go with the message (2026-11-03 user request, task-detail/task-images.tsx): pasted, dropped or added, numbered
+ // in the order they were added so the text can say "Image 1"; they stay with the draft until it is sent.
+ const [storedImages,setStoredImages,clearImages]=useTaskDraft('commentImages','');
+ const images=useComposerImages({stored:readImages(storedImages),store:list=>{if(list.length)setStoredImages(JSON.stringify(list));else clearImages();},max:TASK_IMAGES_PER_MESSAGE});
+ async function send(){const extra=images.ids.length?{imageIds:images.ids}:{};const d=review?await update('requestStageChanges',{...review,comment:message,...extra}):await update('comment',{comment:message,...extra});if(d){clearMessage();images.sent();}else onFailed();}
+ const composer=(!done&&!closed)||Boolean(message),writing=!done&&!closed;
  return <Card className="order-5" aria-label={$t('common.activity')} title={$t('common.activity')}>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
   <ol className="flex flex-col gap-3">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    // Until the members load, a person's name is a placeholder bar, not "Member" that turns into the name (UI review 2026-10-22).
    const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
-   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p></div></li>;
+   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p>{e.images&&<MessageImages images={e.images}/>}</div></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span>{getCurrentLocale()==='ru-RU'?' — ':' '}{line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
-  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={hint} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button>}</div>}
+  {/* The send button is disabled while the box is empty; the box itself stays as it is. */}
+  {composer&&(writing?<InputGroup className='has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30' onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={images.onDrop}>
+   <InputGroupTextarea id='nr-composer' aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-60 min-h-8 px-2.5 pt-2' value={message} disabled={busy} placeholder={hint} onChange={e=>{setMessage(e.target.value);}} onPaste={images.onPaste}/>
+   {images.entries.length>0&&<InputGroupAddon align='block-end' className='font-normal'><ComposerImages images={images.entries} disabled={busy} onRemove={images.remove}/></InputGroupAddon>}
+   <InputGroupAddon align='block-end' className='flex-wrap gap-x-3 gap-y-1 font-normal'><AddImageButton disabled={busy||images.entries.length>=TASK_IMAGES_PER_MESSAGE} onFiles={images.add}/><ImageHint max={TASK_IMAGES_PER_MESSAGE}/><Button className='ml-auto' size='sm' disabled={busy||!message.trim()||images.uploading} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></InputGroupAddon>
+  </InputGroup>:<Textarea aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-40 min-h-8 resize-none py-1.5' value={message} readOnly/>)}
+  <ImageProblem>{writing&&images.problem}</ImageProblem>
   {error&&<p role="alert" className="nr-error">{error}</p>}
  </Card>;
 }

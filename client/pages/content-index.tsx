@@ -27,10 +27,11 @@ import { validRange, useRange, getRanges, defaultRanges } from './range-state';
 import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./content-detail";
 import "./data-views.css";
 import { formatChange, formatCount, formatDate, formatSigned } from '#lib/format';
+import type { PageIdentity } from '../../shared/page-identity.js';
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
 type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null; previousViews?: number | null; previousClicks?: number | null; ga4Untracked?: boolean };
-type SiteList = { window?: {start:string;end:string;all?:boolean}; range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[]; outsideSitemap?: { shown: number; total: number } };
+type SiteList = { window?: {start:string;end:string;all?:boolean}; range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[]; outsideSitemap?: { shown: number; total: number }; identity?: PageIdentity };
 type Row = SitePage & { path: string; tasks: ContentTask[] };
 const CONTENT_RANGES = defaultRanges;
 const PAGE_SIZES = [25, 50, 100] as const;
@@ -69,7 +70,7 @@ export default function ContentPage() {
   const [detail, setDetail] = useState<SitePage>();
   const rows = useMemo<Row[]>(() => (data?.pages || [])
     .filter((p) => (type === "all" || (type === OUTSIDE ? p.outsideSitemap : p.type === type)) && (!query || `${p.title || ""} ${p.url}`.toLowerCase().includes(query.toLowerCase())))
-    .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url)) })), [data, type, query, tasks]);
+    .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url, data?.identity)) })), [data, type, query, tasks]);
   // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so.
   const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{l}</p>)}</>;
   const columns = useMemo<ColumnDef<Row>[]>(() => [
@@ -154,7 +155,7 @@ export default function ContentPage() {
           </Card>
         </>
       ) : null}
-      {detail && project ? <ContentDetail googleScope={JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty])} projectId={project.id} page={detail} tasks={tasks} range={range} from={rangeValue.from} to={rangeValue.to} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}
+      {detail && project ? <ContentDetail googleScope={JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty])} projectId={project.id} page={detail} tasks={tasks} identity={data?.identity} range={range} from={rangeValue.from} to={rangeValue.to} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}
     </PageContainer>
   );
 }

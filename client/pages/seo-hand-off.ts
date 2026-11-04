@@ -153,13 +153,14 @@ export function discussionsDraft(where: string, noun: string, items: DiscussionI
 }
 
 // 访问 · 页面详情: a page's GA4 numbers and the search queries that reach it.
-export function visitPageDraft(page: string, period: string, views: number, conversions: number, share: string, queries: { keyword: string; clicks?: number | null; impressions?: number | null }[]): TaskDraft {
+// The queries are Search Console's finalized days (`queriesWindow`), which end before the GA4 period; the brief says so.
+export function visitPageDraft(page: string, period: string, views: number, conversions: number, share: string, queries: { keyword: string; clicks?: number | null; impressions?: number | null }[], queriesWindow?: Period | null): TaskDraft {
   return {
     pages: pagesOf([page]),
     title: clip($t('seoHandOff.optimizeTarget',{0:pathOf(page)}), 200),
     subject: clip(pathOf(page), 160),
     objective: clip($t('seoHandOff.getMoreKeyActionsSignValue',{0:page}), 1000),
-    brief: clip([$t('seoHandOff.page',{0:page}), $t('seoHandOff.viewsSiteKeyEvents',{0:period,1:n(views),2:share,3:n(conversions)}), ...(queries.length ? [$t('seoHandOff.searchQueries'), ...queries.slice(0, 10).map((q) => $t('seoHandOff.clicksImpressions',{0:q.keyword,1:n(q.clicks),2:n(q.impressions)}))] : []), "", $t('seoHandOff.suggestionFirstLookWhereVisitors')].join("\n"), 20000),
+    brief: clip([$t('seoHandOff.page',{0:page}), $t('seoHandOff.viewsSiteKeyEvents',{0:period,1:n(views),2:share,3:n(conversions)}), ...(queries.length ? [...(queriesWindow ? [$t('dataWebsite.pageQueriesFinalized',{0:formatDate(queriesWindow.start),1:formatDate(queriesWindow.end)})] : []), $t('seoHandOff.searchQueries'), ...queries.slice(0, 10).map((q) => $t('seoHandOff.clicksImpressions',{0:q.keyword,1:n(q.clicks),2:n(q.impressions)}))] : []), "", $t('seoHandOff.suggestionFirstLookWhereVisitors')].join("\n"), 20000),
   };
 }
 

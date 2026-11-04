@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -19,6 +20,7 @@ import { setDictionary } from '../../client/i18n';
 import DataWebsite from '../../client/pages/data-website/index';
 import { GoogleConnection } from '../../client/pages/google-connection';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
+import { GA4_REALTIME_IDLE_MS } from '../../shared/ga4-cache.js';
 
 vi.mock('recharts', async (original) => {
   const actual = await original<typeof import('recharts')>();
@@ -342,6 +344,96 @@ describe('访问', () => {
       }
     },
   );
+
+  it('reads realtime every half hour for the card and every minute while its details are open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      await screen.findByText('今天浏览量');
+      const reads = () =>
+        action.mock.calls.filter(([, name]) => name === 'websiteRealtime')
+          .length;
+      await waitFor(() => expect(reads()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60000);
+      });
+      expect(reads()).toBe(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(GA4_REALTIME_IDLE_MS);
+      });
+      expect(reads()).toBe(2);
+      // Opening the details reads at once if the figure is over a minute old, then every minute.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2 * 60000);
+      });
+      fireEvent.click(screen.getByRole('button', { name: '实时详情' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(reads()).toBe(3);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3 * 60000);
+      });
+      expect(reads()).toBe(6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tries realtime again after a minute when it failed, though the card otherwise reads it every half hour', async () => {
+    const original = action.getMockImplementation()!;
+    let failures = 1;
+    action.mockImplementation(
+      (resource: string, name: string, ...args: unknown[]) => {
+        if (name === 'websiteRealtime' && failures-- > 0)
+          return Promise.reject(new Error('quota exceeded'));
+        return original(resource, name, ...args);
+      },
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      await screen.findByText('今天浏览量');
+      const reads = () =>
+        action.mock.calls.filter(([, name]) => name === 'websiteRealtime')
+          .length;
+      await waitFor(() => expect(reads()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61 * 1000);
+      });
+      expect(reads()).toBe(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60000);
+      });
+      expect(reads()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("names in a row's detail the period its figures are from, when it shows the previous day's report", async () => {
+    const original = action.getMockImplementation()!;
+    action.mockImplementation(
+      async (resource: string, name: string, ...args: unknown[]) => {
+        const value = await original(resource, name, ...args);
+        return name === 'websiteRow'
+          ? {
+              ...(value as object),
+              window: { start: '2026-09-03', end: '2026-09-09' },
+              refreshing: true,
+              savedAt: Date.now(),
+            }
+          : value;
+      },
+    );
+    renderPage('/website?tab=geo');
+    await userEvent.click(await screen.findByRole('button', { name: '美国' }));
+    const drawer = await screen.findByRole('dialog');
+    expect(drawer.textContent).toContain('09-03 至 09-09');
+    expect(
+      drawer.querySelector('[data-row-figures] thead')!.textContent,
+    ).toContain('09-03 至 09-09');
+  });
 
   it('does not reuse a previous GA4 property after changing the project connection', async () => {
     const { router } = renderPage();

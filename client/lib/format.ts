@@ -170,7 +170,11 @@ export function formatCompactIn(
   key: string,
   value: number | null | undefined,
 ): string {
-  const shown = formatCompact(value);
+  return countIn(key, formatCompact(value));
+}
+
+/** A count already written out (`10 wan+` as a page showed it) inside a phrase, joined as formatCompactIn joins it. */
+export function countIn(key: string, shown: string): string {
   const [before, ...rest] = $t(key).split('{0}');
   const after = rest.join('{0}');
   return `${before}${shown}${

@@ -198,6 +198,45 @@ it('shows the overview, the related keywords, the site pages and the top 10 with
   expect(within(top.closest('li')!).getByText('本站')).toBeVisible();
 });
 
+it('says why the site days shown are a saved report when a new one could not be read', async () => {
+  answer({
+    connected: true,
+    overview: {
+      status: 'ready',
+      at: '2026-10-15T01:00:00Z',
+      item: item('open source crm', 1600),
+    },
+    related: {
+      status: 'ready',
+      message: null,
+      related: [],
+      matching: [],
+      questions: [],
+    },
+  });
+  const answered = action.getMockImplementation()!;
+  action.mockImplementation(async (resource: string, act: string) =>
+    resource === 'nrDataViews'
+      ? {
+          connected: true,
+          trend: [
+            {
+              date: '2026-10-12',
+              clicks: 1,
+              impressions: 20,
+            },
+          ],
+          refreshing: false,
+          savedAt: Date.UTC(2026, 9, 12, 12),
+          reason: 'Authorize Google again',
+        }
+      : (answered(resource, act) as unknown),
+  );
+  open();
+  const days = await screen.findByText(/Authorize Google again/);
+  expect(days.closest('[data-keyword-days]')).toBeTruthy();
+});
+
 it('opens a related keyword in place, and its trail goes back to the tab it came from', async () => {
   answer({
     connected: true,

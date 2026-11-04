@@ -715,25 +715,41 @@ const pathOf = (url: string) => {
 /** How many pages the list shows before "N more". */
 const FIRST_PAGES = 3;
 
-/** The pages a start changes: the first few, then the rest behind "N more"; each opens where readers see it. */
+/**
+ * The pages a start changes: the first few, then the rest behind "N more"; each opens where readers see it. `stacked`
+ * puts a titled page's path on a line of its own (the start's record after the task started).
+ */
 export function PageList({
   pages,
+  stacked = false,
 }: {
   pages: { url: string; title?: string }[];
+  stacked?: boolean;
 }) {
   const [all, setAll] = useState(false),
     shown = all ? pages : pages.slice(0, FIRST_PAGES);
   if (!pages.length) return null;
   return (
-    <ul className='flex flex-col gap-1' data-start-pages=''>
+    <ul
+      className={cn('flex flex-col', stacked ? 'gap-2' : 'gap-1')}
+      data-start-pages=''
+    >
       {shown.map((p) => (
         <li
           key={p.url}
-          className={cn(text.body, 'flex min-w-0 items-baseline gap-2')}
+          className={cn(
+            text.body,
+            stacked
+              ? 'flex min-w-0 flex-col items-start'
+              : 'flex min-w-0 items-baseline gap-2',
+          )}
         >
           {/^https?:\/\//i.test(p.url) ? (
             <a
-              className='nr-link inline-flex min-w-0 items-center gap-1'
+              className={cn(
+                'nr-link inline-flex min-w-0 items-center gap-1',
+                stacked && 'max-w-full',
+              )}
               href={p.url}
               target='_blank'
               rel='noreferrer'
@@ -742,10 +758,17 @@ export function PageList({
               <ExternalLink className='size-3 shrink-0' aria-hidden='true' />
             </a>
           ) : (
-            <span className='truncate'>{p.title || p.url}</span>
+            <span className={cn('truncate', stacked && 'max-w-full')}>
+              {p.title || p.url}
+            </span>
           )}
           {p.title && (
-            <small className='truncate text-xs text-muted-foreground'>
+            <small
+              className={cn(
+                'truncate text-xs text-muted-foreground',
+                stacked && 'max-w-full',
+              )}
+            >
               {pathOf(p.url)}
             </small>
           )}
@@ -764,6 +787,50 @@ export function PageList({
         </li>
       )}
     </ul>
+  );
+}
+
+/**
+ * The languages an article is written in, primary first: "Languages: Chinese (primary) · English · Japanese", or for a
+ * translation "From Chinese into English Japanese". Nothing for a single language. The start card and the start's
+ * record after the task started both show it.
+ */
+export function LanguagesLine({
+  languages,
+  translate = false,
+}: {
+  languages: string[];
+  translate?: boolean;
+}) {
+  const ui = getCurrentLocale();
+  if (languages.length < 2) return null;
+  return translate ? (
+    <p
+      className={cn(text.muted, 'flex flex-wrap items-center gap-1')}
+      data-delivery-languages=''
+    >
+      {$tj('articleTask.translateLine', {
+        0: <Tag tone='grey'>{localeName(languages[0], ui)}</Tag>,
+        1: (
+          <span className='inline-flex flex-wrap gap-1'>
+            {languages.slice(1).map((l) => (
+              <Tag key={l} tone='grey'>
+                {localeName(l, ui)}
+              </Tag>
+            ))}
+          </span>
+        ),
+      })}
+    </p>
+  ) : (
+    <p className={text.muted} data-delivery-languages=''>
+      {$t('articleTask.languagesLine', {
+        0: [
+          $t('articleTask.primaryMark', { 0: localeName(languages[0], ui) }),
+          ...languages.slice(1).map((l) => localeName(l, ui)),
+        ].join(' · '),
+      })}
+    </p>
   );
 }
 
@@ -813,8 +880,7 @@ export function DeliverySummary({
     also = choice.target === REPO || translate ? [] : choice.also,
     languages = translate
       ? translationLocales(data, choice)
-      : choiceLocales(data, choice),
-    ui = getCurrentLocale();
+      : choiceLocales(data, choice);
   const change = allowed && !finding && changeable && (
     <Button
       variant='link'
@@ -832,43 +898,15 @@ export function DeliverySummary({
     </Button>
   );
   const languageLine =
-    translate && choice.target !== REPO ? (
-      languages.length > 1 ? (
-        <p
-          className={cn(text.muted, 'flex flex-wrap items-center gap-1')}
-          data-delivery-languages=''
-        >
-          {$tj('articleTask.translateLine', {
-            0: <Tag tone='grey'>{localeName(languages[0], ui)}</Tag>,
-            1: (
-              <span className='inline-flex flex-wrap gap-1'>
-                {languages.slice(1).map((l) => (
-                  <Tag key={l} tone='grey'>
-                    {localeName(l, ui)}
-                  </Tag>
-                ))}
-              </span>
-            ),
-          })}
-        </p>
-      ) : (
-        <p className={text.muted} data-translate-one-language=''>
-          {$t('articleTask.translateOneLanguage')}
-        </p>
-      )
+    translate && choice.target !== REPO && languages.length < 2 ? (
+      <p className={text.muted} data-translate-one-language=''>
+        {$t('articleTask.translateOneLanguage')}
+      </p>
     ) : (
-      languages.length > 1 && (
-        <p className={text.muted} data-delivery-languages=''>
-          {$t('articleTask.languagesLine', {
-            0: [
-              $t('articleTask.primaryMark', {
-                0: localeName(languages[0], ui),
-              }),
-              ...languages.slice(1).map((l) => localeName(l, ui)),
-            ].join(' · '),
-          })}
-        </p>
-      )
+      <LanguagesLine
+        languages={languages}
+        translate={translate && choice.target !== REPO}
+      />
     );
   const field = (
     label: string,

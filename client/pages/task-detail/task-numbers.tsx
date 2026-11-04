@@ -8,7 +8,17 @@ import { cn } from '#lib/utils';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Delta } from '#components/reach/delta';
 import { InfoTip } from '#components/reach/info-tip';
-import { effectLine, type EffectResult } from '../effect-model';
+import {
+  effectLine,
+  judgedPair,
+  lackingText,
+  metricName,
+  type EffectResult,
+} from '../effect-model';
+import {
+  lacking,
+  matchesObservation,
+} from '../../../shared/result-comparison.js';
 import type { TaskData } from '../task-execution-types';
 import { Card } from './layout';
 import { text } from './styles';
@@ -232,15 +242,19 @@ function Compared({
   observeFrom?: string;
   taskId: string;
 }) {
-  const views = r.primary === 'views';
-  const pair = (x: { clicks?: [number, number]; views?: [number, number] }) =>
-    (views ? x.views : x.clicks) || [0, 0];
-  const total = pair({ clicks: r.gsc?.clicks, views: r.ga4?.views });
+  // The metric the change was judged by (search clicks, impressions or views), page by page. Several pages judged
+  // before each page's impressions were kept show their total only.
+  const metric = r.primary;
+  const total = judgedPair(r) || [0, 0];
+  const pagePair = (p: NonNullable<EffectResult['byPage']>[number]) =>
+    metric === 'views' ? p.views : metric ? p[metric] : undefined;
   const rows: Row[] = r.byPage
-    ? r.byPage.map((p) => {
-        const [before, after] = pair(p);
-        return { page: p.page, before, after };
-      })
+    ? r.byPage.every((p) => pagePair(p))
+      ? r.byPage.map((p) => {
+          const [before, after] = pagePair(p)!;
+          return { page: p.page, before, after };
+        })
+      : []
     : r.pages.slice(0, 1).map((page) => ({
         page,
         before: total[0],
@@ -248,14 +262,19 @@ function Compared({
       }));
   return (
     <>
-      <p className={text.muted}>
-        {$t('taskNumbers.window', {
-          0: $t(views ? 'common.viewCount' : 'common.searchClicks'),
-          1: r.day,
-        })}
-      </p>
-      {r.primary ? null : (
-        <p className={text.muted}>{effectLine(r, observeFrom)}</p>
+      {metric ? (
+        <p className={text.muted}>
+          {$t('taskNumbers.window', { 0: metricName(metric), 1: r.day })}
+        </p>
+      ) : (
+        // Too little to judge: why, in the numbers there were.
+        <p className={text.muted}>
+          {observeFrom && !matchesObservation(r, observeFrom)
+            ? effectLine(r, observeFrom)
+            : $t('results.board.insufficientLine', {
+                0: lackingText(lacking(r)),
+              })}
+        </p>
       )}
       {r.primary && (
         <Rows

@@ -40,6 +40,15 @@ export interface BilibiliStatus {
     capped: boolean;
     partial: boolean;
   } | null;
+  /** Daily reading (on unless someone switched it off or cleared the saved videos). */
+  autoSync: boolean;
+  /** A read the busy collector turned away, waiting for its retry. */
+  queued: { retries: number; retryAt: string } | null;
+  /** Why daily reading paused after three reads in a row got nothing through. */
+  pausedCode: string | null;
+  nextSyncAt: string | null;
+  /** When the earliest saved video was first found. */
+  recordingSince: string | null;
 }
 export function bilibiliRequest<T>(
   projectId: number,

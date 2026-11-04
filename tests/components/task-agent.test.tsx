@@ -1,5 +1,12 @@
 import { NavigationGuardProvider } from '@nocobase/app-client';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -492,6 +499,114 @@ test('a refused change request keeps the message in the box', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('内容已更新');
   expect(box).toHaveValue('Shorter title');
   expect(commands()).toEqual(['requestStageChanges']);
+});
+
+// Images go with a message or change request (2026-11-03 user request): pasted or dropped into the box, uploaded at
+// once, numbered in the order they were added and renumbered when one is removed.
+test('images pasted into the message box are numbered in order and go with the change request', async () => {
+  const user = userEvent.setup();
+  const data = reviewTask();
+  data.work.stageIndex = 1;
+  data.work.results = [
+    {
+      id: 'v1',
+      stepId: 'draft',
+      planVersion: 0,
+      content: 'Draft',
+      version: 1,
+      createdAt: '2026-10-28T01:00:00Z',
+      createdBy: 'agent',
+    },
+  ];
+  const ids: string[] = [];
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async (_url, init) => {
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      const file = (init!.body as FormData).get('file') as File;
+      const id = `00000000-0000-4000-8000-00000000000${ids.push(file.name)}`;
+      return new Response(
+        JSON.stringify({
+          data: {
+            id,
+            filename: file.name,
+            mimeType: file.type,
+            size: file.size,
+            contentUrl: `/uploads/task-media/${id}.png`,
+          },
+        }),
+        { status: 201 },
+      );
+    });
+  const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
+  const revoked = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue();
+  try {
+    advance.mockResolvedValueOnce({
+      ...data,
+      work: { ...data.work, revision: 5 },
+    });
+    mount(data);
+    const box = screen.getByRole('textbox', { name: '给执行者的话' });
+    const png = (name: string) =>
+      new File(['png'], name, { type: 'image/png' });
+    fireEvent.paste(box, {
+      clipboardData: {
+        files: [png('a.png'), png('b.png'), png('c.png')],
+        getData: () => '',
+      },
+    });
+    await waitFor(() => expect(ids).toHaveLength(3));
+    const images = screen.getByRole('list', { name: '图片' });
+    await waitFor(() =>
+      expect(within(images).queryAllByRole('status')).toHaveLength(0),
+    );
+    expect(
+      within(images)
+        .getAllByText(/^图 \d$/)
+        .map((e) => e.textContent),
+    ).toEqual(['图 1', '图 2', '图 3']);
+    // Removing Image 2 discards its upload and renumbers the rest.
+    await user.click(within(images).getByRole('button', { name: '删除图 2' }));
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('00000000-0000-4000-8000-000000000002'),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(
+      within(images)
+        .getAllByText(/^图 \d$/)
+        .map((e) => e.textContent),
+    ).toEqual(['图 1', '图 2']);
+    expect(within(images).getByText('c.png')).toBeVisible();
+    // Only PNG, JPG, WebP and GIF are taken.
+    fireEvent.paste(box, {
+      clipboardData: {
+        files: [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })],
+        getData: () => '',
+      },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'logo.svg 不是 PNG、JPG、WebP 或 GIF 图片。',
+    );
+    await user.type(box, '图 1 圈出的这段删掉，图 2 换进去。');
+    await user.click(screen.getByRole('button', { name: '发送意见' }));
+    await waitFor(() => expect(commands()).toEqual(['requestStageChanges']));
+    const body = action.mock.calls.find(([, c]) => c === 'advance')![2].body;
+    expect(body).toMatchObject({
+      comment: '图 1 圈出的这段删掉，图 2 换进去。',
+      imageIds: [
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000003',
+      ],
+    });
+    // Sent: the box starts empty again.
+    await waitFor(() =>
+      expect(screen.queryByRole('list', { name: '图片' })).toBeNull(),
+    );
+  } finally {
+    fetch.mockRestore();
+    created.mockRestore();
+    revoked.mockRestore();
+  }
 });
 
 // The task's saved Agent was removed after its last run failed, and one other Agent is available (2026-10-17 report:

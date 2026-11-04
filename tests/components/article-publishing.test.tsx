@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -53,6 +54,7 @@ import {
   TaskDraftScope,
 } from '../../client/pages/task-detail/drafts';
 import { setDictionary } from '../../client/i18n';
+import { TaskImageContext } from '../../client/pages/task-detail/task-images-model';
 import english from '../../shared/i18n/en.json';
 import type { TaskData } from '../../client/pages/task-execution-types';
 
@@ -280,6 +282,168 @@ it('a conflict on the address reads inline, not as a diff', () => {
     />,
   );
   expect(screen.getByText('hello-cms → hi', { exact: false })).toBeVisible();
+});
+
+// Images on a started task (2026-11-03 user request): a new image shows in the preview with a review-only note on
+// where it came from, Changes lists it, and an image pasted into the body uploads in place as GitHub's editor does.
+const IMAGE_ID = '00000000-0000-4000-8000-000000000002';
+const imageTarget = {
+  ...target,
+  capabilities: { concurrency: 'check-before-write', images: true },
+};
+it('shows a new image with where it came from, and lists it in Changes with what approval does', async () => {
+  const withImage = {
+    ...proposal,
+    draft: {
+      locales: {
+        zh: {
+          body: `中文正文\n\n![NocoBase 3 工作台](/uploads/task-media/${IMAGE_ID}.png)`,
+        },
+      },
+    },
+  };
+  const imageData = {
+    ...data,
+    articleTargets: [imageTarget],
+    articleBases: {
+      'base-1': {
+        ...base,
+        locales: {
+          ...base.locales,
+          zh: {
+            ...base.locales.zh,
+            body: '中文正文\n\n![Old workspace](https://cms.example.com/old.png)',
+          },
+        },
+      },
+    },
+    work: {
+      history: [
+        {
+          at: '2026-11-03T02:55:00Z',
+          action: 'requestStageChanges',
+          comment:
+            'Image 1 circles the line; replace the screenshot with Image 2.',
+          images: [
+            {
+              id: '00000000-0000-4000-8000-000000000001',
+              name: 'circled.png',
+              ref: '/uploads/task-media/00000000-0000-4000-8000-000000000001.png',
+            },
+            {
+              id: IMAGE_ID,
+              name: 'workspace.png',
+              ref: `/uploads/task-media/${IMAGE_ID}.png`,
+            },
+          ],
+        },
+      ],
+    },
+  } as unknown as TaskData;
+  render(<ArticleReview data={imageData} article={withImage} notes='' />);
+  const image = screen.getByRole('img', { name: 'NocoBase 3 工作台' });
+  // The application's own file until publishing, under the application's base path.
+  expect(image.getAttribute('src')).toMatch(
+    new RegExp(`/uploads/task-media/${IMAGE_ID}\\.png$`),
+  );
+  expect(
+    screen.getByText(
+      /^New image · from the change request on .+ \(Image 2\), replacing the earlier one$/,
+    ),
+  ).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
+  const panel = screen.getByRole('tabpanel');
+  expect(
+    within(panel).getByText('Images replaced (1): “NocoBase 3 工作台”'),
+  ).toBeVisible();
+  expect(
+    within(panel).getByText(
+      'On approval, the new images are uploaded to the file library of NocoBase CMS first, then published with the article.',
+    ),
+  ).toBeVisible();
+});
+
+it('uploads an image pasted into the body and writes it where the cursor was', async () => {
+  const onSave = vi.fn(async () => true);
+  const user = userEvent.setup();
+  let answer!: (response: Response) => void;
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(
+      () => new Promise<Response>((resolve) => (answer = resolve)),
+    );
+  try {
+    render(
+      <TaskImageContext.Provider value={{ projectId: 1, taskId: '1' }}>
+        <TaskDraftProvider>
+          <TaskDraftScope scope='1:1'>
+            <ArticleEditor
+              data={{ ...data, articleTargets: [imageTarget] } as TaskData}
+              article={proposal}
+              draftKey='a1'
+              tab='zh'
+              busy={false}
+              onSave={onSave}
+              onCancel={vi.fn()}
+            />
+          </TaskDraftScope>
+        </TaskDraftProvider>
+      </TaskImageContext.Provider>,
+    );
+    expect(
+      screen.getByText(
+        'Paste or drop images into the body · PNG, JPG, WebP or GIF, up to 20 MB each',
+      ),
+    ).toBeVisible();
+    const body = screen
+      .getAllByRole('textbox', { name: /^Body/ })
+      .find((b) => (b as HTMLTextAreaElement).value === '新的中文正文')!;
+    (body as HTMLTextAreaElement).setSelectionRange(2, 2);
+    fireEvent.paste(body, {
+      clipboardData: {
+        files: [new File(['png'], 'workspace.png', { type: 'image/png' })],
+        getData: () => '',
+      },
+    });
+    expect(body).toHaveValue(
+      '新的\n\n![Uploading workspace.png…]()\n\n中文正文',
+    );
+    expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
+    answer(
+      new Response(
+        JSON.stringify({
+          data: {
+            id: IMAGE_ID,
+            filename: 'workspace.png',
+            mimeType: 'image/png',
+            size: 3,
+            contentUrl: `/uploads/task-media/${IMAGE_ID}.png`,
+          },
+        }),
+        { status: 201 },
+      ),
+    );
+    await waitFor(() =>
+      expect(body).toHaveValue(
+        `新的\n\n![workspace](/uploads/task-media/${IMAGE_ID}.png)\n\n中文正文`,
+      ),
+    );
+    expect(String(fetch.mock.calls[0][0])).toContain(
+      '/api/nocoreachTasks/media?projectId=1&requestId=',
+    );
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locales: {
+          zh: {
+            body: `新的\n\n![workspace](/uploads/task-media/${IMAGE_ID}.png)\n\n中文正文`,
+          },
+        },
+      }),
+    );
+  } finally {
+    fetch.mockRestore();
+  }
 });
 
 it('edits a new article with validation on save and sends only what it fills in', async () => {

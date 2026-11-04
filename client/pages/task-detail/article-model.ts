@@ -30,6 +30,7 @@ export {
   pagesToStart,
   presentLocales,
   startPages,
+  startedPageUrls,
   translationLocales,
   type ArticleFound,
   type DeliveryChoice,

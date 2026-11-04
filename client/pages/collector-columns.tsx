@@ -1,4 +1,5 @@
 import { getCurrentLocale } from '#i18n';
+import { formatCompact } from '#lib/format';
 // Columns and values shared by the 小红书, Bilibili and YouTube data tables (collector-content.tsx).
 import type { ReactNode } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -16,6 +17,24 @@ export const retryable = (error: unknown) =>
 /** A count read from the platform; unknown stays "—", never 0. */
 export const countText = (value: number | null | undefined) =>
   typeof value === 'number' ? value.toLocaleString(getCurrentLocale()) : '—';
+
+// Likes as the Xiaohongshu page showed them: a plain number with separators, and one the page shortened to ten-thousands
+// (with "+" for "or more") shortened the reader's way, as other counts are (12K in English); anything else as shown.
+// A note saved without the page text falls back to the parsed number. Sorting uses the parsed number on the server.
+const SHORTENED = /^(\d+(?:\.\d+)?)\s*([万萬亿億])(\+?)$/u;
+export const shownLikes = ({
+  likes,
+  likesText: text,
+}: {
+  likes: number | null;
+  likesText: string | null;
+}): string | null => {
+  if (text && /^\d+$/.test(text)) return countText(likes ?? Number(text));
+  const short = text?.match(SHORTENED);
+  if (short)
+    return `${formatCompact(Number(short[1]) * ('万萬'.includes(short[2]) ? 1e4 : 1e8))}${short[3]}`;
+  return text ?? (likes === null ? null : formatCompact(likes));
+};
 
 const right = {
   headerClassName: 'hidden text-right md:table-cell',

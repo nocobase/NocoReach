@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { lastActivityAt } from '../../shared/task-activity.js';
+import { summary } from './execution/effect.js';
+import { canonicalUrl, pageIdentity } from '../../shared/page-identity.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // What the local Agent and the online AI know about each other's side (2026-10-08 user decision, see
@@ -11,14 +13,11 @@ const DAY=86400000;
 const n=v=>Number(v||0).toLocaleString('en-US');
 const pathOf=u=>{let p;try{p=new URL(String(u)).pathname;}catch{p=String(u||'').split(/[?#]/)[0];}return p.replace(/\/+$/,'')||'/';};
 const hostOf=u=>{try{return new URL(String(u)).hostname.toLowerCase().replace(/^www\./,'');}catch{return '';}};
-// GA4 rows carry `host` and GSC rows a full URL; rows without a host (older syncs) match any site.
-const samePage=(url,page,host)=>{const h=host?String(host).toLowerCase().replace(/^www\./,''):hostOf(page),own=hostOf(url);return pathOf(page)===pathOf(url)&&(!h||!own||h===own);};
-const CONCLUSION={up:systemMessageText('effect.up'),down:systemMessageText('effect.down'),flat:systemMessageText('common.flat'),insufficient:systemMessageText('effect.notEnoughData')};
-// One line per effect checkpoint (day 7, day 28), as the task page shows them.
-function effectLines(w){return ((w?.observation?.results)||[]).map(r=>{
- if(r.conclusion==='insufficient'||!r.primary||r.change==null)return systemMessageText('common.dayNotEnoughData', { 0: r.day });
- const [b,a]=r.primary==='clicks'?(r.gsc?.clicks||[]):(r.ga4?.views||[]),p=Math.round(r.change*100);
- return systemMessageText('effect.day', { 0: r.day, 1: CONCLUSION[r.conclusion]||r.conclusion, 2: r.primary==='clicks'?'搜索点击':'浏览量', 3: b, 4: a, 5: p>0?'+':'', 6: p });});}
+// GA4 rows carry `host` and GSC rows a full URL; rows without a host (older syncs) match any site. Addresses compare as
+// the project's page identity says (shared/page-identity.ts), so a row for another address of the page counts.
+const samePage=(url,page,host,identity)=>{const row=canonicalUrl(host&&String(page||'').startsWith('/')?`https://${String(host)}${page}`:String(page||''),identity),own=canonicalUrl(String(url||''),identity),h=hostOf(row),o=hostOf(own);return pathOf(row)===pathOf(own)&&(!h||!o||h===o);};
+// One line per effect checkpoint (day 7, day 28), worded as the task page writes it (execution/effect.ts summary).
+function effectLines(w){return ((w?.observation?.results)||[]).map(summary);}
 // Where a task stands, in a few words.
 function taskState(task,w){
  if(!w)return '还没开始';if(w.cancelledAt)return systemMessageText('common.closed');if(w.revert&&w.revert.state!=='failed')return '已撤回';
@@ -38,19 +37,19 @@ class TaskData{
   const lines=[];let snaps=[];try{snaps=await this.p.sync.snapshots(project);}catch{snaps=[];}
   const get=k=>snaps.find(s=>s.key===k)?.payload,end=[...(get('history-search')||[]),...(get('history-web')||[])].map(r=>r.date).sort().at(-1);
   // A page on a host GA4 does not track (no row names it while others do) takes no host-less GA4 row: those are another site's.
-  if(url){const path=pathOf(url),web=get('pages-28')||[],tracked=new Set(web.filter(r=>r.host).map(r=>String(r.host).toLowerCase().replace(/^www\./,''))),untracked=tracked.size>0&&!tracked.has(hostOf(url));
-   const queries=(get('queries-28')||[]).filter(r=>samePage(url,r.page)),page=web.find(r=>samePage(url,r.page,r.host)&&!(untracked&&!r.host));
+  if(url){const identity=pageIdentity(await this.p.siteContent?.state?.(project).catch(()=>null)),path=pathOf(canonicalUrl(String(url),identity)),samePath=u=>pathOf(canonicalUrl(String(u||''),identity))===path,web=get('pages-28')||[],tracked=new Set(web.filter(r=>r.host).map(r=>String(r.host).toLowerCase().replace(/^www\./,''))),untracked=tracked.size>0&&!tracked.has(hostOf(url));
+   const queries=(get('queries-28')||[]).filter(r=>samePage(url,r.page,undefined,identity)),page=web.find(r=>samePage(url,r.page,r.host,identity)&&!(untracked&&!r.host));
    if(queries.length){const clicks=queries.reduce((s,r)=>s+(Number(r.clicks)||0),0),imp=queries.reduce((s,r)=>s+(Number(r.impressions)||0),0),pos=imp?queries.reduce((s,r)=>s+(Number(r.position)||0)*(Number(r.impressions)||0),0)/imp:null;
     lines.push(`搜索（近 28 天）：点击 ${n(clicks)}，曝光 ${n(imp)}，点击率 ${imp?(clicks/imp*100).toFixed(1):'0'}%${pos?`，平均排名 ${pos.toFixed(1)}`:''}`);
     lines.push(`主要搜索词：${queries.slice().sort((a,b)=>(b.impressions||0)-(a.impressions||0)).slice(0,8).map(r=>`${r.keyword}（曝光 ${n(r.impressions)}，点击 ${n(r.clicks)}${r.position?`，第 ${Number(r.position).toFixed(1)} 位`:''}）`).join('；')}`);}
    if(page)lines.push(`访问（近 28 天）：浏览 ${n(page.views)}${page.conversions?`，关键事件 ${n(page.conversions)}`:''}`);
    const audit=await this.p.audit?.report?.(project).catch(()=>null);
-   const issues=(audit?.issues||[]).filter(i=>(i.pages||[]).some(p=>pathOf(p?.url||p)===path)).map(i=>`${i.title}${i.severity==='critical'?'（严重）':i.severity==='warning'?'（警告）':''}`);
+   const issues=(audit?.issues||[]).filter(i=>(i.pages||[]).some(p=>samePath(p?.url||p))).map(i=>`${i.title}${i.severity==='critical'?'（严重）':i.severity==='warning'?'（警告）':''}`);
    if(issues.length)lines.push(`网站审计里这页的问题：${issues.join('；')}`);
    const rank=await this.p.rankTracking?.status?.(project).catch(()=>null);
-   const ranked=(rank?.keywords||[]).filter(k=>k.latest?.url&&pathOf(k.latest.url)===path).slice(0,10).map(k=>`${k.keyword} 第 ${k.latest.position||'100+'} 位${k.previous?`（上次 ${k.previous.position||'100+'}）`:''}`);
+   const ranked=(rank?.keywords||[]).filter(k=>k.latest?.url&&samePath(k.latest.url)).slice(0,10).map(k=>`${k.keyword} 第 ${k.latest.position||'100+'} 位${k.previous?`（上次 ${k.previous.position||'100+'}）`:''}`);
    if(ranked.length)lines.push(`排名跟踪：${ranked.join('；')}`);
-   const earlier=(await this.tasks(project).catch(()=>[])).filter(t=>String(t.id)!==String(taskId)&&t.evidence?.work?.page?.url&&pathOf(t.evidence.work.page.url)===path).slice(0,5)
+   const earlier=(await this.tasks(project).catch(()=>[])).filter(t=>String(t.id)!==String(taskId)&&t.evidence?.work?.page?.url&&samePath(t.evidence.work.page.url)).slice(0,5)
     .map(t=>{const w=t.evidence.work,e=effectLines(w);return `${t.evidence?.no?`T-${t.evidence.no} `:''}${t.title}（${taskState(t,w)}${e.length?`；${e.join('；')}`:''}）`;});
    if(earlier.length)lines.push(`这页以前的任务：${earlier.join('；')}`);
    if(!lines.length)lines.push('这页在已同步的数据里没有找到搜索和访问记录（可能是新页面，或 Google 还没接入）。');

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -131,7 +132,7 @@ const board = (overrides: object = {}) => ({
     up: 1,
     down: 1,
     flat: 0,
-    insufficient: 0,
+    insufficient: 1,
     waiting: 0,
   },
   totals: { clicks: { before: 300, after: 360, tasks: 2 }, views: null },
@@ -147,6 +148,7 @@ const board = (overrides: object = {}) => ({
       before: 100,
       after: 200,
       percent: 100,
+      lacking: null,
       nextDay: null,
       nextDate: null,
     },
@@ -157,12 +159,28 @@ const board = (overrides: object = {}) => ({
       liveDate: '2026-10-01T00:00:00.000Z',
       status: 'down',
       day: 7,
-      metric: 'clicks',
-      before: 200,
-      after: 160,
-      percent: -20,
+      metric: 'impressions',
+      before: 6071,
+      after: 4318,
+      percent: -28.9,
+      lacking: null,
       nextDay: 28,
       nextDate: '2026-11-01',
+    },
+    {
+      taskId: '10',
+      taskNo: 10,
+      title: 'Add examples',
+      liveDate: '2026-10-25T00:00:00.000Z',
+      status: 'insufficient',
+      day: 7,
+      metric: null,
+      before: null,
+      after: null,
+      percent: null,
+      lacking: { day: 7, clicks: 19, impressions: 35, views: 6 },
+      nextDay: 28,
+      nextDate: '2026-11-22',
     },
   ],
   attention: [
@@ -209,14 +227,24 @@ it('shows the work of the period: counts, page totals, each change and what need
   expect(
     screen.getByText(english['results.board.noTotals']),
   ).toBeInTheDocument();
+  // Each change names the metric it was judged by; one with too little data has no bar and says what there was.
+  const change = (name: string) =>
+    screen.getAllByRole('link', { name })[0].closest('li')!;
+  const bar = (item: HTMLElement) => item.querySelector('.relative.h-2');
+  expect(change('T-8 · Rewrite the title')).toHaveTextContent(
+    'Up · Search clicks 100 → 200 · ↑ 100% · day 28',
+  );
+  expect(change('T-9 · Add internal links')).toHaveTextContent(
+    /Down · Search impressions 6,071 → 4,318 · ↓ 29% · day 7 · Day 28 result around Nov 1/,
+  );
   expect(
-    screen.getByText('Up · ↑ 100% · Search clicks 100 → 200 · day 28'),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText(
-      /^Down · ↓ 20% · Search clicks 200 → 160 · day 7 · Day 28 result around Nov 1(, \d{4})?$/,
-    ),
-  ).toBeInTheDocument();
+    within(change('T-9 · Add internal links')).getByText('Down'),
+  ).toHaveClass('text-nr-ink-red');
+  expect(bar(change('T-9 · Add internal links'))).not.toBeNull();
+  expect(change('T-10 · Add examples')).toHaveTextContent(
+    /Not enough data: Search clicks 19, Search impressions 35, Views 6 in the 7 days before and after going live, too few to judge · Day 28 result around Nov 22/,
+  );
+  expect(bar(change('T-10 · Add examples'))).toBeNull();
   // A result opens its drawer over the dashboard, keeping the period.
   for (const link of screen.getAllByRole('link', {
     name: 'T-9 · Add internal links',
@@ -237,6 +265,28 @@ it('shows the work of the period: counts, page totals, each change and what need
   const rows = screen.getAllByRole('row');
   expect(rows[1]).toHaveTextContent('T-9 · Add internal links');
   expect(rows[2]).toHaveTextContent('T-14 · Write the pricing FAQ');
+});
+it('explains how a change is judged, in the numbers the server judges by', async () => {
+  action.mockResolvedValueOnce(board());
+  renderBoard();
+  const title = await screen.findByText(english['results.board.changes']);
+  fireEvent.click(
+    within(title).getByRole('button', { name: english['common.info'] }),
+  );
+  expect(
+    await screen.findByText(english['results.board.judgeTitle']),
+  ).toBeInTheDocument();
+  for (const [metric, enough] of [
+    ['Search clicks', 40],
+    ['Search impressions', 200],
+    ['Views', 40],
+  ])
+    expect(
+      screen.getByText(`${metric}: at least ${enough} across both periods`),
+    ).toBeInTheDocument();
+  expect(
+    screen.getByText(/^A change under 15% counts as “No clear change”\./),
+  ).toBeInTheDocument();
 });
 it('opens on 90 days and says so inside each card when nothing went live', async () => {
   action.mockResolvedValueOnce(

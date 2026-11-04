@@ -9,7 +9,13 @@ import {
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import { SearchIndex } from '../../server/nocoreach/search-index.js';
 import {
+  historyBounds,
+  shiftDate,
+} from '../../server/nocoreach/search-history.js';
+import {
   GOOGLE_HISTORY_CACHE_MS,
+  GOOGLE_SAVED_COPY_MAX_AGE_MS,
+  GOOGLE_SAVED_REPORT_MS,
   GOOGLE_PARTIAL_CACHE_MS,
 } from '../../shared/google-cache.js';
 
@@ -181,9 +187,156 @@ it('persists GSC reports, empty countries and row details, preserves expiry and 
   expect(await restarted.searchRow('1', selection)).toEqual(detail);
   expect(await restarted.searchCountries('1', window)).toEqual(countries);
   expect(upstream).toHaveBeenCalledTimes(count);
+  // Final days do not change: a report over them does not expire with the others, however often it is read.
   vi.setSystemTime(Date.now() + 1);
-  await restarted.searchBreakdown('1', window);
+  expect(await restarted.searchBreakdown('1', window)).toEqual(duplicate);
+  expect(upstream).toHaveBeenCalledTimes(count);
+  vi.setSystemTime(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  const later = new DataViews(plugin);
+  await later.searchBreakdown('1', window);
   expect(upstream).toHaveBeenCalledTimes(count + 6);
+});
+
+it('shares one breakdown read between a page that can compare and one that cannot yet', async () => {
+  const { views, upstream } = await fixture();
+  const plain = await views.searchBreakdown('1', { ...window, compare: false });
+  expect(upstream).toHaveBeenCalledTimes(6);
+  expect(plain.countries[0]).toMatchObject({
+    clicks: 10,
+    previousClicks: null,
+    previousImpressions: null,
+  });
+  const compared = await views.searchBreakdown('1', window);
+  expect(upstream).toHaveBeenCalledTimes(6);
+  expect(compared.countries[0].previousClicks).toBe(10);
+});
+
+it("answers a breakdown or a row on a new day's window from the same view's previous one, and says which window it holds", async () => {
+  const { plugin, views, upstream } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  // The page names its view: the range, or a custom range's dates.
+  const week = { ...window, view: '7' };
+  const next = { ...windowFor(shiftDate(end, 1), '7'), view: '7' };
+  const selection = { dimension: 'query', key: 'crm' };
+  const first = await views.searchBreakdown('1', week);
+  const firstRow = await views.searchRow('1', { ...week, ...selection });
+  expect(first.window).toMatchObject({ start: window.start, end: window.end });
+  expect(firstRow.window).toMatchObject({ end: window.end });
+  const calls = upstream.mock.calls.length;
+  const restarted = new DataViews(plugin);
+  const copy = await restarted.searchBreakdown('1', next);
+  const rowCopy = await restarted.searchRow('1', { ...next, ...selection });
+  expect(copy).toMatchObject({ refreshing: true, window: { end: window.end } });
+  expect(rowCopy).toMatchObject({
+    refreshing: true,
+    window: { end: window.end },
+  });
+  await restarted.reports.settled();
+  expect(upstream.mock.calls.length).toBeGreaterThan(calls);
+  expect(await restarted.searchBreakdown('1', next)).toMatchObject({
+    window: { end: next.end },
+  });
+  expect(
+    await restarted.searchRow('1', { ...next, ...selection }),
+  ).not.toHaveProperty('savedAt');
+  // Another view never answers from, or evicts, this one: a 28-day range, or a custom week of the same length.
+  expect(
+    await restarted.searchBreakdown('1', {
+      ...windowFor(shiftDate(end, 1), '28'),
+      view: '28',
+    }),
+  ).not.toHaveProperty('savedAt');
+  expect(
+    await restarted.searchBreakdown('1', {
+      ...windowFor('2026-08-07', '7'),
+      view: 'custom:2026-08-01:2026-08-07',
+    }),
+  ).not.toHaveProperty('savedAt');
+  expect(
+    await restarted.searchRow('1', {
+      ...windowFor('2026-08-07', '7'),
+      ...selection,
+      view: 'custom:2026-08-01:2026-08-07',
+    }),
+  ).not.toHaveProperty('savedAt');
+  expect(await restarted.searchBreakdown('1', next)).toMatchObject({
+    window: { end: next.end },
+  });
+  expect(await restarted.searchBreakdown('1', next)).not.toHaveProperty(
+    'savedAt',
+  );
+  // A request naming no view, such as the online agent's, never gets another window's copy.
+  expect(
+    await restarted.searchBreakdown('1', windowFor(shiftDate(end, 2), '7')),
+  ).not.toHaveProperty('savedAt');
+  // Another key or filter is another view, and a copy older than seven days is not shown, though a breakdown over
+  // final days is kept 90 days for its own window.
+  expect(
+    await restarted.searchRow('1', {
+      ...next,
+      dimension: 'query',
+      key: 'erp',
+    }),
+  ).not.toHaveProperty('savedAt');
+  vi.setSystemTime(Date.now() + GOOGLE_SAVED_COPY_MAX_AGE_MS + 1);
+  const later = { ...windowFor(shiftDate(end, 9), '7'), view: '7' };
+  expect(
+    await new DataViews(plugin).searchBreakdown('1', later),
+  ).not.toHaveProperty('savedAt');
+});
+
+it('reads a report still holding days after the final cutoff again after six hours, answering from its copy', async () => {
+  const { plugin, views, upstream } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const { cutoff } = historyBounds(plugin, '1');
+  const open = {
+    ...window,
+    end: shiftDate(cutoff, 1),
+  };
+  const first = await views.searchBreakdown('1', open);
+  expect(first.cacheExpiresAt).toBe(Date.now() + GOOGLE_HISTORY_CACHE_MS);
+  expect(upstream).toHaveBeenCalledTimes(6);
+  vi.setSystemTime(Date.now() + GOOGLE_HISTORY_CACHE_MS);
+  const copy = await views.searchBreakdown('1', open);
+  expect(copy).toMatchObject({ refreshing: true, connected: true });
+  await views.reports.settled();
+  expect(upstream).toHaveBeenCalledTimes(12);
+  expect(await views.searchBreakdown('1', open)).not.toHaveProperty('savedAt');
+  expect(upstream).toHaveBeenCalledTimes(12);
+});
+
+it('reads a range near the final cutoff again each day until the sync no longer reads its days, as Google may publish late', async () => {
+  const { plugin, views, upstream } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T19:00:00Z');
+  const day = 24 * 60 * 60 * 1000;
+  const { cutoff } = historyBounds(plugin, '1');
+  const range = { ...window, end: cutoff };
+  const first = await views.searchBreakdown('1', range);
+  expect(first.cacheExpiresAt).toBe(Date.now() + day);
+  expect(upstream).toHaveBeenCalledTimes(6);
+  // A rolling range is asked for under a new window every day, so within the day this costs it nothing.
+  vi.setSystemTime(Date.now() + day - 1);
+  expect(await views.searchBreakdown('1', range)).not.toHaveProperty('savedAt');
+  expect(upstream).toHaveBeenCalledTimes(6);
+  vi.setSystemTime(Date.now() + 1);
+  expect(await views.searchBreakdown('1', range)).toMatchObject({
+    refreshing: true,
+  });
+  await views.reports.settled();
+  expect(upstream).toHaveBeenCalledTimes(12);
+  // Its days are still within the sync's seven, so it lives another day.
+  const next = await views.searchBreakdown('1', range);
+  expect(next.cacheExpiresAt).toBe(Date.now() + day);
+  expect(upstream).toHaveBeenCalledTimes(12);
+  vi.setSystemTime(Date.now() + 6 * day);
+  await views.searchBreakdown('1', range);
+  await views.reports.settled();
+  expect(upstream).toHaveBeenCalledTimes(18);
+  // Now the sync no longer reads them: they are final.
+  const final = await views.searchBreakdown('1', range);
+  expect(final.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  expect(upstream).toHaveBeenCalledTimes(18);
 });
 
 it('expires partial dimensions after five minutes and does not cache total failures', async () => {
@@ -201,6 +354,12 @@ it('expires partial dimensions after five minutes and does not cache total failu
   expect(await restarted.searchBreakdown('1', window)).toEqual(partial);
   expect(upstream).toHaveBeenCalledTimes(6);
   vi.setSystemTime(Date.now() + GOOGLE_PARTIAL_CACHE_MS);
+  // The partial copy answers while the whole report is read.
+  expect(await restarted.searchBreakdown('1', window)).toMatchObject({
+    devices: null,
+    refreshing: true,
+  });
+  await restarted.reports.settled();
   expect((await restarted.searchBreakdown('1', window)).devices[0].clicks).toBe(
     10,
   );
@@ -351,6 +510,8 @@ it('persists submitted sitemaps while recomputing local inspection tallies, and 
   expect(upstream).toHaveBeenCalledTimes(2);
   state.fail = '';
   vi.setSystemTime(Date.now() + GOOGLE_PARTIAL_CACHE_MS);
+  expect(await restarted.sitemaps('1')).toMatchObject({ refreshing: true });
+  await restarted.reports.settled();
   const refreshed = await restarted.sitemaps('1');
   expect(refreshed.sitemaps[0].children).toHaveLength(1);
   expect(refreshed.cacheExpiresAt).toBe(Date.now() + GOOGLE_HISTORY_CACHE_MS);
@@ -398,7 +559,11 @@ it('persists bounded live aggregates instead of the original query-page matrix',
           impressions: 10,
           position: 4,
         }));
-  const report = await views.search('1', { range: '7', country: 'usa', details: true });
+  const report = await views.search('1', {
+    range: '7',
+    country: 'usa',
+    details: true,
+  });
   expect(report.queries.total).toBe(10000);
   expect(report.queries.rows).toHaveLength(3000);
   const payload = (
@@ -412,8 +577,8 @@ it('persists bounded live aggregates instead of the original query-page matrix',
   expect(Buffer.byteLength(encoded)).toBeLessThan(2 * 1024 * 1024);
   const restarted = new DataViews(views.p);
   restarted.gscQuery = vi.fn();
-  expect(await restarted.search('1', { range: '7', country: 'usa', details: true })).toEqual(
-    report,
-  );
+  expect(
+    await restarted.search('1', { range: '7', country: 'usa', details: true }),
+  ).toEqual(report);
   expect(restarted.gscQuery).not.toHaveBeenCalled();
 });

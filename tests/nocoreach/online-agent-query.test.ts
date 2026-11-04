@@ -1,4 +1,5 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { GoogleReportCache } from '../../server/nocoreach/google-report-cache';
 import {
   QUERY_SOURCES,
   queryDataTool,
@@ -149,6 +150,8 @@ function fixture() {
         return {
           connected: true,
           cutoff: day(0),
+          settledThrough: day(2),
+          queriesWindow: { start: day(30), end: day(3) },
           window,
           totals: { current: { sessions: 5000 }, previous: { sessions: 4200 } },
           daily: daily(() => ({ sessions: 180 })),
@@ -854,6 +857,7 @@ it('filters, sorts and ranges reach the source the way its page asks', async () 
         queryFilter: { operator: 'contains', expression: 'crm' },
         pageFilter: { operator: 'contains', expression: '/docs/' },
         details: true,
+        exactWindow: true,
       },
     ],
   );
@@ -935,6 +939,10 @@ it('filters, sorts and ranges reach the source the way its page asks', async () 
     source: 'reddit',
     error: 'needsFromBeforeTo',
   });
+  expect((await ask({ source: 'traffic' })).notes).toEqual([
+    `GA4 is still processing the days after ${day(2)}: they are counted and may still rise, so comparisons with the previous period can read low.`,
+    `The page table's queries are Search Console's finalized data for ${day(30)} to ${day(3)}, which ends before dataThrough.`,
+  ]);
   expect(await ask({ source: 'traffic', table: 'nothing' })).toMatchObject({
     error: 'unknownTable',
     tables: expect.arrayContaining(['page', 'channel']),
@@ -1091,4 +1099,96 @@ it('reads indexing only once checked, and reports errors without internals', asy
   await expect(
     midway.execute({ source: 'forum' }, new AbortController().signal),
   ).rejects.toMatchObject({ status: 403 });
+});
+
+it('a table read after the summary waits for its own period, not a saved copy of the last one', async () => {
+  const cache = new GoogleReportCache();
+  let cutoff = day(1);
+  const search = (id: string, v: Row) =>
+    cache.load(
+      id,
+      ['search', cutoff, v.details === true],
+      async () => ({
+        connected: true,
+        cutoff,
+        window: { ...window, end: cutoff },
+        queries: {
+          rows: [
+            {
+              key: `read for ${cutoff}`,
+              clicks: 1,
+              impressions: 1,
+              ctr: 1,
+              position: 1,
+            },
+          ],
+          total: 1,
+        },
+      }),
+      undefined,
+      (value, _expiresAt, saved) => ({ ...value, ...saved }),
+      v.details === true ? { family: ['search', 'details'] } : {},
+    );
+  const { sources } = fixture();
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: { ...sources.dataViews, search },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+    site: 'example.test',
+  });
+  const ask = async () =>
+    (await tool.execute(
+      { source: 'search', table: 'queries' },
+      new AbortController().signal,
+    )) as Answer;
+  await ask();
+  await cache.settled();
+  cutoff = day(0);
+  const answer = await ask();
+  expect(answer.period?.end).toBe(day(0));
+  expect(answer.rows?.[0]?.key).toBe(`read for ${day(0)}`);
+});
+
+it('gives up after 75 seconds on a read someone else started, before the reply stops waiting', async () => {
+  const { sources } = fixture();
+  let started = 0;
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: {
+        ...sources.dataViews,
+        // A page's background refresh still waiting on GA4: it has no deadline of the agent's.
+        search: () => {
+          started++;
+          return new Promise(() => {});
+        },
+      },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+  });
+  vi.useFakeTimers();
+  try {
+    let answer: Answer | undefined;
+    void (
+      tool.execute(
+        { source: 'search', table: 'queries' },
+        new AbortController().signal,
+      ) as Promise<Answer>
+    ).then((a) => (answer = a));
+    await vi.advanceTimersByTimeAsync(74_000);
+    expect(started).toBe(1);
+    expect(answer).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(answer).toEqual({ source: 'search', error: 'timedOut' });
+  } finally {
+    vi.useRealTimers();
+  }
 });

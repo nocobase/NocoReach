@@ -1,4 +1,4 @@
-import { formatDateTime } from '#lib/format';
+import { countIn, formatCount, formatDate, formatDateTime } from '#lib/format';
 import {
   useCallback,
   useEffect,
@@ -8,8 +8,12 @@ import {
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
-import { collectorName, type CollectorChoice } from '#lib/collector-platforms';
-import { useNavigate } from 'react-router';
+import {
+  collectorDocs,
+  collectorName,
+  type CollectorChoice,
+} from '#lib/collector-platforms';
+import { Link } from 'react-router';
 import {
   xiaohongshuErrorMessage,
   xiaohongshuRunMessage,
@@ -17,10 +21,32 @@ import {
 import { xiaohongshuRequest } from './xiaohongshu-api';
 import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '#components/ui/dialog';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from '#components/ui/field';
+import { Input } from '#components/ui/input';
+import { Spinner } from '#components/ui/spinner';
+import { chipClass } from '#components/reach/chip';
 import { confirmAction } from '#components/reach/confirm';
 import { InfoTip } from '#components/reach/info-tip';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { CollectorClear } from '#components/collector-clear';
+import { safeLink } from './analytics';
+import { sentences } from './task-detail/failure-model';
+import { shownLikes } from './collector-columns';
+
+// Xiaohongshu (2026-11-02): laid out as Bilibili's panel, but read by hand only, since frequent reads through the
+// signed-in account can get it limited. A read the busy collector turned away is queued and retried the same way.
 
 export interface XiaohongshuNote {
   id: string;
@@ -50,6 +76,13 @@ export interface XiaohongshuView {
   } | null;
   total: number;
   running: string | null;
+  /** A read the busy collector turned away, waiting for its retry. */
+  queued: { retries: number; retryAt: string } | null;
+  recent: Pick<
+    XiaohongshuNote,
+    'id' | 'title' | 'url' | 'likes' | 'likesText' | 'estimatedPublishedAt'
+  >[];
+  recordingSince: string | null;
 }
 function collectorSelection(view: XiaohongshuView, current = '') {
   return view.collectors.some((collector) => collector.id === current)
@@ -133,7 +166,6 @@ export function XiaohongshuConnect({
   const [loadError, setLoadError] = useState<Failure | null>(null);
   const [notice, setNotice] = useMessageState('');
   const [submitted, setSubmitted] = useState(false);
-  const navigate = useNavigate();
   const mountedRef = useRef(true);
   const initializedRef = useRef(false);
   const readsRef = useRef(0);
@@ -195,6 +227,9 @@ export function XiaohongshuConnect({
       return load();
     });
   }, [busy, load, refreshKey, setNotice]);
+  // The dialog closes for good when its collector or connect permission goes away, so it does not reopen by itself.
+  const editable = canConnect && Boolean(data?.configured);
+  if (editing && !editable) setEditing(false);
   // A layout effect for the same reason: Disconnect must not reach the aborted owner of the denial it replaces.
   useLayoutEffect(() => {
     const owner = new AbortController();
@@ -245,7 +280,9 @@ export function XiaohongshuConnect({
       );
       if (mountedRef.current) {
         updateFromMutation(value);
-        setNotice(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
+        // A read the busy collector turned away is queued: the queue notice below says when it tries again.
+        if (value.queued) setNotice('');
+        else setNotice(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
       }
     } finally {
       if (mountedRef.current) await load();
@@ -297,7 +334,7 @@ export function XiaohongshuConnect({
         )}
       </div>
     );
-  const form = canConnect && (!data.connected || editing);
+  const form = canConnect && data.configured && editing;
   const queryValid =
     query.trim().length >= 2 &&
     query.trim().length <= 60 &&
@@ -327,362 +364,346 @@ export function XiaohongshuConnect({
       {$t('xiaohongshu.currentlySupportsSearchResultCollection')}
     </InfoTip>
   );
+  const locked = Boolean(busy) || running || blocked;
+  const startEdit = () =>
+    void run('edit', async () => {
+      const latest = await load();
+      if (latest && mountedRef.current) {
+        setQuery(latest.query);
+        setCollectorId(collectorSelection(latest));
+        setEditing(true);
+        resetValidation();
+      }
+    });
+  const cancelEdit = () => {
+    setEditing(false);
+    // What the dialog said (a failed save) belongs to the discarded draft.
+    setError(null);
+    setNotice('');
+    setQuery(data.query);
+    setCollectorId(collectorSelection(data));
+    resetValidation();
+  };
+  const disconnect = () =>
+    void run('disconnect', async () => {
+      const confirmation = confirmationRef.current;
+      const confirmationSessionId = session?.session.id;
+      if (
+        !confirmation ||
+        confirmation.signal.aborted ||
+        !confirmationSessionId
+      )
+        return;
+      if (
+        !(await confirmAction({
+          title: 'xiaohongshu.disconnectXiaohongshuCollector',
+          description: 'xiaohongshu.savedNotesKeptConnectionNo',
+          action: 'common.disconnect',
+          signal: confirmation.signal,
+        }))
+      )
+        return;
+      // The shared dialog has its own root; the initiating owner must still be active.
+      if (
+        !mountedRef.current ||
+        !accessRef.current.disconnect ||
+        confirmation.signal.aborted
+      )
+        return;
+      let value: XiaohongshuView;
+      try {
+        // Keep the initiating session, even when another tab replaces the cookie.
+        value = await xiaohongshuRequest<XiaohongshuView>(
+          projectId,
+          'disconnect',
+          { revision: data.revision },
+          confirmationSessionId,
+        );
+      } catch (error) {
+        // A late response must not refresh or report into a replacement owner.
+        if (
+          !mountedRef.current ||
+          !accessRef.current.disconnect ||
+          confirmation.signal.aborted
+        )
+          return;
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+        ) {
+          await refresh();
+          return;
+        }
+        throw error;
+      }
+      if (
+        mountedRef.current &&
+        accessRef.current.disconnect &&
+        !confirmation.signal.aborted
+      ) {
+        updateFromMutation(value);
+        setNotice(() =>
+          $t('xiaohongshu.xiaohongshuDisconnectedSavedNotesKept'),
+        );
+        onChange();
+      }
+    });
+  const stop = () => {
+    const requestId = data.running;
+    if (!requestId || !accessRef.current.cancel || cancelLockRef.current)
+      return;
+    cancelLockRef.current = true;
+    setCancelling(true);
+    void xiaohongshuRequest(projectId, 'cancel', { requestId })
+      .then(() => {
+        if (mountedRef.current)
+          setNotice(() => $t('xiaohongshu.cancellationRequested'));
+        return load();
+      })
+      .catch(setFailure)
+      .finally(() => {
+        cancelLockRef.current = false;
+        if (mountedRef.current) setCancelling(false);
+      });
+  };
+  const collectorField = (
+    <>
+      <label className='nr-field' hidden={data.collectors.length === 1}>
+        {$t('xiaohongshu.collector')}{' '}
+        <span aria-hidden='true' className='text-destructive'>
+          *
+        </span>
+        <select
+          ref={collectorInputRef}
+          aria-label={$t('xiaohongshu.collector')}
+          aria-required='true'
+          aria-invalid={fieldErrors.collector}
+          disabled={Boolean(busy) || running}
+          value={collectorId}
+          onChange={(e) => {
+            setCollectorId(e.target.value);
+            setNotice('');
+          }}
+        >
+          <option value=''>
+            {$t('xiaohongshu.selectConfiguredCollector')}
+          </option>
+          {data.collectors.map((c) => (
+            <option key={c.id} value={c.id}>
+              {collectorName(c)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {fieldErrors.collector && (
+        <p role='alert' className='nr-error'>
+          {$t('xiaohongshu.selectConfiguredCollector')}
+        </p>
+      )}
+    </>
+  );
+  const testButton = canTest ? (
+    <Button
+      type='button'
+      variant='outline'
+      size='sm'
+      className='justify-self-start'
+      disabled={Boolean(busy) || running || !collectorId || blocked}
+      onClick={() =>
+        void run('test', async () => {
+          await xiaohongshuRequest(projectId, 'test', {
+            collectorId,
+          });
+          if (mountedRef.current)
+            setNotice(() =>
+              $t('xiaohongshu.collectorReachableOpencliInstalledBrowser'),
+            );
+        })
+      }
+    >
+      {busy === 'test' ? $t('common.checking') : $t('common.checkCollector')}
+    </Button>
+  ) : null;
+  const likes = (note: XiaohongshuView['recent'][number]) => {
+    const shown = shownLikes(note);
+    return shown === null ? null : countIn('xiaohongshu.likesCount', shown);
+  };
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
-      {errorState}
-      {notice && (
+      {!form && errorState}
+      {notice && !form && (
         <p role='status' className='text-sm'>
           {notice}
         </p>
       )}
+      {data.connected && !running ? <Problem data={data} /> : null}
       {!data.configured && !canConnect && (
         <div className='grid gap-2 text-sm'>
           <h3 className='font-medium'>
             {$t('xiaohongshu.noXiaohongshuCollectorConfigured')}
           </h3>
           <p className='text-muted-foreground'>
-            {$t('xiaohongshu.collectorSetupHelp')}
+            {$t('xiaohongshu.collectorSetupHelp')}{' '}
+            <a
+              className='nr-link'
+              href={collectorDocs.xiaohongshu}
+              target='_blank'
+              rel='noreferrer'
+            >
+              {$t('sourceConnections.deployGuide')}
+            </a>
           </p>
         </div>
       )}
-      {(form || (canTest && !canConnect)) && data.configured && (
-        <form
-          className='grid gap-3'
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!canConnect) return;
-            if (!validate()) return;
-            void run('connect', async () => {
-              const value = await xiaohongshuRequest<XiaohongshuView>(
-                projectId,
-                'connect',
-                {
-                  collectorId,
-                  query: query.trim(),
-                  revision: data.revision,
-                },
-              );
-              if (mountedRef.current) {
-                updateFromMutation(value);
-                setEditing(false);
-                resetValidation();
-                setNotice(() =>
-                  $t('xiaohongshu.connectionSavedBrowserLoginNot'),
-                );
-                onChange();
-              }
-            });
-          }}
+      {data.connected ? (
+        <section
+          className='nr-guide-connected grid gap-3'
+          aria-label={$t('youtube.searchTerms')}
         >
-          <label className='nr-field' hidden={data.collectors.length === 1}>
-            {$t('xiaohongshu.collector')}{' '}
-            <span aria-hidden='true' className='text-destructive'>
-              *
-            </span>
-            <select
-              ref={collectorInputRef}
-              aria-label={$t('xiaohongshu.collector')}
-              aria-required='true'
-              aria-invalid={fieldErrors.collector}
-              disabled={Boolean(busy) || running}
-              value={collectorId}
-              onChange={(e) => {
-                setCollectorId(e.target.value);
-                setNotice('');
-              }}
-            >
-              <option value=''>
-                {$t('xiaohongshu.selectConfiguredCollector')}
-              </option>
-              {data.collectors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {collectorName(c)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {fieldErrors.collector && (
-            <p role='alert' className='nr-error'>
-              {$t('xiaohongshu.selectConfiguredCollector')}
-            </p>
-          )}
-          {canConnect && (
-            <>
-              <label className='nr-field'>
-                <span className='inline-flex items-center gap-1'>
-                  {$t('xiaohongshu.xiaohongshuSearchPhrase')}
-                  <span aria-hidden='true' className='text-destructive'>
-                    *
-                  </span>
-                  <InfoTip>
-                    {$t('xiaohongshu.enterOnePhraseManualSearch')}
-                  </InfoTip>
-                </span>
-                <input
-                  ref={queryInputRef}
-                  aria-label={$t('xiaohongshu.xiaohongshuSearchPhrase')}
-                  aria-required='true'
-                  aria-invalid={fieldErrors.query}
-                  value={query}
-                  disabled={Boolean(busy) || running}
-                  maxLength={60}
-                  placeholder='NocoBase'
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </label>
-              {fieldErrors.query && (
-                <p role='alert' className='nr-error'>
-                  {$t('xiaohongshu.errors.invalidQuery')}
-                </p>
-              )}
-            </>
-          )}
-          <div className='nr-step-actions flex-wrap'>
-            {canConnect && (
-              <Button
-                type='submit'
-                disabled={Boolean(busy) || running || blocked}
-              >
-                {busy === 'connect'
-                  ? $t('common.saving')
-                  : $t('xiaohongshu.saveConnection')}
-              </Button>
-            )}
-            {canTest && (
+          <div className='flex items-center justify-between gap-2'>
+            <h3 className='!mb-0'>{$t('youtube.searchTerms')}</h3>
+            {canConnect ? (
               <Button
                 type='button'
+                size='sm'
                 variant='outline'
-                disabled={Boolean(busy) || running || !collectorId || blocked}
-                onClick={() =>
-                  void run('test', async () => {
-                    await xiaohongshuRequest(projectId, 'test', {
-                      collectorId,
-                    });
-                    if (mountedRef.current)
-                      setNotice(() =>
-                        $t(
-                          'xiaohongshu.collectorReachableOpencliInstalledBrowser',
-                        ),
-                      );
-                  })
-                }
+                disabled={locked}
+                onClick={startEdit}
               >
-                {busy === 'test'
-                  ? $t('common.checking')
-                  : $t('common.checkCollector')}
+                {$t('common.modify')}
               </Button>
-            )}
-            {editing && canConnect && (
+            ) : null}
+          </div>
+          <div className='flex flex-wrap gap-1.5'>
+            <span className={chipClass}>{data.query}</span>
+          </div>
+          {data.total > 0 ? (
+            <p className='text-muted-foreground'>
+              {$t('xiaohongshu.notesRecorded', {
+                0: formatCount(data.total),
+                1: data.recordingSince
+                  ? $t('common.recordingSince', {
+                      0: formatDate(data.recordingSince, { withYear: true }),
+                    })
+                  : '',
+              })}
+              {scopeTip}
+            </p>
+          ) : null}
+          {running ? (
+            <div className='flex items-center justify-between gap-3'>
+              <p role='status' className='flex items-center gap-2'>
+                <Spinner />
+                {$t('xiaohongshu.searchingCollectorBrowserUpAbout')}
+              </p>
+              {canCancel && data.running ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  disabled={cancelling || blocked}
+                  onClick={stop}
+                >
+                  {cancelling
+                    ? $t('xiaohongshu.cancelling')
+                    : $t('xiaohongshu.cancelCollection')}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {data.recent.length ? (
+            <div>
+              <p className='nr-guide-subtitle !mt-1'>
+                {$t('xiaohongshu.recentNotes')}
+              </p>
+              <ul className='grid gap-1'>
+                {data.recent.map((note) => (
+                  <li key={note.id} className='flex min-w-0 gap-1'>
+                    <a
+                      className='nr-link min-w-0 truncate'
+                      href={safeLink(note.url)}
+                      target='_blank'
+                      rel='noreferrer'
+                    >
+                      {note.title}
+                    </a>
+                    <span className='shrink-0 text-muted-foreground'>
+                      {note.estimatedPublishedAt
+                        ? ` · ${formatDate(note.estimatedPublishedAt)}`
+                        : ''}
+                      {likes(note) ? ` · ${likes(note)}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className='flex items-center justify-between gap-3 pt-1'>
+            <span className='min-w-0'>
+              {$t('xiaohongshu.manualRead')}
+              {data.verifiedAt ? (
+                <span className='text-muted-foreground'>
+                  {' · '}
+                  {$t('xiaohongshu.lastSuccessfulCollection', {
+                    0: formatDateTime(data.verifiedAt),
+                  })}
+                </span>
+              ) : null}
+            </span>
+            {canSearch ? (
               <Button
                 type='button'
-                variant='ghost'
-                disabled={Boolean(busy)}
-                onClick={() => {
-                  setEditing(false);
-                  setQuery(data.query);
-                  setCollectorId(collectorSelection(data));
-                  resetValidation();
-                }}
+                size='sm'
+                variant='outline'
+                disabled={locked}
+                onClick={() => void run('search', () => search(data.revision))}
               >
-                {$t('common.cancel')}
+                {running ? $t('youtube.readingShort') : $t('common.readNow')}
               </Button>
-            )}
+            ) : null}
           </div>
-        </form>
-      )}
-      {data.connected && !form && (
-        <section className='grid gap-2'>
-          <h3 className='font-medium'>
-            {$t('common.search', { 0: data.query })}
-          </h3>
-          <p className='nr-footnote'>
-            {collectorName(
-              data.collectors.find((c) => c.id === data.collectorId),
-            )}{' '}
-            ·{' '}
-            {data.verifiedAt
-              ? $t('xiaohongshu.lastSuccessfulCollection', {
-                  0: formatDateTime(data.verifiedAt),
-                })
-              : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
-          </p>
-          {(canConnect || canSearch || canDisconnect) && (
-            <div className='nr-step-actions flex-wrap'>
-              {canSearch && (
-                <Button
-                  disabled={Boolean(busy) || running || blocked}
-                  onClick={() =>
-                    void run('search', () => search(data.revision))
-                  }
-                >
-                  {running
-                    ? $t('xiaohongshu.collecting')
-                    : $t('xiaohongshu.searchNow')}
-                </Button>
-              )}
-              {canConnect && (
-                <Button
-                  variant='outline'
-                  disabled={Boolean(busy) || running || blocked}
-                  onClick={() =>
-                    void run('edit', async () => {
-                      const latest = await load();
-                      if (latest && mountedRef.current) {
-                        setQuery(latest.query);
-                        setCollectorId(collectorSelection(latest));
-                        setEditing(true);
-                        resetValidation();
-                      }
-                    })
-                  }
-                >
-                  {$t('xiaohongshu.editConnection')}
-                </Button>
-              )}
-              {canDisconnect && (
-                <Button
-                  variant='ghost'
-                  disabled={Boolean(busy) || running || blocked}
-                  onClick={() =>
-                    void run('disconnect', async () => {
-                      const confirmation = confirmationRef.current;
-                      const confirmationSessionId = session?.session.id;
-                      if (
-                        !confirmation ||
-                        confirmation.signal.aborted ||
-                        !confirmationSessionId
-                      )
-                        return;
-                      if (
-                        !(await confirmAction({
-                          title: 'xiaohongshu.disconnectXiaohongshuCollector',
-                          description: 'xiaohongshu.savedNotesKeptConnectionNo',
-                          action: 'common.disconnect',
-                          signal: confirmation.signal,
-                        }))
-                      )
-                        return;
-                      // The shared dialog has its own root; the initiating owner must still be active.
-                      if (
-                        !mountedRef.current ||
-                        !accessRef.current.disconnect ||
-                        confirmation.signal.aborted
-                      )
-                        return;
-                      let value: XiaohongshuView;
-                      try {
-                        // Keep the initiating session, even when another tab replaces the cookie.
-                        value = await xiaohongshuRequest<XiaohongshuView>(
-                          projectId,
-                          'disconnect',
-                          { revision: data.revision },
-                          confirmationSessionId,
-                        );
-                      } catch (error) {
-                        // A late response must not refresh or report into a replacement owner.
-                        if (
-                          !mountedRef.current ||
-                          !accessRef.current.disconnect ||
-                          confirmation.signal.aborted
-                        )
-                          return;
-                        if (
-                          error instanceof Error &&
-                          'code' in error &&
-                          error.code ===
-                            'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
-                        ) {
-                          await refresh();
-                          return;
-                        }
-                        throw error;
-                      }
-                      if (
-                        mountedRef.current &&
-                        accessRef.current.disconnect &&
-                        !confirmation.signal.aborted
-                      ) {
-                        updateFromMutation(value);
-                        setNotice(() =>
-                          $t(
-                            'xiaohongshu.xiaohongshuDisconnectedSavedNotesKept',
-                          ),
-                        );
-                        onChange();
-                      }
-                    })
-                  }
-                >
-                  {$t('common.disconnect')}
-                </Button>
-              )}
-            </div>
-          )}
         </section>
-      )}
-      {running && (
-        <div className='grid gap-2'>
-          <p role='status' className='nr-footnote'>
-            {$t('xiaohongshu.searchingCollectorBrowserUpAbout')}
-          </p>
-          {canCancel && data.running && (
-            <Button
-              variant='outline'
-              disabled={cancelling || blocked}
-              onClick={() => {
-                const requestId = data.running;
-                if (
-                  !requestId ||
-                  !accessRef.current.cancel ||
-                  cancelLockRef.current
-                )
-                  return;
-                cancelLockRef.current = true;
-                setCancelling(true);
-                void xiaohongshuRequest(projectId, 'cancel', { requestId })
-                  .then(() => {
-                    if (mountedRef.current)
-                      setNotice(() => $t('xiaohongshu.cancellationRequested'));
-                    return load();
-                  })
-                  .catch(setFailure)
-                  .finally(() => {
-                    cancelLockRef.current = false;
-                    if (mountedRef.current) setCancelling(false);
-                  });
-              }}
-            >
-              {cancelling
-                ? $t('xiaohongshu.cancelling')
-                : $t('xiaohongshu.cancelCollection')}
+      ) : data.configured ? (
+        <section className='nr-guide-connected flex items-center justify-between gap-3'>
+          <div className='min-w-0'>
+            <h3>{$t('youtube.searchTerms')}</h3>
+            <p className='text-muted-foreground'>
+              {canConnect
+                ? $t('youtube.noTermsYet')
+                : $t('xiaohongshu.noConfirmedNotesYetAsk')}
+            </p>
+          </div>
+          {canConnect ? (
+            <Button type='button' disabled={locked} onClick={startEdit}>
+              {$t('youtube.addTerms')}
             </Button>
-          )}
+          ) : null}
+        </section>
+      ) : null}
+      {/* Someone who may check the collector but not change the search gets the check alone. */}
+      {canTest && !canConnect && data.configured ? (
+        <div className='grid gap-3'>
+          {collectorField}
+          {testButton}
         </div>
-      )}
-      {data.lastRun && !data.lastRun.ok && (
-        <p role='status' className='nr-footnote'>
-          {xiaohongshuRunMessage(data.lastRun.errorCode)}
-        </p>
-      )}
-      {data.total > 0 ? (
-        <section className='grid gap-2'>
-          <p className='nr-footnote'>
-            {$t('collectorPage.savedSummary', { 0: data.total })}
-            {scopeTip}
-          </p>
-          <div className='nr-step-actions'>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => void navigate('/data/xiaohongshu')}
-            >
+      ) : null}
+      {data.total > 0 || (data.connected && canDisconnect) ? (
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          {data.total > 0 ? (
+            <Link to='/data/xiaohongshu' className='nr-link text-sm'>
               {$t('collectorPage.viewData')}
-            </Button>
+            </Link>
+          ) : (
+            <span />
+          )}
+          <div className='flex flex-wrap gap-1'>
             <CollectorClear
               projectId={projectId}
               resource='nrXiaohongshu'
               revision={data.revision}
               total={data.total}
+              size='sm'
               disabled={Boolean(busy || data.running)}
               errorMessage={xiaohongshuErrorMessage}
               onCleared={async () => {
@@ -690,18 +711,151 @@ export function XiaohongshuConnect({
                 onChange();
               }}
             />
+            {canDisconnect && data.connected ? (
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                disabled={locked}
+                onClick={disconnect}
+              >
+                {$t('common.disconnect')}
+              </Button>
+            ) : null}
           </div>
-        </section>
-      ) : (
-        <p className='nr-footnote'>
-          {$t(
-            canConnect && canSearch
-              ? 'xiaohongshu.saveConnectionChooseSearchNow'
-              : 'xiaohongshu.noConfirmedNotesYetAsk',
-          )}
-          {scopeTip}
-        </p>
-      )}
+        </div>
+      ) : null}
+      <Dialog
+        open={form}
+        onOpenChange={(open) => {
+          if (!open && busy !== 'connect') cancelEdit();
+        }}
+      >
+        {form ? (
+          <DialogContent className='sm:max-w-lg'>
+            <DialogHeader>
+              <DialogTitle>
+                {$t(
+                  data.connected
+                    ? 'xiaohongshu.editTermsTitle'
+                    : 'xiaohongshu.addTermsTitle',
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            <form
+              className='grid gap-3'
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!validate()) return;
+                void run('connect', async () => {
+                  const value = await xiaohongshuRequest<XiaohongshuView>(
+                    projectId,
+                    'connect',
+                    {
+                      collectorId,
+                      query: query.trim(),
+                      revision: data.revision,
+                    },
+                  );
+                  if (mountedRef.current) {
+                    updateFromMutation(value);
+                    setEditing(false);
+                    resetValidation();
+                    setNotice(() =>
+                      $t('xiaohongshu.connectionSavedBrowserLoginNot'),
+                    );
+                    onChange();
+                  }
+                });
+              }}
+            >
+              {/* The panel's own errors are hidden behind the dialog, so it shows them. */}
+              {loadError ? (
+                <p role='alert' className='nr-error'>
+                  {loadError.message()}
+                </p>
+              ) : null}
+              {error ? (
+                <p role='alert' className='nr-error'>
+                  {error.message()}
+                </p>
+              ) : null}
+              {/* The collector is checked from its row in the drawer, not here. */}
+              {collectorField}
+              {/* The same field as Bilibili's search terms, as one line: the collector takes a single term. */}
+              <Field data-invalid={fieldErrors.query}>
+                <FieldLabel htmlFor='xhs-query'>
+                  {$t('common.searchTerm')}
+                </FieldLabel>
+                <Input
+                  ref={queryInputRef}
+                  id='xhs-query'
+                  aria-required='true'
+                  aria-invalid={fieldErrors.query}
+                  aria-describedby='xhs-query-help xhs-query-error'
+                  value={query}
+                  disabled={Boolean(busy) || running}
+                  maxLength={60}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <FieldDescription id='xhs-query-help'>
+                  {$t('xiaohongshu.termHelp')}
+                </FieldDescription>
+                <FieldError
+                  id='xhs-query-error'
+                  errors={
+                    fieldErrors.query
+                      ? [{ message: $t('xiaohongshu.errors.invalidQuery') }]
+                      : []
+                  }
+                />
+              </Field>
+              <DialogFooter>
+                <Button
+                  type='button'
+                  variant='outline'
+                  disabled={busy === 'connect'}
+                  onClick={cancelEdit}
+                >
+                  {$t('common.cancel')}
+                </Button>
+                <Button
+                  type='submit'
+                  disabled={Boolean(busy) || running || blocked}
+                >
+                  {busy === 'connect' && <Spinner data-icon='inline-start' />}
+                  {$t('common.save')}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </div>
+  );
+}
+
+/** A read waiting for the busy collector, or the last read's problem. Reading stays manual, so nothing pauses. */
+function Problem({ data }: { data: XiaohongshuView }) {
+  const box = (title: string, body: string) => (
+    <section className='nr-guide-step !mt-0 grid gap-1' role='status'>
+      <h3 className='!mb-0'>{title}</h3>
+      <p className='text-muted-foreground'>{body}</p>
+    </section>
+  );
+  if (data.queued)
+    return box($t('collectorQueue.title'), $t('collectorQueue.help'));
+  const last = data.lastRun;
+  if (!last || last.ok || last.errorCode === 'cancelled') return null;
+  return box(
+    $t(
+      last.errorCode === 'busy'
+        ? 'collectorQueue.gaveUp'
+        : 'youtube.lastReadFailedTitle',
+    ),
+    sentences(
+      last.errorCode === 'busy' ? '' : xiaohongshuRunMessage(last.errorCode),
+      $t('youtube.retryManually'),
+    ),
   );
 }

@@ -414,11 +414,9 @@ describe('Google fixtures', () => {
         period.totals.current.sessions,
       );
       expect(period.totals.previous.sessions).toBeGreaterThan(0);
-      expect(period.daily.map((d: { date: string }) => d.date)).toEqual([
-        ...Array.from({ length: 7 }, (_, i) => `2026-10-0${3 + i}`),
-        '2026-10-10',
-        '2026-10-11',
-      ]);
+      expect(period.daily.map((d: { date: string }) => d.date)).toEqual(
+        Array.from({ length: 7 }, (_, i) => `2026-10-0${3 + i}`),
+      );
       expect(period.previousDaily).toHaveLength(7);
       expect(
         period.tables.event.find(

@@ -4,6 +4,7 @@ import {
   type ArticleMatch,
 } from './article-publishing.js';
 import { ownSignalIds, pageKey } from './opportunity-parts.js';
+import type { PageIdentity } from './page-identity.js';
 import { routeRepo, type RepoRef } from './repo-routing.js';
 
 // How a task starts when nobody has to choose: the start card preselects these, and a task handed over from an
@@ -61,8 +62,12 @@ export type StartContext = {
   task: { evidence?: Record<string, unknown> };
   /** The project's AI content language ("zh-CN"): the primary language when nobody chose one (2026-10-30). */
   language?: string | null;
+  /** Which of the project's addresses are one page (shared/page-identity.ts); left out, only their form is compared. */
+  pageIdentity?: PageIdentity | null;
   work: {
     page?: { url?: string } | null;
+    pages?: string[];
+    startedPages?: string[];
     article?: {
       targetId?: string;
       articleId?: string | null;
@@ -80,12 +85,19 @@ export type StartContext = {
   } | null;
 };
 
-/** Web addresses, each page once (whatever its scheme, `www.` or trailing slash), in order, at most `max`. */
-export function distinctPages(urls: unknown[], max = MAX_TASK_PAGES) {
+/**
+ * Web addresses, each page once (whatever its scheme, `www.` or trailing slash, and with the project's page identity
+ * whatever address of it), in order, at most `max`.
+ */
+export function distinctPages(
+  urls: unknown[],
+  max = MAX_TASK_PAGES,
+  identity?: PageIdentity | null,
+) {
   const out = new Map<string, string>();
   for (const u of urls) {
     const url = typeof u === 'string' ? u.trim() : '',
-      key = pageKey(url);
+      key = pageKey(url, identity);
     if (key && !out.has(key)) out.set(key, url);
   }
   return [...out.values()].slice(0, max);
@@ -112,7 +124,11 @@ export function pageUrlsOf(data: StartContext): string[] {
   };
   const listed: unknown[] = Array.isArray(e.pages) ? e.pages : [];
   if (listed.length)
-    return distinctPages([data.work.page?.url, e.page, ...listed]);
+    return distinctPages(
+      [data.work.page?.url, e.page, ...listed],
+      MAX_TASK_PAGES,
+      data.pageIdentity,
+    );
   // A change handed off on its own (Insights › Today's changes) names its page and change instead of an opportunity;
   // one of an opportunity's several tasks looks only at its own place, never at the opportunity's other pages.
   const ids = new Set<unknown>(ownSignalIds(e));
@@ -126,12 +142,26 @@ export function pageUrlsOf(data: StartContext): string[] {
         ? (s.evidence as unknown[])
         : []),
     ]);
-  return distinctPages([
-    data.work.page?.url,
-    e.page,
-    e.part ? undefined : e.insight?.target,
-    ...cited,
-  ]);
+  return distinctPages(
+    [
+      data.work.page?.url,
+      e.page,
+      e.part ? undefined : e.insight?.target,
+      ...cited,
+    ],
+    MAX_TASK_PAGES,
+    data.pageIdentity,
+  );
+}
+
+/**
+ * The pages a task was started with (2026-11-02), as the start recorded them (`work.startedPages`): the pages the
+ * start named, else the task's pages then, so relinking the task's page afterwards changes neither its record on the
+ * task page nor this. Before the start, and for a task started before the record, the pages it would start with now.
+ */
+export function startedPageUrls(data: StartContext): string[] {
+  const w = data.work;
+  return w.startedPages || (w.pages?.length ? w.pages : pageUrlsOf(data));
 }
 
 /** Each page the lookup read, or one standing for them all when it named only the article it found. */

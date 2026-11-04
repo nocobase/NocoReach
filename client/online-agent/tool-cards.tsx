@@ -58,4 +58,8 @@ export const toolLabel = (name: string) =>
               ? $t('onlineAgent.proposeRules')
               : name === 'propose_keyword_run'
                 ? $t('onlineAgent.proposeKeywordRun')
-                : name;
+                : name === 'query_data'
+                  ? $t('onlineAgent.queryData')
+                  : name === 'task_execute'
+                    ? $t('onlineAgent.runTask')
+                    : name;

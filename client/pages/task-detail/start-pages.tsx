@@ -118,10 +118,12 @@ export function PagePicker({
         articleId: a.id,
       })),
     );
-    // A post the sitemap also lists is shown once, as the article it is.
-    const known = new Set(articles.map((a) => pageKey(a.url)).filter(Boolean));
+    // A post the sitemap also lists is shown once, as the article it is, at whatever address of the page.
+    const known = new Set(
+      articles.map((a) => pageKey(a.url, data.pageIdentity)).filter(Boolean),
+    );
     const site: Hit[] = current.pages
-      .filter((p) => !known.has(pageKey(p.url)))
+      .filter((p) => !known.has(pageKey(p.url, data.pageIdentity)))
       .map((p) => ({ kind: 'page', url: p.url, title: p.title }));
     return [
       ...site.slice(0, HITS / 2),
@@ -222,6 +224,7 @@ const restCounts = ({ articles, site }: ReturnType<typeof restGroups>) =>
 export function RestNotice({
   rest,
   related = [],
+  identity,
   allowed,
   busy,
   error,
@@ -229,6 +232,8 @@ export function RestNotice({
 }: {
   rest: PageFound[];
   related?: TaskData['related'];
+  /** Which of the project's addresses are one page (shared/page-identity.ts). */
+  identity?: TaskData['pageIdentity'];
   allowed: boolean;
   busy: boolean;
   error?: string;
@@ -241,7 +246,9 @@ export function RestNotice({
       Array.isArray(r.pages),
   );
   const direct = (p: PageFound) =>
-      siblings.find((s) => s.pages.some((u) => pageKey(u) === pageKey(p.url))),
+      siblings.find((s) =>
+        s.pages.some((u) => pageKey(u, identity) === pageKey(p.url, identity)),
+      ),
     article = (p: PageFound) =>
       p.article ? `${p.article.targetId}:${p.article.articleId}` : '';
   // A post's other address counts as held once a task has one of its addresses.

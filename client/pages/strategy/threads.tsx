@@ -29,7 +29,8 @@ import { OnlineError } from '../../online-agent/controls';
 import { OnlineCutOff } from '../../online-agent/cut-off';
 import { parseQuote } from '../../online-agent/quote';
 import { toolCard, toolLabel } from '../../online-agent/tool-cards';
-import { useFreshData } from '../workspace-cache';
+import { useFreshData, useWorkspaceCache } from '../workspace-cache';
+import type { EarlyRequests } from './early-requests';
 import {
   onlineRunActive,
   type OnlineRun,
@@ -79,21 +80,35 @@ const byTime = (a: OnlineThread, b: OnlineThread) =>
 export const threadsOf = (threads: OnlineThread[], day: string) =>
   threads.filter((t) => t.subject.day === day).sort(byTime);
 
+export const insightThreadsKey = (projectId: number) =>
+  `insight-threads:${projectId}`;
+export const insightThreads = (
+  api: ReturnType<typeof useOnlineApi>,
+  projectId: number,
+) => api<OnlineThread[]>(`threads?projectId=${projectId}`);
+
 /** Reads the owner's Insights conversations for the project, and moves the day's one into the side panel when it opens. */
 export function InsightChatProvider({
   projectId,
   day,
+  early,
   children,
 }: {
   projectId: number;
   day: string;
+  /** The conversations' request when Insights started it early. */
+  early?: EarlyRequests;
   children: ReactNode;
 }) {
   const api = useOnlineApi(),
     chat = useOptionalOnlineChat(),
-    panel = useChatPanel();
-  const view = useFreshData(`insight-threads:${projectId}`, () =>
-    api<OnlineThread[]>(`threads?projectId=${projectId}`),
+    panel = useChatPanel(),
+    cache = useWorkspaceCache();
+  const key = insightThreadsKey(projectId);
+  const view = useFreshData(key, () =>
+    early
+      ? early.take(cache, key, () => insightThreads(api, projectId))
+      : insightThreads(api, projectId),
   );
   const { reload } = view;
   const [sends, setSends] = useState(0),

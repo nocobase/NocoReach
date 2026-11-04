@@ -3,7 +3,7 @@ import {
   TrendChart,
   ChartArea as Area,
 } from '#components/reach/chart-legend';
-import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
+import { googleLocalFreshness, googleCacheExpiry, reportView, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t, $tj, $legacyText } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
@@ -27,7 +27,7 @@ import { Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "#lib/toast";
 import { cn } from "#lib/utils";
 import { PageContainer, PageHeader } from "#components/reach/page";
-import { EmptyState, LoadError, ListSkeleton } from "#components/reach/states";
+import { EmptyState, LoadError, ListSkeleton, SavedReportNote } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
@@ -65,7 +65,7 @@ type Filter = { operator: "contains" | "equals"; expression: string };
 type DimensionRow = { key: string; clicks: number; impressions: number; ctr: number; position: number };
 type StrikingRow = { query: string; page: string; clicks: number; impressions: number; position: number };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr?: number | null; position?: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr?: number | null; previousPosition?: number | null };
-export type SearchReport = {
+export type SearchReport = Partial<SavedCopy> & {
   connected: boolean;
   coverage?: { earliest?: string; current: CoveragePeriod; previous: CoveragePeriod | null };
   history?: { jobs: { id: string; status: string; startDate: string; endDate: string }[]; scheduleEnabled: boolean };
@@ -137,7 +137,7 @@ export default function SearchPerformancePage() {
   const custom = !validRange(range);
   const { data: report, error, reload } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' ? `data-view:search:v4:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country])}` : null,
-    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
+    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), acceptSaved: true }, unwrap: "data" }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   // The query, page and breakdown details load with the page (UI review 2026-10-21) instead of behind a button; they are
@@ -146,19 +146,23 @@ export default function SearchPerformancePage() {
   const showDetails = true;
   const { data: details, error: detailsError } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' && showDetails ? `data-view:search-details:${selectedDetailsKey}` : null,
-    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true }, unwrap: 'data' }),
+    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true, acceptSaved: true }, unwrap: 'data' }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   const tableReport = showDetails ? details : undefined;
   const w = report?.window;
+  const tableWindow = details?.window ?? w;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
-  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters, view: reportView(range) } : null;
+  // The tables' own report says which period they hold, as it can differ from the summary's: they end at the last synced
+  // day until the day's sync lands, and a saved copy holds the window it was read for. A table row opens on that period.
+  const rowScope: Scope | null = scope && tableWindow ? { ...scope, compare: Boolean(details?.complete && details.previousComplete), window: { all: tableWindow.all, start: tableWindow.start, end: tableWindow.end, previousStart: tableWindow.previousStart, previousEnd: tableWindow.previousEnd } } : scope;
   const { data: breakdown, error: breakdownError } = useBreakdown(scope);
   const countries = (breakdown?.countries ?? []).map((c) => ({ key: c.key, clicks: c.clicks }));
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");
   const openRow = useCallback((dimension: "query" | "page", key: string, figures?: { clicks: number; impressions: number; ctr: number; position: number | null }) => setOpen({ dimension, key, figures }), []);
-  const moverRows = report?.complete && report.previousComplete && tableReport?.movers ? (by === "page" ? tableReport.movers.page : tableReport.movers.query)?.[tab === "falling" ? "falling" : tab === "fresh" ? "fresh" : "rising"] ?? [] : [];
+  const moverRows = tableReport?.movers ? (by === "page" ? tableReport.movers.page : tableReport.movers.query)?.[tab === "falling" ? "falling" : tab === "fresh" ? "fresh" : "rising"] ?? [] : [];
   const sliceRows = slice === "date"
     ? (report?.trend ?? []).map((p) => ({ key: p.date, name: p.date, clicks: p.clicks, impressions: p.impressions, ctr: p.ctr ?? null, position: p.position ?? null, previousClicks: p.previousClicks }))
     : slices(slice, slice === "country" ? breakdown?.countries : slice === "device" ? breakdown?.devices : breakdown?.appearances);
@@ -166,7 +170,9 @@ export default function SearchPerformancePage() {
 
   const exportTab = () => {
     if (!report?.connected || !w) return;
-    const stamp = $t('searchPerformance.dateRange',{0:formatDate(w.start),1:formatDate(w.end)});
+    // Country, device and appearance rows follow the summary's window; every other tab is one of the tables.
+    const held = tab === "slices" ? w : tableWindow ?? w;
+    const stamp = $t('searchPerformance.dateRange',{0:formatDate(held.start),1:formatDate(held.end)});
     const metricsHead = [$t('common.clicks'), $t('common.impressions'), $t('common.ctr'), $t('common.position')];
     const ok =
       tab === "striking"
@@ -183,19 +189,19 @@ export default function SearchPerformancePage() {
     if (!ok) toast.error(() => ($t('searchPerformance.noDataExport')));
   };
   const handOffMovers = async (rows: MoverRow[]) => {
-    if (!project || !w || !rows.length) return;
+    if (!project || !tableWindow || !rows.length) return;
     const list = rows.map((r) => ({ key: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position ?? 0 }));
-    if (by === "page") { const p = list.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(p, w), page: p.length === 1 ? p[0].page : undefined }); return; }
+    if (by === "page") { const p = list.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(p, tableWindow), page: p.length === 1 ? p[0].page : undefined }); return; }
     const ranks = await rankRequest(project.id, list.map((r) => r.key)).catch(() => undefined);
     const q = list.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
-    setHanding({ draft: queryDraft(q, w), page: mainPage(q) });
+    setHanding({ draft: queryDraft(q, tableWindow), page: mainPage(q) });
   };
   const [handing, setHanding] = useState<{ draft: TaskDraft; page?: string }>();
 
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(tableWindow ? [$t('searchHistory.detailsScope', { 0: formatDate(tableWindow.start), 1: formatDate(tableWindow.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
@@ -207,6 +213,7 @@ export default function SearchPerformancePage() {
         : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
       <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:formatDate(w.start),1:formatDate(w.end),2:w.days,3:formatDate(report?.cutoff)}) : $t('searchHistory.rangeSummary',{0:formatDate(w.start),1:formatDate(w.end),2:formatDate(report?.cutoff)})) : undefined} />
+      <SavedReportNote {...savedCopyNote(report, details, breakdown)} />
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
       {report && !report.connected ? (
@@ -258,12 +265,12 @@ export default function SearchPerformancePage() {
               />
             ) : null}
             {tab === "striking" ? (
-              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={report.window!} rows={tableReport?.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} onOpen={(r) => openRow("query", r.query, { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position })} />
+              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={tableWindow!} rows={tableReport?.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} onOpen={(r) => openRow("query", r.query, { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position })} />
             ) : tab === "queries" || tab === "pages" ? (
               <DimensionTable
                 key={tab + JSON.stringify(filters)}
                 projectId={project?.id}
-                period={report.window!}
+                period={tableWindow!}
                 data={(tab === "pages" ? tableReport?.pages : tableReport?.queries) ?? { rows: [], total: 0 }}
                 dimension={tab === "pages" ? "pages" : "queries"}
                 isFiltered={activeFilters > 0}
@@ -281,7 +288,7 @@ export default function SearchPerformancePage() {
             )}
           </Card>
           </> : null}
-          {open && scope ? <RowDrawer scope={scope} dimension={open.dimension} rowKey={open.key} figures={open.figures} metric={metric} onClose={() => setOpen(null)} /> : null}
+          {open && rowScope ? <RowDrawer scope={rowScope} dimension={open.dimension} rowKey={open.key} figures={open.figures} metric={metric} onClose={() => setOpen(null)} /> : null}
           {handing && project ? <HandOff projectId={project.id} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
         </>
       ) : null}

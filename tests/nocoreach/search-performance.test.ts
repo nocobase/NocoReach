@@ -64,6 +64,44 @@ test('search report: a filter switches totals to the query × page rows and need
  assert.equal(r.filtered,true);assert.equal(r.totals.clicks,14);assert.equal(r.totals.impressions,140);assert.equal(r.complete,true);assert.equal(r.previous.clicks,14);
  const wide=await dv.search('1',{range:'28',queryFilter:{operator:'contains',expression:'crm'}});assert.equal(wide.complete,false);assert.equal(wide.previous,null);assert.equal(wide.trend[0].clicks,null);
 });
+test('search details: the tables come from the synced days when both periods are held, without asking Search Console',async()=>{
+ const {dv}=views();const asked=vi.fn(async()=>[]);dv.gscQuery=asked;
+ const r=await dv.search('1',{range:'7',details:true});
+ assert.equal(asked.mock.calls.length,0,'no Search Console request');assert.equal(r.live,undefined);assert.equal(r.pairDays,7);
+ assert.deepEqual(r.queries.rows.map(q=>[q.key,q.clicks,q.impressions]),[['crm',14,140],['erp',7,210]]);assert.deepEqual(r.pages.rows.map(q=>q.key),['https://x/a','https://x/b']);
+ assert.deepEqual(r.striking.map(q=>q.query),['crm']);assert.equal(r.window.days,7);
+ assert.deepEqual(r.movers.query.rising,[],'same clicks in both periods');assert.equal(r.movers.query.falling.length,0);
+});
+test('search details: any synced day missing from either period reads Search Console, as the tables would be short',async()=>{
+ const {dv}=views();const asked=[];dv.gscQuery=async(_id,_site,body)=>{asked.push(body);return [];};
+ const r=await dv.search('1',{range:'28',details:true});
+ assert.equal(r.live,true);assert.ok(asked.some(b=>b.dimensions.join()==='query,page'));
+});
+test('search details: more pairs than a report holds reads Search Console, stopping at the day that goes over',async()=>{
+ const {dv,p,end}=views();const LIMIT=100000,repo=p.db.getRepository();let reads=0,size=LIMIT+1;
+ p.db.getRepository=()=>({...repo,find:async o=>{if(o.filter.grain!=='query_page')return repo.find(o);if(!o.fields.includes('payload'))return o.filter.date.$in.map(date=>({get:()=>date}));reads++;
+  const offset=reads*size,payload=Array.from({length:size},(_,i)=>({keyword:`q${offset+i}`,page:'https://x/a',clicks:1,impressions:1,position:1}));return [{get:k=>k==='payload'?payload:o.filter.date.$in[0]}];}});
+ const w=__data_views.windowFor(end,'7');
+ assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,1,'the first day over the limit ends the reading');
+ reads=0;size=Math.floor(LIMIT/7);const within=await dv.storedPairs('1','sc-domain:x',w);assert.equal(reads,14);assert.equal(within.current.length,size*7);assert.equal(within.previous.length,size*7);
+ reads=0;size=LIMIT+1;const asked=[];dv.gscQuery=async(_id,_site,body)=>{asked.push(body);return [];};
+ const r=await dv.search('1',{range:'7',details:true});assert.equal(r.live,true);assert.ok(asked.some(b=>b.dimensions.join()==='query,page'));
+});
+test('search details: a filter or a country reads Search Console; so does a range too long to add up by day',async()=>{
+ const {dv}=views();const asked=vi.fn(async()=>[]);dv.gscQuery=asked;
+ assert.equal((await dv.search('1',{range:'7',details:true,queryFilter:{operator:'contains',expression:'crm'}})).live,true);
+ assert.equal((await dv.search('1',{range:'7',details:true,country:'usa'})).live,true);
+ assert.equal((await dv.storedPairs('1','sc-domain:x',{all:true,start:'2026-09-01',end:'2026-09-27',previousStart:'2026-08-31',previousEnd:'2026-08-31',days:27})),null);
+ assert.equal((await dv.storedPairs('1','sc-domain:x',{start:'2026-05-01',end:'2026-09-27',previousStart:'2025-12-01',previousEnd:'2026-04-30',days:150})),null);
+});
+test('warm: reads what the page opens with, so its details and breakdown are saved before anyone asks',async()=>{
+ const {dv,saved}=views();dv.gscQuery=async()=>[];
+ const breakdown=vi.spyOn(dv,'searchBreakdown');await dv.warm('1');
+ const asked=breakdown.mock.calls[0][1];assert.notEqual(asked.compare,false,'the one report of this window, with the period before');
+ assert.deepEqual(['start','end','previousStart','previousEnd'].map(k=>typeof asked[k]),['string','string','string','string']);
+ assert.equal(saved.find(s=>s.key==='google-local-reports:1').payload.entries.length,2,'summary and details');
+ assert.ok(saved.find(s=>s.key==='gsc-reports:1').payload.entries.length>=1);
+});
 test('search report: not connected is a plain state, not an error',async()=>{
  const dv=new DataViews({sync:{snapshots:async()=>{throw Object.assign(new Error('请先授权'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});},snapshotKey:async()=>{throw Object.assign(new Error('请先授权'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});},link:async()=>{throw Object.assign(new Error('请先授权'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});}}});
  assert.deepEqual(await dv.search('1',{}),{connected:false});
