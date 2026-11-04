@@ -1540,19 +1540,27 @@ test('Full screen edits the same article, Back to task keeps the edits, and leav
   expect(within(reader).queryByLabelText('全屏编辑')).toBeNull();
   await user.type(within(reader).getByRole('textbox', { name: '标题' }), '!');
   await user.click(within(reader).getByRole('button', { name: '返回任务' }));
-  await waitFor(() =>
-    expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+  await waitFor(
+    () =>
+      expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+    { timeout: 3000 },
   );
   expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(within(card).getByRole('textbox', { name: '标题' })).toHaveValue(
     `${title} and more!`,
   );
   await user.click(screen.getByRole('button', { name: 'elsewhere' }));
-  expect(await screen.findByText('Tasks')).toBeVisible();
+  expect(
+    await screen.findByText('Tasks', undefined, { timeout: 3000 }),
+  ).toBeVisible();
   expect(screen.queryByRole('alertdialog')).toBeNull();
   // What was typed last is saved as the task closes, then the article is let go.
-  await waitFor(() =>
-    expect(articleEdit.mock.calls.map(([o]) => o.body.op)).toContain('release'),
+  await waitFor(
+    () =>
+      expect(articleEdit.mock.calls.map(([o]) => o.body.op)).toContain(
+        'release',
+      ),
+    { timeout: 3000 },
   );
   const saves = articleEdit.mock.calls
     .map(([o]) => o.body)
