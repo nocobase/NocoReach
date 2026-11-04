@@ -5,7 +5,7 @@
 // - period: the totals, the daily line and the tables the page shows before a tab is opened (FIRST_TABLES), for a window
 //   that ends yesterday in the property's time zone; kept until midnight there, when yesterday moves on, except that a
 //   report read in the night is read again in the morning, once GA4 has most of yesterday (MORNING_READ_HOUR). The sync
-//   tick reads it ahead. `periodTables`, the other report tables (着陆页, 页面, 地区, 技术…), follows the same rules but is
+//   tick reads it ahead. `periodTables`, the other report tables (Landing pages, Pages, Geography, Tech…), follows the same rules but is
 //   read when the page is opened, and by the tick only once a day for a project opened in the last day: they are most
 //   of the rows, and most visits never open their tabs.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
@@ -189,6 +189,9 @@ class WebsiteReport{
  // Whether a period report read at `now` is a night read, which lives only until MORNING_READ_HOUR: one read before the
  // hour before it. The sync tick reads `periodTables` ahead only when it is not, so once a day, with yesterday whole.
  nightRead(property:string,now:number){return 24*HOUR-untilMidnight(this.endZone(property),now)<(MORNING_READ_HOUR-1)*HOUR;}
+ // Whether a period report read now lasts until midnight. With no zone held yet it is looked up first, as `yesterday` does,
+ // so the hour is the property's rather than UTC's; one held past its time is used while it is refreshed.
+ async dayRead(id:string|number,property:string){if(!this.zones.has(property))await this.timeZone(id,property);return !this.nightRead(property,businessNow(this.p,id,'google'));}
  period(id:string|number,property:string,w:unknown,options:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){return this.periodPart('period',id,property,w,options,()=>this.readPeriod(id,property,w));}
  // The other report tables of the same window, with the same lifetime; their own family, so neither part's copy retires
  // the other's.

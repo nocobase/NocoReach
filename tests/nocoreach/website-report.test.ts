@@ -247,7 +247,12 @@ test('the tick reads the other tables only when a read lasts until midnight: fro
  assert.equal(g.nightRead('123',Date.parse('2026-10-31T06:00:00Z')),false,'23:00 the day before');
  const views=new DataViews({sync:{link:async()=>({get:k=>k==='ga4PropertyId'?'123':null})}});views.ga4=g;
  vi.useFakeTimers({now:new Date('2026-10-31T11:00:00Z')});
- try{assert.equal(await views.websiteDayRead('1'),false,'04:00 there');vi.setSystemTime(new Date('2026-10-31T13:00:00Z'));assert.equal(await views.websiteDayRead('1'),true,'06:00 there');}
+ try{assert.equal(await views.websiteDayRead('1'),false,'04:00 there');vi.setSystemTime(new Date('2026-10-31T13:00:00Z'));assert.equal(await views.websiteDayRead('1'),true,'06:00 there');
+  // With no zone held yet it is looked up first, so the hour is the property's rather than UTC's; the tick passes the
+  // property of the link it holds, so no link is read.
+  const unheld=fake(()=>({})).g;unheld.timeZone=async(_id,property)=>{unheld.zones.set(property,{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});return 'America/Los_Angeles';};
+  const tick=new DataViews({sync:{link:async()=>{throw new Error('the link is not read');}}});tick.ga4=unheld;
+  vi.setSystemTime(new Date('2026-10-31T11:00:00Z'));assert.equal(await tick.websiteDayRead('1','123'),false,'04:00 there, though 11:00 in UTC');}
  finally{vi.useRealTimers();}
 });
 

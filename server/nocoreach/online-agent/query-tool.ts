@@ -4,7 +4,11 @@ import { toolInput } from '../../online-agent/errors.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { waitForFresh } from '../google-report-cache.js';
-import { FIRST_TABLES, withGa4RetryDeadline } from '../website-report.js';
+import {
+  FIRST_TABLES,
+  TABLES,
+  withGa4RetryDeadline,
+} from '../website-report.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
 
 // The reply stops after 90 seconds without output and a tool call gives none, so GA4's 429 retries stop within this.
@@ -188,21 +192,10 @@ interface Source {
   read(s: QuerySources, q: Query): Promise<Read>;
 }
 const NOT_CONNECTED: Read = { connected: false, tables: {} };
-// Traffic's report tables, Pages first as on the page.
+// Traffic's report tables (website-report.ts), Pages first: the first table is the one answered when none is named.
 const TRAFFIC_TABLES = [
   'page',
-  'landing',
-  'channel',
-  'sourceMedium',
-  'campaign',
-  'event',
-  'country',
-  'city',
-  'language',
-  'device',
-  'newVsReturning',
-  'browser',
-  'os',
+  ...Object.keys(TABLES).filter((name) => name !== 'page'),
 ];
 const noData = (dataThrough: unknown): Read => ({
   dataThrough: dataThrough ?? null,
@@ -1584,7 +1577,7 @@ trends: Google Trends (terms, rising, top, weekly, keywords). competitors: compe
 ai_search: saved AI search lookups (brands, answers, lookups).
 forum (topics, unanswered, categories, daily), hackernews (stories, comments, daily), reddit (posts, subreddits), x (posts, daily), discord and slack (messages, open, busiest, channels, daily), youtube and bilibili (videos, groups, daily), xiaohongshu (notes, groups, daily).
 web_sources: public pages connected as sources (sources, items).
-A source the user may not open answers accessDenied; one not connected answers connected: false.`;
+A source the user may not open answers accessDenied; one not connected answers connected: false. A traffic table GA4 left out this time answers error: notReturned, which does not mean it has no rows.`;
 
 /**
  * `query_data`: every data page's source for the online agent, read through the service method that page calls, after
