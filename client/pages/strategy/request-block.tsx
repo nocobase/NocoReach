@@ -24,6 +24,8 @@ export function RequestBlock({
   info,
   compact = false,
   quiet = false,
+  placeholder,
+  skeletonRows = 3,
   children,
 }: {
   title: string;
@@ -37,6 +39,13 @@ export function RequestBlock({
   /** A side block (Insights' Current situation): its heading in 14px semibold with spacing doing the rest (2026-10-24
    * user-approved design), and Retry only after a failure (the page's own refresh reads it again). */
   quiet?: boolean;
+  /**
+   * What the first read shows where the content goes, at the loaded content's size so the page does not move (the
+   * metric tiles, the waiting tasks). Without it: the shared list skeleton, or a bar in a compact row.
+   */
+  placeholder?: ReactNode;
+  /** Rows of that list skeleton, about as many as the loaded list shows (Current situation: 8). */
+  skeletonRows?: number;
   request: RequestState;
   empty?: boolean;
   emptyText?: string;
@@ -69,12 +78,16 @@ export function RequestBlock({
       <p role='status' className='text-sm text-muted-foreground'>
         {$t('common.loadingLoading')}
       </p>
-    ) : compact ? (
-      <div role='status' aria-label={$t('common.loading')}>
-        <Skeleton className='h-4 w-48' />
+    ) : placeholder || compact ? (
+      <div
+        role='status'
+        aria-label={$t('common.loading')}
+        className='min-w-0 flex-1'
+      >
+        {placeholder ?? <Skeleton className='h-4 w-48' />}
       </div>
     ) : (
-      <ListSkeleton rows={3} />
+      <ListSkeleton rows={skeletonRows} />
     ));
   const body =
     hasData &&

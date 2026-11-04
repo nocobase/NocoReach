@@ -22,6 +22,7 @@ import {
   MetricTiles,
   Today,
   WaitingNote,
+  WaitingNoteSkeleton,
 } from './briefing';
 import { dayOf, conversationDayOf, feedOf } from './feed';
 import {
@@ -483,6 +484,7 @@ function Insights({
       request={summaryView}
       empty={!situationLines(summaryView.data?.areas).length}
       emptyText={$t('strategy.noCurrentSituation')}
+      skeletonRows={8}
     >
       <AreaList quiet areas={summaryView.data?.areas} projectId={projectId} />
     </RequestBlock>
@@ -523,6 +525,7 @@ function Insights({
               title={$t('strategy.taskStatus')}
               request={taskView}
               empty={waiting.length === 0}
+              placeholder={<WaitingNoteSkeleton />}
             >
               <WaitingNote tasks={waiting} label={waitingFor} />
             </RequestBlock>
