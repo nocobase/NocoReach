@@ -2,6 +2,7 @@ import { formatDateTime } from '../../client/lib/format';
 import { NavigationGuardProvider } from '@nocobase/app-client';
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -676,6 +677,93 @@ test('before the start, the message box is where the instructions go', () => {
   );
 });
 
+// 2026-11-04 user request: Add image is the chat composer's round paperclip button, and the box takes pasted and
+// dropped images without a line saying so; a limit shows only once a file breaks it.
+const composerOf = () =>
+  screen
+    .getByRole('textbox', { name: '给执行者的话' })
+    .closest<HTMLElement>('[data-slot=input-group]')!;
+test('the message box adds images with an icon-only button and shows no paste or limits line', () => {
+  mount();
+  const box = composerOf();
+  const add = within(box).getByRole('button', { name: '添加图片' });
+  expect(add).toHaveAttribute('title', '添加图片');
+  expect(add).toHaveTextContent(/^$/);
+  expect(add.querySelector('svg')).not.toBeNull();
+  expect(box).not.toHaveTextContent(/粘贴|拖入|PNG|MB|最多/);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('a limit of the message box shows only when an added image breaks it', async () => {
+  let uploads = 0,
+    fail = false;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST')
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      if (fail) return Promise.resolve({ ok: false, status: 500 });
+      const id = `m${++uploads}`;
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          data: {
+            id,
+            filename: `${id}.png`,
+            contentUrl: `/uploads/task-media/${id}.png`,
+          },
+        }),
+      });
+    }),
+  );
+  const objectUrls = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+  };
+  Object.assign(URL, {
+    createObjectURL: () => 'blob:image',
+    revokeObjectURL: () => undefined,
+  });
+  try {
+    mount();
+    const box = composerOf();
+    const picker = box.querySelector<HTMLInputElement>('input[type=file]')!;
+    const png = (name: string) => new File(['x'], name, { type: 'image/png' });
+    fireEvent.change(picker, {
+      target: { files: [new File(['x'], 'scan.bmp', { type: 'image/bmp' })] },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'scan.bmp 不是 PNG、JPG、WebP 或 GIF 图片。',
+    );
+    const large = png('large.png');
+    Object.defineProperty(large, 'size', { value: 21 * 1024 * 1024 });
+    fireEvent.change(picker, { target: { files: [large] } });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'large.png 超过 20 MB。',
+    );
+    fireEvent.paste(within(box).getByRole('textbox'), {
+      clipboardData: {
+        files: Array.from({ length: 11 }, (_, i) => png(`shot-${i + 1}.png`)),
+        getData: () => '',
+      },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('每条最多 10 张图片。');
+    await waitFor(() => expect(uploads).toBe(10));
+    expect(
+      within(box).getByRole('button', { name: '添加图片' }),
+    ).toBeDisabled();
+    fireEvent.click(within(box).getByRole('button', { name: '删除图 10' }));
+    fail = true;
+    fireEvent.change(picker, { target: { files: [png('again.png')] } });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'again.png 上传失败，请重试。',
+    );
+  } finally {
+    Object.assign(URL, objectUrls);
+    vi.unstubAllGlobals();
+  }
+});
+
 // T-33 on Studio (2026-10-21): the article is saved on the task; its page is built from the target's pattern.
 function savedArticleTask(): TaskData {
   const data = blogPageTask();
@@ -1340,6 +1428,23 @@ test('Edit directly opens on the language the review shows, with only the writte
   expect(within(card).getByRole('textbox', { name: /^标题/ })).toHaveValue(
     '最受欢迎的开源无代码 AI 工具',
   );
+});
+
+// 2026-11-04 user request: an article body takes pasted and dropped images without a line saying so.
+test('Edit directly takes images without a paste or limits line beside Save', async () => {
+  const user = userEvent.setup();
+  const data = reviewArticle();
+  const [target] = data.articleTargets!;
+  data.articleTargets = [
+    { ...target, capabilities: { ...target.capabilities, images: true } },
+  ] as TaskData['articleTargets'];
+  mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await user.click(within(card).getByRole('button', { name: '直接编辑' }));
+  const footer = within(card).getByRole('button', {
+    name: '保存',
+  }).parentElement!;
+  expect(footer).toHaveTextContent(/^取消保存$/);
 });
 
 // 2026-11-04 user report (T-62): once editing there was no full screen. The article page opens still editing, with the

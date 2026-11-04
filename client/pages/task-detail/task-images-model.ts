@@ -395,6 +395,10 @@ export function usePastedImages() {
           event.preventDefault();
           insert(key, event.currentTarget, files);
         },
+        /** Images picked with the editor's image button. */
+        onImages(box: HTMLTextAreaElement, files: File[]) {
+          insert(key, box, files);
+        },
       };
     },
   };

@@ -390,11 +390,11 @@ it('uploads an image pasted into the body and writes it where the cursor was', a
         </TaskDraftProvider>
       </TaskImageContext.Provider>,
     );
+    // Images are offered by the editor's toolbar, not by a line of hints under the form (2026-11-04 user request).
     expect(
-      screen.getByText(
-        'Paste or drop images into the body · PNG, JPG, WebP or GIF, up to 20 MB each',
-      ),
-    ).toBeVisible();
+      screen.getByRole('toolbar', { name: 'Formatting' }),
+    ).toContainElement(screen.getByRole('button', { name: 'Add image' }));
+    expect(screen.queryByText(/Paste or drop images/)).toBeNull();
     const body = screen
       .getAllByRole('textbox', { name: /^Body/ })
       .find((b) => (b as HTMLTextAreaElement).value === '新的中文正文')!;

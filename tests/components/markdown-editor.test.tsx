@@ -61,18 +61,45 @@ it.each([
   // And taken off a link, from its text or from the whole link.
   ['See [«the docs»](https://docs.nocobase.com)', 'link', 'See «the docs»'],
   ['See «[the docs](https://docs.nocobase.com)»', 'link', 'See «the docs»'],
+  // Code: inline in a line, a fenced block over several lines; taken off the same way.
+  ['Run «npm i» now', 'code', 'Run `«npm i»` now'],
+  ['Run `«npm i»` now', 'code', 'Run «npm i» now'],
+  ['«a\nb»', 'code', '«```\na\nb\n```»'],
+  ['«```\na\n```»', 'code', '«a»'],
+  // Lines: the prefix goes on every selected line, or off when they all have it; a cursor keeps its place.
+  ['One\n«Two»', 'bulleted', 'One\n«- Two»'],
+  ['«a\nb»', 'bulleted', '«- a\n- b»'],
+  ['«- a\n- b»', 'bulleted', '«a\nb»'],
+  ['«- a\n- b»', 'numbered', '«1. a\n2. b»'],
+  ['«a\n\nb»', 'numbered', '«1. a\n\n2. b»'],
+  ['Ite«»m', 'bulleted', '- Ite«»m'],
+  ['«»', 'quote', '> «»'],
+  ['Say «so»', 'quote', '«> Say so»'],
+  ['> Say «so»', 'quote', '«Say so»'],
+  // The heading goes ## → ### → none.
+  ['Title«»', 'heading', '## Title«»'],
+  ['## Title«»', 'heading', '### Title«»'],
+  ['### Title«»', 'heading', 'Title«»'],
 ] as const)('%s (%s) becomes %s', (marked, style, expected) => {
   expect(format(marked, style)).toBe(expected);
 });
 
-function Editor({ onPaste }: { onPaste?: (e: ClipboardEvent) => void }) {
+function Editor({
+  onPaste,
+  onImages,
+}: {
+  onPaste?: (e: ClipboardEvent) => void;
+  onImages?: (box: HTMLTextAreaElement, files: File[]) => void;
+}) {
   const [value, setValue] = useState('Self-hosted NocoBase');
   return (
     <MarkdownEditor
+      id='body'
       aria-label='Body'
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onPaste={onPaste}
+      onImages={onImages}
       preview={(text) => <p>{text}</p>}
     />
   );
@@ -166,4 +193,57 @@ it('leaves other shortcuts, a read-only box and the paste handler alone', async 
   box().setSelectionRange(0, 4);
   await user.keyboard('{Control>}b{/Control}');
   expect(box()).toHaveValue('Self-hosted NocoBase');
+});
+
+it('formats from the toolbar, keeping the selection in the text, and names each button with its shortcut', async () => {
+  const user = userEvent.setup();
+  render(<Editor />);
+  const toolbar = screen.getByRole('toolbar', { name: 'Formatting' });
+  expect(toolbar).toHaveAttribute('aria-controls', 'body');
+  expect(
+    Array.from(toolbar.querySelectorAll('button'), (b) =>
+      b.getAttribute('aria-label'),
+    ),
+  ).toEqual([
+    'Bold',
+    'Italic',
+    'Link',
+    'Numbered list',
+    'Bulleted list',
+    'Heading',
+    'Quote',
+    'Code',
+  ]);
+  box().focus();
+  box().setSelectionRange(12, 20);
+  await user.click(screen.getByRole('button', { name: 'Bold' }));
+  expect(box()).toHaveValue('Self-hosted **NocoBase**');
+  expect(box()).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: 'Heading' }));
+  expect(box()).toHaveValue('## Self-hosted **NocoBase**');
+  await user.hover(screen.getByRole('button', { name: 'Italic' }));
+  expect(await screen.findByText('Italic')).toBeVisible();
+  expect(screen.getByText('Ctrl I')).toBeVisible();
+});
+
+it('offers images from the toolbar only where the box takes them', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<Editor />);
+  expect(screen.queryByRole('button', { name: 'Add image' })).toBeNull();
+  unmount();
+  const onImages = vi.fn();
+  const { container } = render(<Editor onImages={onImages} />);
+  const add = screen.getByRole('button', { name: 'Add image' });
+  expect(screen.getByRole('toolbar', { name: 'Formatting' })).toContainElement(
+    add,
+  );
+  // Just its name, as the other buttons: the limits show only when a file breaks them.
+  await user.hover(add);
+  expect(await screen.findByText('Add image')).toBeVisible();
+  expect(screen.queryByText(/PNG|Paste or drop/)).toBeNull();
+  const picker = container.querySelector<HTMLInputElement>('input[type=file]')!;
+  const image = new File(['png'], 'workspace.png', { type: 'image/png' });
+  fireEvent.change(picker, { target: { files: [image] } });
+  expect(onImages).toHaveBeenCalledWith(box(), [image]);
+  expect(box()).toHaveFocus();
 });

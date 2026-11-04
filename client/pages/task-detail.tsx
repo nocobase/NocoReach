@@ -34,7 +34,7 @@ import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag, TaskStandingTag } from './task-status-tag';
 import { choiceRepo, startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
-import { AddImageButton, ComposerImages, ImageHint, ImageProblem, MessageImages } from './task-detail/task-images.js';
+import { AddImageButton, ComposerImages, ImageProblem, MessageImages } from './task-detail/task-images.js';
 import { TaskImageContext, readImages, useComposerImages } from './task-detail/task-images-model.js';
 import { TASK_IMAGES_PER_MESSAGE } from '../../shared/task-images.js';
 import { hasTaskAgent, type PartialResult } from './task-execution-types';
@@ -743,7 +743,7 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
   {composer&&(writing?<InputGroup className='has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30' onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={images.onDrop}>
    <InputGroupTextarea id='nr-composer' aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-60 min-h-8 px-2.5 pt-2' value={message} disabled={busy} placeholder={hint} onChange={e=>{setMessage(e.target.value);}} onPaste={images.onPaste}/>
    {images.entries.length>0&&<InputGroupAddon align='block-end' className='font-normal'><ComposerImages images={images.entries} disabled={busy} onRemove={images.remove}/></InputGroupAddon>}
-   <InputGroupAddon align='block-end' className='flex-wrap gap-x-3 gap-y-1 font-normal'><AddImageButton disabled={busy||images.entries.length>=TASK_IMAGES_PER_MESSAGE} onFiles={images.add}/><ImageHint max={TASK_IMAGES_PER_MESSAGE}/><Button className='ml-auto' size='sm' disabled={busy||!message.trim()||images.uploading} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></InputGroupAddon>
+   <InputGroupAddon align='block-end' className='flex-wrap gap-x-3 gap-y-1 font-normal'><AddImageButton disabled={busy||images.entries.length>=TASK_IMAGES_PER_MESSAGE} onFiles={images.add}/><Button className='ml-auto' size='sm' disabled={busy||!message.trim()||images.uploading} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></InputGroupAddon>
   </InputGroup>:<Textarea aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-40 min-h-8 resize-none py-1.5' value={message} readOnly/>)}
   <ImageProblem>{writing&&images.problem}</ImageProblem>
   {error&&<p role="alert" className="nr-error">{error}</p>}
