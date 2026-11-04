@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
 import { createAppTest } from '@nocobase/app-testing/server';
 import {
@@ -100,16 +101,18 @@ test('aggregate reads deduplicate checks and preserve current identity, grants a
       removeListener(event: string, listener: () => void): void;
     }>();
     let queries = 0;
+    const measuring = new AsyncLocalStorage<boolean>();
     const count = () => {
-      queries += 1;
+      if (measuring.getStore()) queries += 1;
     };
     driver.on('query', count);
     try {
-      await read();
+      await measuring.run(true, () => read());
     } finally {
       driver.removeListener('query', count);
     }
-    // Warm hits only authenticate and authorize; no per-source database work.
+    // Count the request, excluding independently scheduled background work.
+    expect(queries).toBeGreaterThan(0);
     expect(queries).toBeLessThanOrEqual(12);
     expect(calls.get('nrGitHub')).toBe(1);
     await read(admin, '2');
