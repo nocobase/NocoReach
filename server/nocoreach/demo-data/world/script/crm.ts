@@ -295,11 +295,71 @@ export const CRM_REDDIT: Thread[] = CRM_STORIES.slice(0, 10).map((s, i) => ({
   age: 2 + i * 3,
   traffic: 45 + i * 18,
 }));
-export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
-  title: t(
-    `Acme CRM 实操：${QUESTIONS[i].zh}`,
-    `Acme CRM workshop: ${QUESTIONS[i].en}`,
+// Video and note titles as creators write them: the subject first, the product named only where a viewer would.
+const CRM_MEDIA_TITLES = [
+  t(
+    '1,280 行客户表有 86 条重复，先合并再导入',
+    'Merging 86 duplicates before importing 1,280 accounts',
   ),
+  t(
+    '销售请假时，新线索自动分给替补的规则',
+    'Routing new leads automatically when a rep is on leave',
+  ),
+  t(
+    '一个商机五个人五种阶段？统一销售阶段的做法',
+    'One deal, five stage choices: aligning your sales stages',
+  ),
+  t(
+    '报价改到第三版，怎样避免发出旧附件',
+    'Quote version three: never send the old attachment again',
+  ),
+  t(
+    '临时帮同事跟进客户，权限怎么给才安全',
+    'Covering for a colleague without opening all their accounts',
+  ),
+  t(
+    '客户说下月再联系：这样暂停本周提醒',
+    'Pausing follow-up reminders until next month',
+  ),
+  t(
+    '托管方案包含哪些：迁移和培训实测',
+    'What the hosted plan includes: migration and training, tested',
+  ),
+  t(
+    '预测金额和签约金额对不上？一次讲明白',
+    'Why forecast value differs from signed contracts',
+  ),
+  t(
+    '五个销售从表格迁到 Acme CRM，先配这几样',
+    'Five reps leaving spreadsheets: what to set up first in Acme CRM',
+  ),
+  t(
+    '转交客户以后，旧负责人名下的跟进怎么处理',
+    'Handing over accounts without stranding open follow-ups',
+  ),
+  t(
+    '续约前九十天要确认的五件事',
+    'Five things to confirm ninety days before renewal',
+  ),
+  t(
+    '外出拜访网络差，先存文字再补照片',
+    'Saving visit notes first on a weak connection',
+  ),
+  t(
+    '本月新增商机按什么时间算？报表口径说明',
+    'Counting new deals this month: creation time or stage entry?',
+  ),
+  t(
+    '输单原因只写“价格贵”？这样区分预算和需求',
+    'Splitting “too expensive” loss notes into budget and fit',
+  ),
+  t(
+    '连接个人邮箱以后，谁能看到客户邮件',
+    'Who can read customer emails after connecting a mailbox',
+  ),
+];
+export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
+  title: CRM_MEDIA_TITLES[i],
   description: s.brief,
   age: 2 + i * 3,
   views: 1840 + i * 1387,
@@ -353,6 +413,98 @@ export const CRM_PACKAGES: PackageLine = {
   ],
 };
 
+/** Search phrases authored for each page, in the supported Taiwan and US markets. */
+const SEARCH_TERMS: Record<string, PerLanguage<readonly string[]>> = {
+  '/docs/lead-routing': {
+    zh: ['線索分配', '線索分配 規則', '如何設定線索分配'],
+    en: ['lead routing', 'lead routing rules', 'how to set up lead routing'],
+  },
+  '/docs/quotes': {
+    zh: ['報價審核', '報價審核 流程', '如何設定報價審核'],
+    en: [
+      'quote approval',
+      'quote approval for discounts',
+      'how to manage quote approval',
+    ],
+  },
+  '/docs/permissions': {
+    zh: ['客戶資料權限', '客戶資料權限 設定', '如何設定客戶資料權限'],
+    en: [
+      'crm access control',
+      'crm access control permissions',
+      'how to configure crm access control',
+    ],
+  },
+  '/docs/follow-ups': {
+    zh: ['客戶跟進', '客戶跟進 提醒', '如何安排客戶跟進'],
+    en: [
+      'sales follow up',
+      'sales follow up reminders',
+      'how to automate sales follow up',
+    ],
+  },
+  '/docs/forecast': {
+    zh: ['銷售預測', '銷售預測 方法', '如何計算銷售預測'],
+    en: [
+      'sales forecasting',
+      'sales forecasting methods',
+      'how to improve sales forecasting',
+    ],
+  },
+  '/docs/handover': {
+    zh: ['客戶交接', '客戶交接 清單', '如何完成客戶交接'],
+    en: [
+      'account handover',
+      'account handover checklist',
+      'how to manage account handover',
+    ],
+  },
+  '/docs/renewals': {
+    zh: ['客戶續約', '客戶續約 提醒', '如何提高客戶續約率'],
+    en: [
+      'customer renewals',
+      'customer renewals checklist',
+      'how to manage customer renewals',
+    ],
+  },
+  '/features/mobile': {
+    zh: ['行動 CRM', '行動 CRM 拜訪紀錄', '如何使用行動 CRM'],
+    en: ['mobile crm', 'mobile crm visit notes', 'how to use mobile crm'],
+  },
+  '/features/reports': {
+    zh: ['銷售週報', '銷售週報 範本', '如何製作銷售週報'],
+    en: [
+      'weekly sales reports',
+      'weekly sales reports templates',
+      'how to build weekly sales reports',
+    ],
+  },
+  '/blog/lost-deals': {
+    zh: ['輸單分析', '輸單分析 範本', '如何進行輸單分析'],
+    en: [
+      'lost deal analysis',
+      'lost deal analysis templates',
+      'how to perform lost deal analysis',
+    ],
+  },
+  '/docs/email': {
+    zh: ['CRM 郵件同步', 'CRM 郵件同步 權限', '如何設定 CRM 郵件同步'],
+    en: [
+      'crm email sync',
+      'crm email sync permissions',
+      'how to configure crm email sync',
+    ],
+  },
+  '/docs/integrations': {
+    zh: ['CRM 訂單整合', 'CRM 訂單整合 重試', '如何設定 CRM 訂單整合'],
+    en: [
+      'crm order integration',
+      'crm order integration retries',
+      'how to configure crm order integration',
+    ],
+  },
+};
+
 export const CRM_QUERIES: PerLanguage<Query[]> = { zh: [], en: [] };
 export const CRM_RESEARCH: PerLanguage<(Research & { topic: string })[]> = {
   zh: [],
@@ -360,11 +512,7 @@ export const CRM_RESEARCH: PerLanguage<(Research & { topic: string })[]> = {
 };
 for (const lang of ['zh', 'en'] as const) {
   CRM_PAGES.forEach((p, i) => {
-    for (const [j, suffix] of (lang === 'zh'
-      ? ['指南', '模板', '常见问题']
-      : ['guide', 'template', 'common questions']
-    ).entries()) {
-      const keyword = `${lang === 'zh' ? 'CRM' : 'crm'} ${p.title[lang]} ${suffix}`;
+    for (const [j, keyword] of SEARCH_TERMS[p.path][lang].entries()) {
       const position = 6.4 + i * 0.75 + j * 3;
       CRM_QUERIES[lang].push({
         q: keyword,

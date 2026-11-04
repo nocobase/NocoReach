@@ -85,8 +85,9 @@ vi.mock('../../client/pages/xiaohongshu-api', () => ({
       lastRun: null,
       total: 0,
       running: null,
-      notes: [],
-      latestIds: [],
+      queued: null,
+      recent: [],
+      recordingSince: null,
     } satisfies XiaohongshuView;
   }),
 }));
@@ -193,8 +194,10 @@ it.each([
     if (transition === 'auth-pending')
       expect(document.querySelector('[data-xiaohongshu-connect]')).toBeNull();
     else
-      await screen.findByText(
-        `搜索词：Project ${transition === 'keyed-project' ? 2 : 1}`,
+      await waitFor(() =>
+        within(screen.getByRole('region', { name: '搜索词' })).getByText(
+          `Project ${transition === 'keyed-project' ? 2 : 1}`,
+        ),
       );
     // Owner teardown must dismiss the separate confirmation root and cancel its pending intent.
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());

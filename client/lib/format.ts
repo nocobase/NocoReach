@@ -143,6 +143,47 @@ export function formatCount(
   });
 }
 
+/**
+ * A large count shortened the locale's way from ten thousand up (16.2K in English); smaller ones as formatCount.
+ * Chinese puts a space between the digits and the ten-thousands unit, as between digits and any Chinese word;
+ * Japanese and Korean write them together.
+ */
+export function formatCompact(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  if (Math.abs(value) < 10_000) return formatCount(value);
+  const locale = getCurrentLocale();
+  const shown = value.toLocaleString(locale, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+  return locale.startsWith('zh')
+    ? shown.replace(/(\d)(\p{Script=Han})/u, '$1 $2')
+    : shown;
+}
+
+/**
+ * A count inside a phrase whose `{0}` is the count (`youtube.viewsCount`), shortened as formatCompact does. A Chinese
+ * or Japanese unit joins the word after it, without the phrase's space before that word; plain digits keep the space
+ * (1,735 views, 16.2K views).
+ */
+export function formatCompactIn(
+  key: string,
+  value: number | null | undefined,
+): string {
+  return countIn(key, formatCompact(value));
+}
+
+/** A count already written out (`10 wan+` as a page showed it) inside a phrase, joined as formatCompactIn joins it. */
+export function countIn(key: string, shown: string): string {
+  const [before, ...rest] = $t(key).split('{0}');
+  const after = rest.join('{0}');
+  return `${before}${shown}${
+    /\p{Script=Han}$/u.test(shown) && /^ \p{Script=Han}/u.test(after)
+      ? after.slice(1)
+      : after
+  }`;
+}
+
 /** A share given as a ratio (0.462): "46.2%", always with the same decimals so a column of them lines up ("7.0%"). */
 export function formatPercent(
   ratio: number | null | undefined,

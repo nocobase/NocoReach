@@ -49,7 +49,12 @@ import { TablePagination } from '#components/seo/table-pagination';
 import { SortableHeader } from '#components/seo/sortable-header';
 import { useHandOffSource } from '#components/reach/hand-off-slot';
 import { WithInfo } from '#components/reach/info-tip';
-import { ListSkeleton, InlineError } from '#components/reach/states';
+import {
+  ListSkeleton,
+  InlineError,
+  SavedReportNote,
+} from '#components/reach/states';
+import { savedCopyNote } from '../../../shared/google-cache.js';
 import { Tag } from '#components/reach/tag';
 import { Delta } from '#components/reach/delta';
 import { formatDate, formatPercent } from '#lib/format';
@@ -75,6 +80,7 @@ import {
   regionName,
   show,
   special,
+  trendPoints,
   type MetricKey,
   type Report,
   type Row,
@@ -684,6 +690,7 @@ function RowDrawer({
           cutoff: report.cutoff,
           table: view.table,
           dims: row.dims,
+          acceptSaved: true,
         },
         unwrap: 'data',
       }),
@@ -702,16 +709,19 @@ function RowDrawer({
       )
     : '';
   const main = columns[0];
-  const w = report.window!;
+  // A saved copy may hold another window than the report's: its figures are labelled with its own dates.
+  const w = data?.window ?? report.window!;
+  const shownPeriod = $t('common.range', {
+    0: formatDate(w.start),
+    1: formatDate(w.end),
+  });
   const now = data?.totals?.current ?? row,
     before = data?.totals?.previous ?? null;
-  const days = ownDays(data?.window ?? w, data?.daily, data?.previousDaily);
-  const points = days.current.map((d, i) => ({
-    date: d.date,
-    value: METRICS[main].of(d),
-    previous: days.previous[i] ? METRICS[main].of(days.previous[i]) : null,
-    previousDate: days.previous[i]?.date ?? '',
-  }));
+  const { points, fresh } = trendPoints(
+    ownDays(w, data?.daily, data?.previousDaily),
+    METRICS[main].of,
+    data?.settledThrough ?? report.settledThrough,
+  );
   return (
     <DetailDrawer
       open
@@ -740,12 +750,14 @@ function RowDrawer({
                     : null,
                 ),
                 row.queries ?? [],
+                report.queriesWindow,
               )
             }
           />
         ) : undefined
       }
     >
+      <SavedReportNote {...savedCopyNote(data)} />
       {isPage && safeLink(page) ? (
         <a
           className='nr-link mb-3 inline-flex items-center gap-1 break-all'
@@ -761,7 +773,7 @@ function RowDrawer({
         <thead>
           <tr className='text-left text-xs text-muted-foreground'>
             <th className='py-1 font-medium' />
-            <th className='py-1 text-right font-medium'>{period}</th>
+            <th className='py-1 text-right font-medium'>{shownPeriod}</th>
             <th className='py-1 text-right font-medium'>
               {$t('dataWebsite.previousPeriod')}
             </th>
@@ -858,6 +870,17 @@ function RowDrawer({
                 strokeDasharray='4 4'
                 dot={false}
               />
+              {fresh ? (
+                <Line
+                  isAnimationActive={false}
+                  type='linear'
+                  dataKey='fresh'
+                  name={$t('dataWebsite.preliminaryData')}
+                  stroke='var(--chart-3)'
+                  strokeDasharray='2 3'
+                  dot={false}
+                />
+              ) : null}
             </TrendChart>
           </ResponsiveContainer>
         </div>
@@ -867,6 +890,14 @@ function RowDrawer({
           <h3 className='mt-5 mb-1 text-sm font-semibold'>
             {$t('dataWebsite.relatedSearchQueries')}
           </h3>
+          {row.queries?.length && report.queriesWindow ? (
+            <p className='mb-2 text-xs text-muted-foreground'>
+              {$t('dataWebsite.pageQueriesFinalized', {
+                0: formatDate(report.queriesWindow.start),
+                1: formatDate(report.queriesWindow.end),
+              })}
+            </p>
+          ) : null}
           {row.queries?.length ? (
             <table className='w-full text-sm'>
               <thead>

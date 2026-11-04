@@ -23,6 +23,14 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
     seq: 1000,
     clock: 0,
     failNextWrite: '' as '' | 'timeout' | '500-after-save',
+    // The file manager (attachments:create): what was uploaded and whether the key may upload.
+    uploads: [] as {
+      name: string;
+      type: string;
+      bytes: Buffer;
+      params: URLSearchParams;
+    }[],
+    uploadDenied: false,
   };
   const stamp = () =>
     new Date(Date.UTC(2026, 9, 18, 0, 0, ++state.clock)).toISOString();
@@ -30,6 +38,24 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
     const u = new URL(url);
     if (init.headers?.Authorization !== 'Bearer cms-key')
       return ok({ errors: [{ message: 'Unauthorized' }] }, 401);
+    if (u.pathname === '/api/attachments:create') {
+      if (state.uploadDenied)
+        return ok({ errors: [{ message: 'No permissions' }] }, 403);
+      const file = (init.body as FormData).get('file') as File;
+      state.uploads.push({
+        name: file.name,
+        type: file.type,
+        bytes: Buffer.from(await file.arrayBuffer()),
+        params: u.searchParams,
+      });
+      return ok({
+        data: {
+          id: state.uploads.length,
+          filename: file.name,
+          url: `/storage/uploads/${state.uploads.length}-${file.name}`,
+        },
+      });
+    }
     const action = u.pathname.split(':')[1],
       body = init.body ? JSON.parse(String(init.body)) : undefined;
     state.requests.push({

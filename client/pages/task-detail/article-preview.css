@@ -25,3 +25,7 @@
 .nr-article-body th{background:var(--muted);font-weight:600}
 .nr-article-body hr{margin:2rem 0;border:0;border-top:1px solid var(--border)}
 .nr-article-body img[data-loading]{min-height:9rem;width:100%;background:var(--muted)}
+.nr-article-figure{display:block;margin:1.5rem 0}
+.nr-article-figure>img{margin:0}
+/* Review only (task-images.tsx imageNote): where a new image came from, never published. */
+.nr-article-image-note{display:block;margin-top:.375rem;font-size:.8125rem;line-height:1.5;color:var(--nr-ink-violet)}

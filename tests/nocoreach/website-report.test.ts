@@ -4,6 +4,7 @@ import { test, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { WebsiteReport, TABLES } from '../../server/nocoreach/website-report.js';
 import { websiteView, windowFor } from '../../server/nocoreach/data-views.js';
+import { GA4_PARTIAL_CACHE_MS } from '../../shared/ga4-cache.js';
 
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
 // A GA4 report from plain rows: dimension and metric names in order, the date range last when the request named several.
@@ -27,7 +28,7 @@ test('period: deduplicated totals for both periods, the daily line, every table;
  const v=await g.period('1','123',w);
  assert.equal(calls.length,4,'18 reports in four batches');
  assert.deepEqual(calls[0].body.requests[0].dateRanges,[{startDate:w.start,endDate:w.end,name:'current'},{startDate:w.previousStart,endDate:w.previousEnd,name:'previous'}]);
- assert.equal(calls[0].body.requests[1].dateRanges[0].endDate,'yesterday','the line runs on past the cutoff');
+ assert.equal(calls[0].body.requests[1].dateRanges[0].endDate,w.end,'the line covers the same days as the totals');
  assert.equal(v.totals.current.users,100);assert.equal(v.totals.previous.sessions,120);assert.equal(v.totals.current.keyEventRate,0.08);
  assert.deepEqual(v.daily.map(r=>r.date),['2026-10-04','2026-10-05']);assert.deepEqual(v.previousDaily.map(r=>r.date),['2026-09-28']);
  const changeRequests=calls.flatMap(c=>c.body.requests).filter(r=>r.dateRanges.length===2&&r.dimensions.length===1&&r.dimensions[0].name!=='date');
@@ -137,12 +138,95 @@ test('访问 view: window at the cutoff, Search Console queries on their page ro
  assert.deepEqual(asked,windowFor(end,'7'));assert.equal(v.cutoff,end);
  assert.deepEqual(v.tables.page[0].queries.map(q=>q.keyword),['docker','install nocobase'],'most seen first, trailing slash ignored');
  assert.deepEqual(v.missing,['city']);
- assert.equal((await websiteView([{key:'history-web',payload:[]}],'28',()=>{throw new Error('not asked');})).cutoff,null);
+ const later=await websiteView(snaps,'7',async()=>({tables:{page:[]},missing:[]}),undefined,undefined,async()=>'2026-09-30');
+ assert.deepEqual(later.queriesWindow,{start:windowFor(end,'7').start,end},'the queries keep the synced range while the traffic reaches yesterday');
+ assert.equal((await websiteView(snaps,'custom',async()=>({tables:{},missing:[]}),'2026-09-25','2026-09-27')).queriesWindow,null,'no synced queries for a custom range');
+ assert.equal((await websiteView([{key:'history-web',payload:[]}],'28',()=>{throw new Error('not asked');},undefined,undefined,()=>{throw new Error('no zone lookup without data');})).cutoff,null);
+});
+
+test('Traffic window ends yesterday, ahead of the synced cutoff, with the last two days unsettled',async()=>{
+ const synced='2026-09-27',snaps=[{key:'project',payload:{end:synced}},{key:'history-web',payload:[{date:'2026-09-20'},{date:synced}]}];
+ let asked,passed;const period=async(w,_cutoff,settled)=>{asked=w;passed=settled;return {tables:{},missing:[]};};
+ const v=await websiteView(snaps,'7',period,undefined,undefined,async()=>'2026-09-30');
+ assert.deepEqual(asked,windowFor('2026-09-30','7'));assert.equal(v.cutoff,'2026-09-30');assert.equal(v.settledThrough,'2026-09-28');assert.equal(passed,'2026-09-28','the report keeps it');
+ const copy=await websiteView(snaps,'7',async()=>({tables:{},missing:[],window:windowFor('2026-09-29','7'),cutoff:'2026-09-29',settledThrough:'2026-09-27'}),undefined,undefined,async()=>'2026-09-30');
+ assert.equal(copy.cutoff,'2026-09-29');assert.equal(copy.settledThrough,'2026-09-27','a saved report keeps the days it had unsettled when read');
+ await websiteView(snaps,'custom',period,'2026-09-25','2026-09-30',async()=>'2026-09-30');
+ assert.equal(asked.end,'2026-09-30','a custom range can reach yesterday');
+ const behind=await websiteView(snaps,'7',period,undefined,undefined,async()=>'2026-09-27');
+ assert.equal(behind.cutoff,synced);assert.equal(behind.settledThrough,'2026-09-25','only the days GA4 is still processing are unsettled');
+ assert.equal((await websiteView(snaps,'7',period)).settledThrough,synced,'no yesterday: the synced days are all settled');
+});
+
+test('yesterday follows the property time zone, not UTC',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T01:00:00Z')});
+ const {g}=fake(()=>({}));
+ g.timeZone=async()=>'America/Los_Angeles';assert.equal(await g.yesterday('1','123'),'2026-10-29');
+ g.timeZone=async()=>'Asia/Shanghai';assert.equal(await g.yesterday('1','123'),'2026-10-30');
+});
+
+test('yesterday after a failed zone lookup ends on a day already over everywhere, and does not wait on a known zone',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T02:00:00Z')});
+ const {g}=fake(()=>({}));
+ g.zones.set('123',{at:Date.now(),zone:'UTC',confirmed:false,ttl:300000});
+ assert.equal(await g.yesterday('1','123'),'2026-10-29','UTC-12 is still on 10-30, the day under way in Los Angeles');
+ let lookups=0;g.timeZone=async()=>{lookups++;return 'Asia/Shanghai';};
+ g.zones.set('123',{at:Date.now()-86400001,zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ assert.equal(await g.yesterday('1','123'),'2026-10-29','the known zone is used while it is looked up again');assert.equal(lookups,1);
+});
+
+test('callers at the same time share one zone lookup, and a failure keeps the zone known by then',async()=>{
+ const {g}=fake(()=>({}));g.timeZone=WebsiteReport.prototype.timeZone;g.token=async()=>'t';
+ let answer;g.json=vi.fn(()=>new Promise(r=>{answer=r;}));
+ const a=g.timeZone('1','123'),b=g.yesterday('1','123');await vi.waitFor(()=>assert.ok(answer));
+ answer({timeZone:'Asia/Shanghai'});
+ assert.equal(await a,'Asia/Shanghai');await b;assert.equal(g.json.mock.calls.length,1,'one Admin API call');
+ g.zones.set('123',{...g.zones.get('123'),at:0});g.json=vi.fn(async()=>{throw Object.assign(new Error('quota'),{status:429});});
+ assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(g.zones.get('123').confirmed,true);assert.equal(g.zones.get('123').ttl,300000);
+});
+
+test('after a restart the zone the sync kept on the project answers without waiting on the Admin API',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T01:00:00Z')});
+ const report=project=>{const g=new WebsiteReport({token:async()=>'t',project:async()=>{if(project instanceof Error)throw project;return project;}});g.json=vi.fn(async()=>({timeZone:'America/Los_Angeles'}));return g;};
+ const g=report({analyticsPropertyId:'123',analyticsPropertyTimeZone:'Asia/Shanghai'});
+ assert.equal(await g.yesterday('1','123'),'2026-10-30','Shanghai is on 10-31');assert.equal(g.json.mock.calls.length,0);
+ assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(g.zones.get('123').confirmed,true);assert.equal(g.json.mock.calls.length,0,'kept a day like a lookup');
+ vi.setSystemTime(new Date('2026-11-01T01:00:01Z'));await g.timeZone('1','123');assert.equal(g.json.mock.calls.length,1,'then looked up again');
+ vi.setSystemTime(new Date('2026-10-31T01:00:00Z'));
+ for(const project of [{analyticsPropertyId:'456',analyticsPropertyTimeZone:'Asia/Shanghai'},{analyticsPropertyId:'123',analyticsPropertyTimeZone:'Mars/Olympus'},{analyticsPropertyId:'123'},Object.assign(new Error('gone'),{status:404})]){
+  const other=report(project);assert.equal(await other.yesterday('1','123'),'2026-10-29','no usable saved zone: Los Angeles, from the Admin API');assert.equal(other.json.mock.calls.length,1);}
+});
+
+test('a period ended on a guessed zone tells the browser to ask again soon, without reading GA4 again',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
+ const {g}=fake(()=>({}));const read=vi.fn(async()=>({tables:{},missing:[]}));g.readPeriod=read;
+ g.zones.set('123',{at:Date.now(),zone:'UTC',confirmed:false,ttl:300000});
+ const w=windowFor('2026-10-29','7');
+ assert.equal((await g.period('1','123',w)).cacheExpiresAt,Date.now()+GA4_PARTIAL_CACHE_MS);
+ vi.setSystemTime(Date.now()+GA4_PARTIAL_CACHE_MS+60000);
+ assert.equal((await g.period('1','123',w)).cacheExpiresAt,Date.now()+GA4_PARTIAL_CACHE_MS);
+ assert.equal(read.mock.calls.length,1,'the stored copy keeps its own lifetime');
+});
+
+test('a stored period from another zone expires for the browser at this zone\'s midnight',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
+ const {g}=fake(()=>({}));g.readPeriod=async()=>({tables:{},missing:[]});
+ const w=windowFor('2026-10-30','7');await g.period('1','123',w);
+ g.zones.set('123',{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ assert.equal((await g.period('1','123',w)).cacheExpiresAt,Date.parse('2026-10-31T07:00:00Z'),'built under UTC, served in Los Angeles at 23:00');
+});
+
+test('a period is kept until midnight in the zone its window ends in',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
+ const {g}=fake(()=>({}));g.readPeriod=async()=>({tables:{},missing:[]});
+ g.zones.set('123',{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ const v=await g.period('1','123',windowFor('2026-10-30','7'));
+ assert.equal(v.cacheExpiresAt,Date.parse('2026-10-31T07:00:00Z'),'23:00 in Los Angeles: an hour left, not six');
 });
 
 test('all-time daily reports increase the row limit and omit previous data',async()=>{
  const {g,calls}=fake((method,body)=>({reports:body.requests.map(r=>report(r.dimensions.map(d=>d.name),r.metrics.map(m=>m.name),[]))}));
- const w={...windowFor('2026-09-27','all',undefined,undefined,'2022-01-01'),explicitEnd:true};
+ const w=windowFor('2026-09-27','all',undefined,undefined,'2022-01-01');
  const all=await g.period('1','123',w);
  const daily=calls.flatMap(c=>c.body.requests||[]).find(r=>dimsOf(r)==='date');
  assert.ok(Number(daily.limit)>1000);assert.equal(daily.dateRanges[0].endDate,w.end);

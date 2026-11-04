@@ -9,7 +9,17 @@ import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
+import { readAhead, waitForFresh } from './google-report-cache.js';
+import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
 const FRESH_MS=3*3600000;
+// As long as a whole report lived before saved copies; a person opening the page still retries sooner.
+const PARTIAL_RETRY_MS=6*60*60*1000;
+// Traffic's default view of a project nobody opens is read this often, a day inside the age a saved copy may be shown,
+// so whoever opens it next sees it at once; a few such projects a tick, as after a deploy every project is one.
+const IDLE_READ_MS=GOOGLE_SAVED_COPY_MAX_AGE_MS-86400000,IDLE_READS_PER_TICK=3;
+// A project opened within this has Traffic read again by the tick once GA4 has most of yesterday (website-report.ts,
+// MORNING_READ_HOUR), so the morning's first visit sees it whole instead of the night's report being replaced.
+const MORNING_REREAD_WITHIN_MS=86400000;
 const active=['queued','running','retrying'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
@@ -93,13 +103,16 @@ class SyncService{
     for(const controller of this.freshFlights.get(id)||[])controller.abort();
    });
   });
-  await plugin.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,analyticsPropertyName:ga4Name||(cur.analyticsPropertyId===ga4?cur.analyticsPropertyName||'':''),searchConsoleProperty:gsc}));
+  await plugin.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,analyticsPropertyName:ga4Name||(cur.analyticsPropertyId===ga4?cur.analyticsPropertyName||'':''),analyticsPropertyTimeZone:cur.analyticsPropertyId===ga4?cur.analyticsPropertyTimeZone||'':'',searchConsoleProperty:gsc}));
   await plugin.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync',...(changed&&link?{lastSyncAt:null}:{})});
   return {changed:Boolean(link)&&changed};
  }
- // The GA4 property's display name, kept on the project for the Google panel. Projects that chose their property before
- // names were kept get it from the property details each GA4 sync already reads. Never fails the sync.
- async rememberPropertyName(id,propertyId,name){if(!name)return;try{const p=await this.p.project(id);if(String(p.analyticsPropertyId)===String(propertyId)&&p.analyticsPropertyName!==name)await this.p.projects.update(id,cur=>String(cur.analyticsPropertyId)===String(propertyId)?{...cur,analyticsPropertyName:name}:cur);}catch{/* the name is cosmetic */}}
+ // The GA4 property's display name, kept on the project for the Google panel, and its time zone, which Traffic uses after
+ // a restart instead of waiting on the Admin API (website-report.ts, `timeZone`). Both come from the property details each
+ // GA4 sync and preliminary read already fetch, so projects that chose their property earlier get them too. Written only
+ // when they change; never fails the sync.
+ async rememberProperty(id,propertyId,property){const next={...(property?.displayName?{analyticsPropertyName:String(property.displayName)}:{}),...(property?.timeZone?{analyticsPropertyTimeZone:String(property.timeZone)}:{})};if(!Object.keys(next).length)return;
+  try{const p=await this.p.project(id);if(String(p.analyticsPropertyId)===String(propertyId)&&Object.entries(next).some(([k,v])=>p[k]!==v))await this.p.projects.update(id,cur=>String(cur.analyticsPropertyId)===String(propertyId)?{...cur,...next}:cur);}catch{/* the name is cosmetic and the zone a shortcut */}}
  async control(id: string | number,command: string){
   const plugin=this.p as Pick<Connections,'metadata'> & {db: LegacyDatabase};
   if(!['enable','disable','pause','resume','retry'].includes(command))throw Object.assign(new Error(systemMessageText('sync.invalidAction')),{status:400});
@@ -149,7 +162,7 @@ class SyncService{
    const covered=new Set(stored.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
    const missing=intervals(datesBetween(cursor,end).filter(d=>!covered.has(d)));
    const token=missing.length?await this.p.token(id,signal):null;
-   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberPropertyName(id,job.get('resource'),property.displayName);}
+   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberProperty(id,job.get('resource'),property);}
    const fetcher=this.p.googleFetch?.(id)||fetch;
    const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
    for(const range of missing)await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:range.start,endDate:range.end});
@@ -192,7 +205,7 @@ class SyncService{
   try{return await this.collectFresh(id,controller.signal);}finally{flights.delete(controller);if(!flights.size)this.freshFlights.delete(key);}
  }
  async collectFresh(id,signal: AbortSignal){signal.throwIfAborted();const clock=(this.p as Connections).mock?.enabled?new Date((this.p as Connections).mock.context(String(id)).clock):new Date(),link=await this.link(id),token=await this.p.token(id,signal),la=calendarDateInTimeZone('America/Los_Angeles',clock),start=shift(la,-2);
-  let tz='UTC';try{tz=(await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])})).timeZone||'UTC';}catch{tz='UTC';}
+  let tz='UTC';try{const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});tz=property.timeZone||'UTC';await this.rememberProperty(id,link.get('ga4PropertyId'),property);}catch{tz='UTC';}
   signal.throwIfAborted();
   const out={fetchedAt:new Date().toISOString(),ga4Resource:link.get('ga4PropertyId'),gscResource:link.get('gscSiteUrl'),gsc:[],ga4:[]};
   for(const source of ['gsc','ga4']){const end=shift(calendarDateInTimeZone(source==='ga4'?tz:'America/Los_Angeles',clock),-1);if(end<start)continue;
@@ -213,8 +226,26 @@ class SyncService{
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
   // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});
-   const webTried=this.webTried=this.webTried||new Map();if(Date.now()-(webTried.get(id)||0)>=15*60000)await this.p.dataViews?.website(id,{range:'28'}).then(()=>webTried.delete(id),()=>webTried.set(id,Date.now()));}
+  // A project nobody has opened lately is not read ahead: its summary comes from the synced days, but Traffic and the
+  // breakdowns ask Google. These wait for the new report instead of taking its saved copy, as the tick is what has to read it.
+  // Search performance's tables and breakdowns join them at most every 15 minutes, as they change once a day. A report Google
+  // refuses in part keeps a short lifetime so that a person opening it soon gets another try, but the tick would read it
+  // again each time that ends, all day, if Google goes on refusing the same part: it waits PARTIAL_RETRY_MS instead.
+  let idleReads=0;
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
+   const authorizedAt=links.find(l=>String(l.get('projectId'))===id)?.get('authorizedAt'),active=!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt);
+   const lately=active&&(!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt,MORNING_REREAD_WITHIN_MS));
+   // An idle project's next read waits IDLE_READ_MS, unless someone opens it meanwhile. Traffic is read ahead once per
+   // window (`readAhead`): a report held for today's window answers whatever its age. A project opened in the last day is
+   // read with `waitForFresh` instead, so the report read in the night is read again when it ends in the morning
+   // (website-report.ts, MORNING_READ_HOUR); a report read in the day lasts until midnight either way. A report refused
+   // in part is retried with `waitForFresh` too, since `readAhead` would take it back as it is; a retry that fails keeps
+   // that mark for the next one 15 minutes later.
+   const webNext=this.webNext=this.webNext||new Map(),next=webNext.get(id);
+   if((!next||Date.now()>=next.at||(active&&next.idle))&&(active||idleReads<IDLE_READS_PER_TICK)){if(!active)idleReads++;
+    await (next?.partial||lately?waitForFresh:readAhead)(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS,partial:true});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000,...(next?.partial?{partial:true}:{})}));}
+   if(!active)continue;
+   const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}

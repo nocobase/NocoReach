@@ -14,6 +14,7 @@ import {
   defineApiRoutes,
   describeRoute,
 } from '@nocobase/app-server/router';
+import { getRequestLocale } from '@nocobase/i18n/server';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
@@ -260,7 +261,11 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       const input = context.req.valid('json');
       await project(input.projectId);
       return context.json({
-        data: await service().send(owner(context), input),
+        data: await service().send(
+          owner(context),
+          input,
+          getRequestLocale(context),
+        ),
       });
     },
   );
@@ -300,10 +305,14 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       );
       await project(conversation.projectId);
       return context.json({
-        data: await service().send(owner(context), {
-          ...context.req.valid('json'),
-          conversationId: conversation.id,
-        }),
+        data: await service().send(
+          owner(context),
+          {
+            ...context.req.valid('json'),
+            conversationId: conversation.id,
+          },
+          getRequestLocale(context),
+        ),
       });
     },
   );

@@ -92,6 +92,35 @@ it('does not reach the network if reading the project marker fails', async () =>
   expect(liveFetch).not.toHaveBeenCalled();
 });
 
+it('answers a marked project from the world, not Demo Mode, on an ordinary installation', async () => {
+  const { network, projects } = setup();
+  const invokeMock = vi.fn(async () => {
+    throw new Error('Demo environment required.');
+  });
+  projects.configuration = { enabled: false, invokeMock } as never;
+  const response = await network.fetch(
+    'site',
+    'https://acme.example/',
+    {},
+    '1',
+  );
+  expect(response.status).toBe(200);
+  expect(invokeMock).not.toHaveBeenCalled();
+  expect(liveFetch).not.toHaveBeenCalled();
+  expect(liveRequest).not.toHaveBeenCalled();
+});
+
+it('answers a marked project through Demo Mode in a demo environment', async () => {
+  const { network, projects } = setup();
+  const answer = new Response('from the adapter');
+  const invokeMock = vi.fn(async () => answer);
+  projects.configuration = { enabled: true, invokeMock } as never;
+  await expect(
+    network.fetch('site', 'https://acme.example/', {}, '1'),
+  ).resolves.toBe(answer);
+  expect(invokeMock).toHaveBeenCalledOnce();
+});
+
 it('keeps unmarked visitor projects offline in a dedicated demo environment', async () => {
   const { network, projects } = setup();
   projects.configuration = {

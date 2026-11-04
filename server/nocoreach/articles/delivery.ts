@@ -28,8 +28,13 @@ import {
   sameText,
   valueAt,
   type ArticleChanges,
+  type ArticleImageFile,
   type ArticleProvider,
 } from './provider.js';
+import {
+  replaceTaskImages,
+  taskImageIds,
+} from '../../../shared/task-images.js';
 import type { ArticleTargets } from './targets.js';
 
 // Publishing an approved article draft (docs/ARTICLE-PUBLISHING.md). The task stores what was approved; this module
@@ -64,8 +69,8 @@ export type PublishFailure = {
   /** What the target or the error said (errorDetail), for Technical details and the server log. */
   detail?: string;
 };
-export type PublishStep = 'read' | 'downstream' | 'write' | 'verify';
-function failed(step: PublishStep, error: unknown): PublishFailure {
+export type PublishStep = 'read' | 'images' | 'downstream' | 'write' | 'verify';
+export function failed(step: PublishStep, error: unknown): PublishFailure {
   const detail = errorDetail(error);
   return {
     kind: 'failed',
@@ -316,6 +321,32 @@ export function projectDraft(
   };
 }
 
+/** The task images a draft shows (2026-11-03), each once. */
+export const draftImageIds = (draft: ArticleDraft) =>
+  taskImageIds(
+    Object.values(draft.locales).flatMap((fields) => Object.values(fields)),
+  );
+
+/**
+ * The proposal as a target publishes it: each task image the draft shows at the address it was uploaded to there
+ * (`urls`, by file id). Publishing, the export and overwrite checks and a rebase all compare against this.
+ */
+export function withImageUrls<T extends { draft: ArticleDraft }>(
+  p: T,
+  urls: Record<string, string> | undefined,
+): T {
+  if (!urls || !Object.keys(urls).length) return p;
+  const locales: ArticleDraft['locales'] = {};
+  for (const [locale, fields] of Object.entries(p.draft.locales))
+    locales[locale] = Object.fromEntries(
+      Object.entries(fields).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? replaceTaskImages(v, (id) => urls[id]) : v,
+      ]),
+    );
+  return { ...p, draft: { ...p.draft, locales } };
+}
+
 const asChanges = (d: ArticleDraft): ArticleChanges => ({
   ...(d.slug ? { slug: d.slug } : {}),
   ...(d.status ? { status: d.status } : {}),
@@ -366,6 +397,17 @@ export class ArticleDelivery {
     articleId: string,
   ): Promise<ArticleSnapshot> {
     return this.provider(project, targetId).get(articleId);
+  }
+  /** Upload an image an approved article shows to the target (provider `uploadImage`); its address there. */
+  async uploadImage(
+    project: string,
+    targetId: string,
+    image: ArticleImageFile,
+  ): Promise<string> {
+    const provider = this.provider(project, targetId);
+    if (!provider.capabilities.images || !provider.uploadImage)
+      throw new ArticleError('invalid', 'images_unsupported');
+    return provider.uploadImage(image);
   }
   /** What the draft changes against its base, field by field. Empty when the draft repeats the base. */
   proposal(

@@ -113,8 +113,9 @@ test('connect needs DataForSEO; the first check reads the most relevant threads,
  // a week later: past month only, new threads added with the day first seen, old ones kept
  st.lastRun.at=new Date(Date.now()-8*DAY).toISOString();week=1;const r=await s.check('1');
  assert.equal(calls.length,2);assert.equal(calls[1].search_param,'&tbs=qdr:m');assert.equal(r.added,1);st=await s.state('1');assert.equal(Object.keys(st.posts).length,3);
- // 立即检查 within six days reuses the paid run
- await s.check('1',{force:true});assert.equal(calls.length,2);
+ assert.deepEqual([r.searched,r.reused],[1,0]);
+ // Update now within six days reuses the paid run and says every term was reused
+ const again=await s.check('1',{force:true});assert.equal(calls.length,2);assert.deepEqual([again.searched,again.reused],[1,1]);
  const status=await s.status('1');assert.equal(status.connected,true);assert.equal(status.total,3);assert.equal(status.recent[0].title,'New 1');
 });
 

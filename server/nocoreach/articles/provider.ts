@@ -117,7 +117,14 @@ export interface ArticleProvider {
     changes: ArticleChanges,
     opts: { baseVersion: string; key: string },
   ): Promise<ArticleSnapshot>;
+  /**
+   * Upload an image the article shows into the target's own file storage and return its public address (2026-11-03).
+   * Only targets with `capabilities.images` have it.
+   */
+  uploadImage?(image: ArticleImageFile): Promise<string>;
 }
+/** An image to upload with an article: a task image's name, type and bytes. */
+export type ArticleImageFile = { name: string; type: string; bytes: Buffer };
 
 export const now = () => new Date().toISOString();
 const norm = (v: unknown) =>

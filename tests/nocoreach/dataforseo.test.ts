@@ -3,7 +3,7 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { DataForSeo, REUSE_MS } from '../../server/nocoreach/dataforseo.js';
+import { DataForSeo, REUSE_MS, RECENT_MS } from '../../server/nocoreach/dataforseo.js';
 const test=__vitest_test;
 const DAY=86400000;
 // In-memory nrKeywordRuns with just the filters the service uses.
@@ -30,10 +30,17 @@ test('spending: this month and in total, reservations count while the cost is un
 });
 test('the same query within 30 days reuses the saved result without a new charge; older ones are offered again',async()=>{
  let calls=0;const {d,m}=service({fetchImpl:async()=>{calls++;return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[1]}]})};}});
- const first=await ask(d);const again=await ask(d);assert.equal(again.id,first.id);assert.equal(calls,1);
+ const first=await ask(d);const again=await ask(d);assert.equal(again.id,first.id);assert.equal(calls,1);assert.deepEqual([first.reused,again.reused],[undefined,true],'the saved one is marked reused');
+ m.rows[0].createdAt=new Date(Date.now()-REUSE_MS+DAY).toISOString();assert.equal((await ask(d)).id,first.id,'a kind without reuseMs keeps 30 days');assert.equal(calls,1);
  assert.equal((await d.preview('1','demo',{target:'crm'})).existing.id,first.id);
  m.rows[0].createdAt=new Date(Date.now()-REUSE_MS-DAY).toISOString();assert.equal((await d.preview('1','demo',{target:'crm'})).existing,null);
  await ask(d);assert.equal(calls,2);
+});
+test('Check again asks anew, but a second one within 10 minutes gets that run, marked reused, so a double click is not billed twice',async()=>{
+ let calls=0;const {d,m}=service({fetchImpl:async()=>{calls++;return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[calls]}]})};}});
+ const first=await ask(d);m.rows[0].createdAt=new Date(Date.now()-RECENT_MS-1000).toISOString();
+ const fresh=await ask(d,{forceRefresh:true});assert.notEqual(fresh.id,first.id);assert.equal(fresh.reused,undefined);assert.equal(calls,2);
+ const twice=await ask(d,{forceRefresh:true});assert.deepEqual([twice.id,twice.reused,calls],[fresh.id,true,2]);
 });
 test('an uncertain outcome is kept as unknown and blocks repeating the same paid query',async()=>{
  let calls=0;const {d}=service({fetchImpl:async()=>{calls++;throw Object.assign(new Error('timeout'),{name:'TimeoutError'});}});

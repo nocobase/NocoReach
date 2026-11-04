@@ -98,6 +98,7 @@ const inputs = z
     collectorId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/),
     terms: inputList,
     bvids: inputList,
+    autoSync: z.boolean().optional(),
     revision: z.string().uuid().nullable(),
   })
   .strict();
@@ -133,7 +134,7 @@ export interface BilibiliConfig {
 }
 export function bilibiliConfig(
   value: unknown,
-): BilibiliConfig & { revision: string | null } {
+): BilibiliConfig & { revision: string | null; autoSync?: boolean } {
   const result = inputs.safeParse(value);
   if (!result.success) throw new BilibiliError('invalid_input');
   const terms = [
@@ -143,7 +144,7 @@ export function bilibiliConfig(
   ];
   const bvids = [...new Set(list(result.data.bvids).map(bilibiliBvid))];
   if (
-    terms.length > 3 ||
+    terms.length > 5 ||
     bvids.length > 5 ||
     (!terms.length && !bvids.length) ||
     terms.some((s) => !bilibiliTerm.safeParse(s).success)
@@ -154,6 +155,9 @@ export function bilibiliConfig(
     terms,
     bvids,
     revision: result.data.revision,
+    ...(result.data.autoSync === undefined
+      ? {}
+      : { autoSync: result.data.autoSync }),
   };
 }
 const metric = z

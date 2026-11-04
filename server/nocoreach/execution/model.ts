@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { TaskResultSource } from '../../../shared/task-result.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { taskState } from '../../../shared/task-pending.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
 import type { FlowSnapshot } from './flow';
@@ -23,6 +24,8 @@ export type PullRequestInfo = { url: string; number: number; branch: string; hea
 // Article releases (article-flow.ts) publish to a target instead of merging: publishing, then exporting when the target
 // exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person.
 export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
+// sortOrder is a board position from before 2026-11-02, when each column came to run newest activity first; it is no
+// longer written or read and stays only on tasks moved before then.
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
@@ -32,11 +35,18 @@ export type Work = {
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; snooze?: import('../../../shared/task-pending.js').TaskSnooze | null; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
   // The pages a task was started to change when it left some of its pages to other tasks (2026-10-29).
   pages?: string[];
+  // The pages the task was started with (2026-11-02), recorded by the start for its record on the task page: the
+  // pages above, else the task's pages then. Relinking the task's page afterwards leaves it. Older tasks have none.
+  startedPages?: string[];
   // The website repository the task changes, kept at its start (2026-10-29, shared/repo-routing.ts); null when it
   // changes none. Tasks started before then have none kept.
   repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
+  // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit
+  // directly. `imageUrls` is where each was uploaded when an article that uses it was published, per target.
+  images?: string[];
+  imageUrls?: Record<string, Record<string, string>>;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
   article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string; locales?: string[] };
   // `locales`: the languages chosen at start, primary first (2026-10-24); the Agent writes the primary, and once a person
@@ -96,18 +106,13 @@ export function canApplyRun(w: Work, run: Run): boolean {
 }
 
 export type BoardState = 'todo' | 'doing' | 'review' | 'done';
+// The pages' rule (shared/task-pending.ts `taskState`), so the status text, notifications and the online agent agree
+// with the task list and the Tasks badge. Flow tasks: an Agent at work is in progress; a step waiting on a person (a
+// review, publishing, a failed run or merge, a step to start again, a change not seen online) needs confirmation; once
+// live, watching the effect is the system's job and the task counts as done for you.
 export function boardState(w: Work): BoardState {
   if (w.cancelledAt) return 'done';
-  if (w.boardState) return w.boardState;
-  if (w.stage === 'done') return 'done';
-  // Flow tasks: stages done by a Runner agent are in progress, stages waiting on a person need confirmation.
-  // The automatic release waits for you only when the merge failed or the change was not seen online.
-  // Once live, watching the effect is the system's job: the task counts as done for you.
-  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; if (kind === 'observe') return 'done'; return kind === 'review' || kind === 'publish' || (kind === 'release' && ['merge_failed', 'not_seen', 'publish_failed', 'publish_conflict', 'export_late'].includes(w.release?.state || '')) ? 'review' : 'doing'; }
-  if (w.stage === 'verification') return w.receipt?.note ? 'done' : 'review';
-  if (w.stage === 'execution') return 'review';
-  if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';
-  return 'todo';
+  return taskState(w);
 }
 /**
  * Where a task stands for people, closed apart (2026-10-23 user feedback: a cancelled task read "Completed · Closed"):

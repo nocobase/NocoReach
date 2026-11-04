@@ -9,9 +9,11 @@ import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
 // 趋势 (SPEC §11 市场需求, Google Trends; 2026-10-04 user choice: weekly, automatic). Google's own Trends API is an alpha
 // open by application only, so the data comes through the shared DataForSEO layer (Google Trends Explore, live): once a
-// week one run of two requests — interest over the past 12 months for up to five terms (the product and competitors) and
-// the searches related to the first term (top and rising). About $0.011 a request, inside the monthly budget; a run is
-// reused for 6 days and an uncertain one is never retried. Values are Google's relative interest, 0–100 within one run.
+// week one run of two requests — interest over the past 12 months for up to five terms (the product and competitors)
+// and the searches related to the first term (top and rising). About $0.011 a request, inside the monthly budget; a run
+// is reused for 6 days by the weekly check and an uncertain one is never retried; a click (Update now, saving the
+// settings, adding a keyword) asks anew, as Update now promises (2026-11-02: it read nothing new for 6 days but showed
+// the click's time). Values are Google's relative interest, 0–100 within one run.
 // 关注的关键词 (2026-10-04 user choice): up to ten keywords added on the 趋势 page, each queried on its own (its own
 // 12-month line, 100 = its own busiest week, so keywords are not compared with each other) with its related searches,
 // one request of about $0.011 a keyword a week; queried right after being added, then weekly with the rest.
@@ -84,10 +86,10 @@ class TrendsSource{
  async collect(id,{force=false,retry=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('trendsSource.connectTrendsFirst'),409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};
   const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
-  this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
+  this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
-   return {...cur,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
+   return {...cur,latest:{at:run.reused&&cur.latest?.at||now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
   return {ok:!error,error};}
  // 关注的关键词: add (queried at once in the background), remove, and the weekly check of each.
  async addKeyword(id,v){if(!this.d4s.config(id)?.verifiedAt)fail(systemMessageText('trendsSource.keywordTrendsUseDataforseoCheck'),409);const [keyword]=termsOf([v.keyword]),kid=keywordId(keyword);
@@ -100,10 +102,10 @@ class TrendsSource{
  async collectKeyword(id,kid,{force=false,retry=false}={}){const s=await this.state(id),k=(s?.keywords||[]).find(x=>x.id===kid);if(!k)return {skipped:true};
   if(!force&&k.lastRun&&Date.now()-Date.parse(k.lastRun.at)<WEEK-6*3600000)return {skipped:true};
   const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
-  this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
+  this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(x.risingSeen||{})},first=!x.latest;for(const q of r.rising){const key=q.query.toLowerCase();if(!(key in seen))seen[key]=first?'':now;}
-   return {...x,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
+   return {...x,latest:{at:run.reused&&x.latest?.at||now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
   return {ok:!error,error};}
  async checkKeywords(id,{force=false}={}){const errors=[];for(const k of (await this.state(id))?.keywords||[]){const key=`${id}:${k.id}`;if(this.keywordChecks.has(key))continue;this.keywordChecks.add(key);
   try{const r=await this.checkKeyword(id,k.id,{force});if(r.error)errors.push(`${k.keyword}：${r.error}`);}finally{this.keywordChecks.delete(key);}}return errors;}

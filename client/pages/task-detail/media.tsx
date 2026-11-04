@@ -35,12 +35,35 @@ function documentLabels(): AttachmentLabels {
   };
 }
 
+// The preview dialog's record of a task file.
+const previewFile = (file: TaskMediaView) => ({
+  id: file.id,
+  disk: 'local',
+  key: file.id,
+  filename: file.filename,
+  ext: file.filename.includes('.')
+    ? file.filename.slice(file.filename.lastIndexOf('.') + 1)
+    : '',
+  mimeType: file.mimeType,
+  size: file.size,
+  createdAt: '',
+  updatedAt: '',
+  contentUrl: file.contentUrl,
+});
+
+/**
+ * A task's attachments. `compact` (2026-11-02, what a started task was given) fits them in one field of a card: no
+ * section of their own, the documents as chips and the images and videos as thumbnails, every one opening in the
+ * preview.
+ */
 export function TaskMedia({
   projectId,
   taskId,
+  compact = false,
 }: {
   projectId: number;
   taskId: string;
+  compact?: boolean;
 }) {
   const api = useApiClient();
   const scope = `${projectId}:${taskId}`;
@@ -92,46 +115,82 @@ export function TaskMedia({
   // Documents are chips that preview (Word, Excel, PDF and text render locally) or download; media show in place.
   const documents = files.filter((file) => isTaskDocument(file.mimeType));
   const media = files.filter((file) => !isTaskDocument(file.mimeType));
+  const chips = (
+    <AttachmentList
+      className={!compact && media.length ? 'mb-4' : undefined}
+      locale={getCurrentLocale()}
+      labels={documentLabels()}
+      files={documents.map((file) => ({
+        id: file.id,
+        name: file.filename,
+        size: file.size,
+        url: file.contentUrl,
+        downloadUrl: file.contentUrl,
+        image: false,
+      }))}
+      onPreview={(_, index) => setPreview(index)}
+    />
+  );
+  const dialog = (shown: TaskMediaView[]) => (
+    <FilePreviewDialog
+      open={preview !== null}
+      initialIndex={preview ?? 0}
+      onOpenChange={(open) => {
+        if (!open) setPreview(null);
+      }}
+      labels={{ download: $t('manualTask.download') }}
+      files={shown.map(previewFile)}
+    />
+  );
+  if (compact)
+    return (
+      <div className='flex min-w-0 flex-col gap-2' data-task-media='compact'>
+        {documents.length > 0 && chips}
+        {media.length > 0 && (
+          <ul
+            className='flex flex-wrap gap-2'
+            aria-label={$t('manualTask.attachments')}
+          >
+            {media.map((file, i) => (
+              <li key={file.id}>
+                <button
+                  type='button'
+                  className='block overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                  aria-label={$t('manualTask.previewFile', {
+                    0: file.filename,
+                  })}
+                  title={file.filename}
+                  onClick={() => setPreview(documents.length + i)}
+                >
+                  {file.mimeType.startsWith('video/') ? (
+                    <video
+                      muted
+                      preload='metadata'
+                      className='h-32 w-auto max-w-60 object-cover'
+                      src={file.contentUrl}
+                    />
+                  ) : (
+                    <img
+                      alt={file.filename}
+                      loading='lazy'
+                      className='h-32 w-auto max-w-60 object-cover'
+                      src={file.contentUrl}
+                    />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {dialog([...documents, ...media])}
+      </div>
+    );
   return (
     <Section title={$t('manualTask.attachments')}>
       {documents.length > 0 && (
         <>
-          <AttachmentList
-            className={media.length ? 'mb-4' : undefined}
-            locale={getCurrentLocale()}
-            labels={documentLabels()}
-            files={documents.map((file) => ({
-              id: file.id,
-              name: file.filename,
-              size: file.size,
-              url: file.contentUrl,
-              downloadUrl: file.contentUrl,
-              image: false,
-            }))}
-            onPreview={(_, index) => setPreview(index)}
-          />
-          <FilePreviewDialog
-            open={preview !== null}
-            initialIndex={preview ?? 0}
-            onOpenChange={(open) => {
-              if (!open) setPreview(null);
-            }}
-            labels={{ download: $t('manualTask.download') }}
-            files={documents.map((file) => ({
-              id: file.id,
-              disk: 'local',
-              key: file.id,
-              filename: file.filename,
-              ext: file.filename.includes('.')
-                ? file.filename.slice(file.filename.lastIndexOf('.') + 1)
-                : '',
-              mimeType: file.mimeType,
-              size: file.size,
-              createdAt: '',
-              updatedAt: '',
-              contentUrl: file.contentUrl,
-            }))}
-          />
+          {chips}
+          {dialog(documents)}
         </>
       )}
       {media.length > 0 && (

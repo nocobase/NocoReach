@@ -172,17 +172,22 @@ function named(
   return why ? { ...base, why: why() } : base;
 }
 
-/** Sentences in a row: a space between them, none after a Chinese or Japanese full stop. */
+// Where Chinese or Japanese text ends: a Han or kana character or full-width punctuation, perhaps followed by a
+// closing quotation mark (a quoted button label ends many sentences).
+const CJK_END =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u3000-\u303f\uff01-\uff60][\u2019\u201d]?$/u;
+
+/**
+ * Sentences in a row: a space between them, none where Chinese or Japanese text ends. Each part is trimmed, so a
+ * translation's stray space cannot show between them.
+ */
 export function sentences(...parts: (string | false | undefined)[]) {
   return parts
-    .filter((p): p is string => Boolean(p))
+    .map((p) => (p ? p.trim() : ''))
+    .filter(Boolean)
     .reduce(
       (text, part) =>
-        !text
-          ? part
-          : /[。！？：]$/u.test(text)
-            ? text + part
-            : `${text} ${part}`,
+        !text ? part : CJK_END.test(text) ? text + part : `${text} ${part}`,
       '',
     );
 }

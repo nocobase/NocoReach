@@ -26,16 +26,16 @@ import {
   CollectorBody,
   CollectorGroupsCard,
   CollectorSkeleton,
+  CollectorSourceLine,
   CollectorTable,
   CollectorTrendCard,
   TitleLink,
 } from './collector-content';
 import {
   countColumn,
-  countText,
   dateColumn,
   retryable,
-  shortDate,
+  shownLikes,
   titleColumn,
 } from './collector-columns';
 import { HandOffBar } from './hand-off-bar';
@@ -51,14 +51,8 @@ import { formatDate, formatDateTime } from '#lib/format';
 
 type Report = XiaohongshuView & CollectorReport & { notes: XiaohongshuNote[] };
 
-// Likes as the page showed them ("1.2万"), with separators when that was a plain number; sorting uses the parsed
-// number on the server.
-const likes = (note: XiaohongshuNote) =>
-  note.likesText && /^\d+$/.test(note.likesText)
-    ? countText(note.likes ?? Number(note.likesText))
-    : (note.likesText ?? '—');
 const summary = (note: XiaohongshuNote) =>
-  `${$t('xiaohongshu.displayedLikes', { 0: likes(note) })} · ${
+  `${$t('xiaohongshu.displayedLikes', { 0: shownLikes(note) ?? '—' })} · ${
     note.estimatedPublishedAt
       ? $t('xiaohongshu.estimatedPublicationDate', {
           0: formatDate(note.estimatedPublishedAt),
@@ -94,12 +88,14 @@ export default function DataXiaohongshu() {
         (note) => <TitleLink href={safeLink(note.url)}>{note.title}</TitleLink>,
         summary,
       ),
-      countColumn<XiaohongshuNote>('likes', $t('collectorView.likes'), likes),
+      countColumn<XiaohongshuNote>(
+        'likes',
+        $t('collectorView.likes'),
+        (note) => shownLikes(note) ?? '—',
+      ),
       dateColumn<XiaohongshuNote>(
         $t('collectorPage.estimatedPublished'),
         (note) => formatDate(note.estimatedPublishedAt),
-        (note) =>
-          $t('collectorPage.collectedShort', { 0: shortDate(note.lastSeenAt) }),
       ),
     ],
     [],
@@ -109,10 +105,15 @@ export default function DataXiaohongshu() {
     if (!project || !data) return;
     setBusy(true);
     try {
-      await xiaohongshuRequest(project.id, 'search', {
-        revision: data.revision,
-      });
-      toast.success(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
+      const next = await xiaohongshuRequest<{ queued: object | null }>(
+        project.id,
+        'search',
+        { revision: data.revision },
+      );
+      // A read the busy collector turned away is queued and retried in about ten minutes.
+      if (next.queued) toast.info(() => $t('collectorQueue.title'));
+      else
+        toast.success(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
     } catch (e) {
       toast.error(() =>
         e instanceof Error
@@ -191,17 +192,16 @@ export default function DataXiaohongshu() {
       ) : null}
       {data && hasData ? (
         <>
-          <p className='nr-footnote'>
-            {data.query
-              ? $t('common.searchTermValue', { 0: data.query })
-              : null}
-            {data.query ? ' · ' : null}
-            {data.verifiedAt
-              ? $t('xiaohongshu.lastSuccessfulCollection', {
-                  0: formatDateTime(data.verifiedAt),
-                })
-              : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
-          </p>
+          <CollectorSourceLine
+            parts={[
+              data.query && $t('common.searchTermValue', { 0: data.query }),
+              data.verifiedAt
+                ? $t('xiaohongshu.lastSuccessfulCollection', {
+                    0: formatDateTime(data.verifiedAt),
+                  })
+                : $t('xiaohongshu.browserXiaohongshuLoginNotYet'),
+            ]}
+          />
           {!data.connected ? (
             <p role='status' className='nr-footnote'>
               {$t('collectorPage.disconnectedKept')}

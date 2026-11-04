@@ -2,6 +2,7 @@ import { Info } from 'lucide-react';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
 import {
+  onlineRunAnsweredPartly,
   onlineRunContinuable,
   onlineRunPartial,
   type OnlineRun,
@@ -12,7 +13,8 @@ import { onlineErrorText } from './error-text.js';
 /**
  * A reply that stopped partway through no fault of the question (`onlineRunContinuable`): why, in one quiet line, and
  * Continue on the conversation's latest turn, which picks the reply up where it stopped (Try again when it had written
- * nothing yet). Other failures keep the red alert and are sent again by hand.
+ * nothing yet). Other failures keep the red alert and are sent again by hand. A reply that used all its tool steps and
+ * answered from what it had read (`onlineRunAnsweredPartly`) says so in the same quiet line, with nothing to click.
  */
 export function OnlineCutOff({
   run,
@@ -24,6 +26,19 @@ export function OnlineCutOff({
   onContinue?: () => void;
   busy?: boolean;
 }) {
+  if (onlineRunAnsweredPartly(run))
+    return (
+      <p
+        role='status'
+        className='flex items-start gap-1.5 border-t pt-2 text-sm text-muted-foreground'
+        data-answered-partly=''
+      >
+        <Info className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
+        <span className='wrap-anywhere'>
+          {$t('onlineAgent.answeredPartly')}
+        </span>
+      </p>
+    );
   if (!onlineRunContinuable(run)) return null;
   return (
     <div

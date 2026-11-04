@@ -170,6 +170,28 @@ export class World {
             path: q.path,
           })),
         ];
+    this.queries = [
+      ...this.queries,
+      ...this.research
+        .filter(
+          (k) =>
+            !this.queries.some(
+              (q) =>
+                q.q !== k.keyword &&
+                q.q.toLowerCase().includes(k.keyword.toLowerCase()),
+            ),
+        )
+        // A long-tail variant is searched no more than its keyword, so the sparse story pages stay too thin to judge.
+        .map((k) => ({
+          q: `${k.keyword} ${this.lang === 'zh' ? '教學' : 'guide'}`,
+          path: k.path!,
+          impressions: Math.min(
+            8,
+            this.queries.find((q) => q.q === k.keyword)?.impressions ?? 8,
+          ),
+          position: k.position! + 2,
+        })),
+    ];
     this.seeded = new Seeded(
       `nocoreach-demo:${project.domain}:${this.language}`,
     );

@@ -10,11 +10,12 @@ import {
   GA4_PARTIAL_CACHE_MS,
   ga4CacheExpiry,
 } from '../../../shared/ga4-cache.js';
+import { savedCopyNote } from '../../../shared/google-cache.js';
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
 // top: 今天 (实时 and today against yesterday and last week, today.tsx), the range, GA4's eight figures (a figure picks
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
-// report tables (reports.tsx). The numbers are read live from GA4 for a window ending at the synced cutoff, like the
-// other data pages; the line runs on to yesterday with the days after the cutoff dotted.
+// report tables (reports.tsx). The numbers are read live from GA4 for a window ending yesterday; the line's last two
+// days are dotted because GA4 is still processing them.
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { BarChart3, TriangleAlert } from 'lucide-react';
@@ -28,7 +29,12 @@ import {
 } from 'recharts';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { PageContainer, PageHeader } from '#components/reach/page';
-import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
+import {
+  EmptyState,
+  ListSkeleton,
+  LoadError,
+  SavedReportNote,
+} from '#components/reach/states';
 import { NotesTip, InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
@@ -59,6 +65,7 @@ import {
   ownDays,
   show,
   TABLE_LABELS,
+  trendPoints,
   visitorName,
   type MetricKey,
   type Report,
@@ -77,7 +84,19 @@ function notesOf(report: Report): string[] {
     $t('dataWebsite.usersDeduplicatedPeriod'),
     $t('dataWebsite.aiAssistantsBySourceName'),
     $t('dataWebsite.keyEventsFollowDefinitionGa'),
-    $t('dataWebsite.preliminaryAfterCutoff'),
+    ...(report.settledThrough &&
+    report.window &&
+    report.window.end > report.settledThrough
+      ? [$t('dataWebsite.latestDaysPreliminary')]
+      : []),
+    ...(report.queriesWindow
+      ? [
+          $t('dataWebsite.pageQueriesFinalized', {
+            0: formatDate(report.queriesWindow.start),
+            1: formatDate(report.queriesWindow.end),
+          }),
+        ]
+      : []),
     ...(missing.length
       ? [
           $t('dataWebsite.ga4DidNotReturn', {
@@ -104,7 +123,7 @@ export default function DataWebsite() {
     () =>
       api.action<Report>('nrDataViews', 'website', {
         method: 'POST',
-        body: { projectId: project!.id, ...r },
+        body: { projectId: project!.id, ...r, acceptSaved: true },
         unwrap: 'data',
       }),
     {
@@ -149,6 +168,7 @@ export default function DataWebsite() {
             : undefined
         }
       />
+      <SavedReportNote {...savedCopyNote(report)} />
       {/* The date range sits right under the header, as on every data page; Today follows it (UI review 2026-10-22). */}
       {report?.connected ? (
         <TodayCard
@@ -329,24 +349,16 @@ function ChangeDrivers({
   );
 }
 
-// The chosen figure per day against the same day of the period before; the days after the cutoff dotted (初步).
+// The chosen figure per day against the same day of the period before; days GA4 is still processing are dotted.
 function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
-  const m = METRICS[metric],
-    cutoff = report.cutoff!;
-  const days = ownDays(report.window, report.daily, report.previousDaily);
-  const points = days.current.map((d, i) => {
-    const before = days.previous[i];
-    const value = m.of(d);
-    return {
-      date: d.date,
-      value: d.date <= cutoff ? value : null,
-      fresh: d.date >= cutoff ? value : null,
-      previous: before ? m.of(before) : null,
-      previousDate: before?.date ?? '',
-    };
-  });
-  const fresh = points.some((p) => p.date > cutoff);
-  if (points.filter((p) => p.value !== null).length < 2) return null;
+  const m = METRICS[metric];
+  const { points, fresh } = trendPoints(
+    ownDays(report.window, report.daily, report.previousDaily),
+    m.of,
+    report.settledThrough ?? report.cutoff,
+  );
+  if (points.filter((p) => p.value !== null || p.fresh !== null).length < 2)
+    return null;
   const axis = (v: number) =>
     m.format === 'percent'
       ? `${Math.round(v * 100)}%`
@@ -363,7 +375,7 @@ function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
         </h2>
         <InfoTip label={$t('common.howReadChart')}>
           {$t('dataWebsite.trendHowToRead', {
-            0: fresh ? $t('dataWebsite.dottedPreliminaryAfterCutoff') : '',
+            0: fresh ? $t('dataWebsite.dottedLatestDaysPreliminary') : '',
           })}
         </InfoTip>
       </div>

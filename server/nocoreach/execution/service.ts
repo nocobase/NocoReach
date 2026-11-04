@@ -16,7 +16,8 @@ import { resultOf, type AgentResult } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
-import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, type Partition } from './effect';
+import { CHECKPOINTS, EFFECT_RULE, compare, dateOf, pageKey, pageNumbers, rejudge, shift, windows, type Partition } from './effect';
+import { pageIdentity, type PageIdentity } from '../../../shared/page-identity.js';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
@@ -25,8 +26,9 @@ import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
-import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
+import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
 import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
+import { TASK_IMAGES_PER_MESSAGE, type MessageImage } from '../../../shared/task-images.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -80,6 +82,7 @@ export class TaskService {
   private lastVerify = 0;
   private lastEffects = 0;
   private legacyDone = false;
+  private notesDone = false;
   private stopped = false;
   private unregisterRuntime?: () => void;
   readonly provider: OnlineProvider;
@@ -96,6 +99,10 @@ export class TaskService {
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
+  // Which of the project's addresses are one page, from what Website content read (shared/page-identity.ts).
+  async pageIdentity(project: string, tx?: any): Promise<PageIdentity> { return pageIdentity(await this.snapshot(`site-content:${project}`, tx)); }
+  // A task's pages (pageUrlsOf) with the project's page identity, as the task page reads them.
+  private async taskPages(project: string, task: any, w: Work, tx?: any) { return pageUrlsOf({ task, work: w, pageIdentity: await this.pageIdentity(project, tx) }); }
   async put(key: string, payload: any, tx: any) {
     const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx });
     if (r) await this.repo('nrSnapshots').update({ filterByTk: r.id, values: { payload }, transaction: tx });
@@ -131,7 +138,10 @@ export class TaskService {
     const events: any[] = [];
     if (owner && owner !== by) {
       const stage = w.flow?.stages[w.stageIndex || 0];
-      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
+      // An Agent step that failed or waits to be started again needs you too, but sends no message yet: the message
+      // names a step to do, and a run a restart interrupted is tried again right after it fails.
+      const agentWaits = stage?.kind === 'agent' && !w.boardState;
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
       if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
       for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
     }
@@ -153,18 +163,19 @@ export class TaskService {
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
-    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
-    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
+    const identity = await this.pageIdentity(project, tx);
+    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, identity, tx)];
+    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, pageIdentity: identity, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), or
   // split off the same task for pages it leaves (2026-10-29: proposals sharing `group`, the first task's proposal or
   // `task:<id>`), in the order they were created, with where each stands and the pages each was handed off with.
-  private async siblings(project: string, task: any, tx?: any) {
+  private async siblings(project: string, task: any, identity: PageIdentity, tx?: any) {
     const insight = task.evidence?.insight?.id, strategy = await this.snapshot(`strategy:${project}`, tx), proposals: any[] = strategy?.proposals || [];
     const own = proposals.find((p: any) => p.id === task.evidence?.proposalId), group = own ? own.group || own.id : `task:${task.id}`;
     const ids = [...new Set<string>([...(typeof group === 'string' && group.startsWith('task:') ? [group.slice(5)] : []), ...[...proposals].reverse().filter((p: any) => p.taskId && ((typeof insight === 'string' && p.insight?.id === insight) || (p.group || p.id) === group)).map((p: any) => String(p.taskId))])].filter(id => id !== String(task.id));
     const rows = (await Promise.all(ids.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean);
-    return rows.map((r: any) => { const e = (r.toJSON ? r.toJSON() : r).evidence || {}, pages = distinctPages([e.page, ...(Array.isArray(e.pages) ? e.pages : [])]); return { ...relatedTask(r), relation: 'sibling', ...(pages.length ? { pages } : {}) }; });
+    return rows.map((r: any) => { const e = (r.toJSON ? r.toJSON() : r).evidence || {}, pages = distinctPages([e.page, ...(Array.isArray(e.pages) ? e.pages : [])], undefined, identity); return { ...relatedTask(r), relation: 'sibling', ...(pages.length ? { pages } : {}) }; });
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.
@@ -277,9 +288,30 @@ export class TaskService {
   flowStageOf(w: Work, key: unknown, kinds: StageKind[]) { return this.flowStage(w, key, kinds); }
   flowArtifactOf(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any) { return this.flowArtifact(project, taskId, stageKey, content, actor, at, tx); }
   enterStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) { return this.enterFlowStage(project, taskId, task, w, index, tx, actor, at); }
+  /**
+   * The images sent with a message or a change request (2026-11-03): the person's own uploads (`imageIds`, in the order
+   * they were added, which is how the text numbers them), linked to the task in this command's transaction. Kept on
+   * `w.images` as well, which lets the task's readers open them.
+   */
+  async linkImages(project: string, taskId: string, w: Work, v: any, actor: string, tx: any, max = TASK_IMAGES_PER_MESSAGE): Promise<MessageImage[]> {
+    const ids = v.imageIds;
+    if (ids === undefined) return [];
+    if (!Array.isArray(ids) || ids.length > max || new Set(ids).size !== ids.length || ids.some((id: unknown) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) return fail(systemMessageText('taskExecution.imagesInvalid'), 400);
+    if (!ids.length) return [];
+    if (!this.p.taskAttachments) return fail(systemMessageText('taskExecution.imageUnavailable'), 409);
+    let images: MessageImage[];
+    try {
+      images = await this.p.taskAttachments.linkImages(tx.connection, actor, project, taskId, ids);
+    } catch (error) {
+      if ((error as { reason?: string })?.reason === 'TASK_IMAGE_UNAVAILABLE') return fail(systemMessageText('taskExecution.imageUnavailable'), 409);
+      throw error;
+    }
+    w.images = [...new Set([...(w.images || []), ...images.map((i) => i.id)])];
+    return images;
+  }
   /** The repository the task changes (shared/repo-routing.ts): the one kept at its start. */
   private async repoOf(project: string, task: any, w: Work, tx: any) {
-    return startedRepo((await this.agents.doc(project, tx)).repos, w, pageUrlsOf({ task, work: w }));
+    return startedRepo((await this.agents.doc(project, tx)).repos, w, await this.taskPages(project, task, w, tx));
   }
   private async flowArtifact(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
     const versions: Artifact[] = await this.list('artifact', project, taskId, tx);
@@ -409,13 +441,13 @@ export class TaskService {
   // the start card reads them (pageUrlsOf: the pages it was handed off with, or the opportunity's page and the cited
   // changes' pages), or the ones it was started to change when it left others to other tasks (`w.pages`). One of an
   // opportunity's several tasks (handed off one place at a time) shows its own place only, never the others'.
-  numberPages(task: any, w: Work) {
-    return distinctPages([...this.effectPages(w), ...(w.pages?.length ? w.pages : pageUrlsOf({ task, work: w }))], 10);
+  numberPages(task: any, w: Work, identity?: PageIdentity) {
+    return distinctPages([...this.effectPages(w), ...(w.pages?.length ? w.pages : pageUrlsOf({ task, work: w, pageIdentity: identity }))], 10, identity);
   }
   // Each page's numbers over 28 days, for the task page: the 28 days before the change went live once it has,
   // otherwise the latest 28 days every source has data for.
   async numbers(project: string, taskId: string) {
-    const task = await this.task(project, taskId), w = projectWork(task), pages = this.numberPages(task, w), live = Boolean(w.observeFrom);
+    const task = await this.task(project, taskId), w = projectWork(task), identity = await this.pageIdentity(project), pages = this.numberPages(task, w, identity), live = Boolean(w.observeFrom);
     if (!pages.length) return { pages: [], range: null, live };
     let range: { start: string; end: string };
     if (w.observeFrom) { const from = dateOf(w.observeFrom); range = { start: shift(from, -28), end: shift(from, -1) }; }
@@ -424,7 +456,7 @@ export class TaskService {
       if (!end) return { pages: pages.map(page => ({ page })), range: null, live };
       range = { start: shift(end, -27), end };
     }
-    return { ...pageNumbers(await this.partitions(project, range.start, range.end), pages, range), live };
+    return { ...pageNumbers(await this.partitions(project, range.start, range.end), pages, range, identity), live };
   }
   // Daily Google partitions of the project's current property and site, between two dates. Only the days in range of
   // the connected resource are read, one at a time, giving way to other requests between them: SQLite answers
@@ -459,17 +491,30 @@ export class TaskService {
   async observeEffects() {
     const tasks: any[] = [];
     for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
-    const ends = new Map<string, string>();
+    const ends = new Map<string, string>(), identities = new Map<string, PageIdentity>();
     for (const t of tasks) {
-      const w = projectWork(t); if (!w.observeFrom || t.evidence?.simulated) continue;
+      const w = projectWork(t);
+      // Results judged by an earlier rule are judged again once, from their stored numbers (the first run after an upgrade
+      // does it): no new data is read, the checkpoint keeps its time, and Activity gets no new line.
+      if ((w.observation?.results || []).some(r => r.rule !== EFFECT_RULE)) {
+        await this.lock(String(t.projectId), String(t.id), async tx => {
+          const task = await this.task(String(t.projectId), String(t.id), tx), fresh = projectWork(task), results = fresh.observation?.results || [];
+          if (!results.some(r => r.rule !== EFFECT_RULE)) return;
+          fresh.observation = { ...fresh.observation, results: results.map(rejudge) };
+          await this.save(task, fresh, tx);
+        });
+      }
+      if (!w.observeFrom || t.evidence?.simulated) continue;
       const project = String(t.projectId), from = dateOf(w.observeFrom), pages = this.effectPages(w), done = new Set((w.observation?.results || []).map(r => r.day));
       if (!pages.length) continue;
       if (!ends.has(project)) ends.set(project, await this.dataEnd(project));
+      if (!identities.has(project)) identities.set(project, await this.pageIdentity(project));
+      const identity = identities.get(project);
       for (const day of CHECKPOINTS.filter(d => !done.has(d) && shift(from, d) <= ends.get(project)!)) {
-        const { baseline, after } = windows(from, day), result = compare(day, from, pages, await this.partitions(project, baseline.start, after.end), now());
+        const { baseline, after } = windows(from, day), result = compare(day, from, pages, await this.partitions(project, baseline.start, after.end), now(), identity);
         // Other tasks that went live on the same page within the compared days are named, not discounted.
-        const keys = new Set(pages.map(pageKey));
-        for (const o of tasks) { const ow = projectWork(o), od = ow.observeFrom ? dateOf(ow.observeFrom) : ''; if (String(o.id) !== String(t.id) && String(o.projectId) === project && od >= baseline.start && od <= after.end && this.effectPages(ow).some(u => keys.has(pageKey(u)))) result.notes.push(systemMessageText('messages.concurrentTaskChangedPageLive', { 0: o.title, 1: od })); }
+        const keys = new Set(pages.map(u => pageKey(u, identity)));
+        for (const o of tasks) { const ow = projectWork(o), od = ow.observeFrom ? dateOf(ow.observeFrom) : ''; if (String(o.id) !== String(t.id) && String(o.projectId) === project && od >= baseline.start && od <= after.end && this.effectPages(ow).some(u => keys.has(pageKey(u, identity)))) result.notes.push(systemMessageText('messages.concurrentTaskChangedPageLive', { 0: o.title, 1: od })); }
         await this.lock(project, String(t.id), async tx => {
           const task = await this.task(project, String(t.id), tx), fresh = projectWork(task), results = fresh.observation?.results || [];
           if (results.some(r => r.day === day)) return;
@@ -581,7 +626,6 @@ export class TaskService {
     const articleRead = ['linkArticle', 'rebaseArticle'].includes(v.command) || (v.command === 'startTask' && Array.isArray(v.delivery?.also) && v.delivery.also.length) ? (await this.authorized(actor, project), await this.articleFlow.preRead(project, taskId, v)) : {};
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
-      if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
       const task = await this.task(project, taskId, tx), w = projectWork(task);
       const opKey = this.key('op', project, taskId, v.requestId), previous = await this.snapshot(opKey, tx);
       if (previous) { if (previous.hash !== hash) return fail(systemMessageText('taskExecution.sameRequestIdCannotUsed'), 409); return this.view(project, taskId, tx); }
@@ -605,11 +649,14 @@ export class TaskService {
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
         if (!['todo','doing','review','done'].includes(v.state)) return fail(systemMessageText('taskExecution.invalidWorkState'));
+        // A column has no order of its own (2026-11-02: the board shows each column newest activity first), so a move
+        // within the task's column changes nothing and records nothing; an old client's beforeId is ignored.
         const from = boardState(w);
+        if (from === v.state) return this.view(project, taskId, tx);
         const runs: Run[] = await this.list('run', project, taskId, tx);
-        if (from !== v.state && runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
-        if (from !== v.state && v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
-        if (from !== v.state && v.state === 'done') {
+        if (runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
+        if (v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
+        if (v.state === 'done') {
           if (v.confirm !== true) return fail(systemMessageText('taskExecution.confirmWorkDoneMovingNot'), 409);
           if (w.flow) {
             if (w.stage !== 'done') return fail(systemMessageText('messages.followWorkflowStage', { 0: w.flow.stages[w.stageIndex || 0]?.name }), 409);
@@ -618,19 +665,7 @@ export class TaskService {
           } else if (!w.receipt?.note || !['verification','done'].includes(w.stage)) return fail(systemMessageText('taskExecution.recordActualPublishRunResult'), 409);
         }
         // Reopening a completed card changes planning status only; receipt and prior approval remain historical facts.
-        const rows: any[] = [];
-        for (let offset=0;;offset+=100) {
-          const page = await this.repo('nrTasks').find({filter:{projectId:project},limit:100,offset,sort:'id',transaction:tx});
-          rows.push(...page.map((r:any)=>r.toJSON())); if(page.length<100) break;
-        }
-        const ordered = rows.filter(t => String(t.id)!==taskId && boardState(projectWork(t))===v.state).sort((a,b)=>(projectWork(a).sortOrder ?? Number(a.id)*1024)-(projectWork(b).sortOrder ?? Number(b.id)*1024) || Number(a.id)-Number(b.id));
-        const index = v.beforeId ? ordered.findIndex(t => String(t.id)===String(v.beforeId)) : ordered.length;
-        if(index<0) return fail(systemMessageText('taskExecution.targetCardMovedRefreshTry'),409);
-        const rank=(t:any)=>projectWork(t).sortOrder ?? Number(t.id)*1024;
-        const prev=index>0?rank(ordered[index-1]):(ordered.length?rank(ordered[0])-2048:0);
-        const next=index<ordered.length?rank(ordered[index]):prev+2048;
-        if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail(systemMessageText('taskExecution.tooManyItemsPositionMove'),409);
-        w.sortOrder=(prev+next)/2;w.boardState=v.state;event.previous=from;event.note=v.state;
+        w.boardState=v.state;event.previous=from;event.note=v.state;
       } else if (v.command === 'startSimple') {
         await this.member(actor, tx);
         if(w.stage!=='plan' || w.plan) return fail(systemMessageText('taskExecution.planExistsKeepAdjust'),409);
@@ -734,11 +769,13 @@ export class TaskService {
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         // The pages it changes when it leaves some of its pages to other tasks (2026-10-29), from its own pages only.
+        const identity = await this.pageIdentity(project, tx);
         if (v.pages !== undefined) {
-          const own = new Set(pageUrlsOf({ task, work: w }).map(pageKey)), pages = distinctPages(Array.isArray(v.pages) ? v.pages : []);
-          if (!pages.length || pages.some(u => !own.has(pageKey(u)))) return fail(systemMessageText('taskPages.notOwnPages'), 409);
+          const own = new Set(pageUrlsOf({ task, work: w, pageIdentity: identity }).map(u => pageKey(u, identity))), pages = distinctPages(Array.isArray(v.pages) ? v.pages : [], undefined, identity);
+          if (!pages.length || pages.some(u => !own.has(pageKey(u, identity)))) return fail(systemMessageText('taskPages.notOwnPages'), 409);
           w.pages = pages;
         }
+        w.startedPages = startedPageUrls({ task, work: w, pageIdentity: identity });
         if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
         await followPlaybook(p);
@@ -748,7 +785,7 @@ export class TaskService {
         // the settings afterwards. Pages that several repositories serve, or none of several, need a person's choice.
         if (!articleTask(w)) {
           const repos = (await this.agents.doc(project, tx)).repos, first = w.flow.stages[0];
-          const chosen = v.repoId ? repos.find(r => r.id === v.repoId) : routeRepo(repos, pageUrlsOf({ task, work: w })).repo;
+          const chosen = v.repoId ? repos.find(r => r.id === v.repoId) : routeRepo(repos, await this.taskPages(project, task, w, tx)).repo;
           if (v.repoId && !chosen) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
           if (!chosen && repos.length > 1 && first?.kind === 'agent' && !withoutRepo(w, first) && !this.p.demoConfiguration?.enabled) return fail(systemMessageText('taskExecution.chooseTaskRepository'), 409);
           w.repo = chosen ? taskRepo(chosen) : null;
@@ -758,6 +795,8 @@ export class TaskService {
         // A message for the executor; the next run reads the latest ones.
         if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
         event.comment = text(v.comment, 3000);
+        const images = await this.linkImages(project, taskId, w, v, actor, tx);
+        if (images.length) event.images = images;
       } else if (v.command === 'approveStage' || v.command === 'requestStageChanges' || v.command === 'changePrimary') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeReviewing'), 409);
@@ -791,7 +830,7 @@ export class TaskService {
             await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
-            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
+            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, w, output, optional(v.release?.note, 2000), tx);
             else if (w.flow!.stages[index + 1]?.kind === 'release') {
               const pr = output.pr, rel = v.release || {};
               const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
@@ -825,9 +864,12 @@ export class TaskService {
         } else {
           const comment = feedback || text(v.comment, 3000);
           if (!feedback) event.comment = comment;
+          // Images sent with the request (2026-11-03) go to the Agent with it, numbered as the person numbered them.
+          const images = feedback ? [] : await this.linkImages(project, taskId, w, v, actor, tx);
+          if (images.length) event.images = images;
           w.results[index - 1] = { ...output, rejectedAt: at };
           // Feedback is filed under the stage that redoes the work, so its next run reads it.
-          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, reviewerId: actor, at }, tx);
+          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, ...(images.length ? { images } : {}), reviewerId: actor, at }, tx);
           await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
         }
       } else if (v.command === 'editStageOutput') {
@@ -965,7 +1007,7 @@ export class TaskService {
       const task = await this.task(project, taskId), w = projectWork(task);
       if (w.flow || w.plan || w.stage !== 'plan' || w.cancelledAt || w.archivedAt || !w.playbookId) return;
       const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
-      const data = { task, work: w, language: (await this.p.project(project))?.language || null, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
+      const data = { task, work: w, language: (await this.p.project(project))?.language || null, pageIdentity: await this.pageIdentity(project), articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
       const found = lookupMatters(data, p.id) ? await this.lookupPages(project, pageUrlsOf(data)) : undefined;
       const changes = p.kind === 'build', translate = changes && data.articleTargets.length > 0 && translatesArticle(p), needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
       if (startBlockers(data, { playbookId: p.id, changes, translate, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;
@@ -1024,7 +1066,8 @@ export class TaskService {
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
       } else {
-        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt;
+        // A failed run waits for a person (Needs you) even if the card was moved by hand before.
+        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt; if (!stale) w.boardState = undefined;
         if (failure.failureReason) fresh.failureReason = failure.failureReason;
         if (failure.partial) { fresh.partialAt = now(); await this.put(this.key('partial', run.projectId, run.taskId, run.id), { ...failure.partial, savedAt: fresh.partialAt }, tx); }
       }
@@ -1059,6 +1102,7 @@ export class TaskService {
       if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
       if (Date.now() - this.lastArticles > 60000) { this.lastArticles = Date.now(); await this.articleFlow.tick().catch(() => undefined); }
       if (!this.legacyDone) { this.legacyDone = true; await this.archiveLegacy().catch(() => { this.legacyDone = false; }); }
+      if (!this.notesDone) { this.notesDone = true; await this.articleFlow.repairNotes().catch(() => { this.notesDone = false; }); }
       if (Date.now() - this.lastEffects > HOUR) { this.lastEffects = Date.now(); await this.observeEffects().catch(() => undefined); }
     } finally { this.busy = false; }
   }
@@ -1241,13 +1285,16 @@ export class TaskService {
     return all.filter(p => !term || `${p.url} ${p.title || ''}`.toLowerCase().includes(term)).slice(0, 20).map(p => ({ url: String(p.url), title: String(p.title || ''), type: String(p.type || '') }));
   }
   // Where each of a task's pages is changed (2026-10-29), for its start card: the article a publishing target holds it
-  // in, or none, a page of the site itself; with its title in Website content. Read-only.
-  async pagePlaces(project: string, taskId: string) {
-    const task = await this.task(project, taskId), urls = pageUrlsOf({ task, work: projectWork(task) });
+  // in, or none, a page of the site itself; with its title in Website content. Read-only. Without `match` only the
+  // titles are read, for the start's record once the task has started (2026-11-02): of the pages it was started with,
+  // and the targets are not asked.
+  async pagePlaces(project: string, taskId: string, match = true) {
+    const s = await this.snapshot(`site-content:${project}`), identity = pageIdentity(s);
+    const task = await this.task(project, taskId), work = projectWork(task), urls = match ? pageUrlsOf({ task, work, pageIdentity: identity }) : startedPageUrls({ task, work, pageIdentity: identity });
     if (!urls.length) return { article: null, unchecked: false, pages: [] };
-    const s = await this.snapshot(`site-content:${project}`), titles = new Map<string, string>((Array.isArray(s?.pages) ? s.pages : []).map((p: any) => [pageKey(p.url), String(p.title || '').slice(0, 300)]));
-    const found = await this.lookupPages(project, urls);
-    return { ...found, pages: found.pages.map(p => ({ ...p, ...(titles.get(pageKey(p.url)) ? { title: titles.get(pageKey(p.url)) } : {}) })) };
+    const titles = new Map<string, string>((Array.isArray(s?.pages) ? s.pages : []).map((p: any) => [pageKey(p.url, identity), String(p.title || '').slice(0, 300)]));
+    const found = match ? await this.lookupPages(project, urls) : { article: null, unchecked: false, pages: urls.map(url => ({ url })) };
+    return { ...found, pages: found.pages.map(p => ({ ...p, ...(titles.get(pageKey(p.url, identity)) ? { title: titles.get(pageKey(p.url, identity)) } : {}) })) };
   }
   // The article lookup of every page; a lookup that fails leaves each page unchecked.
   private async lookupPages(project: string, urls: string[]): Promise<{ article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] }> {
@@ -1280,7 +1327,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), repos: wrap(p => this.repoView(p)), saveRepo: wrap(async (p, v) => (await this.agents.saveRepo(p, v), this.repoView(p))), removeRepo: wrap(async (p, v) => (await this.agents.removeRepo(p, v), this.repoView(p))), checkRepo: wrap(async (p, v, c) => (await this.agents.checkRepo(p, v, String(c.auth.user.id)), this.repoView(p))) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'repos', 'saveRepo', 'removeRepo', 'checkRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId))) } });
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId), v.match !== false)) } });
     this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces'], 'loggedIn');
   }
 }

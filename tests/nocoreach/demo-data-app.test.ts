@@ -423,21 +423,6 @@ describe('read-only demo lifecycle', () => {
         }),
       });
     expect((await knowledge()).status).toBe(400);
-    const configuration = (
-      await (await admin.fetch('/demoMode/configuration')).json()
-    ).data;
-    const configured = await admin.fetch(
-      '/demoMode/configuration/collections',
-      {
-        method: 'PUT',
-        headers: json,
-        body: JSON.stringify({
-          expectedRevision: configuration.revision,
-          value: ['nrSnapshots', 'nrKeywordRuns'],
-        }),
-      },
-    );
-    expect(configured.status).toBe(200);
     // Read-looking keyword endpoints persist provider results in the query cache.
     const keywordInput = {
       projectId,
@@ -467,6 +452,21 @@ describe('read-only demo lifecycle', () => {
     expect(serp.items).toHaveLength(10);
     expect((await keywordDetail('market')).overview).toEqual(market.overview);
 
+    const configuration = (
+      await (await admin.fetch('/demoMode/configuration')).json()
+    ).data;
+    const configured = await admin.fetch(
+      '/demoMode/configuration/collections',
+      {
+        method: 'PUT',
+        headers: json,
+        body: JSON.stringify({
+          expectedRevision: configuration.revision,
+          value: ['nrSnapshots'],
+        }),
+      },
+    );
+    expect(configured.status).toBe(200);
     const added = await knowledge();
     expect(added.status).toBe(200);
     const tasks = await runtime.plugin.db
@@ -701,6 +701,65 @@ test('imports the demo through the API and clears all business data while preser
   };
   expect(data.skipped).toEqual([]);
   const { main, second } = data.projects;
+
+  for (const projectId of [main, second]) {
+    const saved = await runtime.plugin.keywordService.saved(projectId);
+    expect(saved.items.length).toBeGreaterThan(30);
+    const ranks = await runtime.plugin.dataViews.ranks(projectId, {
+      keywords: saved.items.map((keyword) => keyword.keyword),
+    });
+    for (const keyword of saved.items) {
+      expect(keyword.market).toEqual({ locationCode: 2158, language: 'zh-TW' });
+      const body = { projectId, keyword: keyword.keyword, ...keyword.market };
+      const detail = async (action: string) => {
+        const response = await admin.fetch(
+          `/nocoreach/nrKeywordDetail/${action}`,
+          { method: 'POST', headers: json, body: JSON.stringify(body) },
+        );
+        expect(response.status).toBe(200);
+        return (await response.json()).data;
+      };
+      const market = await detail('market');
+      expect(market.overview.status).toBe('ready');
+      expect(market.overview.item).toMatchObject({
+        volume: keyword.metrics.volume,
+        difficulty: keyword.metrics.difficulty,
+        cpc: keyword.metrics.cpc,
+      });
+      expect(market.overview.item.monthlySearches).toHaveLength(12);
+      for (const group of ['related', 'matching', 'questions'])
+        expect(
+          market.related[group].length,
+          `${keyword.keyword}: ${group}`,
+        ).toBeGreaterThan(0);
+      const site = await detail('site');
+      expect(site.gsc.queries.length).toBeGreaterThan(0);
+      expect(site.gsc.pages.length).toBeGreaterThan(0);
+      const rank = ranks.ranks[keyword.keyword.toLowerCase()];
+      expect(site.gsc.pages[0].position).toBeCloseTo(rank.position, 6);
+      const serp = await detail('serp');
+      expect(serp.status).toBe('ready');
+      expect(serp.items).toHaveLength(10);
+    }
+    const tracking = await runtime.plugin.rankTracking.status(projectId);
+    expect(tracking.keywords).toHaveLength(6);
+    for (const keyword of tracking.keywords) {
+      expect(keyword.latest.position).toBeGreaterThan(0);
+      expect(keyword.history).toHaveLength(4);
+    }
+    const trends = await runtime.plugin.trends.state(projectId);
+    expect(trends.keywords).toHaveLength(3);
+    for (const keyword of trends.keywords) {
+      expect(keyword.lastRun.ok).toBe(true);
+      expect(keyword.latest.points.length).toBeGreaterThan(0);
+    }
+    const competitors = await runtime.plugin.competitorResearch.view(projectId);
+    expect(competitors.market).toEqual({
+      locationCode: 2158,
+      language: 'zh-TW',
+    });
+    expect(competitors.sites.length).toBeGreaterThan(0);
+  }
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [

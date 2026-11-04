@@ -8,8 +8,11 @@ import type { MockRunContext } from '../../app-plugins/nocoreach-mock/server/typ
 import {
   createMockBilibiliAdapter,
   createMockXiaohongshuAdapter,
-  createMockYouTubeProvider,
 } from '../../server/nocoreach/mock-collectors';
+import {
+  youtubeSearch,
+  youtubeVideo,
+} from '../../server/nocoreach/youtube-dataforseo';
 import { mockBrowserCollectorConfig } from '../../app-plugins/nocoreach-mock/server/collectors';
 
 const context = (overrides: Partial<MockRunContext> = {}): MockRunContext => ({
@@ -259,7 +262,7 @@ describe('all connector targets use raw synthetic protocols', () => {
     expect(messages.length).toBeGreaterThan(0);
     expect(JSON.stringify(messages)).toContain('Supabase');
   });
-  it('isolates all three media catalogs and normalizes supported user-supplied video IDs', async () => {
+  it('isolates both collector catalogs and YouTube searches, and reads any tracked video', async () => {
     const c = context();
     const cfg = mockBrowserCollectorConfig(c.projectId);
     const req = {
@@ -267,30 +270,48 @@ describe('all connector targets use raw synthetic protocols', () => {
       requestId: 'b7d20cab-05de-4f45-b4ba-7c60379a79b0',
     };
     const bili = createMockBilibiliAdapter(c),
-      xhs = createMockXiaohongshuAdapter(c),
-      youtube = createMockYouTubeProvider(c);
+      xhs = createMockXiaohongshuAdapter(c);
+    // Titles read as people write them: no product name and colon in front, nothing of the fixture product.
+    const realistic = (title: string | null | undefined) => {
+      expect(title).toBeTruthy();
+      expect(title).not.toMatch(/^(Supabase|NocoBloom|supabase\.com)\s*[:：]/);
+      expect(title).not.toMatch(/NocoBloom|nocobloom/);
+    };
     const videos = await bili.search(cfg, { ...req, query: 'Supabase' });
-    expect(videos.items[0].title).toContain('Supabase');
+    for (const video of videos.items) realistic(video.title);
     expect(
       (await bili.video(cfg, { ...req, bvid: 'BV1xx411c7mD' })).items[0].bvid,
     ).toBe('BV1xx411c7mD');
     const notes = await xhs.search(cfg, { ...req, query: 'Supabase' });
-    expect(notes.notes[0].title).toContain('Supabase');
-    const signal = new AbortController().signal;
-    const yt = await youtube.video('Supabase001', signal);
-    expect(yt.title).toContain('Supabase');
-    expect(yt.transcript.text).toContain('Supabase');
-    const other = context({
-      projectId: '72',
-      project: { name: 'Atlas', domain: 'atlas.example' },
-    });
-    const otherIds = await createMockYouTubeProvider(other).search(
+    for (const note of notes.notes) realistic(note.title);
+    // YouTube is answered as DataForSEO's YouTube SERP API and read by the production parsers.
+    const search = async (term: string, at = c) => {
+      const spec = youtubeSearch.specification({ term });
+      return youtubeSearch.result(
+        await (await seo(spec.path, spec.request, at)).json(),
+      ).result.videos!;
+    };
+    const found = await search('Supabase');
+    expect(found).toHaveLength(8);
+    for (const video of found) realistic(video.title);
+    const other = await search(
       'Atlas',
-      signal,
+      context({
+        projectId: '72',
+        project: { name: 'Atlas', domain: 'atlas.example' },
+      }),
     );
-    const ids = await youtube.search('Supabase', signal);
-    expect(ids.some((id) => otherIds.includes(id))).toBe(false);
-    expect(await youtube.search('Supabase', signal)).toEqual(ids);
-    await expect(youtube.video('not-a-valid-id', signal)).rejects.toBeDefined();
+    expect(found.some((v) => other.some((o) => o.id === v.id))).toBe(false);
+    expect(await search('Supabase')).toEqual(found);
+    const spec = youtubeVideo.specification({ videoId: 'Supabase001' });
+    const info = youtubeVideo.result(
+      await (await seo(spec.path, spec.request)).json(),
+      spec,
+    ).result.video;
+    expect(info).toMatchObject({ id: 'Supabase001' });
+    realistic(info!.title);
+    // Not a copy of a search result's title, which would list the same title twice.
+    expect(found.map((v) => v.title)).not.toContain(info!.title);
+    expect(info!.likes).toBeGreaterThan(0);
   });
 });

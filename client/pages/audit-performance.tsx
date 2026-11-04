@@ -33,7 +33,8 @@ import { Segmented } from '#components/reach/segmented';
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
 type Result = { url: string; finalUrl: string; strategy: "mobile" | "desktop"; version: string | null; scores: Record<string, number | null>; metrics: { key: string; label: string; value: string; score: number | null }[]; issues: Issue[] };
 type Metric = Result["metrics"][number];
-type Run = { id: string | number; status: string; spec: { url: string; strategy: "mobile" | "desktop" }; result?: Result | null; errorCode?: string | null; createdAt: string };
+// reused: the run was not started by this click (the same page and device checked within 10 minutes, or still running).
+type Run = { id: string | number; status: string; spec: { url: string; strategy: "mobile" | "desktop" }; result?: Result | null; errorCode?: string | null; createdAt: string; reused?: boolean };
 // One check as the list gives it: scores, metrics and the worst ten failing checks (server/nocoreach/lighthouse.ts list).
 type Record_ = { id: string; status: string; url: string; finalUrl: string | null; strategy: "mobile" | "desktop"; createdAt: string; scores: Record<string, number | null> | null; metrics: Metric[]; issueCount: number | null; issues: Pick<Issue, "category" | "key" | "title" | "value" | "severity">[]; errorCode: string | null };
 const getCategory = (): Record<string, string> => ({ performance: $t('lighthouseCard.performance'), accessibility: $t('lighthouseCard.accessibility'), "best-practices": $t('lighthouseCard.bestPractices'), seo: "SEO" });
@@ -51,6 +52,14 @@ const getZh = (): Record<string, string> => ({
   "errors-in-console": $t('lighthouseCard.errorsBrowserConsole'), "image-aspect-ratio": $t('lighthouseCard.imagesShowWrongAspectRatio'), "image-size-responsive": $t('lighthouseCard.imagesLowResolution'), "valid-source-maps": $t('lighthouseCard.missingSourceMaps'), deprecations: $t('lighthouseCard.usesDeprecatedApis'), "inspector-issues": $t('lighthouseCard.browserReportedIssues'),
 });
 const zh = (i: Issue) => getZh()[i.key] || i.title;
+// Metric names by Lighthouse key, in the reader's language. A run also stores a label, but in the language the server
+// used when it was checked (the server response's was always zh-CN), so it is read only for a key not listed here. The
+// abbreviations are the same in every language.
+const getMetricNames = (): Record<string, string> => ({ "largest-contentful-paint": "LCP", "cumulative-layout-shift": "CLS", "total-blocking-time": "TBT", "first-contentful-paint": "FCP", "speed-index": "Speed Index", interactive: "TTI", "server-response-time": $t('lighthouse.serverResponse') });
+const metricName = (m: Metric) => getMetricNames()[m.key] || $legacyText(m.label);
+// Lighthouse words the server response as an English sentence ("Root document took 490 ms"); only its time is shown,
+// as the other metrics show only theirs.
+const metricValue = (m: Metric) => (m.key === "server-response-time" && String(m.value).match(/\d[\d.,]*\s*ms\b/)?.[0]) || m.value;
 const pathOf = (u: string) => { try { const x = new URL(u); return x.pathname === "/" ? x.host : x.pathname; } catch { return u; } };
 function draft(r: Result): TaskDraft {
   const device = r.strategy === "mobile" ? $t('lighthouseCard.mobile') : $t('lighthouseCard.computer');
@@ -58,7 +67,7 @@ function draft(r: Result): TaskDraft {
     pages: distinctPages([r.finalUrl]),
     title: $t('lighthouseCard.improvePagePerformance',{0:pathOf(r.finalUrl),1:device}).slice(0, 200),
     objective: $t('lighthouseCard.getLighthousePerformanceScore90',{0:r.finalUrl}).slice(0, 1000),
-    brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`).join("，")}), $t('lighthouseCard.metrics',{0:r.metrics.map((m) => `${m.label} ${m.value}`).join("，")}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${zh(i)}${getZh()[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
+    brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`).join("，")}), $t('lighthouseCard.metrics',{0:r.metrics.map((m) => `${metricName(m)} ${metricValue(m)}`).join("，")}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${zh(i)}${getZh()[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
   };
 }
 
@@ -101,17 +110,20 @@ export function PerformanceTab({ projectId, initialUrl }: { projectId: number; i
   const [records, setRecords] = useState<Record_[]>();
   const [listError, setListError] = useMessageState("");
   const [openId, setOpenId] = useState<string>();
+  const [earlier, setEarlier] = useState<Run>();
   const load = () => call<Record_[]>("list").then((r) => { setRecords(r); setListError(""); }).catch((e) => setListError(() => (e instanceof Error ? $legacyText(e.message) : $t('auditPerformance.notLoadRuns'))));
   useEffect(() => {
     void call<{ connected: boolean; suggested: string }>("status").then((s) => { setStatus(s); setUrl((u) => u || s.suggested); }).catch(() => setStatus({ connected: false, suggested: "" }));
     void load();
   }, [projectId]);
-  // A finished check opens in the drawer; one without a result says why here and stays in the list.
+  // A finished check opens in the drawer; one without a result says why here and stays in the list. An earlier run
+  // returned instead of a new one is said so next to the button and opens only when asked.
   const check = async () => {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setEarlier(undefined);
     try {
       const r = await call<Run>("run", { url: url.trim(), strategy, requestKey: crypto.randomUUID().replace(/-/g, "") });
-      if (r.status === "completed") setOpenId(String(r.id));
+      if (r.reused) setEarlier(r);
+      else if (r.status === "completed") setOpenId(String(r.id));
       else setError(() => (r.status === "unknown" ? r.errorCode || $t('common.resultUncertainMayChargedRepeat') : $t('lighthouseCard.noResults', { 0: r.errorCode || $t('errors.unknownReason') })));
       void load();
     } catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('lighthouseCard.notFullyCheckedTryAgain'))); }
@@ -124,16 +136,29 @@ export function PerformanceTab({ projectId, initialUrl }: { projectId: number; i
           <p className="text-sm text-muted-foreground">{$t('lighthouseCard.lighthouseRunsThroughDataforseoFirst')}<Button variant="link" className="h-auto p-0" onClick={() => navigate("/connections?source=keywords")}>{$t('common.connectDataforseo')}</Button>。</p>
         ) : (
           <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void check(); }}>
-            <Input className="lg:max-w-xl" aria-label={$t('lighthouseCard.urlCheck')} value={url} placeholder="https://www.example.com/pricing" onChange={(e) => setUrl(e.target.value)} />
-            <Segmented label={$t('lighthouseCard.device')} options={(["mobile", "desktop"] as const).map((s) => ({ id: s, label: deviceName(s) }))} value={strategy} onChange={(v) => setStrategy(v as typeof strategy)} />
+            <Input className="lg:max-w-xl" aria-label={$t('lighthouseCard.urlCheck')} value={url} placeholder="https://www.example.com/pricing" onChange={(e) => { setUrl(e.target.value); setEarlier(undefined); }} />
+            <Segmented label={$t('lighthouseCard.device')} options={(["mobile", "desktop"] as const).map((s) => ({ id: s, label: deviceName(s) }))} value={strategy} onChange={(v) => { setStrategy(v as typeof strategy); setEarlier(undefined); }} />
             <div className="flex items-center gap-2"><Button type="submit" disabled={busy || !url.trim()}>{busy ? $t('lighthouseCard.checkingAboutHalfMinute') : $t('common.check')}</Button><InfoTip label={$t('auditPerformance.aboutCheck')}>{$t('lighthouseCard.checksOnePageTimeWhen')}</InfoTip></div>
           </form>
         )}
+        {earlier ? <EarlierRun run={earlier} onOpen={() => setOpenId(String(earlier.id))} /> : null}
         {error ? <p role="alert" className="nr-error">{error}</p> : null}
       </Card>
       {listError ? <p role="alert" className="nr-error">{listError}</p> : !records ? <ListSkeleton rows={5} /> : <RunsTable records={records} onOpen={setOpenId} />}
       {openId ? <RunDrawer id={openId} records={records ?? []} projectId={projectId} getRun={(runId) => call<Run>("getRun", { runId })} onOpen={setOpenId} onClose={() => setOpenId(undefined)} /> : null}
     </>
+  );
+}
+
+// Why a click showed an earlier check: one within the last 10 minutes (completed or uncertain), or one still running.
+function EarlierRun({ run, onOpen }: { run: Run; onOpen: () => void }) {
+  const at = when(run.createdAt), device = deviceName(run.spec.strategy);
+  return (
+    <p role="status" className="text-sm text-muted-foreground" data-lighthouse-earlier="">
+      {run.status === "completed" ? <>{$t('auditPerformance.checkedRecently', { 0: at, 1: device })} <Button variant="link" className="h-auto p-0" onClick={onOpen}>{$t('auditPerformance.viewThatRun')}</Button></>
+        : run.status === "running" ? $t('auditPerformance.checkStillRunning', { 0: at, 1: device })
+        : $t('auditPerformance.checkedRecentlyUncertain', { 0: at, 1: device })}
+    </p>
   );
 }
 
@@ -194,7 +219,7 @@ function RunDrawer({ id, records, projectId, getRun, onOpen, onClose }: { id: st
         <div className="flex flex-col gap-4" data-lighthouse-result="">
           {safeLink(r.finalUrl) ? <a className="nr-link block break-all text-sm" href={safeLink(r.finalUrl)!} target="_blank" rel="noreferrer">{r.finalUrl}</a> : null}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(r.scores).map(([k, v]) => <div key={k} className="rounded-lg border p-3" data-score={k}><p className="text-xs text-muted-foreground"><WithInfo help={help(getCategory()[k])}>{getCategory()[k]}</WithInfo></p><p className={`font-heading text-2xl font-semibold tabular-nums ${ink(v)}`}>{v ?? "—"}</p></div>)}</div>
-          {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground"><WithInfo help={help(m.label)}>{m.label}</WithInfo></span> <span className={ink(m.score)}>{m.value}</span></span>)}</div> : null}
+          {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground"><WithInfo help={help(metricName(m))}>{metricName(m)}</WithInfo></span> <span className={ink(m.score)}>{metricValue(m)}</span></span>)}</div> : null}
           <section>
             <h3 className="mb-1 text-sm font-semibold">{$t('auditPerformance.failedChecksCount', { 0: r.issues.length })}</h3>
             {r.issues.length ? (

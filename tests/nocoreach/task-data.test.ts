@@ -11,7 +11,9 @@ function fixture(){
  const work=(extra)=>({schemaVersion:2,stage:'flow',flow:{stages:[{key:'b',name:'修改',kind:'agent'},{key:'o',name:'观察效果',kind:'observe'}]},stageIndex:1,page:{url:'https://example.com/docs/install'},...extra});
  const tasks=[{id:3,title:'当前任务',evidence:{no:3,work:work({page:{url:'https://example.com/docs/install'}})},updatedAt:new Date().toISOString()},
   {id:2,title:'改安装页标题',evidence:{no:2,work:work({observeFrom:'2026-09-20',observation:{results:[{day:7,conclusion:'up',primary:'clicks',change:0.3,gsc:{clicks:[40,52]}}]}})},updatedAt:new Date().toISOString()},
-  {id:1,title:'很久以前的任务',evidence:{no:1,work:{schemaVersion:2,stage:'done',flow:{stages:[]}}},updatedAt:'2020-01-01T00:00:00Z'}];
+  {id:1,title:'很久以前的任务',evidence:{no:1,work:{schemaVersion:2,stage:'done',flow:{stages:[]}}},updatedAt:'2020-01-01T00:00:00Z'},
+  // Written today by something its Activity does not show: its latest activity is still years ago.
+  {id:4,title:'Background write',evidence:{no:4,work:{schemaVersion:2,stage:'done',flow:{stages:[]},history:[{at:'2020-01-01T00:00:00Z',action:'approveStage'},{at:new Date().toISOString(),action:'runStarted'}]}},updatedAt:new Date().toISOString()}];
  const snaps=[{key:'history-search',payload:[{date:'2026-10-05'}]},{key:'queries-28',payload:[{keyword:'nocobase install',page:'https://example.com/docs/install/',clicks:30,impressions:1000,position:6},{keyword:'docker compose nocobase',page:'https://example.com/docs/install',clicks:10,impressions:500,position:9},{keyword:'other',page:'https://example.com/',clicks:99,impressions:999,position:1},{keyword:'docs site install',page:'https://docs.example.com/docs/install',clicks:7,impressions:70,position:3}]},{key:'pages-28',payload:[{page:'/docs/install',host:'example.com',views:3200,conversions:12},{page:'/docs/install',host:'docs.example.com',views:70,conversions:0}]}];
  const p={db:{getRepository:()=>({find:async({offset=0})=>offset?[]:tasks.map(row)})},sync:{snapshots:async()=>snaps},
   audit:{report:async()=>({issues:[{title:'标题重复',severity:'warning',pages:[{url:'https://example.com/docs/install'}]},{title:'页面打不开',severity:'critical',pages:[{url:'https://example.com/x'}]}]})},
@@ -21,11 +23,11 @@ function fixture(){
 }
 test('the Agent\'s data summary of the page: search, top queries, visits, audit, tracked keywords, earlier tasks with effect',async()=>{
  const text=await fixture().forRun('1',{url:'https://example.com/docs/install',taskId:3});
- assert.deepEqual(text.split('\n'),['数据截至 2026-10-05，来自 NocoReach 已同步的数据，只用于参考。','搜索（近 28 天）：点击 40，曝光 1,500，点击率 2.7%，平均排名 7.0','主要搜索词：nocobase install（曝光 1,000，点击 30，第 6.0 位）；docker compose nocobase（曝光 500，点击 10，第 9.0 位）','访问（近 28 天）：浏览 3,200，关键事件 12','网站审计里这页的问题：标题重复（警告）','排名跟踪：nocobase install 第 5 位（上次 7）','这页以前的任务：T-2 改安装页标题（已上线，正在观察效果；第 7 天：上升，搜索点击 40 → 52（+30%））']);
+ assert.deepEqual(text.split('\n'),['数据截至 2026-10-05，来自 NocoReach 已同步的数据，只用于参考。','搜索（近 28 天）：点击 40，曝光 1,500，点击率 2.7%，平均排名 7.0','主要搜索词：nocobase install（曝光 1,000，点击 30，第 6.0 位）；docker compose nocobase（曝光 500，点击 10，第 9.0 位）','访问（近 28 天）：浏览 3,200，关键事件 12','网站审计里这页的问题：标题重复（警告）','排名跟踪：nocobase install 第 5 位（上次 7）','这页以前的任务：T-2 改安装页标题（已上线，正在观察效果；第 7 天：上升 · 搜索点击 40 → 52 · ↑ 30%）']);
  const site=await fixture().forRun('1',{});assert.match(site,/全站搜索（近 28 天）：点击 3,214，曝光 956,147（前 28 天点击 3,100/);assert.match(site,/访问最多的页面：example\.com\/docs\/install（浏览 3,200）；docs\.example\.com\/docs\/install（浏览 70）/);
 });
 test('the daily analysis\'s recent tasks: the last 30 days, where each stands and its effect',async()=>{
- const r=await fixture().recent('1');assert.deepEqual(r.map(t=>t.no),['T-3','T-2']);assert.equal(r[1].state,'已上线，正在观察效果');assert.deepEqual(r[1].effects,['第 7 天：上升，搜索点击 40 → 52（+30%）']);
+ const r=await fixture().recent('1');assert.deepEqual(r.map(t=>t.no),['T-3','T-2']);assert.equal(r[1].state,'已上线，正在观察效果');assert.deepEqual(r[1].effects,['第 7 天：上升 · 搜索点击 40 → 52 · ↑ 30%']);
  assert.equal(taskState({},{cancelledAt:'x'}),'已关闭');assert.equal(taskState({},{stage:'flow',flow:{stages:[{name:'看方案',kind:'review'}]},stageIndex:0}),'进行中：看方案');assert.deepEqual(effectLines({observation:{results:[{day:28,conclusion:'insufficient'}]}}),['第 28 天：数据不足']);
 });
 test('a page on a host GA4 does not track takes no host-less GA4 row, which belongs to another site',async()=>{

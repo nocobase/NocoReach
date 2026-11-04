@@ -3,7 +3,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
 import * as g from './google-client.js';
-import { GoogleReportCache } from './google-report-cache.js';
+import { GoogleReportCache, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_PARTIAL_CACHE_MS } from '../../shared/google-cache.js';
 // 搜索表现 · 索引 and 站点地图 (2026-10-14, user request: everything Search Console's API offers, in NocoReach's own
 // style). Search Console's page-indexing report is not in its API, so 索引 is built from the URL Inspection API: the
@@ -38,7 +38,7 @@ function withDay(history,entry){return [...(history||[]).filter(h=>h.date!==entr
 const int=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 const sitemapOf=s=>({path:String(s.path||''),type:s.type||null,isIndex:Boolean(s.isSitemapsIndex),isPending:Boolean(s.isPending),lastSubmitted:s.lastSubmitted||null,lastDownloaded:s.lastDownloaded||null,warnings:int(s.warnings),errors:int(s.errors),contents:(s.contents||[]).map(c=>({type:String(c.type||''),submitted:int(c.submitted)}))});
 class SearchIndex{
- constructor(plugin){this.p=plugin;this.running=new Set();this.reports=new GoogleReportCache(plugin.db,'gsc-sitemaps');}
+ constructor(plugin){this.p=plugin;this.running=new Set();this.reports=new GoogleReportCache(plugin.db,'gsc-sitemaps',plugin.app?.logger);}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async state(id){return (await this.repo().findOne({filter:{key:KEY(id)}}))?.get('payload')||null;}
  async mutate(id,fn){const key=KEY(id);return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key},transaction});const row=await this.repo().findOne({filter:{key},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key,payload:state},transaction});return state;});}
@@ -78,17 +78,19 @@ class SearchIndex{
  // 站点地图: Search Console's submitted sitemaps (with the files under an index), the sitemaps NocoReach read that it does
  // not list, and per sitemap how many inspected pages Google lists in it and how many of those are indexed.
  async sitemaps(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}const site=link.get('gscSiteUrl');
-  const {listed,readAt,cacheExpiresAt}=await this.reports.load(String(id),[site,link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))],async()=>{const token=await this.p.token(id),base=`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/sitemaps`,get=url=>g.googleJson(url,g.jsonRequest(token),this.p.googleFetch?.(id));let listed,partial=false;
+  const {listed,readAt,cacheExpiresAt,refreshing,savedAt,reason}=await this.reports.load(String(id),[site,link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))],async()=>{const token=await this.p.token(id),base=`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/sitemaps`,get=url=>g.googleJson(url,g.jsonRequest(token),this.p.googleFetch?.(id));let listed,partial=false;
    try{listed=((await get(base)).sitemap||[]).map(sitemapOf);for(const x of listed.filter(x=>x.isIndex).slice(0,5))x.children=((await get(`${base}?sitemapIndex=${encodeURIComponent(x.path)}`).catch(()=>{partial=true;return {};})).sitemap||[]).map(sitemapOf);}
    catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
-   return {listed,partial,readAt:new Date().toISOString()};},value=>value.partial?GOOGLE_PARTIAL_CACHE_MS:CACHE_MS,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
+   return {listed,partial,readAt:new Date().toISOString()};},value=>value.partial?GOOGLE_PARTIAL_CACHE_MS:CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));
   const [s,{sites}]=await Promise.all([this.state(id),this.pages(id,site)]),results=Object.values(s?.site===site?s.results||{}:{}).filter(r=>!r.error);
   const tally=paths=>{const own=results.filter(r=>r.sitemaps?.some(x=>paths.includes(x)));return {checked:own.length,indexed:own.filter(indexed).length};};
   const known=new Set(listed.flatMap(x=>[x.path,...(x.children||[]).map(c=>c.path)]));
   const unsubmitted=[...new Set(sites.flatMap(x=>x.sitemaps||[]))].filter(u=>inProperty(site,u)&&!known.has(u)).map(path=>({path,...tally([path])}));
-  return {connected:true,site,readAt,cacheExpiresAt,
+  return {connected:true,site,readAt,cacheExpiresAt,...(savedAt?{refreshing,savedAt,reason}:{}),
    sitemaps:listed.map(x=>({...x,...tally([x.path,...(x.children||[]).map(c=>c.path)]),...(x.children?{children:x.children.map(c=>({...c,...tally([c.path])}))}:{})})),unsubmitted};}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(String(id),v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
+ register(){
+  // As in the data views: a saved copy only for a page that says it shows one (`acceptSaved`).
+  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const read=()=>fn(String(id),v);ctx.body=v.acceptSaved===true?await read():await waitForFresh(read);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
   this.p.app.resourceManager.define({name:'nrSearchIndex',actions:{view:wrap(id=>this.view(id)),page:wrap((id,v)=>this.page(id,v)),sitemaps:wrap(id=>this.sitemaps(id))}});
   this.p.app.acl.allow('nrSearchIndex',['view','page','sitemaps'],'loggedIn');}
 }

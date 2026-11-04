@@ -7,7 +7,7 @@ import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
 import { lastSuccess } from './sync-policy.js';
 import { terms } from './hackernews-source.js';
-import { DataForSeo } from './dataforseo.js';
+import { DataForSeo, liveTask } from './dataforseo.js';
 import { randomUUID } from 'node:crypto';
 import { redditSchedule, termNextAt, canRecheckConfiguration } from './reddit-schedule.js';
 // Reddit 讨论 (SPEC §11 外部讨论, P1; 2026-10-03 user choice): Reddit's own API needs an approved app and, for brand
@@ -30,23 +30,8 @@ function specification(v){const term=String(v.term||'').trim();if(term.length<3|
  // $0.002 a page of 10 results, 10 pages, ×5 for the site: operator.
  return {kind:'reddit',view:'serp',target:term,path:'serp/google/organic/live/advanced',request:{keyword:`site:reddit.com "${term}"`,location_code:2840,language_code:'en',device:'desktop',depth:100,...(v.recent?{search_param:'&tbs=qdr:m'}:{})},recent:Boolean(v.recent),estimatedUsd:0.1,reservationUsd:0.15,priceVersion:'official-list-2026-10-09'};}
 // Threads among the results: organic links and Google's "discussions and forums" box.
-function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)&&raw.cost>=0?raw.cost:null;
- const providerCode=Number.isInteger(raw?.status_code)?raw.status_code:null,taskCode=Number.isInteger(task?.status_code)?task.status_code:null;
- const taskId=typeof task?.id==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(task.id)?task.id:null;
- const code=providerCode===20000?taskCode:providerCode;
- // Official appendix/errors and live-endpoint guidance: retry only explicit terminal errors,
- // with an explicit zero total cost for our single-task request. Never infer billing from text.
- const retryable=[40103,50000,50303,50401,50402].includes(code)&&cost===0;
- let reason=retryable?'temporary':code===40100||code===40104?'credentials':[40200,40203,40210].includes(code)?'providerBudget':code>=40400&&code<40600?'parameters':'providerFailure';
- const empty=providerCode===20000&&taskCode===40102;
- const success=providerCode===20000&&taskCode===20000;
- const page=task?.result?.[0];
- const valid=Array.isArray(raw?.tasks)&&raw.tasks.length===1&&(empty||(success&&Array.isArray(task.result)&&task.result.length===1&&page&&
-  (Array.isArray(page.items)||(page.items===null&&page.items_count===0))));
- const uncertain=!Number.isInteger(providerCode)||(providerCode===20000&&!Number.isInteger(taskCode))||[20100,40601,40602].includes(code)||(success&&!valid)||(!success&&!empty&&cost===null);
- if(uncertain)reason='uncertain';
- const diagnostic={providerCode,taskCode,taskId,reason:valid?'success':reason,retryable:!uncertain&&retryable,billing:cost===null?'unknown':'known'};
- if(!valid)return {status:uncertain?'unknown':'failed',taskId,errorCode:systemMessageText(`redditDiagnostic.${reason}`),result:{diagnostic},costUsd:cost};
+function result(raw,spec){const {valid,empty,page,taskId,cost,status,reason,diagnostic}=liveTask(raw);
+ if(!valid)return {status,taskId,errorCode:systemMessageText(`redditDiagnostic.${reason}`),result:{diagnostic},costUsd:cost};
  const items=(empty?[]:page.items||[]).flatMap(i=>i?.type==='discussions_and_forums'?(i.items||[]):[i]).filter(i=>['organic','discussions_and_forums_element'].includes(i?.type));
  const seen=new Set(),posts=[];for(const i of items){const t=thread(i.url);if(!t||seen.has(t.id))continue;seen.add(t.id);posts.push({...t,title:String(i.title||'').replace(/\s*:\s*r\/\w+\s*$/i,'').slice(0,300),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp)});}
  return {status:'completed',taskId,errorCode:null,result:{posts:posts.slice(0,100),diagnostic},costUsd:cost};}
@@ -76,12 +61,13 @@ class RedditSource{
   for(const e of due)if(e.status!=='pending'||!e.requestKey){if(!['budget','attention'].includes(e.status)){e.requestKey=`reddit-${randomUUID()}`;e.attempt++;}e.status='pending';e.at=at;}
   // Persist stable request keys before any paid I/O. Restarting an interrupted batch returns the same runs.
   if(prepare)await this.mutate(id,cur=>({...cur,plan}));
-  const found=[];
+  const found=[];let reused=0;
   for(const entry of due){this.runs.assertActive();let run;try{run=await this.d4s.run(id,'reddit',{term:entry.term,recent:plan.recent,requestKey:entry.requestKey});}
    catch(e){this.runs.assertActive();entry.status=e.safeCode==='budget_exceeded'?'budget':'attention';entry.diagnostic={reason:entry.status==='budget'?'budget':'configuration',retryable:false};
     if(entry.status==='budget'){const date=new Date();entry.at=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,1)).toISOString();for(const waiting of due.slice(due.indexOf(entry)+1)){waiting.status='budget';waiting.at=entry.at;waiting.diagnostic=entry.diagnostic;}break;}continue;}
    entry.status=run.status==='running'?'unknown':run.status;entry.runId=String(run.id||'');entry.diagnostic=run.result?.diagnostic||{reason:'uncertain',retryable:false};entry.at=run.completedAt||at;
    if(run.status!=='completed')continue;
+   if(run.reused)reused++;
    entry.queriedAt=run.createdAt||at;
    // A cache hit is historical evidence. Translate its age to the project's business clock without advancing coverage.
    entry.through=iso(Date.parse(plan.cutoff)-Math.max(0,Date.parse(at)-Date.parse(entry.queriedAt)));
@@ -94,7 +80,8 @@ class RedditSource{
    for(const p of found){const old=posts[p.id];if(!old)added++;posts[p.id]={...p,firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
    const kept=Object.values(posts).sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,MAX_POSTS);
    return {...cur,plan,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(complete?through:null),lastRun:{at,ok:complete,errors:errors.slice(0,5),found:found.length,added,lastSuccessAt:successAt||lastSuccess(cur.lastRun)},dataThrough:through||cur.dataThrough||null,datesReadAt:cur.datesReadAt||(complete?plan.cutoff:null)};});
-  return {found:found.length,added,errors};}
+  // searched and reused let Update now say when every term came back from the 6-day reuse instead of a new search.
+  return {found:found.length,added,errors,searched:due.length,reused};}
  async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false,dataforseo:Boolean(this.d4s.config(id)?.verifiedAt)};const list=Object.values(s.posts||{});
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),dataforseo:Boolean(this.d4s.config(id)?.verifiedAt),terms:s.terms,lastRun:s.lastRun||null,retainedFrom:s.retainedFrom||null,total:list.length,
    schedule:redditSchedule(s),diagnostics:s.plan?.entries.filter(e=>e.diagnostic).map(e=>({term:e.term,runId:e.runId,attempt:e.attempt,...e.diagnostic})),nextCheckAt:redditSchedule(s).nextAt,recent:list.sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,3).map(p=>({title:p.title,subreddit:p.subreddit,url:p.url}))};}

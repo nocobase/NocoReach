@@ -293,3 +293,32 @@ test('sorting reads each column as it shows: status by what needs you, snoozed b
     order: 'desc',
   });
 });
+
+test('Updated is the latest activity: Done lists it newest first and shows it, whatever wrote the task since', async () => {
+  const hoursAgo = (h: number) =>
+    new Date(Date.now() - h * 3_600_000).toISOString();
+  const now = new Date().toISOString();
+  // Both were just written by the hourly effect check; only T-33's reading is a line in its Activity.
+  const done = [
+    task(46, 'Older', now, {
+      stage: 'done',
+      history: [{ at: hoursAgo(5), action: 'approveStage' }],
+    }),
+    task(33, 'Read', now, {
+      stage: 'done',
+      history: [
+        { at: hoursAgo(30), action: 'approveStage' },
+        { at: hoursAgo(2), action: 'effect', note: '7' },
+      ],
+    }),
+  ];
+  await setup(done, '?scope=done');
+  expect(rowNumbers()).toEqual(['T-33', 'T-46']);
+  const updated = (no: string) =>
+    within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .find((row) => row.querySelector('td')?.textContent === no)!
+      .querySelectorAll('td')[6].textContent;
+  expect(updated('T-33')).toBe('2 h ago');
+  expect(updated('T-46')).toBe('5 h ago');
+});

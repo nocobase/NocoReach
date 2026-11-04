@@ -63,10 +63,25 @@ test(
           configureServer(vite) {
             vite.middlewares.use('/timestamp-fixture', (request, response) => {
               void (async () => {
+                // A comment is a line in Activity, so the task's latest activity (shared/task-activity.ts) moves.
                 if (request.method === 'POST')
                   await repo.update({
                     filterByTk: row.id,
-                    values: { title: 'Updated synthetic task' },
+                    values: {
+                      title: 'Updated synthetic task',
+                      evidence: {
+                        no: 16,
+                        work: {
+                          history: [
+                            {
+                              at: new Date().toISOString(),
+                              action: 'comment',
+                              comment: 'Synthetic note',
+                            },
+                          ],
+                        },
+                      },
+                    },
                   });
                 const tasks = await repo.find({ filterByTk: row.id });
                 response.setHeader('Content-Type', 'application/json');
@@ -97,10 +112,12 @@ test(
       await server.listen();
       browser = await chromium.launch();
       for (const zone of ['UTC', 'Asia/Shanghai', 'Australia/Melbourne']) {
-        // Restore a synthetic recent update without changing createdAt or relying on wall-clock parsing.
-        await db.connection
-          .repository('nrTasks')
-          .updateMany({ filter: { id: row.id }, values: { updatedAt: at } });
+        // Restore a task with nothing in Activity yet, last active when it was created, without changing createdAt or
+        // relying on wall-clock parsing.
+        await db.connection.repository('nrTasks').updateMany({
+          filter: { id: row.id },
+          values: { updatedAt: at, evidence: { no: 16 } },
+        });
         const context = await browser.newContext({
           timezoneId: zone,
           viewport: { width: 1440, height: 900 },

@@ -1,14 +1,18 @@
 // 审计 (client/pages/site-audit.tsx, audit-performance.tsx): two tabs since 2026-10-14 — 网站审计 and 性能检查 with every
 // Lighthouse check made so far, a row's full result and the earlier checks of the same page and device.
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { setDictionary } from '#i18n';
 import SiteAudit from '#pages/site-audit';
+import english from '../../shared/i18n/en.json';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
-vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
+vi.mock('#lib/nocoreach-api', () => ({
+  nocobaseClient: { action, wrapRequests: vi.fn() },
+}));
 vi.mock('#pages/reach-data', () => ({
   useProject: () => ({ project: { id: 1, domains: ['x.com'] } }),
 }));
@@ -139,6 +143,7 @@ describe('审计', () => {
       },
     );
   });
+  afterEach(() => setDictionary(null));
 
   it('opens on 网站审计 and switches to 性能检查 with every check made so far', async () => {
     const { router } = renderPage('/audit');
@@ -206,5 +211,63 @@ describe('审计', () => {
     expect(
       action.mock.calls.filter(([, name]) => name === 'list'),
     ).toHaveLength(2);
+  });
+
+  // Runs store each metric's label in the language the server used (the server response's was always zh-CN), and
+  // Lighthouse words that metric's value as an English sentence; both used to show as stored in every language.
+  it("names metrics by key in the reader's language, in the drawer and in what it hands off", async () => {
+    const metrics = [
+      ...lcp('3.8 s'),
+      {
+        key: 'server-response-time',
+        label: '服务器响应',
+        value: 'Root document took 490 ms',
+        score: 100,
+      },
+    ];
+    const base = action.getMockImplementation()!;
+    action.mockImplementation(
+      async (
+        resource: string,
+        name: string,
+        options: { body: Record<string, unknown> },
+      ) => {
+        if (name === 'getRun') {
+          const run = full(String(options.body.runId));
+          return { ...run, result: { ...run.result, metrics } };
+        }
+        if (resource === 'nrStrategy')
+          return { revision: name === 'state' ? 1 : 2, proposals: [] };
+        return base(resource, name, options);
+      },
+    );
+    act(() => setDictionary(english));
+    renderPage('/audit?view=performance');
+    const table = await screen.findByRole('table');
+    await userEvent.click(
+      within(table).getAllByRole('button', { name: '/pricing' })[0],
+    );
+    const drawer = await screen.findByRole('dialog');
+    expect(await within(drawer).findByText('Server response')).toBeTruthy();
+    expect(within(drawer).getByText('490 ms')).toBeTruthy();
+    expect(
+      within(drawer).getByRole('button', { name: 'What is Server response' }),
+    ).toBeTruthy();
+    expect(drawer.textContent).not.toMatch(/服务器响应|Root document/);
+
+    await userEvent.click(
+      within(drawer).getByRole('button', { name: 'Hand off to agent' }),
+    );
+    await waitFor(() =>
+      expect(
+        action.mock.calls.some(([, name]) => name === 'confirmDirection'),
+      ).toBe(true),
+    );
+    const [, , { body }] = action.mock.calls.find(
+      ([, name]) => name === 'confirmDirection',
+    )!;
+    expect(body.brief).toContain('Metrics: LCP 3.8 s');
+    expect(body.brief).toContain('Server response 490 ms');
+    expect(body.brief).not.toMatch(/服务器响应|Root document/);
   });
 });

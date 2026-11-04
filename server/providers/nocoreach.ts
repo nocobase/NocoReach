@@ -74,6 +74,8 @@ import { ReachInvitations } from '../access/invitations.js';
 import { registerDemoAdapters } from '../nocoreach/demo-data/adapters.js';
 import { demoDataToken, demoConfigurationToken } from '@nocobase/app-plugin-demo-mode/server/tokens';
 import { createNocoReachDemo, DemoProjects, demoProjectsOf } from '../nocoreach/demo-data/index.js';
+import type { DemoHost } from '../nocoreach/demo-data/host.js';
+import { registerNocoReachSampleData } from '../nocoreach/demo-data/sample-data.js';
 
 export interface NocoReachRuntime {
   keys?: ReachKeys;
@@ -125,7 +127,7 @@ export function analysisCompletion(status: number, result: unknown): ScheduleExe
     ? { status: 'succeeded', result: { projects } }
     : {
         status: 'failed',
-        reason: failed.map(([id, r]) => `项目 ${id}：${String(r?.error ?? '分析失败')}`).join('；').slice(0, 500),
+        reason: failed.map(([id, r]) => `项目 ${id}：${typeof r?.error === 'string' ? r.error : '分析失败'}`).join('；').slice(0, 500),
         result: { projects },
       };
 }
@@ -135,7 +137,7 @@ export function analysisObservation(run: ScheduledRun | null): ScheduleTargetObs
   if (run.status === 'succeeded' || run.status === 'failed' || run.status === 'cancelled')
     return {
       state: 'completed',
-      completion: { status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result as JsonObject } : {}) },
+      completion: { status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result } : {}) },
     };
   // Accepted or running, and silent since: the process that ran it was stopped, and it will not report.
   if (Date.now() - Date.parse(run.updatedAt) > STALE_RUN_MS)
@@ -159,7 +161,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       scopeOf: async (identity) => {
         const runtime = this.app.container.resolve(nocoReachToken);
         if (identity.principal.type !== 'user') return 'none';
-        const role = await roleOf(runtime.legacy.db, identity.principal.id);
+        const role: unknown = await roleOf(runtime.legacy.db, identity.principal.id);
         // Membership grants only edits to one's own records. Global management remains an explicit settings grant.
         return role ? { users: [identity.principal.id] } : 'none';
       },
@@ -207,6 +209,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   // once and run on a job executor; the run's record answers the Scheduler's questions after a restart. The service's
   // own minute timer still retries a failed day and catches up a missed one (DailyAnalysis.tick), as before.
   public override async boot(): Promise<void> {
+    registerNocoReachSampleData(this.app, () => this.app.container.resolve(nocoReachToken).plugin as DemoHost);
     if (!this.app.container.has(schedulerServiceToken)) return;
     const scheduler = this.app.container.resolve(schedulerServiceToken);
     const runtime = () => this.app.container.resolve(nocoReachToken);
@@ -354,7 +357,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     }, {
       list: async ({ identity, ids, search }) => {
         const context = access.authorization.for(identity);
-        const rows = await runtime.plugin.projects.list();
+        const rows = (await runtime.plugin.projects.list()) as { id: string | number; name: string }[];
         const result = [];
         for (const row of rows) {
           const id = String(row.id);
@@ -384,6 +387,8 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       demoProjects.configuration = configuration;
       runtime.plugin.demoData = demoData;
       runtime.plugin.demoModels = demoData.models;
+      // Outside Demo Mode there is no policy to consult, which the plugin's adapter refuses; sample projects still get simulated answers.
+      if (!configuration.enabled) demoData.models.setAdapter((request) => demoData.models.simulate(request));
     }
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
@@ -406,7 +411,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       await access.as(userId, async () => {
         for (const id of ids) {
           if (!await access.allows('nrProjects', 'list', id)) continue;
-          const row = await runtime.plugin.projects.row(id, undefined);
+          const row = (await runtime.plugin.projects.row(id, undefined)) as { get(name: 'payload'): { name: string } } | null;
           if (row) found.set(id, { title: row.get('payload').name, key: null, url: null });
         }
       });

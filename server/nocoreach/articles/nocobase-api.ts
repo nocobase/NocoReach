@@ -15,6 +15,7 @@ import {
   now,
   sendWrite,
   type ArticleChanges,
+  type ArticleImageFile,
   type ArticleProvider,
   unreachable,
   type Fetcher,
@@ -212,5 +213,48 @@ export class NocoBaseArticles implements ArticleProvider {
   async update(id: string, changes: ArticleChanges) {
     await this.write('update', { filterByTk: id }, this.values(changes));
     return this.get(id);
+  }
+  /**
+   * The CMS's file manager takes the image (`attachments:create`, multipart `file`), into the storage of the article
+   * body field when it names one, as when an editor pastes an image there; the file record's `url` is its address.
+   */
+  async uploadImage(image: ArticleImageFile) {
+    const body = this.target.fields.locales[this.target.locales[0]]?.body;
+    const url = new URL(
+      `${this.target.baseUrl.replace(/\/+$/, '')}/api/attachments:create`,
+    );
+    if (body)
+      url.searchParams.set(
+        'attachmentField',
+        `${this.target.collection}.${body}`,
+      );
+    const form = new FormData();
+    form.set(
+      'file',
+      new File([new Uint8Array(image.bytes)], image.name, { type: image.type }),
+    );
+    const response = await sendWrite(this.fetcher, url.href, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        Accept: 'application/json',
+      },
+      body: form,
+      signal: AbortSignal.timeout(60000),
+    });
+    let data: unknown;
+    try {
+      data = await json(response);
+    } catch {
+      if (response.ok)
+        throw new ArticleError('unknown_outcome', 'image_upload');
+      data = null;
+    }
+    if (!response.ok)
+      throw httpError(response.status, field(data, 'errors') ?? data);
+    const address = scalar(field(field(data, 'data'), 'url'));
+    if (!address) throw new ArticleError('unknown_outcome', 'image_upload');
+    // A local storage answers with a path on the CMS itself.
+    return new URL(address, `${this.target.baseUrl.replace(/\/+$/, '')}/`).href;
   }
 }

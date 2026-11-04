@@ -5,10 +5,12 @@ import {
 } from '../../shared/article-publishing.js';
 import {
   pageKey,
+  partsOf,
   splitOf,
   type OpportunityPart,
   type TaskPart,
 } from '../../shared/opportunity-parts.js';
+import { pageIdentity, type PageIdentity } from '../../shared/page-identity.js';
 import type {
   Opportunity,
   Proposal,
@@ -30,7 +32,8 @@ export type PlanPart = TaskPart & {
 };
 
 type SiteContent = {
-  pages?: { url?: unknown; title?: unknown }[];
+  pages?: { url?: unknown; title?: unknown; canonical?: unknown }[];
+  outsidePages?: { url?: unknown; canonical?: unknown }[];
   sites?: { origin?: unknown }[];
   origin?: unknown;
 } | null;
@@ -76,11 +79,18 @@ function siteOrigin(site: SiteContent) {
 }
 
 /** A place in words: the site page's title, otherwise its path (with the host when it is not the site's). */
-function labelOf(part: OpportunityPart, site: SiteContent, locale: string) {
+function labelOf(
+  part: OpportunityPart,
+  site: SiteContent,
+  locale: string,
+  identity: PageIdentity,
+) {
   if (part.kind === 'replies')
     return systemMessageText('opportunityTasks.replies', {}, locale);
-  const key = pageKey(part.url);
-  const title = (site?.pages || []).find((p) => pageKey(p.url) === key)?.title;
+  const key = pageKey(part.url, identity);
+  const title = (site?.pages || []).find(
+    (p) => pageKey(p.url, identity) === key,
+  )?.title;
   if (typeof title === 'string' && title.trim())
     return title.trim().replace(/\s+/g, ' ').slice(0, 150);
   try {
@@ -166,12 +176,13 @@ function legacyCover(
   task: PlanTask,
   parts: OpportunityPart[],
   targets: ArticleTarget[],
+  identity: PageIdentity,
 ) {
   const e = task.evidence || {},
     w = e.work || {};
   const pages = new Set(
     [e.page, w.page?.url, w.receipt?.url, ...(w.release?.pages || [])]
-      .map(pageKey)
+      .map((u) => pageKey(u, identity))
       .filter(Boolean),
   );
   const slugs = new Set(
@@ -187,7 +198,7 @@ function legacyCover(
     .filter(
       (p) =>
         p.kind === 'page' &&
-        (pages.has(pageKey(p.url)) ||
+        (pages.has(pageKey(p.url, identity)) ||
           targets.some((t) => {
             const slug = (
               slugFromPage(t.pages, String(p.url)) ||
@@ -199,10 +210,21 @@ function legacyCover(
     .map((p) => p.key);
 }
 
+/** A task's place as the page identity names it now: a page's key follows the page, whatever address it was made for. */
+const placeKey = (
+  part: { key: string; url?: unknown },
+  identity: PageIdentity,
+) => {
+  const page = part.key.startsWith('page:') ? pageKey(part.url, identity) : '';
+  return page ? `page:${page}` : part.key;
+};
+
 /**
  * The places of an opportunity to hand off one by one, each with its label, task title and playbook, and the open
  * task already covering it; empty when the opportunity is one task. A closed task covers nothing, so its place can be
- * handed off again.
+ * handed off again. Whether it is several places is told by the addresses alone, as the Insights page tells it; the
+ * places themselves follow the project's page identity (2026-11-03: O-59 made T-55 for /blog/{slug}/ and T-56 for
+ * /en/blog/{slug}, whose canonical is the first), so addresses of one page are one place, which may leave only one.
  */
 export function planOf({
   card,
@@ -224,8 +246,9 @@ export function planOf({
   playbooks?: NamedPlaybook[];
   locale: string;
 }): PlanPart[] {
-  const parts = oneArticleEach(splitOf(card, signals), targets);
-  if (!parts.length) return [];
+  if (!splitOf(card, signals).length) return [];
+  const identity = pageIdentity(site),
+    parts = oneArticleEach(partsOf(card, signals, identity), targets);
   const byId = new Map(tasks.map((t) => [String(t.id), t])),
     covered = new Map<string, { id: string; no?: number }>();
   for (const p of [...proposals].reverse()) {
@@ -238,11 +261,13 @@ export function planOf({
         ? { no: task.evidence?.no ?? p.taskNo }
         : {}),
     };
-    for (const key of p.part ? [p.part.key] : legacyCover(task, parts, targets))
+    for (const key of p.part
+      ? [placeKey(p.part, identity)]
+      : legacyCover(task, parts, targets, identity))
       if (!covered.has(key)) covered.set(key, ref);
   }
   return parts.map((part) => {
-    const label = labelOf(part, site, locale);
+    const label = labelOf(part, site, locale, identity);
     return {
       key: part.key,
       kind: part.kind,

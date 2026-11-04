@@ -127,7 +127,7 @@ describe.each(['zh-CN', 'en-US'])(
           q.q ===
           (language === 'en-US'
             ? 'project management software'
-            : '项目管理软件'),
+            : '專案管理軟體'),
       );
       expect(query).toMatchObject({ path: '/', position: 6, rank: { by: -5 } });
       expect(JSON.stringify(world.site)).not.toMatch(

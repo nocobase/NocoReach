@@ -87,6 +87,8 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'backlinks/history',
       'serp/google/organic/live/advanced',
       'serp/google/organic/live/regular',
+      'serp/youtube/organic/live/advanced',
+      'serp/youtube/video_info/live/advanced',
       'keywords_data/google_ads/keywords_for_keywords/live',
       'keywords_data/google_trends/explore/live',
       'ai_optimization/llm_mentions/aggregated_metrics',
@@ -1393,6 +1395,64 @@ function keywordRows(
     },
   );
 }
+// Titles as creators write them, without the product's name in front: the search term finds them by subject.
+const YOUTUBE_TOPICS = [
+  'Build a team workspace from templates in 10 minutes',
+  'Connecting GitHub and Slack workflows, step by step',
+  'How we build our weekly growth report',
+  'First look at the new automation templates',
+  'Setting up permissions for a support team',
+  'Importing customer data without spreadsheets',
+  'Self-hosting with Docker: the full setup',
+  'Reporting dashboards in ten minutes',
+  'Building an internal CRM from scratch',
+  'Issue triage with a ready-made template',
+  'Onboarding new teammates: our checklist',
+  'Internal tool builders compared (2026)',
+];
+// Descriptions as creators write them; the data page shows them under the title.
+const YOUTUBE_DESCRIPTIONS = [
+  'Step by step, with the template from the video linked below. Chapters in the description.',
+  'The setup our team uses every week, and the questions we get about it most often.',
+  'Everything shown runs on a self-hosted install. Links to the docs are in the pinned comment.',
+  'A short walkthrough for people new to the tool, from an empty workspace to the first report.',
+];
+// A video tracked by ID is not among the search results (usually the project's own), so it gets a title of its own.
+const YOUTUBE_TRACKED = [
+  'Product walkthrough: what changed this quarter',
+  'Live Q&A with the team: questions from the community',
+  'Customer story: replacing five tools with one workspace',
+];
+// Fictional YouTube videos: NocoBloom01… for the fixture product, hashed IDs for a configured project, so one
+// project's videos never appear in another's results. Any valid ID can be read for details (a tracked video).
+const youtubeId = (c: FixtureContext, index: number): string =>
+  c.project
+    ? fixtureHash(c, `youtube:${index}`).slice(0, 11)
+    : `NocoBloom${String(index + 1).padStart(2, '0')}`;
+function youtubeVideo(
+  c: FixtureContext,
+  index: number,
+  id = youtubeId(c, index),
+) {
+  const views = 800 + fixtureNumber(c, `youtube-views:${index}`, 24_000);
+  return {
+    video_id: id,
+    title: YOUTUBE_TOPICS[index % YOUTUBE_TOPICS.length],
+    url: `https://www.youtube.com/watch?v=${id}`,
+    channel_name: ['Ops Notes', 'FlowGrove Academy', 'Build With Data'][
+      index % 3
+    ],
+    channel_id: `UC${fixtureHash(c, `youtube-channel:${index % 3}`).slice(0, 22)}`,
+    description: YOUTUBE_DESCRIPTIONS[index % YOUTUBE_DESCRIPTIONS.length],
+    views_count: views + (added(c) ? 275 : 0),
+    timestamp: at(c, 1 + index * 2)
+      .replace('T', ' ')
+      .replace(/\.\d+Z$/, ' +00:00'),
+    publication_date: `${1 + index * 2} days ago`,
+    duration_time_seconds: 240 + index * 37,
+    is_shorts: false,
+  };
+}
 const seoTarget = (b: ObjectValue, c: FixtureContext): string =>
   string(b.target, string(b.target1, fixtureProduct(c).domain));
 function dataforseo(
@@ -1735,6 +1795,55 @@ function dataforseo(
       se_results_count: rows.length,
       check_url: `https://www.google.com/search?q=${encodeURIComponent(string(b.keyword))}`,
     });
+  }
+  if (operation === 'serp/youtube/organic/live/advanced') {
+    const term = string(b.keyword);
+    // Terms share some videos, as related searches do.
+    const start = fixtureNumber(c, `youtube-term:${term.toLowerCase()}`, 4);
+    const rows = Array.from(
+      { length: Math.min(size(c, 8), integer(b.block_depth, 20), 20) },
+      (_, i) => ({
+        type: 'youtube_video',
+        rank_group: i + 1,
+        rank_absolute: i + 1,
+        ...youtubeVideo(c, (start + i) % YOUTUBE_TOPICS.length),
+      }),
+    );
+    return result(rows, {
+      keyword: term,
+      se_domain: 'youtube.com',
+      check_url: `https://www.youtube.com/results?search_query=${encodeURIComponent(term)}`,
+    });
+  }
+  if (operation === 'serp/youtube/video_info/live/advanced') {
+    const id = string(b.video_id);
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return result([]);
+    const known = Array.from(
+      { length: YOUTUBE_TOPICS.length },
+      (_, i) => i,
+    ).find((i) => youtubeId(c, i) === id);
+    const hash = parseInt(
+      createHash('sha256').update(id).digest('hex').slice(0, 4),
+      16,
+    );
+    const index = known ?? hash % YOUTUBE_TOPICS.length;
+    const video = {
+      ...youtubeVideo(c, index, id),
+      ...(known === undefined && {
+        title: YOUTUBE_TRACKED[hash % YOUTUBE_TRACKED.length],
+      }),
+    };
+    return result([
+      {
+        type: 'youtube_video_info',
+        rank_group: 1,
+        rank_absolute: 1,
+        ...video,
+        likes_count: Math.round(video.views_count / 28),
+        comments_count: Math.round(video.views_count / 190),
+        subscribers_count: 4_200 + index * 13,
+      },
+    ]);
   }
   const lab = operation.match(
     /^dataforseo_labs\/google\/(related_keywords|keyword_suggestions|keyword_ideas|keyword_overview|domain_rank_overview|historical_rank_overview|ranked_keywords|relevant_pages|domain_intersection)\/live$/,

@@ -39,7 +39,8 @@ export default function DataReddit() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:reddit:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrReddit", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<RedditTimingState & { added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:r.diagnostics?.find(d=>d.reason!=='success') ? $t(`redditDiagnostic.${r.diagnostics.find(d=>d.reason!=='success')!.reason}`) : $legacyText(r.errors[0])})); else toast.success(() => (r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
+    // Every term within its 6-day reuse comes back without a new search; the toast says so instead of "no new posts".
+    try { const r = await api.action<RedditTimingState & { added: number; errors: string[]; searched?: number; reused?: number }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:r.diagnostics?.find(d=>d.reason!=='success') ? $t(`redditDiagnostic.${r.diagnostics.find(d=>d.reason!=='success')!.reason}`) : $legacyText(r.errors[0])})); else toast.success(() => (r.searched && r.reused === r.searched ? $t('dataReddit.searchedRecently') : r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notFullyChecked'))); }
     finally { setBusy(false); }
   };
