@@ -7774,5 +7774,14 @@
   "articles.provider.imagesUnsupported": "Đích xuất bản này không nhận hình ảnh từ nhiệm vụ.",
   "articles.provider.imageUploadDenied": "Đích xuất bản từ chối tải lên hình ảnh. Vui lòng nhờ quản trị viên cho phép khóa tải tệp lên.",
   "articleTask.failedStepImages": "Tải lên hình ảnh của bài viết",
-  "articles.imagesUnsupported": "{0} không nhận hình ảnh từ nhiệm vụ. Hãy xóa các hình trước khi duyệt, hoặc xuất bản lên đích khác."
+  "articles.imagesUnsupported": "{0} không nhận hình ảnh từ nhiệm vụ. Hãy xóa các hình trước khi duyệt, hoặc xuất bản lên đích khác.",
+  "articles.cannotRestore": "Không thể khôi phục phiên bản này nữa. Hãy tải lại trang để xem phiên bản hiện tại.",
+  "taskDetail.eventRestoreArticleVersion": "Đã khôi phục một phiên bản trước của bản nháp bài viết",
+  "taskDetail.editedArticleVersion": "Đã chỉnh sửa bản nháp bài viết, phiên bản {0}",
+  "taskDetail.restoredArticleVersion": "Đã khôi phục phiên bản {0} thành phiên bản {1}",
+  "taskDetail.restoredFromVersion": "khôi phục từ phiên bản {0}",
+  "taskDetail.editedByHandBy": "{0} chỉnh sửa thủ công",
+  "taskDetail.restoredFromBy": "{0} khôi phục từ phiên bản {1}",
+  "taskDetail.restoreThisVersion": "Khôi phục phiên bản này",
+  "taskDetail.restoreVersionNote": "Khôi phục sẽ tạo phiên bản {0}, giống hệt phiên bản {1}. Phiên bản hiện tại {2} vẫn nằm trong lịch sử và có thể khôi phục lại bất cứ lúc nào."
 }

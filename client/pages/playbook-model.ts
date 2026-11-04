@@ -118,6 +118,7 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   // Article delivery (article-flow.ts).
   case 'linkArticle':return {who:$t('common.you'),text:$t('taskDetail.eventLinkArticle')};
   case 'editArticleDraft':return {who:$t('common.you'),text:$t('taskDetail.eventEditArticleDraft')};
+  case 'restoreArticleVersion':return {who:$t('common.you'),text:$t('taskDetail.eventRestoreArticleVersion')};
   case 'retryPublish':return {who:$t('common.you'),text:$t('taskDetail.eventRetryPublish')};
   case 'rebaseArticle':return {who:$t('common.you'),text:$t('taskDetail.eventRebaseArticle')};
   case 'articlePublished':return {who:$t('common.system'),text:$t('taskDetail.eventArticlePublished')};

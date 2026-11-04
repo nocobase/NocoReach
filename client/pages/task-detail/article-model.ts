@@ -1,5 +1,6 @@
 import { $t, getCurrentLocale } from '#i18n';
 import {
+  ARTICLE_FIELDS,
   inPlaceLocales,
   type ArticleContent,
   type ArticleField,
@@ -100,6 +101,67 @@ export const draftContent = (
 
 /** How a changed language is read: as it will be, or its changes field by field against the version it was written from. */
 export type ArticleView = 'preview' | 'changes';
+
+/** A version's whole article: its draft over the article it was written from, in every language either has. */
+export function wholeArticle(
+  data: TaskData,
+  a: ArticleProposal,
+): ArticleContent {
+  const { base } = articleContext(data, a);
+  const locales = [
+    ...new Set([
+      ...Object.keys(base?.locales || {}),
+      ...Object.keys(a.draft.locales),
+    ]),
+  ];
+  const status = a.draft.status ?? base?.status;
+  return {
+    slug: a.draft.slug || base?.slug || '',
+    ...(status ? { status } : {}),
+    locales: Object.fromEntries(
+      locales.map((l) => [l, revisedText(a, base, l)]),
+    ),
+  };
+}
+
+/**
+ * A version read against the version before it (Activity's View, 2026-11-04): both as whole articles, with the fields
+ * that differ as its changes. For ArticleReview's `article` and `against`.
+ */
+export function againstPrevious(
+  data: TaskData,
+  a: ArticleProposal,
+  previous: ArticleProposal,
+): { article: ArticleProposal; against: ArticleContent } {
+  const before = wholeArticle(data, previous),
+    after = wholeArticle(data, a);
+  const locales = [
+    ...new Set([...Object.keys(before.locales), ...Object.keys(after.locales)]),
+  ];
+  const changes = [
+    ...(['slug', 'status'] as const).filter(
+      (p) => (before[p] || '') !== (after[p] || ''),
+    ),
+    ...locales.flatMap((l) =>
+      ARTICLE_FIELDS.map((f) => `${l}.${f}`).filter(
+        (p) => valueAt(before, p) !== valueAt(after, p),
+      ),
+    ),
+  ];
+  return {
+    article: {
+      ...a,
+      draft: {
+        ...a.draft,
+        slug: after.slug || undefined,
+        status: after.status,
+        locales: after.locales,
+      },
+      changes,
+    },
+    against: before,
+  };
+}
 
 /**
  * How a task in several languages writes the ones after its primary (2026-10-28, T-53): those the article already has
@@ -202,10 +264,16 @@ export function reviewRound(
  * the draft or the article is left out (2026-10-24 user report: empty tabs looked broken) and listed in `missing`. A
  * changed language opens as a preview when its body changed, as its changes when only its title or description did; a
  * new article, or a language the article did not have, has one version. A version that updated other languages in
- * place opens on the first of them, as its changes: their edits are what is left to check (2026-10-28).
+ * place opens on the first of them, as its changes: their edits are what is left to check (2026-10-28). With `against`
+ * (Activity's View, againstPrevious), each language is compared with the version before instead.
  */
-export function articleLanguages(data: TaskData, a: ArticleProposal) {
-  const { target, base } = articleContext(data, a);
+export function articleLanguages(
+  data: TaskData,
+  a: ArticleProposal,
+  against?: ArticleContent,
+) {
+  const { target, base: from } = articleContext(data, a),
+    base = against ?? from;
   const all = [
     ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
   ];
@@ -221,7 +289,11 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
       plan.write.length > 0 && Boolean(data.work?.delivery?.translateFrom),
     changed = (l: string) => a.changes.some((c) => c.startsWith(`${l}.`)),
     edited = (l: string) =>
-      after && plan.update.includes(l) && Boolean(base?.locales[l]);
+      after && plan.update.includes(l) && Boolean(base?.locales[l]),
+    // A language reads as changes against what it was: the article it was written from, or with `against`, the version
+    // before it, which a new article has too.
+    compared = (l: string) =>
+      (Boolean(against) || !isNew) && Boolean(base?.locales[l]);
   return {
     target,
     base,
@@ -242,11 +314,11 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
       locales[0],
     isNew,
     changed,
-    versions: (l: string) => !isNew && Boolean(base?.locales[l]),
+    versions: compared,
     defaultView: (l: string): ArticleView =>
       !isNew && edited(l)
         ? 'changes'
-        : isNew || !base?.locales[l] || a.changes.includes(`${l}.body`)
+        : !compared(l) || a.changes.includes(`${l}.body`)
           ? 'preview'
           : 'changes',
   };

@@ -7792,5 +7792,14 @@
   "articles.provider.imagesUnsupported": "Этот ресурс публикации не принимает изображения из задач.",
   "articles.provider.imageUploadDenied": "Ресурс публикации отклонил загрузку изображения. Попросите администратора разрешить ключу загружать файлы.",
   "articleTask.failedStepImages": "Загрузка изображений статьи",
-  "articles.imagesUnsupported": "{0} не принимает изображения из задач. Удалите их перед одобрением или опубликуйте на другом ресурсе."
+  "articles.imagesUnsupported": "{0} не принимает изображения из задач. Удалите их перед одобрением или опубликуйте на другом ресурсе.",
+  "articles.cannotRestore": "Эту версию уже нельзя восстановить. Обновите страницу, чтобы увидеть текущую версию.",
+  "taskDetail.eventRestoreArticleVersion": "Восстановлена предыдущая версия черновика статьи",
+  "taskDetail.editedArticleVersion": "Черновик статьи изменен, версия {0}",
+  "taskDetail.restoredArticleVersion": "Версия {0} восстановлена как версия {1}",
+  "taskDetail.restoredFromVersion": "восстановлено из версии {0}",
+  "taskDetail.editedByHandBy": "Отредактировано вручную: {0}",
+  "taskDetail.restoredFromBy": "Восстановлено из версии {1}: {0}",
+  "taskDetail.restoreThisVersion": "Восстановить эту версию",
+  "taskDetail.restoreVersionNote": "При восстановлении появится версия {0}, полностью совпадающая с версией {1}. Текущая версия {2} останется в истории, и её можно будет восстановить в любой момент."
 }

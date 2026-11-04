@@ -7774,5 +7774,14 @@
   "articles.provider.imagesUnsupported": "這個目標不支援任務裡的圖片。",
   "articles.provider.imageUploadDenied": "目標系統拒絕上傳圖片，請管理員給金鑰開通上傳檔案的權限。",
   "articleTask.failedStepImages": "上傳文章用到的圖片",
-  "articles.imagesUnsupported": "{0} 不支援任務裡的圖片。通過前請刪掉這些圖片，或改發到其他目標。"
+  "articles.imagesUnsupported": "{0} 不支援任務裡的圖片。通過前請刪掉這些圖片，或改發到其他目標。",
+  "articles.cannotRestore": "這一版已經不能恢復了，請重新整理頁面查看現在的版本。",
+  "taskDetail.eventRestoreArticleVersion": "恢復到文章稿以前的一版",
+  "taskDetail.editedArticleVersion": "修改了文章稿，第 {0} 版",
+  "taskDetail.restoredArticleVersion": "恢復到第 {0} 版，產生第 {1} 版",
+  "taskDetail.restoredFromVersion": "恢復自第 {0} 版",
+  "taskDetail.editedByHandBy": "{0} 人工修改",
+  "taskDetail.restoredFromBy": "{0} 恢復自第 {1} 版",
+  "taskDetail.restoreThisVersion": "恢復到這一版",
+  "taskDetail.restoreVersionNote": "恢復後會產生第 {0} 版，內容和第 {1} 版完全一樣；現在的第 {2} 版仍在記錄裡，隨時能再恢復。"
 }

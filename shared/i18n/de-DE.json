@@ -7774,5 +7774,14 @@
   "articles.provider.imagesUnsupported": "Dieses Zielsystem übernimmt keine Bilder aus Aufgaben.",
   "articles.provider.imageUploadDenied": "Das Zielsystem hat das Hochladen des Bildes abgelehnt. Bitten Sie einen Administrator, dem Schlüssel das Hochladen von Dateien zu erlauben.",
   "articleTask.failedStepImages": "Bilder des Artikels hochladen",
-  "articles.imagesUnsupported": "{0} übernimmt keine Bilder aus Aufgaben. Entfernen Sie sie vor der Freigabe oder veröffentlichen Sie in einem anderen Zielsystem."
+  "articles.imagesUnsupported": "{0} übernimmt keine Bilder aus Aufgaben. Entfernen Sie sie vor der Freigabe oder veröffentlichen Sie in einem anderen Zielsystem.",
+  "articles.cannotRestore": "Diese Version kann nicht mehr wiederhergestellt werden. Laden Sie die Seite neu, um die aktuelle Version zu sehen.",
+  "taskDetail.eventRestoreArticleVersion": "Frühere Version des Artikelentwurfs wiederhergestellt",
+  "taskDetail.editedArticleVersion": "Artikelentwurf bearbeitet, Version {0}",
+  "taskDetail.restoredArticleVersion": "Version {0} als Version {1} wiederhergestellt",
+  "taskDetail.restoredFromVersion": "aus Version {0} wiederhergestellt",
+  "taskDetail.editedByHandBy": "Manuell bearbeitet von {0}",
+  "taskDetail.restoredFromBy": "Aus Version {1} wiederhergestellt von {0}",
+  "taskDetail.restoreThisVersion": "Diese Version wiederherstellen",
+  "taskDetail.restoreVersionNote": "Beim Wiederherstellen entsteht Version {0} mit genau dem Inhalt von Version {1}. Die aktuelle Version {2} bleibt im Verlauf und kann jederzeit wiederhergestellt werden."
 }

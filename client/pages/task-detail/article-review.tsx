@@ -513,6 +513,7 @@ export function ArticleReview({
   article: a,
   notes,
   settled = false,
+  against,
   readerTo,
   tab: asked,
   onTab,
@@ -522,13 +523,15 @@ export function ArticleReview({
   notes: string;
   /** Looking back at a delivered version rather than reviewing it: what review settled (conflicts, adoption) is left out. */
   settled?: boolean;
+  /** The version before, which Changes compares with instead of the article it was written from (againstPrevious). */
+  against?: ArticleContent;
   /** Where Read full screen opens the language and view being shown; left out where there is no reading page. */
   readerTo?: (tab: string, view: ArticleView) => string;
   /** The language last chosen, kept by the card so Edit directly opens on it. */
   tab?: string;
   onTab?: (tab: string) => void;
 }) {
-  const languages = articleLanguages(data, a);
+  const languages = articleLanguages(data, a, against);
   const { target, base, locales } = languages;
   const [own, setOwn] = useState(languages.first);
   const tab = asked && locales.includes(asked) ? asked : own;

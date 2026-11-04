@@ -7774,5 +7774,14 @@
   "articles.provider.imagesUnsupported": "Tujuan ini tidak menerima gambar dari tugas.",
   "articles.provider.imageUploadDenied": "Tujuan menolak unggahan gambar. Minta administrator mengizinkan kunci mengunggah file.",
   "articleTask.failedStepImages": "Mengunggah gambar artikel",
-  "articles.imagesUnsupported": "{0} tidak menerima gambar dari tugas. Hapus gambar sebelum menyetujui, atau terbitkan ke tujuan lain."
+  "articles.imagesUnsupported": "{0} tidak menerima gambar dari tugas. Hapus gambar sebelum menyetujui, atau terbitkan ke tujuan lain.",
+  "articles.cannotRestore": "Versi ini tidak dapat dipulihkan lagi. Muat ulang halaman untuk melihat versi saat ini.",
+  "taskDetail.eventRestoreArticleVersion": "Versi sebelumnya dari draf artikel dipulihkan",
+  "taskDetail.editedArticleVersion": "Draf artikel diedit, versi {0}",
+  "taskDetail.restoredArticleVersion": "Versi {0} dipulihkan sebagai versi {1}",
+  "taskDetail.restoredFromVersion": "dipulihkan dari versi {0}",
+  "taskDetail.editedByHandBy": "Diedit manual oleh {0}",
+  "taskDetail.restoredFromBy": "Dipulihkan dari versi {1} oleh {0}",
+  "taskDetail.restoreThisVersion": "Pulihkan versi ini",
+  "taskDetail.restoreVersionNote": "Memulihkan akan membuat versi {0} yang sama persis dengan versi {1}. Versi saat ini, versi {2}, tetap ada di riwayat dan dapat dipulihkan kapan saja."
 }

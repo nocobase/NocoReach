@@ -6,6 +6,7 @@ import type { MaterialAttachment } from './task-materials.js';
 import type { ArticleTargets } from '../articles/targets.js';
 import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
 import { primaryChanges } from '../articles/edits.js';
+import { restorable, writtenByHand } from '../../../shared/article-versions.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { fail, projectWork, type Artifact, type Work } from './model';
 
@@ -19,7 +20,7 @@ const clip = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, ma
 // Published articles are watched this long for an overwrite in the target (accepted risk (b), shown on the task).
 const DRIFT_DAYS = 14;
 const EXPORT_HOURS = 6;
-export const ARTICLE_COMMANDS = ['linkArticle', 'editArticleDraft', 'retryPublish', 'rebaseArticle'];
+export const ARTICLE_COMMANDS = ['linkArticle', 'editArticleDraft', 'restoreArticleVersion', 'retryPublish', 'rebaseArticle'];
 // A task publishes to its primary target and at most this many others.
 const MAX_ALSO = 4;
 // Images one save of Edit directly may add; the person's unlinked uploads are capped lower still (manual-tasks.ts).
@@ -79,8 +80,11 @@ export class ArticleFlow {
       return {};
     }
   }
-  /** The article versions the task page compares with: each shown draft's base (every target's) and a conflict's current version. */
-  async bases(project: string, taskId: string, w: Work, tx: any) {
+  /**
+   * The article versions the task page compares with: each shown draft's base (every target's), a conflict's current
+   * version, and the bases of earlier versions, which Activity opens too (`versions`, after the current ones).
+   */
+  async bases(project: string, taskId: string, w: Work, tx: any, versions: Artifact[] = []) {
     const keys = new Set<string>();
     for (const a of w.results) for (const p of a?.article ? [a.article, ...(a.article.also || [])] : []) if (p.baseKey) keys.add(p.baseKey);
     if (w.release?.article?.conflict?.currentKey) keys.add(w.release.article.conflict.currentKey);
@@ -88,6 +92,7 @@ export class ArticleFlow {
       const approved = await this.s.snapshot(this.s.key('artifact', project, taskId, w.release.article.artifactId), tx);
       if (approved?.article?.baseKey) keys.add(approved.article.baseKey);
     }
+    for (const a of [...versions].reverse()) for (const p of a?.article ? [a.article, ...(a.article.also || [])] : []) if (p.baseKey) keys.add(p.baseKey);
     const out: Record<string, ArticleSnapshot> = {};
     for (const key of [...keys].slice(0, 12)) {
       const snap = await this.s.snapshot(key, tx);
@@ -426,6 +431,27 @@ export class ArticleFlow {
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 1] = artifact;
       event.artifactId = artifact.id;
+      return true;
+    }
+    if (v.command === 'restoreArticleVersion') {
+      // An earlier version back under review (2026-11-04, T-62): a new version with the chosen one's whole article and
+      // notes, every language, field, image, slug and status as they were. Nothing is deleted and no Agent runs; the
+      // version it replaces stays in Activity and can be restored in turn.
+      const { index } = s.flowStageOf(w, v.stageKey, ['review']);
+      const producer = w.flow.stages[index - 1],
+        output = w.results[index - 1];
+      if (!output?.article || output.id !== v.currentId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeSaving'), 409);
+      const chosen: Artifact | null = typeof v.artifactId === 'string' ? await s.snapshot(s.key('artifact', project, taskId, v.artifactId), tx) : null;
+      if (!restorable(w.history || [], output, chosen)) return fail(systemMessageText('articles.cannotRestore'), 409);
+      // Its images were linked to the task when that version was saved; checked again, as approval will.
+      const linked = new Set([...(w.images || []), ...(task.evidence?.attachmentIds || [])]);
+      if (draftImageIds(chosen.article.draft).some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
+      const { rebasedFrom: _rebased, ...article } = structuredClone(chosen.article);
+      const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, chosen.content, actor, at, tx)), article, restoredFrom: { artifactId: chosen.id, version: chosen.version, byHand: writtenByHand(chosen) } };
+      await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
+      w.results[index - 1] = artifact;
+      event.artifactId = artifact.id;
+      event.restoredFrom = chosen.id;
       return true;
     }
     if (v.command === 'retryPublish') {

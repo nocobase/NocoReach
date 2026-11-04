@@ -2,6 +2,7 @@ import { formatDateTime, formatDate } from '#lib/format';
 import { Skeleton } from '#components/ui/skeleton';
 import {matchesObservation} from '../../shared/result-comparison.js';
 import {shownInActivity} from '../../shared/task-activity.js';
+import {nextVersion,previousVersion,restorable,type RestoredFrom} from '../../shared/article-versions.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
@@ -21,7 +22,7 @@ import { StartedCard } from './task-detail/started-card.js';
 import { startBrief } from './task-detail/started-model.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
+import { againstPrevious, canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
 import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
@@ -43,7 +44,7 @@ import {Outlet,useLocation,useNavigate,useSearchParams} from 'react-router';
 import {createUuid,useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine} from 'lucide-react';
+import {History,BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -416,8 +417,9 @@ function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
 }
 const ScopeConfirm=({pr,ok,setOk,busy}:{pr?:PullRequestInfo;ok:boolean;setOk:(v:boolean)=>void;busy:boolean})=>pr?.outOfScope?.length?<label className="flex items-start gap-2 text-sm text-destructive"><input type="checkbox" className="mt-0.5 size-4 accent-destructive" checked={ok} disabled={busy} onChange={e=>setOk(e.target.checked)}/> {$t('taskDetail.otherFilesChanged')}</label>:null;
 // The version under review, under the card's title: the Agent's own needs no name, since Properties shows the Agent
-// (2026-10-24 user request: "Agent · Version 2"); a version a person made says so, without assuming it was you.
-const versionLine=(out:{version:number;manual?:boolean;createdBy?:string})=>[$t('taskDetail.versionNumber',{0:out.version}),out.manual?$t('taskDetail.doneByHand'):out.createdBy&&out.createdBy!=='agent'?$t('taskDetail.editedByHand'):''].filter(Boolean).join(' · ');
+// (2026-10-24 user request: "Agent · Version 2"); a version a person made says so, without assuming it was you, and a
+// restored one names the version it brought back (2026-11-04).
+const versionLine=(out:{version:number;manual?:boolean;createdBy?:string;restoredFrom?:RestoredFrom})=>[$t('taskDetail.versionNumber',{0:out.version}),out.manual?$t('taskDetail.doneByHand'):out.restoredFrom?$t('taskDetail.restoredFromVersion',{0:out.restoredFrom.version}):out.createdBy&&out.createdBy!=='agent'?$t('taskDetail.editedByHand'):''].filter(Boolean).join(' · ');
 // The note that goes with a publish, folded until asked for.
 function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string)=>void;busy:boolean;open:boolean}){
  return <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={open}><Field label={$t('taskDetail.releaseNotesGoPublishRecord')}><Textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={value} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>onChange(e.target.value)}/></Field></Reveal>;
@@ -635,11 +637,24 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
 }
 // What one delivered version changes, as its owner reviewed it: a page change's visible changes, or an article's fields
-// against the version it was written from. The activity's View and the live card's View changes both show it.
-function VersionChange({data,artifact,notes}:{data:Data;artifact:Artifact;notes:boolean}){
+// against the version it was written from. The activity's View and the live card's View changes both show it; the
+// activity's compares an article with the version before it, when there is one (`previous`, 2026-11-04).
+function VersionChange({data,artifact,notes,previous}:{data:Data;artifact:Artifact;notes:boolean;previous?:Artifact}){
  if(artifact.pr)return <PageChange pr={artifact.pr} content={artifact.content}/>;
- if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} settled/>;
+ if(artifact.article){const vs=previous?.article?againstPrevious(data,artifact.article,previous.article):undefined;return <ArticleReview data={data} article={vs?.article||artifact.article} against={vs?.against} notes={notes?artifact.content:''} settled/>;}
  return null;
+}
+// A version opened from Activity (2026-11-04, T-62): the Agent's versions, the ones edited by hand and the restored ones
+// alike, compared with the version before. While the article waits for review, an earlier version of the same round can
+// be restored as a new one (shared/article-versions.ts), by whoever may use Edit directly; nothing runs and nothing is
+// deleted. The reader closes either way, so the new version, or why it could not be made, shows on the page.
+function VersionReader({data,artifact,versions,who,title,update,busy,onClose}:{data:Data;artifact:Artifact;versions:Artifact[];who:string;title:string;update:Update;busy:boolean;onClose:()=>void}){
+ const w=data.work,{allowed}=useContext(TaskAccess),index=w.stageIndex||0,stage=w.flow?.stages[index],current=w.results[index-1],at=when(artifact.createdAt);
+ const meta=artifact.createdBy==='agent'?at:`${artifact.restoredFrom?$t('taskDetail.restoredFromBy',{0:who,1:artifact.restoredFrom.version}):$t('taskDetail.editedByHandBy',{0:who})} · ${at}`;
+ const open=allowed&&w.stage!=='done'&&!w.cancelledAt&&!w.archivedAt&&stage?.kind==='review'&&current&&!current.rejectedAt&&restorable(w.history||[],current,artifact)?{stage,current}:undefined;
+ const footer=open&&<><p className={cn(text.muted,'flex-1')}>{$t('taskDetail.restoreVersionNote',{0:nextVersion(versions,open.current.stepId),1:artifact.version,2:open.current.version})}</p>
+  <PendingButton disabled={busy} onClick={async()=>{await update('restoreArticleVersion',{stageKey:open.stage.key,artifactId:artifact.id,currentId:open.current.id});onClose();}}>{$t('taskDetail.restoreThisVersion')}</PendingButton></>;
+ return <DocReader open onClose={onClose} title={title} meta={meta} content={artifact.pr||artifact.article?'':artifact.content} footer={footer||undefined}><VersionChange data={data} artifact={artifact} notes previous={artifact.article?previousVersion(versions,artifact):undefined}/></DocReader>;
 }
 // Once live, the card names what changed in one line; the change itself opens on demand.
 function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
@@ -668,13 +683,16 @@ function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,editArticleDraft:<Pencil/>,restoreArticleVersion:<History/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
 const RECENT=8;
+// The events that made a version, each opened from its line.
+const VERSION_EVENTS=['runSucceeded','editArticleDraft','restoreArticleVersion'];
 // Release events in the owner's words rather than in pull-request terms.
 const getPlainEvents=():Record<string,string>=>({merged:$t('taskDetail.eventPublished'),markMerged:$t('taskDetail.publishedManually'),retryMerge:$t('taskDetail.eventPublishAgain'),prClosed:$t('taskDetail.unpublishedClosed'),revertOpened:$t('taskDetail.undoPrepared')});
-// What has happened: people's actions, each version the Agent delivered (open it here) and comments, then one line to
-// write to the Agent (2026-10-22 user decision: the activity and the message form one card), where changes to a version
-// under review are asked for too.
+// What has happened: people's actions, each version delivered, edited by hand or restored (open it here; 2026-11-04:
+// Activity is the article's version history, with no list of its own) and comments, then one line to write to the
+// Agent (2026-10-22 user decision: the activity and the message form one card), where changes to a version under review
+// are asked for too.
 function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{data:Data;update:Update;busy:boolean;members:Member[];membersLoaded:boolean;error:string;onFailed:()=>void}){
  const [message,setMessage,clearMessage]=useTaskDraft('comment',''),w=data.work,stages=w.flow?.stages||[],done=w.stage==='done',closed=Boolean(w.cancelledAt||w.archivedAt);
  const [all,setAll]=useState(false),[view,setView]=useState<Artifact>();
@@ -704,11 +722,11 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
    // Until the members load, a person's name is a placeholder bar, not "Member" that turns into the name (UI review 2026-10-22).
    const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p>{e.images&&<MessageImages images={e.images}/>}</div></li>;
-   const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
-   const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
+   const artifact=VERSION_EVENTS.includes(e.action)&&e.artifactId?artifacts.get(e.artifactId):undefined;
+   const line=!artifact?plain[e.action]||t!.text:e.action==='editArticleDraft'?$t('taskDetail.editedArticleVersion',{0:artifact.version}):e.action==='restoreArticleVersion'?(artifact.restoredFrom?$t('taskDetail.restoredArticleVersion',{0:artifact.restoredFrom.version,1:artifact.version}):t!.text):$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)});
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span>{getCurrentLocale()==='ru-RU'?' — ':' '}{line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
-  {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
+  {view&&<VersionReader data={data} artifact={view} versions={[...artifacts.values()]} who={people.get(view.createdBy)||$t('common.member')} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} update={update} busy={busy} onClose={()=>setView(undefined)}/>}
   {/* The send button is disabled while the box is empty; the box itself stays as it is. */}
   {composer&&(writing?<InputGroup className='has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30' onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={images.onDrop}>
    <InputGroupTextarea id='nr-composer' aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-60 min-h-8 px-2.5 pt-2' value={message} disabled={busy} placeholder={hint} onChange={e=>{setMessage(e.target.value);}} onPaste={images.onPaste}/>

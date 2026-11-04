@@ -8,7 +8,7 @@ import type { AgentRunExecution, RunTranscriptEvent } from '#components/agent-ru
 import { $t } from "#i18n";
 import type { Plan } from './task-work-model';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
-export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id:string; stepId:string; planVersion:number; version:number; content:string; createdAt:string; createdBy:string; runId?:string; legacy?:boolean; manual?:boolean; approvedAt?:string; rejectedAt?:string; pr?:PullRequestInfo; article?:ArticleProposal };
+export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id:string; stepId:string; planVersion:number; version:number; content:string; createdAt:string; createdBy:string; runId?:string; legacy?:boolean; manual?:boolean; approvedAt?:string; rejectedAt?:string; pr?:PullRequestInfo; article?:ArticleProposal; restoredFrom?:import('../../shared/article-versions.js').RestoredFrom };
 // Article delivery (server/nocoreach/execution/article-flow.ts): the draft an article step proposes and its base.
 export type FieldConflict = { field:string; base:string; current:string; draft:string };
 export type ArticleProposal = { targetId:string; articleId:string|null; baseKey:string|null; baseVersion:string|null; draft:ArticleDraft; changes:string[]; conflicts?:FieldConflict[]; rebasedFrom?:string; carried?:string[]; also?:AlsoProposal[] };

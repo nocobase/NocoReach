@@ -7774,5 +7774,14 @@
   "articles.provider.imagesUnsupported": "Este destino não aceita imagens de tarefas.",
   "articles.provider.imageUploadDenied": "O destino recusou o envio da imagem. Peça a um administrador para permitir que a chave envie arquivos.",
   "articleTask.failedStepImages": "Envio das imagens do artigo",
-  "articles.imagesUnsupported": "{0} não aceita imagens de tarefas. Remova-as antes de aprovar ou publique em outro destino."
+  "articles.imagesUnsupported": "{0} não aceita imagens de tarefas. Remova-as antes de aprovar ou publique em outro destino.",
+  "articles.cannotRestore": "Esta versão não pode mais ser restaurada. Atualize a página para ver a versão atual.",
+  "taskDetail.eventRestoreArticleVersion": "Versão anterior do rascunho do artigo restaurada",
+  "taskDetail.editedArticleVersion": "Rascunho do artigo editado, versão {0}",
+  "taskDetail.restoredArticleVersion": "Versão {0} restaurada como versão {1}",
+  "taskDetail.restoredFromVersion": "restaurada da versão {0}",
+  "taskDetail.editedByHandBy": "Editada manualmente por {0}",
+  "taskDetail.restoredFromBy": "Restaurada da versão {1} por {0}",
+  "taskDetail.restoreThisVersion": "Restaurar esta versão",
+  "taskDetail.restoreVersionNote": "Ao restaurar, é criada a versão {0}, idêntica à versão {1}. A versão atual {2} continua no histórico e pode ser restaurada a qualquer momento."
 }
