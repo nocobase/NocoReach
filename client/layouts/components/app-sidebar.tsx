@@ -185,7 +185,7 @@ export function AppSidebarToggle(): ReactElement {
     <Button
       aria-label={label}
       aria-pressed={isMobile ? undefined : collapsed}
-      className='size-9 rounded-xl text-muted-foreground hover:text-foreground'
+      className='size-8 rounded-xl text-muted-foreground hover:text-foreground sm:size-9'
       onClick={toggleSidebar}
       size='icon'
       variant='ghost'

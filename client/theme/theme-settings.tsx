@@ -20,7 +20,9 @@ const COLOR_MODES = [
   { id: 'system', icon: Monitor },
 ] as const;
 
-export function ThemeSettings(): ReactElement {
+export function ThemeSettings({
+  className,
+}: { className?: string } = {}): ReactElement {
   const { theme, setTheme } = useTheme();
   const { preset, setPreset } = useThemePreset();
   const { t } = useTranslation();
@@ -38,7 +40,10 @@ export function ThemeSettings(): ReactElement {
             aria-label={title}
             size='icon'
             variant='outline'
-            className='size-10 rounded-xl border-border bg-background/60 hover:bg-accent/50'
+            className={cn(
+              'size-10 rounded-xl border-border bg-background/60 hover:bg-accent/50',
+              className,
+            )}
           />
         }
       >

@@ -1,0 +1,4 @@
+## Mobile navigation: compact demo status and shortcuts
+
+- Keep Demo mode, the project switcher and header shortcuts on one row on phones, with a compact Demo label and smaller controls and gaps.
+- Preserve the demo notice, account switching, unread indicator, parent-page navigation and the existing desktop header.

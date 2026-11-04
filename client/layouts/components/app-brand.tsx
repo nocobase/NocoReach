@@ -22,7 +22,7 @@ export function AppBrand(inputProps: AppBrandProps): ReactElement {
       to='/home'
     >
       {compact ? (
-        <ReachMark className='size-9 shrink-0' />
+        <ReachMark className='size-8 shrink-0 sm:size-9' />
       ) : (
         <BrandWordmark className='min-w-0' />
       )}

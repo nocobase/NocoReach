@@ -10,7 +10,7 @@ export function HeaderActions(): ReactElement {
     <TooltipProvider>
       <div className='flex shrink-0 items-center gap-1 sm:gap-2'>
         <InboxHeaderButton />
-        <ThemeSettings />
+        <ThemeSettings className='size-8 sm:size-10' />
         <UserMenu />
       </div>
     </TooltipProvider>
