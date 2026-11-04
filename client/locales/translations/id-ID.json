@@ -262,7 +262,6 @@
   "status.deniedDescription": "Anda tidak memiliki izin untuk mengakses {{label}}.",
   "status.routeFailedDescription": "Rute {{label}} dari {{packageName}} tidak dapat dimuat.",
   "shell": {
-    "templateVersionUnknown": "Versi tidak diketahui",
     "buildFreely": "AI menemukan peluang pertumbuhan.",
     "reliability": "Agen mewujudkannya."
   },
