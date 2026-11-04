@@ -262,7 +262,6 @@
   "status.deniedDescription": "{{label}} にアクセスする権限がありません。",
   "status.routeFailedDescription": "{{packageName}} のルート {{label}} を読み込めませんでした。",
   "shell": {
-    "templateVersionUnknown": "バージョン不明",
     "buildFreely": "AI が成長の機会を見つけ、",
     "reliability": "エージェントが実行します。"
   },

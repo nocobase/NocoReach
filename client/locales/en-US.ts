@@ -107,7 +107,6 @@ const enUS = {
   'navigation.brandHome': 'NocoReach home',
   'navigation.brandApps': 'NocoReach applications',
   shell: {
-    templateVersionUnknown: 'Version unknown',
     buildFreely: 'AI finds growth opportunities.',
     reliability: 'Agents put them into action.',
   },

@@ -262,7 +262,6 @@
   "status.deniedDescription": "Bạn không có quyền truy cập {{label}}.",
   "status.routeFailedDescription": "Không thể tải route {{label}} từ {{packageName}}.",
   "shell": {
-    "templateVersionUnknown": "Không rõ phiên bản",
     "buildFreely": "AI tìm ra cơ hội tăng trưởng.",
     "reliability": "Agent biến chúng thành hành động."
   },
