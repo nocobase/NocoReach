@@ -87,15 +87,18 @@ for (const width of [1440, 375]) {
       const account = page.getByRole('button', {
         name: /Open account menu|打开账户菜单/,
       });
-      const appearance = page.getByRole('button', { name: /Appearance|外观/ });
-      await appearance.focus();
+      await account.focus();
       await page.keyboard.press('Enter');
+      const appearance = page.getByRole('menuitem', {
+        name: /Appearance|外观/,
+      });
+      await appearance.focus();
+      await page.keyboard.press('ArrowRight');
       await page
-        .getByRole('dialog')
-        .locator('label')
-        .filter({ has: page.locator(`input[type="radio"][value="${preset}"]`) })
+        .getByRole('menuitemradio', {
+          name: preset === 'compact' ? /Compact|紧凑/ : /Spacious|宽松/,
+        })
         .click();
-      await page.keyboard.press('Escape');
       await expect(page.locator('html')).toHaveAttribute('data-theme', preset);
       const header = await page
         .locator('header')

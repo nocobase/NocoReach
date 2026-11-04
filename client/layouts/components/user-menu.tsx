@@ -20,6 +20,7 @@ import { ChangePasswordDialog } from '#components/change-password-dialog';
 import { usePendingInvitationCount } from '#pages/access/api';
 
 import { LanguageSwitcher } from './language-switcher.js';
+import { ThemeSettingsMenu } from '../../theme/theme-settings.js';
 
 export function UserMenu(): ReactElement {
   useNocoReachLocale();
@@ -124,6 +125,7 @@ export function UserMenu(): ReactElement {
             </DropdownMenuItem>
           ) : null}
           <LanguageSwitcher />
+          <ThemeSettingsMenu />
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={isLoggingOut}

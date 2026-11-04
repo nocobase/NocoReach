@@ -488,12 +488,11 @@ try {
   await expect(
     page.getByText('Synthetic reader', { exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-  await page.getByText('Dark', { exact: true }).click();
-  await expect(
-    page.getByRole('radio', { name: 'Dark', exact: true }),
-  ).toBeChecked();
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Open account menu' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('menuitem', { name: 'Appearance', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('menuitemradio', { name: 'Dark', exact: true }).click();
   await page.setViewportSize({ width: 375, height: 900 });
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(

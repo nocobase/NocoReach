@@ -5,6 +5,15 @@ import { useId, type ReactElement } from 'react';
 import { Button } from '#components/ui/button';
 import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import {
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '#components/ui/dropdown-menu';
+import {
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -19,6 +28,57 @@ const COLOR_MODES = [
   { id: 'dark', icon: Moon },
   { id: 'system', icon: Monitor },
 ] as const;
+
+export function ThemeSettingsMenu(): ReactElement {
+  const { theme, setTheme } = useTheme();
+  const { preset, setPreset } = useThemePreset();
+  const { t } = useTranslation();
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className='gap-2'>
+        <Palette aria-hidden='true' className='size-4' />
+        {t('appearance.title', { defaultValue: 'Appearance' })}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className='min-w-40 max-w-[calc(100vw-2rem)]'>
+        <DropdownMenuRadioGroup
+          value={theme}
+          onValueChange={(value) => setTheme(String(value))}
+          aria-label={t('appearance.mode', { defaultValue: 'Color mode' })}
+        >
+          <DropdownMenuLabel>
+            {t('appearance.mode', { defaultValue: 'Color mode' })}
+          </DropdownMenuLabel>
+          {COLOR_MODES.map(({ id, icon: Icon }) => (
+            <DropdownMenuRadioItem key={id} value={id} closeOnClick>
+              <Icon aria-hidden='true' className='size-4' />
+              {t('appearance.' + id, {
+                defaultValue: id[0].toUpperCase() + id.slice(1),
+              })}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={preset}
+          onValueChange={(value) => {
+            const selected = themePresets.find((item) => item.id === value);
+            if (selected) setPreset(selected.id);
+          }}
+          aria-label={t('appearance.preset', { defaultValue: 'Theme' })}
+        >
+          <DropdownMenuLabel>
+            {t('appearance.preset', { defaultValue: 'Theme' })}
+          </DropdownMenuLabel>
+          {themePresets.map((item) => (
+            <DropdownMenuRadioItem key={item.id} value={item.id} closeOnClick>
+              {t(item.labelKey)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
 
 export function ThemeSettings({
   className,

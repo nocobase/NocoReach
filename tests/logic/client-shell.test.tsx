@@ -105,7 +105,7 @@ describe('application shell', () => {
     expect(
       await screen.findByRole('button', { name: 'Open account menu' }),
     ).not.toHaveAttribute('title');
-    expect(screen.getByRole('button', { name: 'Appearance' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Appearance' })).toBeNull();
     expect(
       screen.queryByRole('link', { name: 'Settings' }),
     ).not.toBeInTheDocument();
