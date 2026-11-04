@@ -31,7 +31,7 @@ import { CONNECT_SOURCES } from '../../shared/connect-sources';
 import { systemMessageText } from '../../shared/i18n/messages';
 
 const { viewer, collector } = vi.hoisted(() => ({
-  viewer: { can: true, networkOnly: false },
+  viewer: { can: true, networkOnly: false, projectId: 1 as number | undefined },
   collector: {
     onSavingChange: undefined as ((saving: boolean) => void) | undefined,
   },
@@ -86,7 +86,10 @@ vi.mock('../../client/pages/xiaohongshu-connect', () => ({
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({
-    project: { id: 1, name: 'Example', domains: ['example.com'] },
+    project:
+      viewer.projectId === undefined
+        ? undefined
+        : { id: viewer.projectId, name: 'Example', domains: ['example.com'] },
   }),
 }));
 vi.mock('../../client/components/connection-network', () => ({
@@ -136,6 +139,7 @@ afterEach(() => {
   cleanup();
   connectionApi.request.mockReset();
   connectionApi.request.mockResolvedValue({ data: { publicSources: [] } });
+  viewer.projectId = 1;
   viewer.can = true;
   viewer.networkOnly = false;
   collector.onSavingChange = undefined;
@@ -192,6 +196,37 @@ describe('NocoReach language integration', () => {
       expect(document.body).toHaveTextContent($t('dataSources.available'));
     },
   );
+
+  it('waits safely for a project before reading connection states', async () => {
+    viewer.projectId = undefined;
+    const i18n = await runtime('en-US');
+    const content = (
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter>
+          <Page />
+        </MemoryRouter>
+      </I18nProvider>
+    );
+    const view = render(content);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      $t('sourceConnections.checkingDataSources'),
+    );
+    expect(connectionApi.request).not.toHaveBeenCalled();
+    viewer.projectId = 1;
+    view.rerender(
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter>
+          <Page />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(connectionApi.request).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.queryByText($t('sourceConnections.checkingDataSources')),
+      ).not.toBeInTheDocument(),
+    );
+  });
 
   it('reads the catalog through one aggregate request per visit or close', async () => {
     const i18n = await runtime('en-US');

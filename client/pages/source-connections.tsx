@@ -52,9 +52,9 @@ type Source={id:string;kind:string;url:string;title:string;capturedAt:string;ite
 const collectorActions = ['nrCollectors.status','nrCollectors.save'] as const;
 export default function SourceConnections(){const api=useApiClient();const {project,error:projectError}=useProject(),navigate=useNavigate();const [snapshot,setSnapshot]=useState<{projectId:number;status:StatusInput&{publicSources:Source[]}}|null>(null),[error,setError]=useMessageState(''),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
  const projectId=project?.id;
- const status:StatusInput=snapshot?.projectId===projectId?snapshot!.status:{};
+ const status:StatusInput=snapshot&&snapshot.projectId===projectId?snapshot.status:{};
  const sources=status.publicSources as Source[]|undefined??[];
- const loaded=snapshot?.projectId===projectId;
+ const loaded=Boolean(snapshot&&snapshot.projectId===projectId);
  const {can:canManageOpen}=useSourceAccess(open?.id,projectId);
  const {can:canDiscover}=useBusinessAccess('nrDiscovery.discover',projectId??null);
  const {can:canSelectNetwork}=useBusinessAccess('nrProxyProfiles.select',projectId??null);
