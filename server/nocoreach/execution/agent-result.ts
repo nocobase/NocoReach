@@ -98,6 +98,7 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           // the page, never where the review stands.
           'release 是发布记录里的说明，负责人在任务页和成果页都会看到：最多三行，用读者能懂的话说页面上改了什么，不写时间戳和规则名，也不写审核和流程（如“等待人工审核”“已提交审核”“按你的意见”）；verifyText 是改动后可在公开页面找到的独特短句（最多 200 字符）；pages 是待验证的页面 URL。无法通过页面文字验证时，verifyText 返回空字符串、pages 返回空数组，并在 release 说明原因，不得编造。',
           'changes 提供实际修改文本的前后对比，最多 10 个文件，正文合计不超过 40000 字符，截断时标记 truncated=true；二进制文件只列在 files。完整 JSON 不超过 90000 字符。',
+          '文字要求放进页面的图片：从 images.json 解码出原图，放到仓库里网站存放图片的位置，按仓库现有的写法在页面里引用，随 PR 一起提交；visibleChanges 里写明新增或替换了哪张图片。只用来指出问题的截图不要提交。',
         ]
       : []),
     ...(mode === 'article'
@@ -108,6 +109,8 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           'status 只能是 draft 或 published，仅在 data.article.target.status 为 true 时有效：新文章默认 draft，任务明确要求直接公开时才写 published；改写已有文章时不要改变状态，除非任务明确要求。提交前先用 JSON 解析器检查结果是合法 JSON。',
           '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及主语言 data.article.languages.primary 的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
           'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。',
+          // An image placed in the article stays a task image until publishing uploads it (2026-11-03).
+          '文字要求放进文章的图片：在正文对应位置写 Markdown 图片 ![简短说明](ref)，ref 原样使用这张图片在 notes 或 feedback 里的 ref（以 /uploads/task-media/ 开头），说明用文章的语言写；不要改写地址、不要写成 base64、不要自己上传。审核通过后由 NocoReach 把文章用到的图片上传到发布目标，再换成正式地址。源稿和上一版正文里已有的 /uploads/task-media/ 图片保持原样。',
           // The article's language is never the project's (2026-10-27, T-47: with the project, the brief and the
           // outline in Chinese, the Agent wrote a Chinese-only article for a target whose first language is English).
           '文章用哪种语言写只看 data.article.languages，和 data.language 无关。data.language 是项目语言，只用于 content、summary、release 这些说明；任务标题和说明、大纲、上一步的成果、留言和资料用什么语言，都不改变文章的语言，需要时先理解其中的意思，再用文章的语言来写。locales 的键是语言代码，每种语言的 title、description、body 都要真的用这种语言写，例如 en 用英语、zh 用中文、ja 用日语。',

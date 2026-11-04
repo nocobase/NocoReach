@@ -38,6 +38,14 @@ import type {
 import { useTaskDraft } from './draft-store.js';
 import { AgentNotes } from './agent-notes.js';
 import { ArticlePreview } from './article-preview.js';
+import { ImageHint, ImageProblem } from './task-images.js';
+import {
+  ArticleImageNotesContext,
+  imageNote,
+  imageSources,
+  usePastedImages,
+} from './task-images-model.js';
+import { imageChanges, taskImageOf } from '../../../shared/task-images.js';
 import { localePageUrl } from './article-page.js';
 import { MarkdownEditor } from './markdown-editor.js';
 import { Notice } from './layout.js';
@@ -378,38 +386,123 @@ export function ArticleLanguage({
   tab: string;
   view: ArticleView;
 }) {
-  const draft = draftContent(a);
+  const draft = draftContent(a),
+    revised = revisedText(a, base, tab);
+  // Images the version adds or swaps in (2026-11-03 user request): a note under each new task image in the preview,
+  // and a line for each kind of change above the fields' changes.
+  const images = imageChanges(base?.locales[tab]?.body, revised.body);
+  const sources = imageSources(data),
+    notes = new Map<string, string>();
+  for (const [image, replaced] of [
+    ...images.replaced.map((r) => [r.image, true] as const),
+    ...images.added.map((i) => [i, false] as const),
+  ]) {
+    const task = taskImageOf(image.address);
+    if (task) notes.set(task.id, imageNote(sources.get(task.id), replaced));
+  }
   return (
     <div role='tabpanel' className='flex flex-col gap-3'>
       {view !== 'changes' ? (
-        <ArticlePreview
-          key={tab}
-          text={revisedText(a, base, tab)}
-          pageUrl={localePageUrl(
-            data,
-            a.targetId,
-            a.draft.slug || base?.slug || '',
-            tab,
-          )}
-        />
+        <ArticleImageNotesContext.Provider value={notes}>
+          <ArticlePreview
+            key={tab}
+            text={revised}
+            pageUrl={localePageUrl(
+              data,
+              a.targetId,
+              a.draft.slug || base?.slug || '',
+              tab,
+            )}
+          />
+        </ArticleImageNotesContext.Provider>
       ) : (
-        ARTICLE_FIELDS.map((f) => {
-          const path = `${tab}.${f}`;
-          return a.changes.includes(path) ? (
-            // The diff's own first line names the field ("English · Title"), so no label above it.
-            <div key={path} className='flex min-w-0 flex-col gap-1'>
-              <ChangeView
-                changes={[
-                  fieldChange(path, valueAt(base, path), valueAt(draft, path)),
-                ]}
-              />
-            </div>
-          ) : (
-            <p key={path} className='text-sm text-muted-foreground'>
-              {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
-            </p>
-          );
-        })
+        <>
+          <ImageChangeLines data={data} article={a} changes={images} />
+          {ARTICLE_FIELDS.map((f) => {
+            const path = `${tab}.${f}`;
+            return a.changes.includes(path) ? (
+              // The diff's own first line names the field ("English · Title"), so no label above it.
+              <div key={path} className='flex min-w-0 flex-col gap-1'>
+                <ChangeView
+                  changes={[
+                    fieldChange(
+                      path,
+                      valueAt(base, path),
+                      valueAt(draft, path),
+                    ),
+                  ]}
+                />
+              </div>
+            ) : (
+              <p key={path} className='text-sm text-muted-foreground'>
+                {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
+              </p>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Every target the article publishes to, as the task knows them. */
+const articleTargetsOf = (data: TaskData, a: ArticleProposal) =>
+  [a.targetId, ...(a.also || []).map((x) => x.targetId)].flatMap(
+    (id) => data.articleTargets?.find((t) => t.id === id) ?? [],
+  );
+
+/**
+ * The images a version adds, replaces or removes, one line each, and, where it brings task images, what happens to them
+ * on approval: each target that takes them gets them uploaded to its file library before the article.
+ */
+function ImageChangeLines({
+  data,
+  article: a,
+  changes,
+}: {
+  data: TaskData;
+  article: ArticleProposal;
+  changes: ReturnType<typeof imageChanges>;
+}) {
+  const name = (image: { address: string; alt: string }) =>
+    $t('taskImages.name', {
+      0: image.alt || image.address.slice(image.address.lastIndexOf('/') + 1),
+    });
+  const lines = [
+    ['taskImages.replaced', changes.replaced.map((r) => r.image)],
+    ['taskImages.added', changes.added],
+    ['taskImages.removed', changes.removed],
+  ] as const;
+  const brought = [
+    ...changes.replaced.map((r) => r.image),
+    ...changes.added,
+  ].some((i) => taskImageOf(i.address));
+  const targets = articleTargetsOf(data, a);
+  const taking = targets.filter((t) => t.capabilities.images),
+    refusing = targets.filter((t) => !t.capabilities.images);
+  if (!lines.some(([, list]) => list.length)) return null;
+  return (
+    <div className='flex flex-col gap-1 text-sm'>
+      {lines.map(([key, list]) =>
+        list.length ? (
+          <p key={key}>
+            {$t(key, { 0: list.length, 1: joinNames(list.map(name)) })}
+          </p>
+        ) : null,
+      )}
+      {brought && taking.length > 0 && (
+        <p className={text.muted}>
+          {$t('taskImages.uploadOnApproval', {
+            0: joinNames(taking.map((t) => t.name)),
+          })}
+        </p>
+      )}
+      {brought && refusing.length > 0 && (
+        <p className={text.muted}>
+          {$t('taskImages.targetRefuses', {
+            0: joinNames(refusing.map((t) => t.name)),
+          })}
+        </p>
       )}
     </div>
   );
@@ -605,6 +698,11 @@ export function ArticleEditor({
   };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  // Images paste into the body where every target the article goes to takes them (2026-11-03 user request).
+  const pasted = usePastedImages(),
+    targets = articleTargetsOf(data, a),
+    takesImages =
+      targets.length > 0 && targets.every((t) => t.capabilities.images);
   function check(f: EditForm) {
     const e: Record<string, string> = {};
     if (create && !SLUG.test(f.slug)) e.slug = $t('articleTask.slugInvalid');
@@ -770,6 +868,11 @@ export function ArticleEditor({
                     // The body is written beside the article it makes (2026-10-23 user request, as dev.to does).
                     <MarkdownEditor
                       {...props}
+                      {...(takesImages
+                        ? pasted.bind(key, props.value, (value) =>
+                            props.onChange({ target: { value } }),
+                          )
+                        : {})}
                       preview={(body) => (
                         <ArticlePreview
                           text={{ ...form.locales[l], body }}
@@ -808,7 +911,13 @@ export function ArticleEditor({
           {err('verifyText')}
         </Field>
       </fieldset>
-      <div className='flex flex-wrap justify-end gap-2'>
+      <ImageProblem>{pasted.problem}</ImageProblem>
+      <div className='flex flex-wrap items-center justify-end gap-2'>
+        {takesImages && (
+          <span className='mr-auto'>
+            <ImageHint />
+          </span>
+        )}
         <Button
           type='button'
           variant='ghost'
@@ -820,8 +929,8 @@ export function ArticleEditor({
         >
           {$t('common.cancel')}
         </Button>
-        <Button type='submit' disabled={busy}>
-          {busy && <Spinner data-icon='inline-start' />}
+        <Button type='submit' disabled={busy || pasted.uploading}>
+          {(busy || pasted.uploading) && <Spinner data-icon='inline-start' />}
           {$t('common.save')}
         </Button>
       </div>

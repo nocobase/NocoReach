@@ -42,6 +42,10 @@ export type Work = {
   repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
+  // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit
+  // directly. `imageUrls` is where each was uploaded when an article that uses it was published, per target.
+  images?: string[];
+  imageUrls?: Record<string, Record<string, string>>;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
   article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string; locales?: string[] };
   // `locales`: the languages chosen at start, primary first (2026-10-24); the Agent writes the primary, and once a person

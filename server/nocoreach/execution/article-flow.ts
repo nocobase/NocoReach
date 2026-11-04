@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { ARTICLE_FIELDS, articleLocales, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import { ARTICLE_CAPABILITIES, ARTICLE_FIELDS, articleLocales, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import type { MaterialAttachment } from './task-materials.js';
 import type { ArticleTargets } from '../articles/targets.js';
-import { articlePages, draftRejection, primaryOnly, verifyPhrase, writesNone, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
+import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
 import { primaryChanges } from '../articles/edits.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { languageOf } from './language';
@@ -23,6 +24,8 @@ const EXPORT_HOURS = 6;
 export const ARTICLE_COMMANDS = ['linkArticle', 'editArticleDraft', 'retryPublish', 'rebaseArticle'];
 // A task publishes to its primary target and at most this many others.
 const MAX_ALSO = 4;
+// Images one save of Edit directly may add; the person's unlinked uploads are capped lower still (manual-tasks.ts).
+const PASTED_PER_EDIT = 40;
 
 // A release publishes to one target or several: the primary (`release.article`) and the others (`release.also`), each
 // with its own record and state; `release.state` is the aggregate (settle). Leg 0 is the primary.
@@ -346,6 +349,16 @@ export class ArticleFlow {
     const a: ArticleProposal = output.article;
     const legs = [a, ...(a.also || [])];
     if (!legs.some((l) => l.changes.length || l.carried?.length)) return fail(systemMessageText('articles.noChanges'), 409);
+    // The task images the article shows are uploaded when it is published (2026-11-03): only to a target that takes
+    // images, and only images of this task.
+    const linked = new Set([...(projectWork(task).images || []), ...(task.evidence?.attachmentIds || [])]);
+    for (const l of legs) {
+      const ids = draftImageIds(l.draft);
+      if (!ids.length) continue;
+      const target = this.need().target(project, l.targetId);
+      if (!ARTICLE_CAPABILITIES[target.kind]?.images) return fail(systemMessageText('articles.imagesUnsupported', { 0: target.name }), 409);
+      if (ids.some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
+    }
     const pages = [];
     const records = legs.map((l, i) => {
       const slug = l.draft.slug || (i ? l.slug : '') || '';
@@ -463,6 +476,10 @@ export class ArticleFlow {
       if (a.carried) next.carried = a.carried;
       if (a.also?.length) next.also = await this.alsoProposals(project, w.delivery, next, a.also, base, 400, tx);
       if (![next, ...(next.also || [])].some((l) => l.changes.length || l.carried?.length)) return fail(systemMessageText('articles.noChanges'), 409);
+      // Images pasted into Edit directly (2026-11-03) are the person's own uploads until the edit is saved: linked now.
+      const linked = new Set([...(w.images || []), ...(task.evidence?.attachmentIds || [])]);
+      const pasted = draftImageIds(next.draft).filter((id) => !linked.has(id));
+      if (pasted.length) await s.linkImages(project, taskId, w, { imageIds: pasted }, actor, tx, PASTED_PER_EDIT);
       const content = typeof v.content === 'string' && v.content.trim() ? v.content.trim().slice(0, 30000) : output.content;
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
@@ -520,7 +537,7 @@ export class ArticleFlow {
           return { articleId: p.articleId, base: was, baseKey: p.baseKey, conflicts };
         }
         if (rec.published) {
-          const snap = publishedSnapshot(was, p, rec.published);
+          const snap = publishedSnapshot(was, withImageUrls(p, w.imageUrls?.[rec.targetId]), rec.published);
           return { articleId: rec.published.articleId, base: snap, baseKey: await keep(snap), carried: [...new Set([...(p.carried || []), ...rec.published.written])] };
         }
         return { articleId: p.articleId, base: was, baseKey: p.baseKey, ...(p.carried ? { carried: p.carried } : {}) };
@@ -528,7 +545,8 @@ export class ArticleFlow {
       const primary = await rebased(0);
       let next: ArticleProposal;
       try {
-        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: old.draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
+        // Images already uploaded to the target are written at their address there, which the base now holds too.
+        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: withImageUrls(old, w.imageUrls?.[old.targetId]).draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
       } catch (error) {
         if (error instanceof ArticleError) return fail(draftRejection(error), 409);
         throw error;
@@ -566,12 +584,18 @@ export class ArticleFlow {
           const p = proposalOf(artifact, i);
           if (stateOf(r, rec) === 'publishing' && p) legs.push({ i, p, key: rec.key, base: p.baseKey ? await this.s.snapshot(p.baseKey, tx) : null });
         }
-        return { r, artifact, legs };
+        // The task images the legs show that their target has not taken yet, read here on the task's connection.
+        const urls = w.imageUrls || {};
+        const wanted = [...new Set(legs.flatMap((l) => draftImageIds(l.p.draft).filter((id) => !urls[l.p.targetId]?.[id])))];
+        const files: MaterialAttachment[] = wanted.length && this.s.p.taskAttachments ? await this.s.p.taskAttachments.forAgent(tx.connection, project, taskId, wanted) : [];
+        return { r, artifact, legs, urls, files };
       });
       if (!claim) return;
       const outcomes = [];
       for (const l of claim.legs) {
-        const outcome = await this.delivery.publish(project, l.p, l.base, l.key);
+        // The images first: the article is written with their addresses in the target.
+        const images = await this.uploadImages(project, taskId, l.p, claim.urls[l.p.targetId] || {}, claim.files);
+        const outcome = 'urls' in images ? await this.delivery.publish(project, withImageUrls(l.p, images.urls), l.base, l.key) : images;
         // Every failed leg leaves a line in the application log (`nb-studio app logs`), whether or not it is recorded.
         if (outcome.kind === 'failed') this.s.p.app?.logger?.warn?.('NocoReach article publish failed', { projectId: project, taskId, targetId: l.p.targetId, step: outcome.step, code: outcome.code, detail: outcome.detail });
         outcomes.push(outcome);
@@ -592,6 +616,39 @@ export class ArticleFlow {
     } finally {
       this.running.delete(key);
     }
+  }
+  /**
+   * Upload the task images a leg's draft shows that its target has not taken yet (2026-11-03), and keep each address
+   * on the task at once (`imageUrls`, per target): a retry, an export check or a rebase uses the same address, and an
+   * image is never uploaded twice. Images the article does not show are not uploaded.
+   */
+  private async uploadImages(project: string, taskId: string, p: ArticleProposal, known: Record<string, string>, files: MaterialAttachment[]): Promise<{ urls: Record<string, string> } | PublishFailure> {
+    const uploaded: Record<string, string> = {};
+    for (const id of draftImageIds(p.draft).filter((x) => !known[x])) {
+      const file = files.find((f) => f.id === id);
+      if (!file?.read) {
+        await this.keepUrls(project, taskId, p.targetId, uploaded);
+        return { kind: 'failed', code: 'image_missing', step: 'images', detail: id };
+      }
+      try {
+        uploaded[id] = await this.delivery.uploadImage(project, p.targetId, { name: file.name, type: file.type, bytes: await file.read() });
+      } catch (error) {
+        await this.keepUrls(project, taskId, p.targetId, uploaded);
+        const f = failed('images', error);
+        return { ...f, code: error instanceof ArticleError && error.message === 'images_unsupported' ? 'images_unsupported' : f.code === 'unauthorized' ? 'image_upload_denied' : f.code };
+      }
+    }
+    await this.keepUrls(project, taskId, p.targetId, uploaded);
+    return { urls: { ...known, ...uploaded } };
+  }
+  private async keepUrls(project: string, taskId: string, targetId: string, uploaded: Record<string, string>) {
+    if (!Object.keys(uploaded).length) return;
+    await this.s.lock(project, taskId, async (tx) => {
+      const task = await this.s.task(project, taskId, tx),
+        w = projectWork(task);
+      w.imageUrls = { ...w.imageUrls, [targetId]: { ...w.imageUrls?.[targetId], ...uploaded } };
+      await this.s.save(task, w, tx);
+    });
   }
   private async record(project: string, taskId: string, w: Work, r: any, i: number, a: any, p: ArticleProposal, outcome: PublishOutcome, tx: any) {
     const at = now();
@@ -698,14 +755,15 @@ export class ArticleFlow {
   }
   private async checkExport(project: string, taskId: string) {
     const t = await this.s.task(project, taskId),
-      r = projectWork(t).release;
+      work = projectWork(t),
+      r = work.release;
     const artifact = await this.s.snapshot(this.s.key('artifact', project, taskId, r.article.artifactId));
     const results = new Map<number, { done: boolean; commit?: string } | null>();
     for (const [i, rec] of legsOf(r).entries()) {
       if (stateOf(r, rec) !== 'exporting' || !rec.published) continue;
       const p = proposalOf(artifact, i);
       try {
-        results.set(i, p ? await this.delivery.exported(project, rec.targetId, this.publishedContent(p, rec.published.slug), rec.published.written) : null);
+        results.set(i, p ? await this.delivery.exported(project, rec.targetId, this.publishedContent(withImageUrls(p, work.imageUrls?.[rec.targetId]), rec.published.slug), rec.published.written) : null);
       } catch {
         results.set(i, { done: false });
       }
@@ -737,7 +795,8 @@ export class ArticleFlow {
     if (Date.now() - (this.checked.get(key) || 0) < HOUR) return;
     this.checked.set(key, Date.now());
     const t = await this.s.task(project, taskId),
-      r = projectWork(t).release;
+      work = projectWork(t),
+      r = work.release;
     const artifact = await this.s.snapshot(this.s.key('artifact', project, taskId, r.article.artifactId));
     if (!artifact?.article) return;
     const found = new Map<number, any[]>();
@@ -746,7 +805,7 @@ export class ArticleFlow {
       if (!rec.published || !p || Date.now() - Date.parse(rec.published.at) >= DRIFT_DAYS * 24 * HOUR) continue;
       let fields: any[];
       try {
-        ({ fields } = await this.delivery.drift(project, rec.targetId, rec.published.articleId, this.publishedContent(p, rec.published.slug), rec.published.written));
+        ({ fields } = await this.delivery.drift(project, rec.targetId, rec.published.articleId, this.publishedContent(withImageUrls(p, work.imageUrls?.[rec.targetId]), rec.published.slug), rec.published.written));
       } catch {
         continue;
       }
