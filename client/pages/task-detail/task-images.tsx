@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Plus, X } from 'lucide-react';
+import { PaperclipIcon, X } from 'lucide-react';
 import { $t } from '#i18n';
 import { cn } from '#lib/utils';
 import { Spinner } from '#components/ui/spinner';
@@ -111,7 +111,11 @@ export function ComposerImages({
   );
 }
 
-/** Add image: a link that opens the file picker for images. */
+/**
+ * Add image under the message box: the right-side chat composer's attach button, as it is there (2026-11-04 user
+ * request: a chat box takes pasted images without a line of hints beside it). The limits show only when a file breaks
+ * them (ImageProblem).
+ */
 export function AddImageButton({
   disabled,
   onFiles,
@@ -120,30 +124,31 @@ export function AddImageButton({
   onFiles: (files: File[]) => void;
 }) {
   const pickerRef = useRef<HTMLInputElement>(null);
+  const label = $t('taskImages.add');
   return (
     <>
+      {/* Hidden rather than visually hidden, so the box's frame does not focus it on a click beside the button. */}
       <input
         ref={pickerRef}
         type='file'
         multiple
         accept={TASK_IMAGE_ACCEPT}
-        className='sr-only'
-        tabIndex={-1}
-        aria-hidden='true'
+        hidden
         onChange={(event) => {
           onFiles(Array.from(event.target.files ?? []));
           event.target.value = '';
         }}
       />
       <Button
-        variant='link'
-        size='sm'
+        variant='ghost'
+        size='icon-sm'
+        className='shrink-0 rounded-full text-muted-foreground'
+        aria-label={label}
+        title={label}
         disabled={disabled}
-        className='h-auto shrink-0 gap-1 p-0 font-normal'
         onClick={() => pickerRef.current?.click()}
       >
-        <Plus aria-hidden='true' />
-        {$t('taskImages.add')}
+        <PaperclipIcon />
       </Button>
     </>
   );
@@ -189,15 +194,6 @@ export function MessageImages({ images }: { images: MessageImage[] }) {
         files={images.map(previewRecord)}
       />
     </>
-  );
-}
-
-/** The paste-and-drop hint under the message box and the editor. */
-export function ImageHint({ max }: { max?: number }) {
-  return (
-    <span className='min-w-0 text-xs text-muted-foreground'>
-      {max ? $t('taskImages.hint', { 0: max }) : $t('taskImages.hintEditor')}
-    </span>
   );
 }
 
