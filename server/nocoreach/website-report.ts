@@ -195,8 +195,9 @@ class WebsiteReport{
  // hour before it. The sync tick reads `periodTables` ahead only when it is not, so once a day, with yesterday whole.
  nightRead(property:string,now:number){return 24*HOUR-untilMidnight(this.endZone(property),now)<(MORNING_READ_HOUR-1)*HOUR;}
  // Whether a period report read now lasts until midnight. With no zone held yet it is looked up first, as `yesterday` does,
- // so the hour is the property's rather than UTC's; one held past its time is used while it is refreshed.
- async dayRead(id:string|number,property:string){if(!this.zones.has(property))await this.timeZone(id,property);return !this.nightRead(property,businessNow(this.p,id,'google'));}
+ // so the hour is the property's rather than UTC's; one held past its time is used while it is refreshed. A project with
+ // no GA4 property has nothing to read ahead, and no zone to look up.
+ async dayRead(id:string|number,property:string){if(!property)return false;if(!this.zones.has(property))await this.timeZone(id,property);return !this.nightRead(property,businessNow(this.p,id,'google'));}
  period(id:string|number,property:string,w:unknown,options:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){return this.periodPart('period',id,property,w,options,()=>this.readPeriod(id,property,w));}
  // The other report tables of the same window, with the same lifetime; their own family, so neither part's copy retires
  // the other's.

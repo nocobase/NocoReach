@@ -271,8 +271,8 @@ class DataViews{
  // The rest of Traffic's tables, which the page asks for once it shows the rest (website-report.ts, `periodTables`).
  async websiteTables(id,v){return this.websitePart(id,v,'periodTables');}
  // Whether Traffic read now lasts until midnight rather than until the morning re-read (website-report.ts, `dayRead`):
- // the sync tick reads the other tables ahead only then. It passes the property of the link it holds.
- async websiteDayRead(id,property?){return this.ga4.dayRead(id,property??(await this.p.sync.link(id)).get('ga4PropertyId'));}
+ // the sync tick reads the other tables ahead only then. It passes the property of the link it holds, null for none.
+ async websiteDayRead(id,property?){return this.ga4.dayRead(id,property===undefined?(await this.p.sync.link(id)).get('ga4PropertyId'):property);}
  async websitePart(id,v,part:'period'|'periodTables'){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,(w,cutoff,settledThrough)=>this.ga4[part](id,property,w,{cutoff,settledThrough,view:[range,String(v.from||''),String(v.to||'')]}),v.from,v.to,()=>this.ga4.yesterday(id,property));}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).

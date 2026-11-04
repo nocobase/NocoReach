@@ -259,7 +259,10 @@ test('the tick reads the other tables only when a read lasts until midnight: fro
   // property of the link it holds, so no link is read.
   const unheld=fake(()=>({})).g;unheld.timeZone=async(_id,property)=>{unheld.zones.set(property,{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});return 'America/Los_Angeles';};
   const tick=new DataViews({sync:{link:async()=>{throw new Error('the link is not read');}}});tick.ga4=unheld;
-  vi.setSystemTime(new Date('2026-10-31T11:00:00Z'));assert.equal(await tick.websiteDayRead('1','123'),false,'04:00 there, though 11:00 in UTC');}
+  vi.setSystemTime(new Date('2026-10-31T11:00:00Z'));assert.equal(await tick.websiteDayRead('1','123'),false,'04:00 there, though 11:00 in UTC');
+  // A project with Search Console only has no GA4 property: nothing to read ahead, and no zone looked up for it.
+  unheld.timeZone=async()=>{throw new Error('no zone is looked up');};vi.setSystemTime(new Date('2026-10-31T20:00:00Z'));
+  assert.equal(await tick.websiteDayRead('1',null),false);assert.equal(await views.websiteDayRead('1',undefined),true,'a missing property asks the link');}
  finally{vi.useRealTimers();}
 });
 
