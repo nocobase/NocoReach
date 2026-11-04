@@ -32,6 +32,12 @@ import {
   insightThreadsKey,
 } from './threads';
 import { EarlyRequests } from './early-requests';
+import {
+  insightsState,
+  RECHECK_REUSE_MS,
+  useRecheckHandover,
+  type InsightsState,
+} from './insights-state';
 import { useOnlineApi } from '../../online-agent/api';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
@@ -134,22 +140,28 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     [attempt, setAttempt] = useState(0);
   const cache = useWorkspaceCache(),
     withChat = useOptionalOnlineChat() !== null,
-    [early] = useState(() => new EarlyRequests()),
-    startedRef = useRef('');
+    store = insightsState(cache, projectId),
+    // A mount right after an access re-check unmounted the page takes over what that mount had started and read,
+    // instead of sending it again; any other mount reads afresh.
+    afterRecheck = useRecheckHandover(store),
+    [early] = useState(
+      () => (afterRecheck && store.early) || new EarlyRequests(),
+    ),
+    startedRef = useRef(afterRecheck ? `${projectId}:0` : '');
+  useEffect(() => {
+    store.keepEarly(early);
+  }, [store, early]);
+  useEffect(() => store.subscribe(setState), [store]);
   useEffect(() => {
     let active = true;
     setError('');
-    request<StrategyState>(projectId, 'state')
-      .then((s) => {
-        if (active) setState(s);
-      })
-      .catch(() => {
-        if (active) setError(() => $t('strategy.notLoadInsightsTryAgain'));
-      });
+    store.read(afterRecheck && attempt === 0).catch(() => {
+      if (active) setError(() => $t('strategy.notLoadInsightsTryAgain'));
+    });
     return () => {
       active = false;
     };
-  }, [projectId, attempt, setError]);
+  }, [store, afterRecheck, attempt, setError]);
   // Started right after the state, once per attempt: the overview through the cache as Insights reads it (it may still
   // be fresh), the others handed to Insights' first read of each. The conversations start in EarlyThreads.
   useEffect(() => {
@@ -195,14 +207,16 @@ function ProjectInsights({ projectId }: { projectId: number }) {
       <Insights
         projectId={projectId}
         state={state}
-        setState={setState}
+        store={store}
+        afterRecheck={afterRecheck}
         early={early}
       />
     </>
   );
 }
 // Starts the Insights conversations' request with the state where the chat is mounted, as InsightChatProvider reads
-// them. It renders nothing; like the provider's own, its request is cancelled when it unmounts.
+// them. It renders nothing; like the provider's own, its request is cancelled when it unmounts, so a mount after an
+// access re-check starts it again.
 function EarlyThreads({
   projectId,
   attempt,
@@ -228,19 +242,27 @@ function EarlyThreads({
 function Insights({
   projectId,
   state,
-  setState,
+  store,
+  afterRecheck,
   early,
 }: {
   projectId: number;
   state: StrategyState;
-  setState: (s: StrategyState) => void;
+  store: InsightsState;
+  /** This mount follows an access re-check: its first reads may take an answer from the last RECHECK_REUSE_MS. */
+  afterRecheck: boolean;
   early: EarlyRequests;
 }) {
-  const cache = useWorkspaceCache();
-  const taskView = useFreshData(insightTasksKey(projectId), () =>
-    early.take(cache, insightTasksKey(projectId), () =>
-      insightTasks(projectId),
-    ),
+  const cache = useWorkspaceCache(),
+    setState = store.write,
+    reuse = { staleTime: afterRecheck ? RECHECK_REUSE_MS : 0 };
+  const taskView = useFreshData(
+    insightTasksKey(projectId),
+    () =>
+      early.take(cache, insightTasksKey(projectId), () =>
+        insightTasks(projectId),
+      ),
+    reuse,
   );
   const tasks = taskView.data ?? [];
   const [busy, setBusy] = useState(false),
@@ -282,7 +304,7 @@ function Insights({
               }),
             );
           else {
-            setState(await request<StrategyState>(projectId, 'state'));
+            await store.read();
             setNotice(() => $t('strategy.opportunitiesUpdated'));
             refreshNavBadges();
           }
@@ -293,7 +315,7 @@ function Insights({
     }
     setGenerating(false);
     setError(() => $t('strategy.analysisTakingWhileRefreshLater'));
-  }, [projectId, setError, setNotice, setState]);
+  }, [projectId, setError, setNotice, store]);
   async function generate() {
     setError('');
     setNotice('');
@@ -399,6 +421,7 @@ function Insights({
       early.take(cache, insightSummaryKey(projectId), () =>
         insightSummary(projectId),
       ),
+    reuse,
   );
   const overview = useFreshData<{ cards: SourceCard[]; window?: MetricWindow }>(
     insightOverviewKey(projectId),
@@ -452,26 +475,23 @@ function Insights({
     // With the side panel open the day's conversation is there; the page gives it the room.
     docked = useChatPanel().open && !!chat;
   // A change no analysis judged yet (an analysis from before every change got a verdict) is judged once in the
-  // background, as the server does after each analysis; the state is read again afterwards.
+  // background, as the server does after each analysis; the state is read again afterwards. A mount after an access
+  // re-check does not ask again: the earlier mount's request still ends in the store's state.
   const unjudged = (state.insights?.evidence.signals?.items || []).filter(
       (s) => signalDisposition(s, state, tasks).next === 'judge',
     ).length,
-    judgedRef = useRef(''),
-    projectRef = useRef(projectId);
-  projectRef.current = projectId;
+    judgedRef = useRef(afterRecheck ? store.judged : '');
   const taskDataAvailable = taskView.data !== undefined,
     analyzedAt = state.insights?.generatedAt || '';
   useEffect(() => {
     const key = `${projectId}:${analyzedAt}`;
     if (!unjudged || !taskDataAvailable || judgedRef.current === key) return;
     judgedRef.current = key;
+    store.markJudged(key);
     void judgeMissing(projectId)
-      .then(() => request<StrategyState>(projectId, 'state'))
-      .then((next) => {
-        if (projectRef.current === projectId) setState(next);
-      })
+      .then(() => store.read())
       .catch(() => undefined);
-  }, [projectId, analyzedAt, unjudged, taskDataAvailable, setState]);
+  }, [projectId, analyzedAt, unjudged, taskDataAvailable, store]);
   const situation = (
     <RequestBlock
       quiet
