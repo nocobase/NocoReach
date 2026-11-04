@@ -86,15 +86,21 @@ const REST_TABLES=Object.keys(TABLES).filter(n=>!FIRST_TABLES.includes(n));
 // Tables read as one report over both periods with the change of the same dimension: Channel in the first part, and
 // Landing pages in the other, which makes that part nine reports, one round of the nine reads at once (Ga4Requests).
 // Pages are not paired: their table is by path and title. The changes left are read on their own (LONE_CHANGES). A
-// paired report takes its change's order and limit, so a paired table must be sorted as its change: the table keeps its
-// first rows (KEEP). Do not unpair Channel instead, as the first part reads no change on its own.
+// paired report takes its change's order and limit, so a paired table must be sorted as its change: that order decides
+// which rows the shared limit keeps. Do not unpair Channel instead, as the first part reads no change on its own. The
+// whole period (`all`) has no period before it, so no changes: its paired tables are read for it alone, as the others.
 const PAIRED=Object.keys(CHANGES).filter(n=>TABLES[n]?.dims.join()===CHANGES[n].dim);
 const LONE_CHANGES=Object.keys(CHANGES).filter(n=>!PAIRED.includes(n));
+const pairedIn=(w,n)=>PAIRED.includes(n)&&!w.all;
 // A paired report keeps the current period's rows for its table. GA4 answers each period for every value seen in either,
 // at zero where it had none, so a value seen only in the period before is dropped, as a report of the current period alone
-// leaves it out. Its row limit is the change's and covers both periods; the table keeps the current period's first rows
-// (KEEP), which only a period before with far more values ahead of them would push past it.
-const currentOf=report=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');return i<0?report:{...report,rows:(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current'&&(r.metricValues||[]).some(m=>Number(m?.value)))};};
+// leaves it out. The rows are sorted again by the report's order once picked, so the table does not depend on how GA4
+// orders rows over two periods. Its row limit is the change's and covers both periods; the table keeps the current
+// period's first rows (KEEP), which only a period before with far more values ahead of them would push past it.
+type Ga4Report={dimensionHeaders?:{name:string}[];metricHeaders?:{name:string}[];rows?:{dimensionValues?:{value?:string}[];metricValues?:{value?:string}[]}[]};
+const currentOf=(report:Ga4Report|null|undefined,order:string)=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');if(i<0)return report;
+ const m=(report.metricHeaders||[]).findIndex(h=>h.name===order),rows=(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current'&&(r.metricValues||[]).some(v=>Number(v?.value)));
+ if(m>=0)rows.sort((a,b)=>num(b.metricValues?.[m]?.value)-num(a.metricValues?.[m]?.value));return {...report,rows};};
 // One row per value with its current and previous figures; the largest in either period first. A page is its path:
 // GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
 const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};
@@ -223,16 +229,17 @@ class WebsiteReport{
    ...this.tablesOf(w,FIRST_TABLES,[],rest),complete:reports.every(Boolean)};
   if(w.all){out.totals.previous=null;out.previousDaily=[];}
   return out;}
- async readTables(id,property,w){const reports=await this.batch(id,property,this.tableRequests(w,REST_TABLES,LONE_CHANGES));
-  return {...this.tablesOf(w,REST_TABLES,LONE_CHANGES,reports),complete:reports.every(Boolean)};}
- // A table's report, over both periods with the order and limit of its change when PAIRED, then the changes read alone.
+ // The whole period has no changes, so it reads none: eight reports.
+ async readTables(id,property,w){const changes=w.all?[]:LONE_CHANGES,reports=await this.batch(id,property,this.tableRequests(w,REST_TABLES,changes));
+  return {...this.tablesOf(w,REST_TABLES,changes,reports),complete:reports.every(Boolean)};}
+ // A table's report, over both periods with the order and limit of its change when paired, then the changes read alone.
  tableRequests(w,names,changeNames){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
-  return [...names.map(n=>{const t=TABLES[n],c=CHANGES[n];return PAIRED.includes(n)?request(t.dims,t.metrics||SESSION,both,c.order,c.limit):request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
+  return [...names.map(n=>{const t=TABLES[n],c=CHANGES[n];return pairedIn(w,n)?request(t.dims,t.metrics||SESSION,both,c.order,c.limit):request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
    ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);})];}
  // `missing` names the tables GA4 refused, a paired one with its change; a change report read alone that it refuses only
  // leaves that part out of the explanation.
  tablesOf(w,names,changeNames,reports){const out={tables:{},missing:[],changes:{}};
-  names.forEach((n,i)=>{const r=reports[i];if(!r){out.missing.push(n);return;}const paired=PAIRED.includes(n);out.tables[n]=tableRows(n,paired?currentOf(r):r);if(paired&&!w.all)out.changes[n]=changeRows(n,r);});
+  names.forEach((n,i)=>{const r=reports[i];if(!r){out.missing.push(n);return;}const paired=pairedIn(w,n);out.tables[n]=tableRows(n,paired?currentOf(r,CHANGES[n].order):r);if(paired)out.changes[n]=changeRows(n,r);});
   if(!w.all)changeNames.forEach((n,i)=>{const r=reports[names.length+i];if(r)out.changes[n]=changeRows(n,r);});
   return out;}
 

@@ -284,3 +284,32 @@ test('all-time daily reports increase the row limit and omit previous data',asyn
  await g.row('1','123',w,{table:'page',dims:{pagePath:'/docs'}});
  assert.equal(calls.length,count,'all-time row reuses the history cache');
 });
+
+test('a paired table is sorted by its own figures, whatever order GA4 gives a report over two periods',async()=>{
+ const w=windowFor('2026-10-10','28');
+ // GA4 answers ordered by the period before here: the current period's rows come out smallest first.
+ const pages=Array.from({length:320},(_,i)=>i+1),channels=['Direct','Referral','Organic Search'];
+ const {g}=fake((method,body)=>({reports:body.requests.map(r=>{const d=dimsOf(r),m=r.metrics.map(x=>x.name),at=n=>m.map(k=>k==='sessions'?n:1);
+  if(d==='landingPagePlusQueryString'&&r.dateRanges.length===2)return report([d,'dateRange'],m,pages.flatMap(i=>[[[`/p${i}`,'previous'],at(1000-i)],[[`/p${i}`,'current'],at(i)]]));
+  if(d==='sessionDefaultChannelGroup'&&r.dateRanges.length===2)return report([d,'dateRange'],m,channels.flatMap((c,i)=>[[[c,'previous'],at(100-i)],[[c,'current'],at(i+1)]]));
+  return report(r.dimensions.map(x=>x.name),m,[]);})}));
+ const t=await g.periodTables('1','123',w);
+ assert.equal(t.tables.landing.length,300,'the table keeps its first 300 rows');
+ assert.deepEqual([t.tables.landing[0].key,t.tables.landing[0].sessions,t.tables.landing.at(-1).key],['/p320',320,'/p21'],'the current period\'s most sessions first, and those kept');
+ const v=await g.period('1','123',w);
+ assert.deepEqual(v.tables.channel.map(r=>r.key),['Organic Search','Referral','Direct']);
+});
+
+test('the whole period reads no changes: paired tables for the current period alone, and no pages behind a change',async()=>{
+ const w=windowFor('2026-09-27','all',undefined,undefined,'2022-01-01');
+ const {g,calls}=fake((method,body)=>({reports:body.requests.map(r=>{const d=dimsOf(r),m=r.metrics.map(x=>x.name);
+  return d==='landingPagePlusQueryString'||d==='sessionDefaultChannelGroup'?report([d],m,[[[d==='landingPagePlusQueryString'?'/':'Direct'],m.map(()=>3)]]):report(r.dimensions.map(x=>x.name),m,[]);})}));
+ const v=await g.period('1','123',w),t=await g.periodTables('1','123',w),requests=calls.flatMap(c=>c.body.requests);
+ assert.deepEqual(calls.map(c=>c.body.requests.length),[5,2,5,3],'seven reports, then eight');
+ assert.deepEqual(requests.filter(r=>r.dateRanges.length===2).map(dimsOf),['','date'],'only the figures and the line are read over two ranges');
+ assert.equal(requests.filter(r=>dimsOf(r)==='pagePath').length,0,'no pages behind a change');
+ for(const [name,dim] of [['channel','sessionDefaultChannelGroup'],['landing','landingPagePlusQueryString']]){const r=requests.find(x=>dimsOf(x)===dim);
+  assert.equal(r.limit,String(TABLES[name].limit),`${name} with its table's own limit`);assert.equal(r.orderBys[0].metric.metricName,'sessions');}
+ assert.deepEqual([v.tables.channel.map(r=>r.key),t.tables.landing.map(r=>r.key)],[['Direct'],['/']]);
+ assert.deepEqual([v.changes,t.changes,t.missing,t.complete],[{},{},[],true]);
+});
