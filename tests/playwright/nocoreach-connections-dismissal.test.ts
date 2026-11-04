@@ -90,7 +90,7 @@ for (const width of [1440, 375]) {
       await account.focus();
       await page.keyboard.press('Enter');
       const appearance = page.getByRole('menuitem', {
-        name: /Appearance|外观/,
+        name: /^(Theme|主题)/,
       });
       await appearance.focus();
       await page.keyboard.press('ArrowRight');
@@ -100,6 +100,8 @@ for (const width of [1440, 375]) {
         })
         .click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', preset);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
       const header = await page
         .locator('header')
         .filter({ has: account })

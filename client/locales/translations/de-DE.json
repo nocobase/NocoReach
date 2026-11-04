@@ -460,6 +460,8 @@
     }
   },
   "appearance": {
+    "menu": "Design",
+    "density": "Dichte",
     "title": "Darstellung",
     "mode": "Farbmodus",
     "preset": "Design",

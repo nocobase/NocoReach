@@ -459,6 +459,8 @@
     }
   },
   "appearance": {
+    "menu": "테마",
+    "density": "밀도",
     "title": "화면 모양",
     "mode": "색상 모드",
     "preset": "테마",

@@ -5,6 +5,7 @@ import { useId, type ReactElement } from 'react';
 import { Button } from '#components/ui/button';
 import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import {
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -29,52 +30,67 @@ const COLOR_MODES = [
   { id: 'system', icon: Monitor },
 ] as const;
 
+/** The account menu shares the standalone control's browser-local preferences. */
 export function ThemeSettingsMenu(): ReactElement {
   const { theme, setTheme } = useTheme();
   const { preset, setPreset } = useThemePreset();
   const { t } = useTranslation();
+  const current = COLOR_MODES.find((mode) => mode.id === theme);
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className='gap-2'>
         <Palette aria-hidden='true' className='size-4' />
-        {t('appearance.title', { defaultValue: 'Appearance' })}
+        <span className='flex-1'>{t('appearance.menu')}</span>
+        {current ? (
+          <span className='text-muted-foreground'>
+            {t(`appearance.${current.id}`)}
+          </span>
+        ) : null}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className='min-w-40 max-w-[calc(100vw-2rem)]'>
-        <DropdownMenuRadioGroup
-          value={theme}
-          onValueChange={(value) => setTheme(String(value))}
-          aria-label={t('appearance.mode', { defaultValue: 'Color mode' })}
-        >
+        <DropdownMenuGroup>
           <DropdownMenuLabel>
             {t('appearance.mode', { defaultValue: 'Color mode' })}
           </DropdownMenuLabel>
-          {COLOR_MODES.map(({ id, icon: Icon }) => (
-            <DropdownMenuRadioItem key={id} value={id} closeOnClick>
-              <Icon aria-hidden='true' className='size-4' />
-              {t('appearance.' + id, {
-                defaultValue: id[0].toUpperCase() + id.slice(1),
-              })}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+          <DropdownMenuRadioGroup
+            value={theme}
+            onValueChange={(value: unknown) => {
+              if (value === 'light' || value === 'dark' || value === 'system') {
+                setTheme(value);
+              }
+            }}
+          >
+            {COLOR_MODES.map(({ id, icon: Icon }) => (
+              <DropdownMenuRadioItem key={id} value={id} closeOnClick={false}>
+                <Icon aria-hidden='true' className='size-4' />
+                {t('appearance.' + id, {
+                  defaultValue: id[0].toUpperCase() + id.slice(1),
+                })}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup
-          value={preset}
-          onValueChange={(value) => {
-            const selected = themePresets.find((item) => item.id === value);
-            if (selected) setPreset(selected.id);
-          }}
-          aria-label={t('appearance.preset', { defaultValue: 'Theme' })}
-        >
-          <DropdownMenuLabel>
-            {t('appearance.preset', { defaultValue: 'Theme' })}
-          </DropdownMenuLabel>
-          {themePresets.map((item) => (
-            <DropdownMenuRadioItem key={item.id} value={item.id} closeOnClick>
-              {t(item.labelKey)}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('appearance.density')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={preset}
+            onValueChange={(value: unknown) => {
+              const selected = themePresets.find((item) => item.id === value);
+              if (selected) setPreset(selected.id);
+            }}
+          >
+            {themePresets.map((item) => (
+              <DropdownMenuRadioItem
+                key={item.id}
+                value={item.id}
+                closeOnClick={false}
+              >
+                {t(item.labelKey)}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

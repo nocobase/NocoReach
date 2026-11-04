@@ -490,9 +490,11 @@ try {
   ).toBeVisible();
   await page.getByRole('button', { name: 'Open account menu' }).focus();
   await page.keyboard.press('Enter');
-  await page.getByRole('menuitem', { name: 'Appearance', exact: true }).focus();
+  await page.getByRole('menuitem', { name: /^Theme/ }).focus();
   await page.keyboard.press('ArrowRight');
   await page.getByRole('menuitemradio', { name: 'Dark', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 900 });
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(

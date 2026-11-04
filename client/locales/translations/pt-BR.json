@@ -460,6 +460,8 @@
     }
   },
   "appearance": {
+    "menu": "Tema",
+    "density": "Densidade",
     "title": "Aparência",
     "mode": "Modo de cor",
     "preset": "Tema",
