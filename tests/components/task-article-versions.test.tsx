@@ -332,6 +332,86 @@ test('a version opens against the one before it, and an earlier one is restored 
   expect(again).toHaveTextContent('人工最后改好的引言。');
 });
 
+// The review card shows the Agent's notes only above text the Agent wrote, by the version reader's rule (2026-11-04,
+// T-62: version 10, edited by hand, read under version 7's notes saying the text was restored unchanged).
+const card = () => screen.getByRole('region', { name: '等你处理' });
+// The task with `n` under review, without the versions after it, and the Agent's summaries for the reviewer.
+function reviewing(data: TaskData, n: number) {
+  for (const v of data.artifacts)
+    if (v.createdBy === 'agent')
+      v.article!.draft.summary = `第 ${v.version} 版的摘要`;
+  const shown = data.artifacts.find((v) => v.version === n)!;
+  data.artifacts = data.artifacts.filter(
+    (v) => v.version <= n || v.restoredFrom,
+  );
+  data.work.history = data.work.history.filter(
+    (e) => !e.artifactId || data.artifacts.some((v) => v.id === e.artifactId),
+  );
+  data.work.results = [{ ...shown, rejectedAt: undefined }];
+  return data;
+}
+
+test('the review card shows the Agent’s notes above a version the Agent wrote', async () => {
+  const user = userEvent.setup();
+  mount(reviewing(t62(), 7));
+  expect(card()).toHaveTextContent('第 7 版');
+  expect(card()).toHaveTextContent('第 7 版的摘要');
+  await user.click(within(card()).getByRole('button', { name: '完整说明' }));
+  expect(card()).toHaveTextContent('第 7 版的修改说明');
+});
+
+test('the review card shows no Agent notes above a version edited by hand', () => {
+  const data = reviewing(t62(), 10);
+  // Notes and a summary kept from the Agent's version it replaced.
+  data.work.results[0]!.content = '第 7 版的修改说明';
+  data.work.results[0]!.article!.draft.summary = '第 7 版的摘要';
+  mount(data);
+  expect(card()).toHaveTextContent('第 10 版 · 人工修改');
+  expect(card()).not.toHaveTextContent('第 7 版的摘要');
+  expect(card()).not.toHaveTextContent('第 7 版的修改说明');
+  expect(within(card()).queryByRole('button', { name: '完整说明' })).toBeNull();
+  expect(within(card()).getByRole('heading', { name: TITLE })).toBeVisible();
+});
+
+test('a version restored from the Agent’s shows that version’s notes; one restored from a hand edit shows none', async () => {
+  const user = userEvent.setup();
+  // Version 7 restored over version 10: the restore copied version 7's article and notes.
+  const data = reviewing(t62(), 10);
+  const v7 = data.artifacts[6]!;
+  const v11: Artifact = {
+    ...structuredClone(v7),
+    id: 'v11',
+    version: 11,
+    createdBy: '1',
+    createdAt: '2026-11-04T02:20:00Z',
+    rejectedAt: undefined,
+    restoredFrom: { artifactId: 'v7', version: 7, byHand: false },
+  };
+  data.artifacts.push(v11);
+  data.work.results = [v11];
+  data.work.history.push({
+    at: v11.createdAt,
+    actor: '1',
+    action: 'restoreArticleVersion',
+    artifactId: 'v11',
+    stageKey: 'review',
+  });
+  mount(data);
+  expect(card()).toHaveTextContent('第 11 版 · 恢复自第 7 版');
+  expect(card()).toHaveTextContent('第 7 版的摘要');
+  // The version reader follows the same rule.
+  const dialog = await openVersion(user, '恢复到第 7 版，生成第 11 版');
+  expect(dialog).toHaveTextContent('第 7 版的摘要');
+  await user.keyboard('{Escape}');
+  cleanup();
+
+  // Version 5, edited by hand, restored: notes kept from version 3 do not show.
+  mount(reviewing(restored(), 11));
+  expect(card()).toHaveTextContent('第 11 版 · 恢复自第 5 版');
+  expect(card()).not.toHaveTextContent('第 3 版的修改说明');
+  expect(within(card()).queryByRole('button', { name: '完整说明' })).toBeNull();
+});
+
 test('the first version compares with nothing; the version under review has nothing to restore', async () => {
   const user = userEvent.setup();
   mount(t62());
