@@ -28,13 +28,25 @@ import type { TaskData } from '../../client/pages/task-execution-types';
 import spanish from '../../shared/i18n/es-ES.json';
 import russian from '../../shared/i18n/ru-RU.json';
 
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+const { action, articleEdit } = vi.hoisted(() => ({
+  action: vi.fn(),
+  articleEdit: vi.fn(),
+}));
 vi.mock('../../client/lib/nocoreach-api', async (original) => {
   const module =
     await original<typeof import('../../client/lib/nocoreach-api')>();
   return {
     ...module,
-    nocobaseClient: { ...module.nocobaseClient, action, wrapRequests: vi.fn() },
+    nocobaseClient: {
+      ...module.nocobaseClient,
+      // The article's autosave and edit lease (article-edit-session.ts) answer on their own, so each test's `action`
+      // stays about the task.
+      action: (resource: string, command: string, options?: object) =>
+        command === 'articleEdit'
+          ? articleEdit(options)
+          : action(resource, command, options),
+      wrapRequests: vi.fn(),
+    },
   };
 });
 vi.mock('../../client/pages/me', () => ({
@@ -156,6 +168,8 @@ function pageChange(): TaskData {
 }
 beforeEach(() => {
   setDictionary(null);
+  articleEdit.mockReset();
+  articleEdit.mockResolvedValue({ lease: null, mine: true, draft: null });
   action.mockReset();
   action.mockImplementation((resource: string, command: string) => {
     if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
@@ -1243,9 +1257,9 @@ test('an article review has no release notes to edit, and the live card none to 
   delete (artifact as { approvedAt?: string }).approvedAt;
   const view = mount(data);
   const card = screen.getByRole('region', { name: '等你处理' });
-  expect(
-    within(card).getByText('Top 12 Open Source No-Code AI Tools (2026)'),
-  ).toBeVisible();
+  expect(within(card).getByRole('textbox', { name: '标题' })).toHaveValue(
+    'Top 12 Open Source No-Code AI Tools (2026)',
+  );
   expect(within(card).queryByRole('button', { name: /发布说明/ })).toBeNull();
   action.mockImplementation((resource: string, command: string) =>
     Promise.resolve(
@@ -1311,16 +1325,20 @@ function reviewArticle(): TaskData {
   return data;
 }
 
-// 2026-10-24 user request: the article on a page of its own, to read without the task around it.
-test('Read full screen opens the article on its own page, and Esc goes back to the task', async () => {
+// 2026-10-24 user request: the article on a page of its own, without the task around it; under review it is edited
+// there as in the card (2026-11-04).
+test('Full screen opens the article being edited on its own page, and Esc goes back to the task', async () => {
   const user = userEvent.setup();
   mountRoutes(reviewArticle(), '/actions/1');
   const card = screen.getByRole('region', { name: '等你处理' });
-  await user.click(within(card).getByLabelText('全屏阅读'));
+  await user.click(within(card).getByLabelText('全屏编辑'));
   expect(screen.getByTestId('where')).toHaveTextContent(
-    '/actions/1/article?lang=en&view=changes',
+    /^\/actions\/1\/article\?lang=en$/,
   );
   const reader = readerPage();
+  expect(within(reader).getByRole('textbox', { name: '标题' })).toHaveValue(
+    'Top 12 Open Source No-Code AI Tools (2026)',
+  );
   expect(
     within(reader).getByRole('button', { name: '通过并发布' }),
   ).toBeVisible();
@@ -1328,8 +1346,27 @@ test('Read full screen opens the article on its own page, and Esc goes back to t
   expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
 });
 
+// Once the article is live there is nothing to edit: the page reads it, in the language and view of its address.
+test('the reading page of a live article follows its language and view', async () => {
+  const user = userEvent.setup();
+  mountRoutes(liveArticle(), '/actions/1/article?lang=en&view=preview');
+  const reader = readerPage();
+  expect(
+    within(reader).getByRole('heading', {
+      name: 'Top 12 Open Source No-Code AI Tools (2026)',
+    }),
+  ).toBeVisible();
+  expect(within(reader).queryByRole('textbox')).toBeNull();
+  expect(within(reader).getByRole('button', { name: '预览' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await user.click(within(reader).getByRole('button', { name: '改动' }));
+  expect(screen.getByTestId('where')).toHaveTextContent('view=changes');
+});
+
 test.each([false, true])(
-  'the reading page opens from its address, follows its language and view, and approves (simulated: %s)',
+  'the article page opens from its address and approves (simulated: %s)',
   async (simulated) => {
     const user = userEvent.setup();
     const data = reviewArticle();
@@ -1343,18 +1380,11 @@ test.each([false, true])(
             : [],
       ),
     );
-    mountRoutes(data, '/actions/1/article?lang=en&view=preview');
+    mountRoutes(data, '/actions/1/article?lang=en');
     const reader = readerPage();
-    expect(
-      within(reader).getByRole('heading', {
-        name: 'Top 12 Open Source No-Code AI Tools (2026)',
-      }),
-    ).toBeVisible();
-    expect(
-      within(reader).getByRole('button', { name: '预览' }),
-    ).toHaveAttribute('aria-pressed', 'true');
-    await user.click(within(reader).getByRole('button', { name: '改动' }));
-    expect(screen.getByTestId('where')).toHaveTextContent('view=changes');
+    expect(within(reader).getByRole('textbox', { name: '标题' })).toHaveValue(
+      'Top 12 Open Source No-Code AI Tools (2026)',
+    );
     await user.click(
       within(reader).getByRole('button', {
         name: simulated ? '通过并模拟发布' : '通过并发布',
@@ -1392,8 +1422,8 @@ test.each(['page', 'article'])(
 );
 
 // 2026-10-24 user request: an article in several languages is reviewed in its primary one first, then translated.
-// 2026-10-27 user report: Edit directly opened on empty fields of a language the article did not have yet.
-test('Edit directly opens on the language the review shows, with only the written ones as tabs', async () => {
+// 2026-10-27 user report: the editor opened on empty fields of a language the article did not have yet.
+test('the review card edits the languages written, one tab each, from the one asked for', async () => {
   const user = userEvent.setup();
   const data = reviewArticle();
   data.articleTargets = [
@@ -1414,25 +1444,25 @@ test('Edit directly opens on the language the review shows, with only the writte
   };
   mount(data);
   const card = screen.getByRole('region', { name: '等你处理' });
-  await user.click(within(card).getByRole('tab', { name: '中文' }));
-  await user.click(within(card).getByRole('button', { name: '直接编辑' }));
+  // No Edit directly: the card is the editor.
+  expect(within(card).queryByRole('button', { name: '直接编辑' })).toBeNull();
   expect(
     within(card)
       .getAllByRole('tab')
       .map((t) => t.textContent),
   ).toEqual(['英语', '中文']);
+  await user.click(within(card).getByRole('tab', { name: '中文' }));
   expect(within(card).getByRole('tab', { name: '中文' })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  expect(within(card).getByRole('textbox', { name: /^标题/ })).toHaveValue(
+  expect(within(card).getByRole('textbox', { name: '标题' })).toHaveValue(
     '最受欢迎的开源无代码 AI 工具',
   );
 });
 
-// 2026-11-04 user request: an article body takes pasted and dropped images without a line saying so.
-test('Edit directly takes images without a paste or limits line beside Save', async () => {
-  const user = userEvent.setup();
+// 2026-11-04 user request: an article body takes images from its toolbar, without a line saying so.
+test('the article body offers images in its toolbar, with no paste or limits line', async () => {
   const data = reviewArticle();
   const [target] = data.articleTargets!;
   data.articleTargets = [
@@ -1440,16 +1470,16 @@ test('Edit directly takes images without a paste or limits line beside Save', as
   ] as TaskData['articleTargets'];
   mount(data);
   const card = screen.getByRole('region', { name: '等你处理' });
-  await user.click(within(card).getByRole('button', { name: '直接编辑' }));
-  const footer = within(card).getByRole('button', {
-    name: '保存',
-  }).parentElement!;
-  expect(footer).toHaveTextContent(/^取消保存$/);
+  const toolbar = await within(card).findByRole('toolbar', { name: '格式' });
+  expect(
+    within(toolbar).getByRole('button', { name: '添加图片' }),
+  ).toBeVisible();
+  expect(card).not.toHaveTextContent(/粘贴|拖入/);
 });
 
-// 2026-11-04 user report (T-62): once editing there was no full screen. The article page opens still editing, with the
-// draft, and Back to task keeps both; going back and forth never asks about leaving the drafts behind.
-test('Edit full screen opens the editor on the article page with the draft, and Back to task keeps editing', async () => {
+// 2026-11-04 user report (T-62): the article page opens with the same edits, and Back to task keeps them. The edits
+// are kept on the server as they are made, so leaving the task asks nothing about them.
+test('Full screen edits the same article, Back to task keeps the edits, and leaving saves them', async () => {
   const user = userEvent.setup();
   function Elsewhere() {
     const navigate = useNavigate();
@@ -1477,6 +1507,7 @@ test('Edit full screen opens the editor on the article page with the draft, and 
             >
               <Route path='article' element={<ArticleReaderPage />} />
             </Route>
+            <Route path='/actions' element={<p>Tasks</p>} />
           </Routes>
           <Where />
           <Elsewhere />
@@ -1485,39 +1516,227 @@ test('Edit full screen opens the editor on the article page with the draft, and 
     </MemoryRouter>,
   );
   const card = screen.getByRole('region', { name: '等你处理' });
-  await user.click(within(card).getByRole('button', { name: '直接编辑' }));
+  const title = 'Top 12 Open Source No-Code AI Tools (2026)';
+  await waitFor(() =>
+    expect(
+      within(card).getByRole('textbox', { name: '标题' }),
+    ).not.toHaveAttribute('readonly'),
+  );
   await user.type(
-    within(card).getByRole('textbox', { name: /^正文/ }),
+    within(card).getByRole('textbox', { name: '标题' }),
     ' and more',
   );
+  expect(card).toHaveTextContent('第 1 版 + 你的修改');
   await user.click(within(card).getByLabelText('全屏编辑'));
   expect(screen.getByTestId('where')).toHaveTextContent(
     /^\/actions\/1\/article\?lang=en$/,
   );
   expect(screen.queryByRole('alertdialog')).toBeNull();
   const reader = readerPage();
-  expect(within(reader).getByRole('textbox', { name: /^正文/ })).toHaveValue(
-    'Body and more',
+  expect(within(reader).getByRole('textbox', { name: '标题' })).toHaveValue(
+    `${title} and more`,
   );
-  // Already full screen: no second way there, and no review actions while editing.
+  // Already full screen: no second way there.
   expect(within(reader).queryByLabelText('全屏编辑')).toBeNull();
-  expect(
-    within(reader).queryByRole('button', { name: '通过并发布' }),
-  ).toBeNull();
-  await user.type(within(reader).getByRole('textbox', { name: /^正文/ }), '!');
+  await user.type(within(reader).getByRole('textbox', { name: '标题' }), '!');
   await user.click(within(reader).getByRole('button', { name: '返回任务' }));
-  expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
+  await waitFor(() =>
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+  );
   expect(screen.queryByRole('alertdialog')).toBeNull();
-  expect(within(card).getByRole('textbox', { name: /^正文/ })).toHaveValue(
-    'Body and more!',
+  expect(within(card).getByRole('textbox', { name: '标题' })).toHaveValue(
+    `${title} and more!`,
   );
-  expect(within(card).getByRole('button', { name: '保存' })).toBeVisible();
-  // Leaving the task still asks.
   await user.click(screen.getByRole('button', { name: 'elsewhere' }));
-  expect(await screen.findByRole('alertdialog')).toHaveTextContent(
-    '离开此页面？',
+  expect(await screen.findByText('Tasks')).toBeVisible();
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  // What was typed last is saved as the task closes, then the article is let go.
+  await waitFor(() =>
+    expect(articleEdit.mock.calls.map(([o]) => o.body.op)).toContain('release'),
   );
-  expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
+  const saves = articleEdit.mock.calls
+    .map(([o]) => o.body)
+    .filter((b) => b.op === 'save');
+  expect(saves.at(-1)).toMatchObject({
+    projectId: '1',
+    taskId: '1',
+    artifactId: 'artifact-1',
+    form: { locales: { en: { title: `${title} and more!` } } },
+    ai: 0,
+  });
+  expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(false);
+});
+
+// 2026-11-04 user request: one person edits at a time; the others read the article as that person leaves it.
+test('while someone else edits the article, the card is read-only and names them', async () => {
+  articleEdit.mockResolvedValue({
+    lease: { userId: '2', name: 'Tian Qi', until: '2099-01-01T00:00:00Z' },
+    mine: false,
+    draft: {
+      artifactId: 'artifact-1',
+      form: { locales: { en: { title: 'Their title' } } },
+      ai: 1,
+      savedAt: '2026-11-04T10:20:00Z',
+      savedBy: '2',
+      savedByName: 'Tian Qi',
+    },
+  });
+  mount(reviewArticle());
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    await within(card).findByText(
+      'Tian Qi 正在编辑，你现在只能阅读；对方离开后即可编辑。',
+    ),
+  ).toBeVisible();
+  const title = within(card).getByRole('textbox', { name: '标题' });
+  expect(title).toHaveValue('Their title');
+  expect(title).toHaveAttribute('readonly');
+  expect(within(card).queryByRole('toolbar', { name: '格式' })).toBeNull();
+  expect(card).toHaveTextContent('第 1 版 + Tian Qi 的修改');
+  expect(
+    within(card).getByRole('button', { name: '通过并发布' }),
+  ).toBeDisabled();
+  expect(
+    within(card).getByRole('button', { name: '提修改意见' }),
+  ).toBeDisabled();
+});
+
+// Edits are kept on the server without being a version: they open again as they were left, and Approve makes the
+// version of them first, with how many places AI rewrote.
+test('kept edits open again with when they were saved, and Approve makes a version of them first', async () => {
+  const user = userEvent.setup();
+  const data = reviewArticle();
+  const edited = structuredClone(data);
+  edited.work.revision++;
+  edited.work.results = [
+    { ...data.work.results[0]!, id: 'artifact-2', version: 2 },
+  ];
+  action.mockImplementation((resource: string, command: string, o) =>
+    Promise.resolve(
+      command === 'advance'
+        ? (o as { body: { command: string } }).body.command ===
+          'editArticleDraft'
+          ? edited
+          : data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  articleEdit.mockResolvedValue({
+    lease: { userId: '1', name: 'Super Admin', until: '2099-01-01T00:00:00Z' },
+    mine: true,
+    draft: {
+      artifactId: 'artifact-1',
+      form: { locales: { en: { title: 'Kept title' } } },
+      ai: 2,
+      savedAt: '2026-11-04T10:20:00Z',
+      savedBy: '1',
+      savedByName: 'Super Admin',
+    },
+  });
+  mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await waitFor(() =>
+    expect(within(card).getByRole('textbox', { name: '标题' })).toHaveValue(
+      'Kept title',
+    ),
+  );
+  expect(card).toHaveTextContent('第 1 版 + 你的修改（AI 改写 2 处）');
+  expect(within(card).getByText(/^已自动保存 \d{2}:\d{2}$/)).toBeVisible();
+  await user.click(within(card).getByRole('button', { name: '通过并发布' }));
+  await waitFor(() =>
+    expect(action.mock.calls.filter(([, c]) => c === 'advance')).toHaveLength(
+      2,
+    ),
+  );
+  const sent = action.mock.calls
+    .filter(([, c]) => c === 'advance')
+    .map(([, , options]) => options.body);
+  expect(sent).toEqual([
+    expect.objectContaining({
+      command: 'editArticleDraft',
+      artifactId: 'artifact-1',
+      article: expect.objectContaining({
+        locales: { en: expect.objectContaining({ title: 'Kept title' }) },
+      }),
+      edits: { ai: 2 },
+    }),
+    expect.objectContaining({
+      command: 'approveStage',
+      artifactId: 'artifact-2',
+      revision: edited.work.revision,
+    }),
+  ]);
+});
+
+test('Discard unversioned changes takes the article back to its version', async () => {
+  const user = userEvent.setup();
+  const kept = {
+    artifactId: 'artifact-1',
+    form: { locales: { en: { title: 'Kept title' } } },
+    ai: 0,
+    savedAt: '2026-11-04T10:20:00Z',
+    savedBy: '1',
+    savedByName: 'Super Admin',
+  };
+  articleEdit.mockImplementation((o: { body: { op: string } }) =>
+    Promise.resolve({
+      lease: null,
+      mine: true,
+      draft: o.body.op === 'discard' ? null : kept,
+    }),
+  );
+  mount(reviewArticle());
+  const card = screen.getByRole('region', { name: '等你处理' });
+  const title = within(card).getByRole('textbox', { name: '标题' });
+  await waitFor(() => expect(title).toHaveValue('Kept title'));
+  await user.click(within(card).getByRole('button', { name: '更多操作' }));
+  await user.click(
+    await screen.findByRole('menuitem', { name: '放弃未成版的修改' }),
+  );
+  const dialog = await screen.findByRole('alertdialog');
+  expect(dialog).toHaveTextContent('文章回到第 1 版');
+  await user.click(within(dialog).getByRole('button', { name: '放弃修改' }));
+  await waitFor(() =>
+    expect(title).toHaveValue('Top 12 Open Source No-Code AI Tools (2026)'),
+  );
+  expect(articleEdit.mock.calls.map(([o]) => o.body.op)).toContain('discard');
+  expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(false);
+});
+
+test('Activity says how a version edited in the card was made', () => {
+  const data = reviewArticle();
+  const [first] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  const second = {
+    ...first,
+    id: 'artifact-2',
+    version: 2,
+    createdBy: '1',
+    createdAt: '2026-10-22T09:00:00Z',
+    edits: { ai: 1, hand: 2 },
+  };
+  data.artifacts = [{ ...first, rejectedAt: '2026-10-22T09:00:00Z' }];
+  data.work.results = [second];
+  data.work.history = [
+    ...(data.work.history || []),
+    {
+      at: '2026-10-22T09:00:00Z',
+      actor: '1',
+      action: 'editArticleDraft',
+      stageKey: 'review',
+      artifactId: 'artifact-2',
+    },
+  ];
+  mount(data);
+  const activity = screen.getByRole('region', { name: '动态' });
+  expect(
+    within(activity).getByText(
+      /修改了文章稿，第 2 版（AI 改写 1 处，手改 2 处）/,
+    ),
+  ).toBeVisible();
 });
 
 test('an article in two languages approves the primary to translate, and the card names the translation', () => {
@@ -1630,13 +1849,20 @@ function updatingArticle(round: 'primary' | 'writing' | 'updated' | 'none') {
   return data;
 }
 
-test('an update of an existing article says so at each round, and opens on the edited language as its changes', async () => {
+test('an update of an existing article says so at each round, and opens on the edited language', async () => {
+  const user = userEvent.setup();
   let view = mount(updatingArticle('primary'));
   let card = screen.getByRole('region', { name: '等你处理' });
   expect(card).toHaveTextContent(
     '英语版已改好，通过后按同样的改动更新其他语言',
   );
-  expect(card).toHaveTextContent('中文会在英语通过后按同样的改动更新。');
+  // The other languages are named beside the one edited, not editable until it is approved.
+  expect(card).toHaveTextContent('中文 · 通过后更新');
+  expect(
+    within(card)
+      .getAllByRole('tab')
+      .map((t) => t.textContent),
+  ).toEqual(['英语']);
   expect(
     within(card).getByRole('button', { name: '通过，更新其他语言' }),
   ).toBeVisible();
@@ -1660,11 +1886,12 @@ test('an update of an existing article says so at each round, and opens on the e
     'aria-selected',
     'true',
   );
-  expect(within(card).getByRole('button', { name: '改动' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
+  expect(within(card).getByRole('textbox', { name: '标题' })).toHaveValue(
+    '最受欢迎的 12 个开源无代码 AI 工具（2026）',
   );
-  expect(card).toHaveTextContent('最受欢迎的 12 个开源无代码 AI 工具（2026）');
+  // What changed is one switch away, read-only.
+  await user.click(within(card).getByRole('switch', { name: '对比原文' }));
+  expect(within(card).queryByRole('textbox', { name: '标题' })).toBeNull();
   expect(card).toHaveTextContent('摘要 · 未修改');
   expect(
     within(card).getByRole('button', { name: '通过并发布' }),
@@ -1695,9 +1922,9 @@ test('a version that changed none of the other languages says so and offers Upda
       .getAllByRole('button')
       .map((b) => b.textContent)
       .filter((t) =>
-        ['重新更新', '提修改意见', '只发布英语', '直接编辑'].includes(t || ''),
+        ['重新更新', '提修改意见', '只发布英语'].includes(t || ''),
       ),
-  ).toEqual(['重新更新', '提修改意见', '只发布英语', '直接编辑']);
+  ).toEqual(['重新更新', '只发布英语', '提修改意见']);
   await user.click(within(card).getByRole('button', { name: '重新更新' }));
   const again = action.mock.calls.find(([, c]) => c === 'advance');
   expect(again?.[2]?.body).toMatchObject({
@@ -2014,10 +2241,11 @@ test.each([
   ['translation', '翻译已完成，确认后一起发布'],
   ['document', '修改已完成，请审核'],
 ])(
-  'a %s under review goes back to the Agent with the message written in Activity',
+  'a %s under review goes back to the Agent with the change request written for it',
   async (kind, title) => {
     const user = userEvent.setup();
     const data = underReview(kind);
+    const article = !['page change', 'document'].includes(kind);
     const comment = '标题里不要写年份，突出免费试用';
     const revising = structuredClone(data);
     revising.work.revision++;
@@ -2061,18 +2289,33 @@ test.each([
     mount(data);
     const card = screen.getByRole('region', { name: '等你处理' });
     expect(card).toHaveTextContent(title);
-    // The card has no box of its own: its button puts the cursor in Activity's.
     await user.click(within(card).getByRole('button', { name: '提修改意见' }));
-    const box = screen.getByRole('textbox', { name: '给执行者的话' });
-    expect(box).toHaveFocus();
-    expect(within(card).queryByRole('textbox')).toBeNull();
-    expect(box).toHaveAttribute(
-      'placeholder',
-      '写修改意见，发送后 Agent 会按意见重新修改',
-    );
-    await user.type(box, comment);
-    await user.click(screen.getByRole('button', { name: '发送意见' }));
-    await waitFor(() => expect(box).toHaveValue(''));
+    if (article) {
+      // An article is edited in its card, so changes across the whole of it are asked in a box there (2026-11-04).
+      const box = within(card).getByRole('textbox', {
+        name: '提修改意见，整篇交给 Agent 修改',
+      });
+      expect(box).toHaveFocus();
+      await user.type(box, comment);
+      await user.click(
+        within(card).getByRole('button', { name: '发送给 Agent' }),
+      );
+      await waitFor(() =>
+        expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(true),
+      );
+    } else {
+      // The card has no box of its own: its button puts the cursor in Activity's.
+      const box = screen.getByRole('textbox', { name: '给执行者的话' });
+      expect(box).toHaveFocus();
+      expect(within(card).queryByRole('textbox')).toBeNull();
+      expect(box).toHaveAttribute(
+        'placeholder',
+        '写修改意见，发送后 Agent 会按意见重新修改',
+      );
+      await user.type(box, comment);
+      await user.click(screen.getByRole('button', { name: '发送意见' }));
+      await waitFor(() => expect(box).toHaveValue(''));
+    }
     const sent = action.mock.calls
       .filter(([, c]) => c === 'advance')
       .map(([, , options]) => options.body);
@@ -2093,23 +2336,75 @@ test.each([
   },
 );
 
-test('Request changes on the reading page goes back to the task, into the message box', async () => {
+test('Request changes on the article page asks there, makes a version of the edits, and goes back to the task', async () => {
   const user = userEvent.setup();
-  mountRoutes(reviewArticle(), '/actions/1/article?lang=en&view=preview');
+  const data = reviewArticle();
+  const edited = structuredClone(data);
+  edited.work.revision++;
+  edited.work.results = [
+    { ...data.work.results[0]!, id: 'artifact-2', version: 2 },
+  ];
+  action.mockImplementation((resource: string, command: string, o) =>
+    Promise.resolve(
+      command === 'advance'
+        ? (o as { body: { command: string } }).body.command ===
+          'editArticleDraft'
+          ? edited
+          : data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  mountRoutes(data, '/actions/1/article?lang=en');
+  const reader = readerPage();
+  await waitFor(() =>
+    expect(
+      within(reader).getByRole('textbox', { name: '标题' }),
+    ).not.toHaveAttribute('readonly'),
+  );
+  await user.type(within(reader).getByRole('textbox', { name: '标题' }), '!');
+  await user.click(within(reader).getByRole('button', { name: '提修改意见' }));
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    /^\/actions\/1\/article\?lang=en$/,
+  );
+  // The edits go to the Agent as the version it works from.
+  expect(reader).toHaveTextContent('发送前，你的修改会存成第 2 版');
+  await user.type(
+    within(reader).getByRole('textbox', {
+      name: '提修改意见，整篇交给 Agent 修改',
+    }),
+    '按选型标准重排',
+  );
   await user.click(
-    within(readerPage()).getByRole('button', { name: '提修改意见' }),
+    within(reader).getByRole('button', { name: '发送给 Agent' }),
   );
   await waitFor(() =>
     expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
   );
-  await waitFor(() =>
-    expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveFocus(),
-  );
-  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveAttribute(
-    'placeholder',
-    '写修改意见，发送后 Agent 会按意见重新修改',
-  );
-  expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(false);
+  const sent = action.mock.calls
+    .filter(([, c]) => c === 'advance')
+    .map(([, , options]) => options.body);
+  expect(sent).toEqual([
+    expect.objectContaining({
+      command: 'editArticleDraft',
+      artifactId: 'artifact-1',
+      article: expect.objectContaining({
+        locales: {
+          en: expect.objectContaining({
+            title: 'Top 12 Open Source No-Code AI Tools (2026)!',
+          }),
+        },
+      }),
+      edits: { ai: 0 },
+    }),
+    expect.objectContaining({
+      command: 'requestStageChanges',
+      artifactId: 'artifact-2',
+      comment: '按选型标准重排',
+      revision: edited.work.revision,
+    }),
+  ]);
 });
 
 test('saving an existing snooze keeps its configuration day after the schedule timezone loads', async () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -24,10 +25,20 @@ import {
   articleRequest,
   searchArticles,
 } from '../../client/pages/article-targets-api';
+import { ArticleReview } from '../../client/pages/task-detail/article-review';
+import { ArticleEditFields } from '../../client/pages/task-detail/article-edit';
+import { ArticleBodyEditor } from '../../client/pages/task-detail/article-body-editor';
 import {
-  ArticleEditor,
-  ArticleReview,
-} from '../../client/pages/task-detail/article-review';
+  formDraft,
+  initialForm,
+  keptForm,
+  sameForm,
+} from '../../client/pages/task-detail/article-edit-model';
+import {
+  useArticleSubmit,
+  type ArticleEditSession,
+} from '../../client/pages/task-detail/article-edit-session';
+import type { Editor } from '@tiptap/core';
 import {
   DriftNotice,
   TargetRows,
@@ -56,7 +67,10 @@ import {
 import { setDictionary } from '../../client/i18n';
 import { TaskImageContext } from '../../client/pages/task-detail/task-images-model';
 import english from '../../shared/i18n/en.json';
-import type { TaskData } from '../../client/pages/task-execution-types';
+import type {
+  ArticleProposal,
+  TaskData,
+} from '../../client/pages/task-execution-types';
 
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
@@ -363,52 +377,115 @@ it('shows a new image with where it came from, and lists it in Changes with what
   ).toBeVisible();
 });
 
-it('uploads an image pasted into the body and writes it where the cursor was', async () => {
-  const onSave = vi.fn(async () => true);
-  const user = userEvent.setup();
+// The review card's form (article-edit.tsx) on a session kept in memory: Save checks it as Approve and Request changes
+// do (useArticleSubmit), and hands over the draft the version would be made of.
+function Editing({
+  data: d,
+  article,
+  tab: first,
+  onVersion,
+}: {
+  data: TaskData;
+  article: ArticleProposal;
+  tab?: string;
+  onVersion: (draft: ReturnType<typeof formDraft>) => void;
+}) {
+  const initial = initialForm(d, article);
+  const [form, setForm] = useState(initial);
+  const [tab, setTab] = useState(first);
+  const session: ArticleEditSession = {
+    artifactId: 'a1',
+    form,
+    ai: 0,
+    changed: !sameForm(form, initial),
+    readOnly: false,
+    othersEdits: false,
+    saving: false,
+    saveFailed: false,
+    set: setForm,
+    accepted: () => undefined,
+    discard: async () => undefined,
+    version: async () => {
+      onVersion(formDraft(d, article, form));
+      return { artifactId: 'a1', revision: 1 };
+    },
+  };
+  const submit = useArticleSubmit({ data: d, article, session, onTab: setTab });
+  return (
+    <TaskDraftProvider>
+      <TaskDraftScope scope='1:1'>
+        <ArticleEditFields
+          data={d}
+          article={article}
+          session={session}
+          tab={tab}
+          onTab={setTab}
+          id={submit.id}
+          errors={submit.errors}
+        />
+        <button type='button' onClick={() => void submit.prepare()}>
+          Save
+        </button>
+      </TaskDraftScope>
+    </TaskDraftProvider>
+  );
+}
+// The body is a rich editor: its Markdown is replaced through the editor, as typing would.
+const setBody = (box: HTMLElement, markdown: string) =>
+  act(() => {
+    (box as HTMLElement & { editor: Editor }).editor.commands.setContent(
+      markdown,
+      { contentType: 'markdown' },
+    );
+  });
+
+it('uploads an image added from the toolbar and writes it where the cursor was', async () => {
+  const onChange = vi.fn();
   let answer!: (response: Response) => void;
   const fetch = vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation(
       () => new Promise<Response>((resolve) => (answer = resolve)),
     );
+  const created = vi.fn(() => 'blob:local-1');
+  Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() });
+  // The editor scrolls the cursor into view, measuring text that jsdom does not lay out.
+  const rect = { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+  Object.assign(Range.prototype, {
+    getClientRects: () => [],
+    getBoundingClientRect: () => rect,
+  });
   try {
     render(
       <TaskImageContext.Provider value={{ projectId: 1, taskId: '1' }}>
-        <TaskDraftProvider>
-          <TaskDraftScope scope='1:1'>
-            <ArticleEditor
-              data={{ ...data, articleTargets: [imageTarget] } as TaskData}
-              article={proposal}
-              draftKey='a1'
-              tab='zh'
-              busy={false}
-              onSave={onSave}
-              onCancel={vi.fn()}
-            />
-          </TaskDraftScope>
-        </TaskDraftProvider>
+        <ArticleBodyEditor
+          aria-label='Body'
+          value='新的中文正文'
+          takesImages
+          onChange={onChange}
+        />
       </TaskImageContext.Provider>,
     );
-    // Images are offered by the editor's toolbar, not by a line of hints under the form (2026-11-04 user request).
+    // Images are offered by the editor's toolbar, not by a line of hints under it (2026-11-04 user request).
     expect(
       screen.getByRole('toolbar', { name: 'Formatting' }),
     ).toContainElement(screen.getByRole('button', { name: 'Add image' }));
     expect(screen.queryByText(/Paste or drop images/)).toBeNull();
-    const body = screen
-      .getAllByRole('textbox', { name: /^Body/ })
-      .find((b) => (b as HTMLTextAreaElement).value === '新的中文正文')!;
-    (body as HTMLTextAreaElement).setSelectionRange(2, 2);
-    fireEvent.paste(body, {
-      clipboardData: {
+    const box = screen.getByRole('textbox', { name: 'Body' });
+    act(() => {
+      (
+        box as HTMLElement & { editor: Editor }
+      ).editor.commands.setTextSelection(3);
+    });
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: {
         files: [new File(['png'], 'workspace.png', { type: 'image/png' })],
-        getData: () => '',
       },
     });
-    expect(body).toHaveValue(
-      '新的\n\n![Uploading workspace.png…]()\n\n中文正文',
-    );
-    expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
+    // Shown from the file at once; the body is handed back only once its address is the uploaded copy's.
+    expect(box.querySelector('img')).toHaveAttribute('src', 'blob:local-1');
+    expect(screen.getByRole('status')).toHaveTextContent('Uploading images…');
+    expect(onChange).not.toHaveBeenCalled();
     answer(
       new Response(
         JSON.stringify({
@@ -424,98 +501,70 @@ it('uploads an image pasted into the body and writes it where the cursor was', a
       ),
     );
     await waitFor(() =>
-      expect(body).toHaveValue(
+      expect(onChange).toHaveBeenLastCalledWith(
         `新的\n\n![workspace](/uploads/task-media/${IMAGE_ID}.png)\n\n中文正文`,
       ),
     );
     expect(String(fetch.mock.calls[0][0])).toContain(
       '/api/nocoreachTasks/media?projectId=1&requestId=',
     );
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        locales: {
-          zh: {
-            body: `新的\n\n![workspace](/uploads/task-media/${IMAGE_ID}.png)\n\n中文正文`,
-          },
-        },
-      }),
-    );
   } finally {
     fetch.mockRestore();
+    const range = Range.prototype as Partial<Range>;
+    delete range.getClientRects;
+    delete range.getBoundingClientRect;
   }
 });
 
 // 2026-11-04 user report (T-62): "Page check phrase" in the edit form read as something to fill in. The page check now
 // picks its own phrase from the approved text (verifyPhrase), so the form neither shows nor sends one.
-it('edits an article without a page check phrase, and saves none', async () => {
-  const onSave = vi.fn(async () => true);
+it('edits an article without a page check phrase, and sends none', async () => {
+  const onVersion = vi.fn();
   const user = userEvent.setup();
   render(
-    <TaskDraftProvider>
-      <TaskDraftScope scope='1:1'>
-        <ArticleEditor
-          data={data}
-          article={{
-            ...proposal,
-            draft: { ...proposal.draft, verifyText: '新的中文正文' },
-          }}
-          draftKey='a-phrase'
-          tab='zh'
-          busy={false}
-          onSave={onSave}
-          onCancel={vi.fn()}
-        />
-      </TaskDraftScope>
-    </TaskDraftProvider>,
+    <Editing
+      data={data}
+      article={{
+        ...proposal,
+        draft: { ...proposal.draft, verifyText: '新的中文正文' },
+      }}
+      tab='zh'
+      onVersion={onVersion}
+    />,
   );
   expect(screen.queryByText('Page check phrase')).toBeNull();
-  expect(
-    screen.queryByText(
-      'After publishing, the page is checked for this phrase.',
-    ),
-  ).toBeNull();
-  const body = screen
-    .getAllByRole('textbox', { name: /^Body/ })
-    .find((b) => (b as HTMLTextAreaElement).value === '新的中文正文')!;
-  await user.clear(body);
-  await user.type(body, '人工改写的中文正文');
+  await setBody(
+    screen.getByRole('textbox', { name: 'Body' }),
+    '人工改写的中文正文',
+  );
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith({
+  expect(onVersion).toHaveBeenCalledWith({
     locales: { zh: { body: '人工改写的中文正文' } },
   });
 });
 
-it('edits a new article with validation on save and sends only what it fills in', async () => {
-  const onSave = vi.fn(async () => true);
+it('checks a new article before a version is made of it, and sends only what it fills in', async () => {
+  const onVersion = vi.fn();
   const user = userEvent.setup();
-  const fresh = {
-    ...proposal,
-    articleId: null,
-    baseKey: null,
-    baseVersion: null,
-    draft: {
-      slug: 'Bad Slug',
-      locales: { en: { title: 'New post', body: '' } },
-    },
-    changes: ['en.title', 'slug'],
-  };
   render(
-    <TaskDraftProvider>
-      <TaskDraftScope scope='1:1'>
-        <ArticleEditor
-          data={data}
-          article={fresh}
-          draftKey='a1'
-          busy={false}
-          onSave={onSave}
-          onCancel={vi.fn()}
-        />
-      </TaskDraftScope>
-    </TaskDraftProvider>,
+    <Editing
+      data={data}
+      article={{
+        ...proposal,
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: {
+          slug: 'Bad Slug',
+          locales: { en: { title: 'New post', body: '' } },
+        },
+        changes: ['en.title', 'slug'],
+      }}
+      onVersion={onVersion}
+    />,
   );
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).not.toHaveBeenCalled();
+  expect(onVersion).not.toHaveBeenCalled();
   expect(
     screen.getByText(
       'Enter an address of lowercase letters, digits and hyphens',
@@ -526,108 +575,90 @@ it('edits a new article with validation on save and sends only what it fills in'
   await waitFor(() => expect(slug).toHaveFocus());
   await user.clear(slug);
   await user.type(slug, 'new-post');
-  const bodies = screen.getAllByRole('textbox', { name: /^Body/ });
-  await user.type(bodies[0], 'Body text');
+  await setBody(screen.getByRole('textbox', { name: /^Body/ }), 'Body text');
   expect(screen.queryByText('Enter the body')).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith({
+  expect(onVersion).toHaveBeenCalledWith({
     slug: 'new-post',
     locales: { en: { title: 'New post', body: 'Body text' } },
   });
 });
 
 // 2026-10-27: the language a new article must have is the task's primary one, as the server checks.
-it('asks a new article for the title and body of the primary language chosen at start', async () => {
-  const onSave = vi.fn(async () => true);
+it('edits only the primary language of a new article before its approval, and asks for its title and body', async () => {
+  const onVersion = vi.fn();
   const user = userEvent.setup();
   render(
-    <TaskDraftProvider>
-      <TaskDraftScope scope='1:1'>
-        <ArticleEditor
-          data={
-            {
-              ...data,
-              work: { delivery: { locales: ['zh', 'en'] } },
-            } as unknown as TaskData
-          }
-          article={{
-            ...proposal,
-            articleId: null,
-            baseKey: null,
-            baseVersion: null,
-            draft: { slug: 'new-post', locales: { zh: { title: '新文章' } } },
-            changes: ['zh.title', 'slug'],
-          }}
-          draftKey='a2'
-          busy={false}
-          onSave={onSave}
-          onCancel={vi.fn()}
-        />
-      </TaskDraftScope>
-    </TaskDraftProvider>,
+    <Editing
+      data={
+        {
+          ...data,
+          work: { delivery: { locales: ['zh', 'en'] } },
+        } as unknown as TaskData
+      }
+      article={{
+        ...proposal,
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: { slug: 'new-post', locales: { zh: { title: '新文章' } } },
+        changes: ['zh.title', 'slug'],
+      }}
+      onVersion={onVersion}
+    />,
   );
-  // Only Chinese is edited before its approval: English is translated from it, and says so once instead of as fields.
+  // English is written from Chinese once it is approved, and says so beside it instead of as fields.
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
     'Chinese',
   ]);
+  expect(screen.getByText('English · updated after approval')).toBeVisible();
   expect(screen.getAllByRole('textbox', { name: /^Title/ })).toHaveLength(1);
-  expect(
-    screen.getByText('English will be translated once Chinese is approved.'),
-  ).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).not.toHaveBeenCalled();
+  expect(onVersion).not.toHaveBeenCalled();
   expect(screen.getAllByText('Enter the body')).toHaveLength(1);
   expect(screen.queryByText('Enter a title')).not.toBeInTheDocument();
-  const bodies = screen.getAllByRole('textbox', { name: /^Body/ });
-  await user.type(bodies[0], '中文正文');
+  await setBody(screen.getByRole('textbox', { name: /^Body/ }), '中文正文');
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith({
+  expect(onVersion).toHaveBeenCalledWith({
     slug: 'new-post',
     locales: { zh: { title: '新文章', body: '中文正文' } },
   });
 });
 
 // 2026-10-27 user report: the editor opened on empty English fields while the Chinese ones were further down.
-it('edits the languages written, one at a time from the one shown, and opens the one with an error on save', async () => {
-  const onSave = vi.fn(async () => true);
+it('edits the languages written, one at a time from the one asked for, and opens the one with a problem', async () => {
+  const onVersion = vi.fn();
   const user = userEvent.setup();
   render(
-    <TaskDraftProvider>
-      <TaskDraftScope scope='1:1'>
-        <ArticleEditor
-          data={
-            {
-              ...data,
-              work: {
-                delivery: {
-                  locales: ['zh', 'en'],
-                  translateFrom: { artifactId: 'a0', at: '2026-10-27' },
-                },
-              },
-            } as unknown as TaskData
-          }
-          article={{
-            ...proposal,
-            articleId: null,
-            baseKey: null,
-            baseVersion: null,
-            draft: {
-              slug: 'new-post',
-              locales: {
-                zh: { title: '新文章', body: '中文正文' },
-                en: { title: 'New post', body: 'English body' },
-              },
+    <Editing
+      data={
+        {
+          ...data,
+          work: {
+            delivery: {
+              locales: ['zh', 'en'],
+              translateFrom: { artifactId: 'a0', at: '2026-10-27' },
             },
-            changes: ['zh.title', 'zh.body', 'en.title', 'en.body', 'slug'],
-          }}
-          draftKey='a3'
-          tab='en'
-          busy={false}
-          onSave={onSave}
-          onCancel={vi.fn()}
-        />
-      </TaskDraftScope>
-    </TaskDraftProvider>,
+          },
+        } as unknown as TaskData
+      }
+      article={{
+        ...proposal,
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: {
+          slug: 'new-post',
+          locales: {
+            zh: { title: '新文章', body: '中文正文' },
+            en: { title: 'New post', body: 'English body' },
+          },
+        },
+        changes: ['zh.title', 'zh.body', 'en.title', 'en.body', 'slug'],
+      }}
+      tab='en'
+      onVersion={onVersion}
+    />,
   );
   const tab = (name: string) => screen.getByRole('tab', { name });
   expect(tab('English')).toHaveAttribute('aria-selected', 'true');
@@ -636,20 +667,20 @@ it('edits the languages written, one at a time from the one shown, and opens the
   );
   await user.click(tab('Chinese'));
   expect(screen.getByRole('textbox', { name: /^Title/ })).toHaveValue('新文章');
-  await user.clear(screen.getByRole('textbox', { name: /^Body/ }));
+  await setBody(screen.getByRole('textbox', { name: /^Body/ }), '');
   await user.click(tab('English'));
   const title = screen.getByRole('textbox', { name: /^Title/ });
   await user.clear(title);
   await user.type(title, 'Edited');
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).not.toHaveBeenCalled();
-  // The Chinese body is required: its language opens, with the field focused.
+  expect(onVersion).not.toHaveBeenCalled();
+  // The Chinese body is required: its language opens, with the body focused.
   expect(tab('Chinese')).toHaveAttribute('aria-selected', 'true');
   const body = screen.getByRole('textbox', { name: /^Body/ });
   await waitFor(() => expect(body).toHaveFocus());
-  await user.type(body, '新的正文');
+  await setBody(body, '新的正文');
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith({
+  expect(onVersion).toHaveBeenCalledWith({
     slug: 'new-post',
     locales: {
       zh: { title: '新文章', body: '新的正文' },
@@ -664,40 +695,21 @@ it.each([
   { create: false, status: 'published' as const },
   { create: false, status: 'draft' as const },
 ])(
-  'preserves $status when editing an article (create=$create)',
-  async ({ create, status }) => {
-    const onSave = vi.fn(async () => true);
-    const user = userEvent.setup();
-    render(
-      <TaskDraftProvider>
-        <TaskDraftScope scope='1:1'>
-          <ArticleEditor
-            data={data}
-            article={{
-              ...proposal,
-              ...(create
-                ? { articleId: null, baseKey: null, baseVersion: null }
-                : {}),
-              draft: {
-                slug: 'hello',
-                status,
-                locales: { en: { title: 'Hello', body: 'English body' } },
-              },
-              changes: [],
-            }}
-            draftKey='status-edit'
-            busy={false}
-            onSave={onSave}
-            onCancel={vi.fn()}
-          />
-        </TaskDraftScope>
-      </TaskDraftProvider>,
-    );
-    const title = screen.getAllByRole('textbox', { name: /^Title/ })[0];
-    await user.clear(title);
-    await user.type(title, 'Edited title');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(onSave).toHaveBeenCalledWith({
+  'keeps $status in the version made of an edit (create=$create)',
+  ({ create, status }) => {
+    const article = {
+      ...proposal,
+      ...(create ? { articleId: null, baseKey: null, baseVersion: null } : {}),
+      draft: {
+        slug: 'hello',
+        status,
+        locales: { en: { title: 'Hello', body: 'English body' } },
+      },
+      changes: [],
+    } as ArticleProposal;
+    const form = initialForm(data, article);
+    form.locales.en.title = 'Edited title';
+    expect(formDraft(data, article, form)).toEqual({
       ...(create ? { slug: 'hello' } : {}),
       status,
       locales: {
@@ -711,42 +723,43 @@ it.each([
 );
 
 it('chooses draft or published for a target that stores a status, starting from the draft', async () => {
-  const onSave = vi.fn(async () => true);
+  const onVersion = vi.fn();
   const user = userEvent.setup();
-  const withStatus = {
-    ...data,
-    articleTargets: [{ ...target, status: true }],
-  } as unknown as TaskData;
   render(
-    <TaskDraftProvider>
-      <TaskDraftScope scope='1:1'>
-        <ArticleEditor
-          data={withStatus}
-          article={{
-            ...proposal,
-            articleId: null,
-            baseKey: null,
-            baseVersion: null,
-            draft: {
-              slug: 'new-post',
-              status: 'draft',
-              locales: { en: { title: 'New', body: 'Body' } },
-            },
-          }}
-          draftKey='status-choice'
-          busy={false}
-          onSave={onSave}
-          onCancel={vi.fn()}
-        />
-      </TaskDraftScope>
-    </TaskDraftProvider>,
+    <Editing
+      data={
+        {
+          ...data,
+          articleTargets: [{ ...target, status: true }],
+        } as unknown as TaskData
+      }
+      article={{
+        ...proposal,
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: {
+          slug: 'new-post',
+          status: 'draft',
+          locales: { en: { title: 'New', body: 'Body' } },
+        },
+      }}
+      onVersion={onVersion}
+    />,
   );
   expect(screen.getByRole('radio', { name: 'Draft' })).toBeChecked();
   await user.click(screen.getByRole('radio', { name: 'Published' }));
   await user.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith(
+  expect(onVersion).toHaveBeenCalledWith(
     expect.objectContaining({ slug: 'new-post', status: 'published' }),
   );
+});
+
+// An address still being typed is left out of the automatic save, which would refuse it.
+it('keeps an unfinished address out of the automatic save', () => {
+  const form = initialForm(data, proposal);
+  expect(keptForm({ ...form, slug: 'Bad Slug' })).not.toHaveProperty('slug');
+  expect(keptForm({ ...form, slug: 'hello' })).toMatchObject({ slug: 'hello' });
 });
 
 it('shows status changes as words in the review', () => {
