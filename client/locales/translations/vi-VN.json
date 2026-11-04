@@ -460,6 +460,8 @@
     }
   },
   "appearance": {
+    "menu": "Giao diện",
+    "density": "Mật độ",
     "title": "Hiển thị",
     "mode": "Chế độ màu",
     "preset": "Giao diện",

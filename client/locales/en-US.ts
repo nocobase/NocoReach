@@ -11,6 +11,11 @@ const enUS = {
   schedules,
   ...systemEnUS,
   ...agentChat,
+  appearance: {
+    ...systemEnUS.appearance,
+    menu: 'Theme',
+    density: 'Density',
+  },
   'agentSetup.title': 'Use NocoReach in your agent',
   'agentSetup.description':
     'Copy these instructions into Claude Code, Codex, or another coding agent to connect to NocoReach.',
@@ -98,12 +103,16 @@ const enUS = {
   'auth.marketingTitleSecond': 'Agents put them into action.',
   // Not shown since the sign-in title became the two-line slogan; kept because the locale type requires the key.
   'auth.marketingTitleThird': '',
-  'auth.marketingDescription': 'Data collection, daily analysis and Agent execution in one platform.',
+  'auth.marketingDescription':
+    'Data collection, daily analysis and Agent execution in one platform.',
   'auth.frontend': 'Daily analysis',
-  'auth.frontendDescription': 'Online AI analyzes your data every day and proposes opportunities with evidence.',
+  'auth.frontendDescription':
+    'Online AI analyzes your data every day and proposes opportunities with evidence.',
   'auth.foundation': 'Agent execution',
-  'auth.foundationDescription': 'Once you confirm, an Agent carries out the work; you review the changes and track the impact.',
-  'auth.marketingFooter': 'Find opportunities · Put them into action · Track the impact',
+  'auth.foundationDescription':
+    'Once you confirm, an Agent carries out the work; you review the changes and track the impact.',
+  'auth.marketingFooter':
+    'Find opportunities · Put them into action · Track the impact',
   'navigation.brandHome': 'NocoReach home',
   'navigation.brandApps': 'NocoReach applications',
   shell: {

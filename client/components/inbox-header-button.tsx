@@ -21,5 +21,5 @@ function SignedInInboxButton(): ReactElement {
   // Nothing in this application asks the viewer to decide, so the badge counts what is unread.
   const badge = inboxBadge(0, unread.data ?? 0);
   useDocumentTitleBadge(badge?.text ?? null);
-  return <InboxButton badge={badge} />;
+  return <InboxButton badge={badge} className='size-8 xl:size-9' />;
 }

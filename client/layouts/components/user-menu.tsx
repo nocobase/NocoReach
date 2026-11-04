@@ -20,6 +20,7 @@ import { ChangePasswordDialog } from '#components/change-password-dialog';
 import { usePendingInvitationCount } from '#pages/access/api';
 
 import { LanguageSwitcher } from './language-switcher.js';
+import { ThemeSettingsMenu } from '../../theme/theme-settings.js';
 
 export function UserMenu(): ReactElement {
   useNocoReachLocale();
@@ -64,7 +65,7 @@ export function UserMenu(): ReactElement {
           aria-label={t('account.openMenu', {
             defaultValue: 'Open account menu',
           })}
-          className='flex size-10 cursor-pointer items-center justify-center rounded-full border border-border bg-background/60 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50'
+          className='flex size-8 cursor-pointer xl:size-10 items-center justify-center rounded-full border border-border bg-background/60 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50'
         >
           {identity?.avatar ? (
             <img
@@ -124,6 +125,7 @@ export function UserMenu(): ReactElement {
             </DropdownMenuItem>
           ) : null}
           <LanguageSwitcher />
+          <ThemeSettingsMenu />
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={isLoggingOut}

@@ -11,6 +11,11 @@ const zhCN: AppResource = {
   schedules,
   ...systemZhCN,
   ...agentChat,
+  appearance: {
+    ...systemZhCN.appearance,
+    menu: '主题',
+    density: '密度',
+  },
   'agentSetup.title': '在 agent 中使用 NocoReach',
   'agentSetup.description':
     '将下面的指引复制到 Claude Code、Codex 或其他编程 agent，连接 NocoReach。',
@@ -92,11 +97,13 @@ const zhCN: AppResource = {
   'auth.marketingTitleSecond': '交给 Agent 执行',
   // Not shown since the sign-in title became the two-line slogan; kept because the locale type requires the key.
   'auth.marketingTitleThird': '',
-  'auth.marketingDescription': '数据采集、每日分析和 Agent 执行在同一个平台完成。',
+  'auth.marketingDescription':
+    '数据采集、每日分析和 Agent 执行在同一个平台完成。',
   'auth.frontend': '每日分析',
   'auth.frontendDescription': '在线 AI 每天分析数据，提出有依据的机会。',
   'auth.foundation': 'Agent 执行',
-  'auth.foundationDescription': '确认后交给 Agent 执行，改动由你审核，并跟踪效果。',
+  'auth.foundationDescription':
+    '确认后交给 Agent 执行，改动由你审核，并跟踪效果。',
   'auth.marketingFooter': '发现机会 · 执行落地 · 跟踪效果',
   'navigation.brandHome': 'NocoReach 首页',
   'navigation.brandApps': 'NocoReach 应用',

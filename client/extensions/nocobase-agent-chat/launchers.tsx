@@ -36,7 +36,7 @@ function HeaderButton(): ReactElement {
             <Button
               variant='outline'
               size='icon'
-              className='relative size-10 rounded-xl border-border/70 bg-background/60 text-foreground aria-expanded:border-foreground/40 aria-expanded:bg-accent dark:border-border/70'
+              className='relative size-8 rounded-xl xl:size-10 border-border/70 bg-background/60 text-foreground aria-expanded:border-foreground/40 aria-expanded:bg-accent dark:border-border/70'
               aria-label={label}
               aria-expanded={panel.open}
               aria-controls={CHAT_PANEL_ID}

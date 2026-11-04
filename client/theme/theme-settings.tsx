@@ -5,6 +5,16 @@ import { useId, type ReactElement } from 'react';
 import { Button } from '#components/ui/button';
 import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import {
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '#components/ui/dropdown-menu';
+import {
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -20,7 +30,75 @@ const COLOR_MODES = [
   { id: 'system', icon: Monitor },
 ] as const;
 
-export function ThemeSettings(): ReactElement {
+/** The account menu shares the standalone control's browser-local preferences. */
+export function ThemeSettingsMenu(): ReactElement {
+  const { theme, setTheme } = useTheme();
+  const { preset, setPreset } = useThemePreset();
+  const { t } = useTranslation();
+  const current = COLOR_MODES.find((mode) => mode.id === theme);
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className='gap-2'>
+        <Palette aria-hidden='true' className='size-4' />
+        <span className='flex-1'>{t('appearance.menu')}</span>
+        {current ? (
+          <span className='text-muted-foreground'>
+            {t(`appearance.${current.id}`)}
+          </span>
+        ) : null}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className='min-w-40 max-w-[calc(100vw-2rem)]'>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {t('appearance.mode', { defaultValue: 'Color mode' })}
+          </DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={theme}
+            onValueChange={(value: unknown) => {
+              if (value === 'light' || value === 'dark' || value === 'system') {
+                setTheme(value);
+              }
+            }}
+          >
+            {COLOR_MODES.map(({ id, icon: Icon }) => (
+              <DropdownMenuRadioItem key={id} value={id} closeOnClick={false}>
+                <Icon aria-hidden='true' className='size-4' />
+                {t('appearance.' + id, {
+                  defaultValue: id[0].toUpperCase() + id.slice(1),
+                })}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('appearance.density')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={preset}
+            onValueChange={(value: unknown) => {
+              const selected = themePresets.find((item) => item.id === value);
+              if (selected) setPreset(selected.id);
+            }}
+          >
+            {themePresets.map((item) => (
+              <DropdownMenuRadioItem
+                key={item.id}
+                value={item.id}
+                closeOnClick={false}
+              >
+                {t(item.labelKey)}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+export function ThemeSettings({
+  className,
+}: { className?: string } = {}): ReactElement {
   const { theme, setTheme } = useTheme();
   const { preset, setPreset } = useThemePreset();
   const { t } = useTranslation();
@@ -38,7 +116,10 @@ export function ThemeSettings(): ReactElement {
             aria-label={title}
             size='icon'
             variant='outline'
-            className='size-10 rounded-xl border-border bg-background/60 hover:bg-accent/50'
+            className={cn(
+              'size-10 rounded-xl border-border bg-background/60 hover:bg-accent/50',
+              className,
+            )}
           />
         }
       >

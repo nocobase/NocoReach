@@ -460,6 +460,8 @@
     }
   },
   "appearance": {
+    "menu": "主題",
+    "density": "密度",
     "title": "外觀",
     "mode": "色彩模式",
     "preset": "主題",

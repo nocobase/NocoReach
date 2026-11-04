@@ -15,6 +15,7 @@ import { ApiClientError } from '@nocobase/app-client';
 import { AgentSetupDialog } from '../../client/components/agent-setup-dialog.js';
 import { UserMenu } from '../../client/layouts/components/user-menu.js';
 import locales from '../../client/locales/index.js';
+import { AppThemeProvider } from '../../client/theme/index.js';
 
 const fixture = vi.hoisted(() => ({
   request: vi.fn(),
@@ -60,6 +61,11 @@ function deferred<T>() {
 let runtime: I18nRuntime;
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addListener() {},
+    removeListener() {},
+  }));
   fixture.request.mockResolvedValue(token());
   fixture.user = { id: 'test-person', name: 'Test person' };
   fixture.invitations = 0;
@@ -78,6 +84,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 function tree(open = true) {
   return (
@@ -296,7 +303,9 @@ const accountMenu = () =>
   render(
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
-        <UserMenu />
+        <AppThemeProvider>
+          <UserMenu />
+        </AppThemeProvider>
       </MemoryRouter>
     </I18nProvider>,
   );

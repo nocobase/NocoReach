@@ -7,7 +7,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TestI18nProvider,
   createTestI18nRuntime,
@@ -15,6 +15,7 @@ import {
 import type { ReactNode } from 'react';
 import { UserMenu } from '../../client/layouts/components/user-menu.tsx';
 import enUS from '../../client/locales/en-US.js';
+import { AppThemeProvider } from '../../client/theme/index.js';
 
 const runtime = await createTestI18nRuntime({
   application: { namespace: '@nocobase/app-template-default', resources: enUS },
@@ -23,7 +24,9 @@ const runtime = await createTestI18nRuntime({
 function I18n({ children }: { readonly children: ReactNode }) {
   return (
     <MemoryRouter>
-      <TestI18nProvider runtime={runtime}>{children}</TestI18nProvider>
+      <TestI18nProvider runtime={runtime}>
+        <AppThemeProvider>{children}</AppThemeProvider>
+      </TestI18nProvider>
     </MemoryRouter>
   );
 }
@@ -37,9 +40,12 @@ const { signOut, refresh, showToast, resolveError } = vi.hoisted(() => ({
 vi.mock('@nocobase/app-plugin-authentication/client/actions', () => ({
   useAuthenticationErrorResolver: () => resolveError,
 }));
-vi.mock('@nocobase/app-client', () => {
+vi.mock('@nocobase/app-client', async (original) => {
   const toaster = { show: showToast, close: vi.fn() };
-  return { useToaster: () => toaster };
+  return {
+    ...(await original<typeof import('@nocobase/app-client')>()),
+    useToaster: () => toaster,
+  };
 });
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
@@ -69,8 +75,14 @@ async function openAccountMenu(): Promise<void> {
 }
 
 describe('account menu sign out', () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addListener() {},
+      removeListener() {},
+    }));
     refresh.mockResolvedValue(undefined);
     resolveError.mockReturnValue({ message: 'Localized authentication error' });
   });

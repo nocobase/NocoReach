@@ -460,6 +460,8 @@
     }
   },
   "appearance": {
+    "menu": "テーマ",
+    "density": "表示密度",
     "title": "外観",
     "mode": "カラーモード",
     "preset": "テーマ",

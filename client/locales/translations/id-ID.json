@@ -460,6 +460,8 @@
     }
   },
   "appearance": {
+    "menu": "Tema",
+    "density": "Kepadatan",
     "title": "Tampilan",
     "mode": "Mode warna",
     "preset": "Tema",
