@@ -251,7 +251,7 @@ test('all unedited built-in detail panels render English instructions', async ({
     await expect(detail).toBeVisible();
     await expect(detail).not.toContainText(/[一-鿿]/u);
     if (playbook.id === 'tech-fix')
-      await expect(detail).toContainText('Do not edit files yet.');
+      await expect(detail).toContainText('Do not make any changes yet.');
     if (playbook.id === 'community-reply')
       await expect(detail).toContainText('Draft one reply for each post');
   }

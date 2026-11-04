@@ -34,6 +34,13 @@ const currentSystemText = new Map<string, MessageKey>(
     'playbooks.syncPageChangesOtherLanguage',
     'playbooks.translationInstruction',
     'articleTask.translateStep',
+    // Built-in step instructions that hold for a website repository and a CMS article alike (2026-11-04): the
+    // repository's own duties (folder, frontmatter, navigation, checks) are in the build rules (agent-result.ts).
+    'playbooks.writeBlogPostTaskBrief',
+    'playbooks.createPageInstruction',
+    'playbooks.releaseNotesInstruction',
+    'playbooks.technicalFixInstruction',
+    'playbooks.changePlanInstruction',
     // The daily report's time limit (2026-10-23): stored as Chinese text in a run's error, shown in the reader's language.
     'analysis.modelTimedOut',
     // Bilibili takes up to five search terms (2026-11-02); the three-term text stays as its alias.
