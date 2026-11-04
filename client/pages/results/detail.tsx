@@ -5,6 +5,7 @@ import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { ExternalLinkIcon } from 'lucide-react';
 import { $t } from '#i18n';
 import { RouteDrawer } from '#components/route-drawer';
+import { ListSkeleton } from '#components/reach/states';
 import { formatDate } from '#lib/format';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { useProject } from '../reach-data.js';
@@ -238,7 +239,7 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
             </section>
           </>
         ) : (
-          !error && <p role='status'>{$t('common.loading')}</p>
+          !error && <ListSkeleton rows={4} />
         )}
       </div>
     </RouteDrawer>

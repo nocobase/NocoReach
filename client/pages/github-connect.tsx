@@ -1,6 +1,7 @@
 import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {ConnectionError,NetworkSettingsLink} from "#components/connection-error";
+import {ListSkeleton} from '#components/reach/states';
 import {useEffect,useState} from 'react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -24,7 +25,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
  useEffect(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>setError(() => ($t('github.notLoadGithubStatus'))));},[projectId, setError]);
  useEffect(()=>{if(!status?.history?.running)return;const t=setInterval(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.history?.running]);
  async function run(fn:()=>Promise<GitHubStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<ListSkeleton rows={2}/>;
  // Star and Fork history (from each star's and fork's date, with the token); Traffic cannot be read back further than 14 days.
  const historyLine=(h:History,total?:number)=>h?.complete?<>{$tj('github.rebuilt',{0:h.from||'—',1:h.total?.toLocaleString(getCurrentLocale()),2:total&&h.total!==null&&total-h.total>0?$t('github.fewerNowStarsRemovedDeleted',{0:(total-h.total).toLocaleString(getCurrentLocale())}):''})}</>:h?.error?<span className="text-destructive">{$tj('github.notRebuilt',{0:$legacyText(h.error)})}</span>:status.token?$t('github.waitingRebuildStartsFewMinutes'):$t('github.rebuiltOnceTokenBelowConnected');
  const historySection=status.connected?<section className="nr-guide-step" data-history><h3><WithInfo help={$t('github.historyCoverageHelp')}>{$t('github.history')}</WithInfo></h3>

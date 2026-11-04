@@ -1,7 +1,7 @@
 // @ts-nocheck
-import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { systemMessageKey, systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
-import type { StageKind, Stage } from '../../../shared/playbook-catalog';
+import { SYSTEM_PLAYBOOKS, stagesFor, type StageKind, type Stage } from '../../../shared/playbook-catalog';
 export type { StageKind, Stage, ChecklistItem, AgentMode } from '../../../shared/playbook-catalog';
 import { languageOf } from './language';
 import { fail, text } from './model';
@@ -91,6 +91,15 @@ export function runNotes(history: readonly { action?: unknown; comment?: unknown
   }
   return comments.filter(e => kept.has(e)).map(e => runMessage(e.comment, e.images));
 }
+// A built-in step's instruction as the Agent reads it: in its current wording, the one View steps shows for it
+// (client/pages/playbook-snapshot.ts), when the task started from the unedited built-in. A task started before a
+// reword gets the new words on its next run (2026-11-04: Write blog post said to fill in the blog folder and
+// frontmatter, wrong for a CMS article). Edited and custom playbooks keep their own words.
+const BUILT_IN_INSTRUCTIONS = new Set(SYSTEM_PLAYBOOKS.flatMap(p => stagesFor(p).flatMap(s => (s.instruction ? [systemMessageKey(s.instruction)] : []))));
+export function stageInstruction(flow: Pick<FlowSnapshot, 'id' | 'system' | 'edited'> | undefined, instruction = '') {
+  const key = flow?.system === true && flow.edited === false && SYSTEM_PLAYBOOKS.some(p => p.id === flow.id) ? systemMessageKey(instruction) : undefined;
+  return key && BUILT_IN_INSTRUCTIONS.has(key) ? systemMessageText(key) : instruction;
+}
 export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[]; pages?: string[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
   const insight = task?.evidence?.insight || null, part = task?.evidence?.part || null;
@@ -113,7 +122,7 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
     ...(w.pages?.length ? { pagesToChange: w.pages } : {}),
     evidence: insight ? { insight, signals, ...(part ? { part: { target: part.label, ...(part.url ? { url: part.url } : {}) } } : {}) } : rest,
     content: content || null,
-    stage: { name: stage.name, instruction: stage.instruction || '', ...(stage.skills?.length ? { skills: stage.skills } : {}) },
+    stage: { name: stage.name, instruction: stageInstruction(w.flow, stage.instruction), ...(stage.skills?.length ? { skills: stage.skills } : {}) },
     previousStages: stages.slice(0, index).map((s, i) => ({ stage: s.name, output: w.results[i]?.content || null })).filter(x => x.output),
     rejectedDraft: w.results[index]?.rejectedAt ? w.results[index]!.content : null,
     feedback: reviews.filter(r => r?.kind === 'stage' && r.stageKey === stage.key && r.decision === 'requestChanges').slice(-3).map(r => runMessage(r.comment, r.images)),
