@@ -35,7 +35,7 @@ const knownText = (list: string[]) => {
       (stepKey(value) !== undefined && keys.has(stepKey(value))),
   };
 };
-// A stored built-in step name in the reader's language, under its current name.
+// A stored built-in step's text in the reader's language, under its current wording.
 const stepText = (value: string) => {
   const key = systemMessageKey(value);
   return key !== undefined && REPLACED[key]
@@ -43,8 +43,15 @@ const stepText = (value: string) => {
     : $legacyText(value);
 };
 const names = knownText(SYSTEM_PLAYBOOKS.map((p) => p.name));
-const stageNames = knownText(
-  SYSTEM_PLAYBOOKS.flatMap((p) => stagesFor(p).map((s) => s.name)),
+const canonicalStages = SYSTEM_PLAYBOOKS.flatMap((p) => stagesFor(p));
+const stageNames = knownText(canonicalStages.map((s) => s.name));
+// A built-in step's instruction and its review items are stored as Chinese system text too (View steps on a started
+// task showed them in Chinese in every language until 2026-11-04).
+const instructions = knownText(
+  canonicalStages.flatMap((s) => (s.instruction ? [s.instruction] : [])),
+);
+const checklistLabels = knownText(
+  canonicalStages.flatMap((s) => (s.checklist || []).map((c) => c.label)),
 );
 
 // Compare the complete JSON shape, including unknown fields, without depending on
@@ -122,11 +129,23 @@ function localizeFlowSnapshot(
     stages: flow.stages.map((stage) => ({
       ...stage,
       name: stageNames.has(stage.name) ? stepText(stage.name) : stage.name,
+      ...(stage.instruction && instructions.has(stage.instruction)
+        ? { instruction: stepText(stage.instruction) }
+        : {}),
+      ...(stage.checklist
+        ? {
+            checklist: stage.checklist.map((item) =>
+              checklistLabels.has(item.label)
+                ? { ...item, label: stepText(item.label) }
+                : item,
+            ),
+          }
+        : {}),
     })),
   };
 }
 
-// Always derive a display copy from raw state. Never persist these translated names.
+// Always derive a display copy from raw state. Never persist this translated text.
 export function localizeWorkSnapshots<
   T extends { flow?: FlowSnapshot; playbook?: PlaybookSnapshot },
 >(work: T): T {

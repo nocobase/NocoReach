@@ -4,6 +4,7 @@ import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import english from '../../shared/i18n/en.json';
+import chinese from '../../shared/i18n/zh.json';
 import { localizeWorkSnapshots } from '../../client/pages/playbook-snapshot';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -161,15 +162,19 @@ test('localizes proven built-in snapshot names without changing stored data or m
   expect(data).toEqual(before);
 });
 
-test('every canonical built-in name is localized in English and restored in Chinese', () => {
+test('every canonical built-in name, instruction and review item is localized in English and restored in Chinese', () => {
   for (const p of SYSTEM_PLAYBOOKS) {
     const data = task(p.id),
       original = structuredClone(data);
     setDictionary(english);
     const view = localizeWorkSnapshots(data.work);
     expect(view.playbook?.name).not.toMatch(/[一-鿿]/u);
-    for (const stage of view.flow!.stages)
+    for (const stage of view.flow!.stages) {
       expect(stage.name).not.toMatch(/[一-鿿]/u);
+      expect(stage.instruction || '').not.toMatch(/[一-鿿]/u);
+      for (const item of stage.checklist || [])
+        expect(item.label).not.toMatch(/[一-鿿]/u);
+    }
     setDictionary(null);
     expect(localizeWorkSnapshots(data.work)).toEqual(data.work);
     expect(data).toEqual(original);
@@ -215,6 +220,129 @@ test.each(['custom', 'edited', 'clone', 'legacy', 'partial-origin'] as const)(
     expect(data).toEqual(before);
   },
 );
+
+// View steps on a started task reads the snapshot: a built-in's instruction and review items are stored as Chinese
+// system text, as its step names are, and show in the reader's language (2026-11-04).
+async function viewSteps(playbook: string) {
+  await userEvent
+    .setup()
+    .click(
+      within(
+        document.querySelector<HTMLElement>('[data-started-card]')!,
+      ).getByRole('button', { name: 'View steps' }),
+    );
+  return within(screen.getByRole('dialog', { name: playbook })).getByRole(
+    'list',
+    { name: 'Steps' },
+  );
+}
+
+test('View steps on a started Improve existing page task shows its instruction in English', async () => {
+  const data = task('optimize-page'),
+    before = structuredClone(data);
+  const runtime = await setup(data);
+  const steps = await viewSteps('Improve existing page');
+  expect(steps).toHaveTextContent('1. Agent Change');
+  expect(steps).toHaveTextContent(english['playbooks.optimizePageInstruction']);
+  expect(steps).not.toHaveTextContent(/[一-鿿]/u);
+  await act(() => runtime.changeLanguage('zh-CN'));
+  expect(
+    within(screen.getByRole('dialog', { name: '优化现有页面' })).getByRole(
+      'list',
+      { name: '步骤' },
+    ),
+  ).toHaveTextContent(chinese['playbooks.optimizePageInstruction']);
+  expect(data).toEqual(before);
+});
+
+test.each(['system', 'legacy'] as const)(
+  'View steps on a started %s research task shows its review items in English',
+  async (variant) => {
+    const data = task('change-research');
+    if (variant === 'legacy') {
+      delete data.work.flow!.system;
+      delete data.work.flow!.edited;
+      delete data.work.playbook!.system;
+      delete data.work.playbook!.edited;
+    }
+    await setup(data);
+    const steps = await viewSteps('Change investigation');
+    expect(steps).toHaveTextContent(
+      english['playbooks.changeResearchInstruction'],
+    );
+    expect(steps).toHaveTextContent(
+      `Confirm: ${english['playbooks.citedDataFactsAccurate']}`,
+    );
+    expect(steps).not.toHaveTextContent(/[一-鿿]/u);
+  },
+);
+
+// The current step reads the same snapshot: the items to confirm on Review.
+test('the current review lists its built-in items in the reader language', async () => {
+  const data = task('change-research');
+  data.work.results = [
+    {
+      id: 'artifact-1',
+      stepId: 'analyze',
+      planVersion: 0,
+      version: 1,
+      content: '用户成果 {0}',
+      createdAt: '2026-10-01T00:00:00Z',
+      createdBy: 'root',
+    },
+  ];
+  data.work.stageIndex = 1;
+  const runtime = await setup(data);
+  const items = (dictionary: Record<string, string>) =>
+    screen.getByRole('group', {
+      name: dictionary['taskDetail.confirmFollowing'],
+    });
+  expect(items(english)).toHaveTextContent(
+    english['playbooks.citedDataFactsAccurate'],
+  );
+  await act(() => runtime.changeLanguage('zh-CN'));
+  expect(items(chinese)).toHaveTextContent(
+    chinese['playbooks.citedDataFactsAccurate'],
+  );
+});
+
+test.each(['custom', 'edited'] as const)(
+  'View steps on a started %s playbook keeps its own instruction and review items',
+  async (variant) => {
+    const data = task('change-research');
+    const flow = data.work.flow!,
+      playbook = data.work.playbook!;
+    if (variant === 'custom') {
+      flow.id = playbook.id = 'custom-12345678';
+      flow.system = playbook.system = false;
+      flow.version = playbook.version = 1;
+    } else {
+      flow.edited = playbook.edited = true;
+      flow.version = playbook.version = 4;
+    }
+    flow.name = playbook.name = '分析变化';
+    // An instruction the person wrote, and a review item still worded as the built-in's: both stay as stored.
+    flow.stages[0].instruction = '分析。任务。 {0}';
+    const before = structuredClone(data);
+    await setup(data);
+    const steps = await viewSteps('分析变化');
+    expect(steps).toHaveTextContent('分析。任务。 {0}');
+    expect(steps).toHaveTextContent(
+      `Confirm: ${chinese['playbooks.citedDataFactsAccurate']}`,
+    );
+    expect(data).toEqual(before);
+  },
+);
+
+test('unknown instructions and review items stay raw even with system provenance', () => {
+  setDictionary(english);
+  const data = task('change-research');
+  data.work.flow!.stages[0].instruction = '分析。任务。 {0}';
+  data.work.flow!.stages[1].checklist![0].label = '分析。任务。 {0}';
+  const view = localizeWorkSnapshots(data.work);
+  expect(view.flow!.stages[0].instruction).toBe('分析。任务。 {0}');
+  expect(view.flow!.stages[1].checklist![0].label).toBe('分析。任务。 {0}');
+});
 
 test('unknown names stay raw even with system provenance, without fuzzy translation', () => {
   setDictionary(english);
