@@ -45,6 +45,9 @@ test('period: deduplicated totals for both periods, the daily line and the first
  assert.deepEqual(later.map(c=>c.body.requests.length),[5,4],'the other nine reports, read apart, in one round');
  assert.deepEqual(changeRequests(later).map(dimsOf),['landingPagePlusQueryString','pagePath'],'landing pages and pages read for both periods');
  assert.equal(later.flatMap(c=>c.body.requests).filter(r=>dimsOf(r)==='landingPagePlusQueryString').length,1,'landing pages read once, for their table and the change');
+ // A table read with its change is sorted as that change, as the table keeps its first rows.
+ for(const [name,dim] of [['channel','sessionDefaultChannelGroup'],['landing','landingPagePlusQueryString']])
+  assert.equal(calls.flatMap(c=>c.body.requests).find(r=>dimsOf(r)===dim).orderBys[0].metric.metricName,TABLES[name].order||'sessions',`${name}'s table keeps its own order`);
  assert.deepEqual(t.changes.page,[{key:'/docs',current:{views:310,keyEvents:2},previous:{views:200,keyEvents:1}}],'/docs and /docs/ are one page');
  assert.deepEqual(t.changes.landing,[{key:'/',current:{sessions:25,newUsers:5},previous:{sessions:30,newUsers:6}},{key:'/old',current:{sessions:0,newUsers:0},previous:{sessions:9,newUsers:3}}],'a landing page with a query string is its path, and one seen only before stays behind the change');
  assert.deepEqual(t.tables.landing.map(r=>[r.key,r.sessions,r.engaged]),[['/',20,1],['/?utm_source=x',5,1]],'the table holds the current period only, with every column, and not a landing page seen only before it');

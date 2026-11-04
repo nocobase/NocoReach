@@ -39,10 +39,15 @@ import { NotesTip, InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
 import { cn } from '#lib/utils';
-import { useProject } from '../reach-data';
+import { useProject, type Project } from '../reach-data';
 import { useFreshData } from '../workspace-cache';
 import { RangePicker } from '../range-picker';
-import { validRange, useRange, defaultRanges } from '../range-state';
+import {
+  validRange,
+  useRange,
+  defaultRanges,
+  type Range,
+} from '../range-state';
 import { MetricTile } from '../data-parts';
 import { HandOffBar } from '../hand-off-bar';
 import { ReportCard } from './reports';
@@ -111,19 +116,27 @@ function notesOf(report: Report, rest?: Report): string[] {
   ];
 }
 
-export default function DataWebsite() {
-  const { project } = useProject();
-  const navigate = useNavigate();
-  const [range, setRange] = useRange();
-  const r = RANGES.includes(range.range) ? range : { range: '28' };
-  const valid = validRange(r);
-  const [metric, setMetric] = useState<MetricKey>('users');
-  const { data: report, error } = useFreshData<Report>(
-    project && valid
-      ? `data-view:website:${project.id}:${project.analyticsPropertyId}:${project.searchConsoleProperty}:${JSON.stringify(r)}`
+// Traffic's two parts (website-report.ts, `period` and `periodTables`) are asked for alike, so their client keys differ
+// only by these prefixes, which `isGoogleReportKey` drops when the Google connection changes.
+const TRAFFIC_PARTS = {
+  website: 'data-view:website',
+  websiteTables: 'data-view:website-tables',
+} as const;
+
+// One part of Traffic for the range, or nothing while `project` is not given.
+function useTrafficPart(
+  action: keyof typeof TRAFFIC_PARTS,
+  project:
+    | Pick<Project, 'id' | 'analyticsPropertyId' | 'searchConsoleProperty'>
+    | undefined,
+  r: Range,
+) {
+  return useFreshData<Report>(
+    project
+      ? `${TRAFFIC_PARTS[action]}:${project.id}:${project.analyticsPropertyId}:${project.searchConsoleProperty}:${JSON.stringify(r)}`
       : null,
     () =>
-      api.action<Report>('nrDataViews', 'website', {
+      api.action<Report>('nrDataViews', action, {
         method: 'POST',
         body: { projectId: project!.id, ...r, acceptSaved: true },
         unwrap: 'data',
@@ -134,25 +147,28 @@ export default function DataWebsite() {
       expiresAt: ga4CacheExpiry,
     },
   );
+}
+
+export default function DataWebsite() {
+  const { project } = useProject();
+  const navigate = useNavigate();
+  const [range, setRange] = useRange();
+  const r = RANGES.includes(range.range) ? range : { range: '28' };
+  const valid = validRange(r);
+  const [metric, setMetric] = useState<MetricKey>('users');
+  const { data: report, error } = useTrafficPart(
+    'website',
+    valid ? project : undefined,
+    r,
+  );
   const w = report?.window;
   const ready = Boolean(report?.connected && report.cutoff && report.totals);
   // The tables behind the tabs and the pages behind a change are read once the page shows, not ahead
   // (website-report.ts, `periodTables`), so they are asked for as soon as the figures are there, before any tab is opened.
-  const { data: rest, error: restError } = useFreshData<Report>(
-    project && valid && ready
-      ? `data-view:website-tables:${project.id}:${project.analyticsPropertyId}:${project.searchConsoleProperty}:${JSON.stringify(r)}`
-      : null,
-    () =>
-      api.action<Report>('nrDataViews', 'websiteTables', {
-        method: 'POST',
-        body: { projectId: project!.id, ...r, acceptSaved: true },
-        unwrap: 'data',
-      }),
-    {
-      staleTime: GA4_HISTORY_CACHE_MS,
-      retryDelay: GA4_PARTIAL_CACHE_MS,
-      expiresAt: ga4CacheExpiry,
-    },
+  const { data: rest, error: restError } = useTrafficPart(
+    'websiteTables',
+    valid && ready ? project : undefined,
+    r,
   );
   // Pages explain a change only when they cover the same days as the figures; a copy of another window waits for its new one.
   const explained =

@@ -85,7 +85,9 @@ const FIRST_TABLES=['channel','newVsReturning','device','event','sourceMedium'];
 const REST_TABLES=Object.keys(TABLES).filter(n=>!FIRST_TABLES.includes(n));
 // Tables read as one report over both periods with the change of the same dimension: Channel in the first part, and
 // Landing pages in the other, which makes that part nine reports, one round of the nine reads at once (Ga4Requests).
-// Pages are not paired: their table is by path and title. The changes left are read on their own (LONE_CHANGES).
+// Pages are not paired: their table is by path and title. The changes left are read on their own (LONE_CHANGES). A
+// paired report takes its change's order and limit, so a paired table must be sorted as its change: the table keeps its
+// first rows (KEEP). Do not unpair Channel instead, as the first part reads no change on its own.
 const PAIRED=Object.keys(CHANGES).filter(n=>TABLES[n]?.dims.join()===CHANGES[n].dim);
 const LONE_CHANGES=Object.keys(CHANGES).filter(n=>!PAIRED.includes(n));
 // A paired report keeps the current period's rows for its table. GA4 answers each period for every value seen in either,
