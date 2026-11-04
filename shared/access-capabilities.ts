@@ -303,7 +303,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrRankTracking', ['add', 'remove', 'check']),
   ],
   tasks: [
-    ...list('nrTaskWork', ['advance', 'execute']),
+    ...list('nrTaskWork', ['advance', 'execute', 'articleEdit']),
     ...TASK_COMMANDS.map((command) => `nrTaskWork.command.${command}`),
     // New task › Organize with AI goes with creating a task by hand.
     ...list('nrTasks', ['createManual', 'draftManual']),
