@@ -18,6 +18,7 @@ import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, EFFECT_RULE, compare, dateOf, pageKey, pageNumbers, rejudge, shift, windows, type Partition } from './effect';
 import { pageIdentity, type PageIdentity } from '../../../shared/page-identity.js';
+import { findPages, ownLink } from '../../../shared/page-search.js';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
@@ -29,6 +30,8 @@ import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
 import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
 import { TASK_IMAGES_PER_MESSAGE, type MessageImage } from '../../../shared/task-images.js';
+// What a page search and Related page read of Website content's snapshot.
+type SiteState = { sites?: { origin?: unknown }[]; pages?: { url?: unknown; title?: unknown; type?: unknown }[] } | null | undefined;
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -82,6 +85,7 @@ export class TaskService {
   private lastVerify = 0;
   private lastEffects = 0;
   private legacyDone = false;
+  private notesDone = false;
   private stopped = false;
   private unregisterRuntime?: () => void;
   readonly provider: OnlineProvider;
@@ -137,7 +141,10 @@ export class TaskService {
     const events: any[] = [];
     if (owner && owner !== by) {
       const stage = w.flow?.stages[w.stageIndex || 0];
-      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
+      // An Agent step that failed or waits to be started again needs you too, but sends no message yet: the message
+      // names a step to do, and a run a restart interrupted is tried again right after it fails.
+      const agentWaits = stage?.kind === 'agent' && !w.boardState;
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
       if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
       for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
     }
@@ -700,10 +707,13 @@ export class TaskService {
       } else if (v.command === 'linkPage') {
         if (v.url === '' || v.url === null) { w.page = undefined; event.note = ''; }
         else {
-          const url = text(v.url, 2000), s = await this.snapshot(`site-content:${project}`, tx);
-          const page = (Array.isArray(s?.pages) ? s.pages : []).find((p: any) => p.url === url);
-          if (!page) return fail(systemMessageText('taskExecution.pageNotWebsiteContentPage'), 404);
-          w.page = { url, title: String(page.title || '').slice(0, 300) }; event.note = w.page.title || url;
+          const url = text(v.url, 2000), s: SiteState = await this.snapshot(`site-content:${project}`, tx), all = Array.isArray(s?.pages) ? s.pages : [];
+          const identity = pageIdentity(s), key = pageKey(url, identity);
+          const page = all.find(p => p.url === url) || (key ? all.find(p => pageKey(p.url, identity) === key) : undefined);
+          // A page Website content has not read is linked as it is when it is on the site's own hosts (Use this link).
+          const link = page ? '' : ownLink(url, await this.siteHosts(project, s));
+          if (!page && !link) return fail(systemMessageText('taskExecution.pageNotWebsiteContentPage'), 404);
+          w.page = page ? { url: String(page.url), title: String(page.title || '').slice(0, 300) } : { url: link, title: '' }; event.note = w.page.title || w.page.url;
         }
       }
       else if (v.command === 'savePlan') {
@@ -826,7 +836,7 @@ export class TaskService {
             await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
-            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, output, optional(v.release?.note, 2000), tx);
+            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, w, output, optional(v.release?.note, 2000), tx);
             else if (w.flow!.stages[index + 1]?.kind === 'release') {
               const pr = output.pr, rel = v.release || {};
               const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
@@ -1062,7 +1072,8 @@ export class TaskService {
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
       } else {
-        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt;
+        // A failed run waits for a person (Needs you) even if the card was moved by hand before.
+        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt; if (!stale) w.boardState = undefined;
         if (failure.failureReason) fresh.failureReason = failure.failureReason;
         if (failure.partial) { fresh.partialAt = now(); await this.put(this.key('partial', run.projectId, run.taskId, run.id), { ...failure.partial, savedAt: fresh.partialAt }, tx); }
       }
@@ -1097,6 +1108,7 @@ export class TaskService {
       if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
       if (Date.now() - this.lastArticles > 60000) { this.lastArticles = Date.now(); await this.articleFlow.tick().catch(() => undefined); }
       if (!this.legacyDone) { this.legacyDone = true; await this.archiveLegacy().catch(() => { this.legacyDone = false; }); }
+      if (!this.notesDone) { this.notesDone = true; await this.articleFlow.repairNotes().catch(() => { this.notesDone = false; }); }
       if (Date.now() - this.lastEffects > HOUR) { this.lastEffects = Date.now(); await this.observeEffects().catch(() => undefined); }
     } finally { this.busy = false; }
   }
@@ -1272,11 +1284,20 @@ export class TaskService {
     }
     return rows;
   }
-  // Pages from the 网站内容 data source matching a search, for linking a task to the page it changes.
+  // Pages of Website content matching a search, for linking a task to the page it changes: the page a link names first
+  // (shared/page-search.ts), then the ones whose title or address holds the text. A link on the site's own hosts that
+  // names no page Website content read comes last, marked `link`, for Use this link (2026-11-04).
   async pages(project: string, q: unknown) {
-    const s = await this.snapshot(`site-content:${project}`), all: any[] = Array.isArray(s?.pages) ? s.pages : [];
-    const term = typeof q === 'string' ? q.trim().toLowerCase().slice(0, 100) : '';
-    return all.filter(p => !term || `${p.url} ${p.title || ''}`.toLowerCase().includes(term)).slice(0, 20).map(p => ({ url: String(p.url), title: String(p.title || ''), type: String(p.type || '') }));
+    const s: SiteState = await this.snapshot(`site-content:${project}`), all = Array.isArray(s?.pages) ? s.pages : [];
+    const hosts = await this.siteHosts(project, s), found = findPages(all, q, hosts, pageIdentity(s));
+    const list = found.pages.slice(0, 20).map(p => ({ url: String(p.url), title: String(p.title || ''), type: String(p.type || '') }));
+    const link = found.named ? '' : ownLink(q, hosts);
+    return link ? [...list.slice(0, 19), { url: link, title: '', type: '', link: true }] : list;
+  }
+  // The site's own hosts: the sites Website content reads, then the project's domains.
+  private async siteHosts(project: string, s: SiteState): Promise<string[]> {
+    const context = (await Promise.resolve(this.p.project(project)).catch(() => null)) as { domains?: unknown } | null;
+    return [...(Array.isArray(s?.sites) ? s.sites.map(x => x?.origin) : []), ...(Array.isArray(context?.domains) ? (context.domains as unknown[]) : [])].filter((h): h is string => typeof h === 'string' && Boolean(h));
   }
   // Where each of a task's pages is changed (2026-10-29), for its start card: the article a publishing target holds it
   // in, or none, a page of the site itself; with its title in Website content. Read-only. Without `match` only the

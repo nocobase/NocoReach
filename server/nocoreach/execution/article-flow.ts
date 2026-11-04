@@ -7,7 +7,9 @@ import type { ArticleTargets } from '../articles/targets.js';
 import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
 import { primaryChanges } from '../articles/edits.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
+import { languageOf } from './language';
 import { fail, projectWork, type Artifact, type Work } from './model';
+import { changeSentence, languagesLine, releaseNote } from './release-note';
 
 // Article delivery inside the task flow (docs/ARTICLE-PUBLISHING.md). A task linked to a publishing target writes a
 // structured article in its change step instead of a pull request; the approved version is published by the server.
@@ -354,8 +356,11 @@ export class ArticleFlow {
     }
     return out;
   }
-  /** The release record for an approved article. Pages and the check phrase come from the target and the draft. */
-  async release(project: string, task: any, output: Artifact, note: string, tx?: any) {
+  /**
+   * The release record for an approved article. Pages and the check phrase come from the target and the draft; the note
+   * is the owner's, else what the approved primary version changed and which languages followed it (releaseNote).
+   */
+  async release(project: string, task: any, w: Work, output: Artifact, note: string, tx: any) {
     const a: ArticleProposal = output.article;
     const legs = [a, ...(a.also || [])];
     if (!legs.some((l) => l.changes.length || l.carried?.length)) return fail(systemMessageText('articles.noChanges'), 409);
@@ -377,8 +382,7 @@ export class ArticleFlow {
     });
     // The phrase is looked for in the primary language first. It must be new against what the draft was written on
     // and against the article as the task linked it (`w.article`), which a rebase leaves as it was.
-    const w = projectWork(task),
-      target = this.need().target(project, a.targetId),
+    const target = this.need().target(project, a.targetId),
       first = this.primaryOn(project, w.delivery, a.targetId) || target.locales[0],
       sourceKey = w.article?.sourceKey;
     const base = a.baseKey ? await this.s.snapshot(a.baseKey, tx) : null,
@@ -386,12 +390,66 @@ export class ArticleFlow {
     const verifyText = verifyPhrase(a.draft, base, [...new Set([first, ...a.changes.filter((c) => c.includes('.')).map((c) => c.split('.')[0])])], source);
     return {
       state: 'publishing',
-      note: note || a.draft.summary || task.title,
+      note: releaseNote({ owner: note, ...(await this.recordOf(project, w, a, tx)), title: task.title }),
       pages: [...new Set(pages)].slice(0, 10),
       ...(verifyText ? { verifyText } : {}),
       article: { artifactId: output.id, ...records[0] },
       ...(records.length > 1 ? { also: records.slice(1) } : {}),
     };
+  }
+  /**
+   * What the record says this task changed: the sentence of the primary-language version that was approved (the version
+   * the other languages were translated from, not that step's own summary), and the languages updated in place or
+   * translated in this task, in the project language. `a` is the version being published.
+   */
+  private async recordOf(project: string, w: Work, a: ArticleProposal, tx: any) {
+    const d = w.delivery,
+      t = d?.translateFrom;
+    const change = changeSentence(t ? t.draft : a.draft);
+    if (!t || !d.locales || d.locales.length < 2) return { change, languages: '' };
+    const source = d.sourceKey ? await this.s.snapshot(d.sourceKey, tx) : null,
+      inPlace = inPlaceLocales(d, source ? articleLocales(source) : null);
+    const written = d.locales.slice(1).filter((l) => a.changes.some((c) => c.startsWith(`${l}.`)));
+    const language = languageOf(await this.s.p.project(project).catch(() => null));
+    return { change, languages: languagesLine(language, written.filter((l) => inPlace.includes(l)), written.filter((l) => !inPlace.includes(l))) };
+  }
+  /**
+   * Once (2026-11-04): article releases recorded before `releaseNote` copied the published version's summary for the
+   * reviewer, or fell back to the title. Their notes are written again by the same rule from what the task kept, without
+   * a model call: the approved primary version's summary for the record and the languages line. A note the owner wrote
+   * stays, and so does a receipt that is not a copy of the note. No line in Activity.
+   */
+  async repairNotes() {
+    const flag = 'nr-migrations:release-notes-1';
+    if (await this.s.snapshot(flag)) return 0;
+    let n = 0;
+    for (let offset = 0; ; offset += 100) {
+      const rows = await this.s.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+      for (const row of rows) {
+        const t = row.toJSON ? row.toJSON() : row,
+          project = String(t.projectId),
+          taskId = String(t.id);
+        if (!projectWork(t).release?.article?.artifactId) continue;
+        await this.s.lock(project, taskId, async (tx) => {
+          const task = await this.s.task(project, taskId, tx),
+            w = projectWork(task),
+            r = w.release,
+            id = r?.article?.artifactId;
+          if (!id) return;
+          const shipped = (await this.s.snapshot(this.s.key('artifact', project, taskId, id), tx)) || w.results.find((x) => x?.id === id);
+          if (!shipped?.article || ![shipped.article.draft?.summary, task.title].includes(r.note)) return;
+          const note = releaseNote({ change: '', languages: '', ...(await this.recordOf(project, w, shipped.article, tx)), title: task.title });
+          if (note === r.note) return;
+          if (w.receipt?.note === r.note) w.receipt = { ...w.receipt, note };
+          r.note = note;
+          await this.s.save(task, w, tx);
+          n++;
+        });
+      }
+      if (rows.length < 100) break;
+    }
+    await this.s.p.db.sequelize.transaction(async (tx: any) => this.s.put(flag, { at: now(), repaired: n }, tx));
+    return n;
   }
   kick(project: string, taskId: string, tx: any) {
     const go = () => {

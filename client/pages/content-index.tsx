@@ -28,6 +28,7 @@ import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./co
 import "./data-views.css";
 import { formatChange, formatCount, formatDate, formatSigned } from '#lib/format';
 import type { PageIdentity } from '../../shared/page-identity.js';
+import { findPages } from '../../shared/page-search.js';
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
 type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null; previousViews?: number | null; previousClicks?: number | null; ga4Untracked?: boolean };
@@ -68,9 +69,10 @@ export default function ContentPage() {
   const { data, error: loadError } = useFreshData(project && valid ? `data-view:site-list:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range }, unwrap: "data" }), googleLocalFreshness);
   const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
-  const rows = useMemo<Row[]>(() => (data?.pages || [])
-    .filter((p) => (type === "all" || (type === OUTSIDE ? p.outsideSitemap : p.type === type)) && (!query || `${p.title || ""} ${p.url}`.toLowerCase().includes(query.toLowerCase())))
-    .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url, data?.identity)) })), [data, type, query, tasks]);
+  // A link finds the page it is whatever its scheme, www., trailing slash or language prefix (shared/page-search.ts).
+  const hosts = useMemo(() => [...(data?.summary.sites || []).map((x) => x.origin), ...(project?.domains || [])], [data, project]);
+  const rows = useMemo<Row[]>(() => findPages((data?.pages || []).filter((p) => type === "all" || (type === OUTSIDE ? p.outsideSitemap : p.type === type)), query, hosts, data?.identity).pages
+    .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url, data?.identity)) })), [data, type, query, tasks, hosts]);
   // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so.
   const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{l}</p>)}</>;
   const columns = useMemo<ColumnDef<Row>[]>(() => [

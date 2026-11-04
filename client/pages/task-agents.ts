@@ -1,7 +1,12 @@
 import { $t } from '#i18n';
 import { stageName } from './playbook-model';
 import { localizeWorkSnapshots } from './playbook-snapshot';
-import { isClosed, workState, type Work } from './task-execution-types';
+import {
+  isClosed,
+  restartOf,
+  workState,
+  type Work,
+} from './task-execution-types';
 
 // Tasks by the Agent that does them (Tasks › By Agent, 2026-10-21, after Studio's Agent view): which Agent a task
 // runs with, what it is doing, and what waits for a person.
@@ -65,6 +70,12 @@ export function placeOf(w: Work | undefined, hasAgent: boolean): Placed | null {
     run = w.latestRun?.status;
   if (!st) return null;
   if (st.kind === 'agent') {
+    // Reopened after the closing stopped it or withdrew its change: the list's Start this step again, not a failure.
+    if (restartOf(w))
+      return {
+        lane: 'waiting',
+        ask: { text: $t('taskList.waitingRestart'), tone: 'amber' },
+      };
     if (run === 'running') return { lane: 'running', step: stageName(st, w) };
     if (run === 'queued') return { lane: 'queued' };
     if (run === 'failed')
