@@ -115,6 +115,17 @@ test('aggregate reads deduplicate checks and preserve current identity, grants a
     expect(queries).toBeGreaterThan(0);
     expect(queries).toBeLessThanOrEqual(12);
     expect(calls.get('nrGitHub')).toBe(1);
+    const findings = await admin.fetch('/nocoreach/nrDiscovery/connections', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ projectId: '1', items: [] }),
+    });
+    expect(findings.status).toBe(200);
+    await read();
+    expect(calls.get('nrGitHub')).toBe(1);
     await read(admin, '2');
     expect(calls.get('nrGitHub')).toBe(2);
 

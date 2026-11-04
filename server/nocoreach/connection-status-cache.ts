@@ -78,7 +78,6 @@ export class ConnectionStatusCache {
 const CONNECTION_CHANGES: Record<string, readonly string[]> = {
   nrSources: ['save', 'refresh', 'disconnect'],
   nrAutomaticSources: ['ingest', 'disconnect'],
-  nrDiscovery: ['connections'],
   nrGoogle: [
     'configure',
     'callback',
