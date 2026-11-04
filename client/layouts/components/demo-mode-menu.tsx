@@ -18,9 +18,9 @@ import {
   DropdownMenuTrigger,
 } from '#components/ui/dropdown-menu';
 
-/** Keep the desktop entry; phones use the public account hook with a short, text-based status. */
+/** Keep the desktop entry; narrow screens use the public account hook with a short, text-based status. */
 export function HeaderDemoModeMenu() {
-  const compact = useMediaQuery('(max-width: 639px)');
+  const compact = useMediaQuery('(max-width: 1023px)');
   const enabled = useDemoMode();
   return compact && enabled ? <CompactDemoModeMenu /> : <DemoModeMenu />;
 }
