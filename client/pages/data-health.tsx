@@ -11,6 +11,8 @@ import {confirmAction} from '#components/reach/confirm';
 import {formatDate,formatDateTime,joinList} from '#lib/format';
 import {InfoTip} from '#components/reach/info-tip';
 import {SourceLogo} from '#components/reach/source-logo';
+import {ListSkeleton} from '#components/reach/states';
+import {Skeleton} from '#components/ui/skeleton';
 import {help} from './glossary';
 export type HealthText={key:string;params?:Record<string,string|number|HealthText|{systemError:string}|{date:string}>};
 // A missing descriptor is legacy or user-authored content: preserve the original verbatim. A `date` is an instant the
@@ -56,7 +58,8 @@ export function HealthPanel({projectId,reloadKey,onChange,settingsOf}:{projectId
  }
  // An uncertain DataForSEO result may already be billed: ask before querying again.
  async function verify(item:HealthItem){if(await confirmAction({title:() => $t('dataHealth.verifyTitle',{0:healthText(item.name,item.nameText)}),description:() => $t('dataHealth.verifyDescription'),action:() => $t('dataHealth.retryAnyway'),destructive:false}))await retry([item]);}
- if(!health)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingLoading')}</p>;
+ // While the first read is out: a bar where the summary line goes and the shared list skeleton below it.
+ if(!health)return error?<p className="nr-error" role="alert">{error}</p>:<div className="flex flex-col gap-4"><Skeleton className="h-4 w-65 max-w-full"/><ListSkeleton rows={5} label={$t('dataHealth.loadingDataHealth')}/></div>;
  if(!health.items.length)return <p className="text-sm text-muted-foreground">{$t('dataHealth.noSourcesYet')}</p>;
  return <section className="flex flex-col gap-4" aria-label={$t('dataHealth.dataHealth')}>
   <div className="flex flex-wrap items-center gap-2"><p className="text-sm text-muted-foreground">{$tj('dataHealth.dataSourcesOk',{0:health.items.length,1:health.items.length-attention.length,2:attention.length?$t('dataHealth.needAttention',{0:attention.length}):''})}</p><InfoTip label={$t('dataHealth.whatDataHealthMeans')}>{help($t('dataHealth.dataHealth'))}</InfoTip>

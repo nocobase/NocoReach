@@ -13,7 +13,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bookmark, LoaderCircle, Pencil, Search, Trash2 } from "lucide-react";
 import { toast } from "#lib/toast";
-import { LoadError, InlineError, EmptyState } from "#components/reach/states";
+import { LoadError, InlineError, EmptyState, ListSkeleton } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
@@ -169,7 +169,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     finally { setBusy(""); }
   };
   if (error && !view) return <LoadError title={$t('keywordSuggestions.keywordSuggestionsNotComplete')} message={error} onRetry={() => void load()} />;
-  if (!view || !projectId) return <Card className="px-4"><p role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('common.loading')}</p></Card>;
+  if (!view || !projectId) return <ListSkeleton rows={6} />;
   const has = Boolean(view.at && view.items.length);
   const running = view.running;
   const stage = running ? $t(`keywordSuggestions.stage.${running.stage}`) : "";

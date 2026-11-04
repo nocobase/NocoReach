@@ -2,7 +2,7 @@ import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { Skeleton } from '#components/ui/skeleton';
 import {matchesObservation} from '../../shared/result-comparison.js';
 import {shownInActivity} from '../../shared/task-activity.js';
-import {nextVersion,previousVersion,restorable,type RestoredFrom} from '../../shared/article-versions.js';
+import {nextVersion,previousVersion,restorable,writtenByHand,type RestoredFrom} from '../../shared/article-versions.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
@@ -478,7 +478,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     {!editing&&<PrimaryLanguage data={data} busy={busy} allowed={allowed} onChange={l=>void changePrimary(l)}/>}
     <LastFeedback w={w} stage={stage} out={out}/>
     {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} onTab={setArticleTab} fullScreenTo={lang=>`article?lang=${encodeURIComponent(lang)}`} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
-     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} tab={articleTab} onTab={setArticleTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
+     <ArticleReview key={out.id} data={data} article={out.article} {...agentNotes(out)} tab={articleTab} onTab={setArticleTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
      <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
     </>}
    </StageCard>;
@@ -643,23 +643,28 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
 // activity's compares an article with the version before it, when there is one (`previous`, 2026-11-04), and the live
 // card leads with the publish record instead of the Agent's summary for the reviewer (2026-11-04, T-33: it ended with
 // "awaiting human review").
-function VersionChange({data,artifact,notes,previous,record}:{data:Data;artifact:Artifact;notes:boolean;previous?:Artifact;record?:string}){
+function VersionChange({data,artifact,previous,record}:{data:Data;artifact:Artifact;previous?:Artifact;record?:string}){
  if(artifact.pr)return <PageChange pr={artifact.pr} content={artifact.content}/>;
- if(artifact.article){const vs=previous?.article?againstPrevious(data,artifact.article,previous.article):undefined;return <ArticleReview data={data} article={vs?.article||artifact.article} against={vs?.against} notes={notes?artifact.content:''} summary={record} settled/>;}
+ if(artifact.article){const vs=previous?.article?againstPrevious(data,artifact.article,previous.article):undefined;return <ArticleReview data={data} article={vs?.article||artifact.article} against={vs?.against} {...(record===undefined?agentNotes(artifact):{notes:'',summary:record})} settled/>;}
  return null;
 }
+// What the Agent said about an article version, its summary and notes, for the review card and the version reader alike.
+// A version whose text a person wrote (writtenByHand) has none: Edit directly keeps the notes of the version it
+// replaced (2026-11-04, T-62: version 10, edited by hand, read under version 7's notes saying the text was restored
+// unchanged). A version restored from one of the Agent's has that version's own notes, which the restore copied.
+const agentNotes=(v:Artifact)=>writtenByHand(v)?{notes:'',summary:''}:{notes:v.content};
 // A version opened from Activity (2026-11-04, T-62): the Agent's versions, the ones edited by hand and the restored ones
 // alike, compared with the version before. While the article waits for review, an earlier version of the same round can
 // be restored as a new one (shared/article-versions.ts), by whoever may use Edit directly; nothing runs and nothing is
-// deleted. The reader closes either way, so the new version, or why it could not be made, shows on the page. A version a
-// person made shows no notes: Edit directly keeps the Agent's notes from the version it replaced.
+// deleted. The reader closes either way, so the new version, or why it could not be made, shows on the page. Notes show
+// as on the review card (agentNotes).
 function VersionReader({data,artifact,versions,who,title,update,busy,onClose}:{data:Data;artifact:Artifact;versions:Artifact[];who:string;title:string;update:Update;busy:boolean;onClose:()=>void}){
  const w=data.work,{allowed}=useContext(TaskAccess),index=w.stageIndex||0,stage=w.flow?.stages[index],current=w.results[index-1],at=when(artifact.createdAt);
  const meta=artifact.createdBy==='agent'?at:`${artifact.restoredFrom?$t('taskDetail.restoredFromBy',{0:who,1:artifact.restoredFrom.version}):$t('taskDetail.editedByHandBy',{0:who})} · ${at}`;
  const open=allowed&&w.stage!=='done'&&!w.cancelledAt&&!w.archivedAt&&stage?.kind==='review'&&current&&!current.rejectedAt&&restorable(w.history||[],current,artifact)?{stage,current}:undefined;
  const footer=open&&<><p className={cn(text.muted,'flex-1')}>{$t('taskDetail.restoreVersionNote',{0:nextVersion(versions,open.current.stepId),1:artifact.version,2:open.current.version})}</p>
   <PendingButton disabled={busy} onClick={async()=>{await update('restoreArticleVersion',{stageKey:open.stage.key,artifactId:artifact.id,currentId:open.current.id});onClose();}}>{$t('taskDetail.restoreThisVersion')}</PendingButton></>;
- return <DocReader open onClose={onClose} title={title} meta={meta} content={artifact.pr||artifact.article?'':artifact.content} footer={footer||undefined}><VersionChange data={data} artifact={artifact} notes={artifact.createdBy==='agent'} previous={artifact.article?previousVersion(versions,artifact):undefined}/></DocReader>;
+ return <DocReader open onClose={onClose} title={title} meta={meta} content={artifact.pr||artifact.article?'':artifact.content} footer={footer||undefined}><VersionChange data={data} artifact={artifact} previous={artifact.article?previousVersion(versions,artifact):undefined}/></DocReader>;
 }
 // Once live, the card names what changed in one line; the change itself opens on demand.
 function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
@@ -675,7 +680,7 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  return <div className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}>
   {created?<span>{$t('articleTask.newArticle')}</span>:count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
   <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{created?$t('taskDetail.viewArticle'):$t('taskDetail.viewChanges')}<ChevronRight/></Button>
-  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false} record={record}/></DocReader>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} record={record}/></DocReader>
  </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.

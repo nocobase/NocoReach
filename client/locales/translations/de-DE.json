@@ -262,7 +262,6 @@
   "status.deniedDescription": "Sie haben keine Berechtigung für {{label}}.",
   "status.routeFailedDescription": "Route {{label}} aus {{packageName}} konnte nicht geladen werden.",
   "shell": {
-    "templateVersionUnknown": "Version unbekannt",
     "buildFreely": "KI findet Wachstumschancen.",
     "reliability": "Agenten setzen sie um."
   },

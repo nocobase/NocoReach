@@ -8,6 +8,7 @@ import { NocoBaseArticles } from '../../server/nocoreach/articles/nocobase-api.j
 import { ARTICLE_TARGET_PRESETS } from '../../shared/article-publishing.js';
 import { boardState } from '../../server/nocoreach/execution/model.js';
 import { fakeGitHub, fakeNocoBase } from './article-fakes.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 vi.setConfig({ testTimeout: 60000 });
 
 const EXPORTER = { name: 'NocoBase-CMS', email: 'cms@example.com' };
@@ -1179,6 +1180,21 @@ test('languages: the primary is written and approved first, then translated, and
     title_cn: '一篇新文章',
     content_cn: '新文章的正文',
   });
+});
+
+// 2026-11-04 (T-62): the step told a new CMS article to go in the blog folder with its frontmatter; the article's
+// fields and address come from the article rules, so the instruction names only what to write.
+test('a blog post written as an article gets the instruction for both places, without a repository', async () => {
+  const f = await fixture();
+  await f.command('startTask', { playbookId: 'blog-post' });
+  const { run } = await claim(f);
+  expect(run.mode).toBe('article');
+  expect(run.input.repo).toBeNull();
+  expect(run.input.article.action).toBe('create');
+  expect(run.input.stage.instruction).toBe(
+    systemMessageText('playbooks.writeBlogPostTaskBrief'),
+  );
+  expect(run.input.stage.instruction).not.toMatch(/目录|frontmatter/);
 });
 
 // 2026-10-27 (T-47): with the project, the brief and the outline in Chinese, the Agent wrote a Chinese-only new article

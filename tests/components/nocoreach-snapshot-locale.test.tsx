@@ -5,6 +5,7 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
+import legacyKeys from '../../shared/i18n/legacy-keys.json';
 import { localizeWorkSnapshots } from '../../client/pages/playbook-snapshot';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -253,6 +254,26 @@ test('View steps on a started Improve existing page task shows its instruction i
     ),
   ).toHaveTextContent(chinese['playbooks.optimizePageInstruction']);
   expect(data).toEqual(before);
+});
+
+// Write blog post named the blog folder and frontmatter until 2026-11-04, wrong for a CMS article; a task started under
+// that wording shows the current one, which the Agent also gets.
+test('View steps on a Write blog post task started under the old wording shows the current instruction', async () => {
+  const data = task('blog-post');
+  const old = Object.entries(legacyKeys).find(
+    ([, key]) => key === 'playbooks.writeBlogPostTaskBrief',
+  )![0];
+  data.work.flow!.stages[0].instruction = old;
+  const runtime = await setup(data);
+  const steps = await viewSteps('Write blog post');
+  expect(steps).toHaveTextContent(english['playbooks.writeBlogPostTaskBrief']);
+  expect(steps).not.toHaveTextContent(/folder|frontmatter/i);
+  await act(() => runtime.changeLanguage('zh-CN'));
+  const zh = within(
+    screen.getByRole('dialog', { name: '写博客文章' }),
+  ).getByRole('list', { name: '步骤' });
+  expect(zh).toHaveTextContent(chinese['playbooks.writeBlogPostTaskBrief']);
+  expect(zh).not.toHaveTextContent('博客目录');
 });
 
 test.each(['system', 'legacy'] as const)(

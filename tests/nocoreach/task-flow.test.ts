@@ -297,7 +297,7 @@ test('playbooks: built-in ones are edited in place and restored; copies and new 
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
  assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,12);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
  await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
- r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建页面/);
+ r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建一个文档页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
  const copied=await f.s.playbooks.copy('1',{playbookId:'content-outline',revision:2});const id=copied.playbook.id;
  assert.equal(copied.playbook.name,'内容选题与大纲（副本）');assert.deepEqual(copied.playbook.next,['blog-post','new-doc']);assert.equal(copied.playbook.system,undefined);assert.equal(copied.playbook.category,'create');
@@ -343,7 +343,7 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  let d=await f.command('startTask',{playbookId:'tech-fix'});
  assert.equal(d.runs[0].status,'queued');assert.ok(d.runs[0].pluginRunId);assert.equal(d.agent.repo.repo,'estheryo/website');
  await f.s.tick();assert.equal(invoked,0,'the server never runs local Agent work itself');
- let c=await claim(f);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.repo.repo,'estheryo/website');assert.equal(c.run.branch,'nocoreach/task-1');assert.ok(c.run.input.stage.instruction.includes('先不要修改文件'));
+ let c=await claim(f);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.repo.repo,'estheryo/website');assert.equal(c.run.branch,'nocoreach/task-1');assert.ok(c.run.input.stage.instruction.includes('先不要做任何修改'));
  assert.deepEqual(await claim(f),{run:null});
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Change content/articles/a/index.md intro'});
  d=await f.view();assert.equal((await f.stage()).key,'approve-plan');assert.equal(output(d).content,'Change content/articles/a/index.md intro');

@@ -267,7 +267,6 @@
   "status.deniedDescription": "У вас нет разрешения на доступ: {{label}}.",
   "status.routeFailedDescription": "Не удалось загрузить маршрут {{label}} из {{packageName}}.",
   "shell": {
-    "templateVersionUnknown": "Версия неизвестна",
     "buildFreely": "ИИ находит возможности для роста.",
     "reliability": "Агенты воплощают их в жизнь."
   },

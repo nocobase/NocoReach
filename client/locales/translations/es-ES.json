@@ -262,7 +262,6 @@
   "status.deniedDescription": "No tienes permiso para acceder a {{label}}.",
   "status.routeFailedDescription": "No se ha podido cargar la ruta {{label}} de {{packageName}}.",
   "shell": {
-    "templateVersionUnknown": "Versión desconocida",
     "buildFreely": "La IA encuentra oportunidades de crecimiento.",
     "reliability": "Los agentes las ponen en práctica."
   },
