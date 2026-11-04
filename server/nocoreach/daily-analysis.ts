@@ -227,7 +227,7 @@ class DailyAnalysis{
  holdJudgement(id,held){this.judgeHolds.delete(id);this.judgeHolds.set(id,held);if(this.judgeHolds.size>JUDGE_REMEMBERED)this.judgeHolds.delete(this.judgeHolds.keys().next().value);}
  // What the model call would go to, as a short hash: the simulated model's settings, or the system's default chat model
  // and its service's connection (provider, address and key), which an administrator changes to fix a failure.
- async modelFingerprint(id){try{const mock=this.p.mock;if(mock?.enabled){const s=mock.status(id);return `mock:${s.enabled}:${s.scenario}:${s.revision}`;}
+ async modelFingerprint(id){try{const mock=this.p.mock;if(mock?.enabled){const s=mock.status(id);return JSON.stringify(['mock',s.enabled,s.scenario,s.revision]);}
   const services=this.p.agents?.models?.services,chat=(await services?.defaults?.())?.effectiveChat;if(!chat)return 'none';
   let connection;try{connection=await services.connectionFor({modelService:chat.modelService,model:chat.model},'chat');}catch(e){connection={refused:String(e?.code||e?.name||'error')};}
   return createHash('sha256').update(JSON.stringify([chat.modelService,chat.model,connection])).digest('hex').slice(0,16);}catch{return '';}}
