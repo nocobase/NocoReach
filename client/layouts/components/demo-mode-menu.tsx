@@ -52,6 +52,8 @@ function CompactDemoModeMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        openOnHover
+        delay={0}
         aria-label={
           accounts?.length
             ? `${t('menu.label')} · ${t('menu.switchAccount')}`

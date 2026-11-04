@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event';
 import {
   act,
   fireEvent,
@@ -153,4 +154,22 @@ it('reports a failed switch and allows retrying', async () => {
   expect(member).not.toHaveAttribute('aria-disabled', 'true');
   fireEvent.click(member);
   expect(state.signIn).toHaveBeenCalledTimes(2);
+});
+
+it('opens on hover and supports keyboard opening and dismissal', async () => {
+  const user = userEvent.setup();
+  await setup();
+  const trigger = screen.getByRole('button', {
+    name: 'Demo mode · Switch account',
+  });
+  await user.hover(trigger);
+  expect(await screen.findByRole('menu')).toBeVisible();
+  await user.unhover(trigger);
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  trigger.focus();
+  await user.keyboard('{Enter}');
+  expect(await screen.findByRole('menu')).toBeVisible();
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  expect(trigger).toHaveFocus();
 });
