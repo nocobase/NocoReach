@@ -88,6 +88,32 @@ test('tick: Traffic of a project opened in the last day waits for a new report, 
   assert.equal(website.mock.calls.length,2);assert.deepEqual(scopes,['fresh','ahead'],'opened in the last day, then only in the last three');
  }finally{vi.useRealTimers();}
 });
+test('tick: Traffic\'s other tables are read for a project opened in the last day, not in the night, waiting like the figures after a refusal or a failure',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const opened={lately:true},{sync,website}=tickFixture(opened);
+  let day=false;const tables=vi.fn(async()=>({complete:true,missing:[]})),scopes=[];
+  Object.assign(sync.p.dataViews,{websiteDayRead:vi.fn(async()=>{if(day==='fails')throw new Error('link');return day;}),websiteTables:(...a)=>{scopes.push(__report_cache.readsFresh()?'fresh':'other');return tables(...a);}});
+  await sync.tick();assert.equal(website.mock.calls.length,1);assert.equal(tables.mock.calls.length,0,'a read in the night would be read again in the morning');
+  day='fails';await sync.tick();assert.equal(tables.mock.calls.length,0,'nor when the hour cannot be told');
+  day=true;await sync.tick();await sync.tick();assert.equal(tables.mock.calls.length,2,'the report held answers, and a moved window is noticed at once');
+  assert.deepEqual(tables.mock.calls[0],['1',{range:'28'}]);
+  tables.mockResolvedValue({complete:true,missing:['city']});await sync.tick();await sync.tick();assert.equal(tables.mock.calls.length,3);
+  vi.setSystemTime(Date.now()+6*HOURS-1);await sync.tick();assert.equal(tables.mock.calls.length,3,'a table left out waits six hours');
+  vi.setSystemTime(Date.now()+1);tables.mockRejectedValue(new Error('quota'));await sync.tick();assert.equal(tables.mock.calls.length,4);
+  vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(tables.mock.calls.length,4,'a failure waits 15 minutes');
+  vi.setSystemTime(Date.now()+1);tables.mockResolvedValue({complete:true,missing:[]});await sync.tick();assert.equal(tables.mock.calls.length,5);
+  // While the figures' last read failed, the tables wait with it rather than meet the same failure.
+  website.mockRejectedValueOnce(new Error('quota'));await sync.tick();assert.equal(tables.mock.calls.length,5,'not after the figures failed');
+  vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(tables.mock.calls.length,5,'nor while the figures wait');
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(tables.mock.calls.length,6,'read once the figures are again');
+  assert.ok(scopes.every(s=>s==='fresh'),'it waits for a new report rather than taking a copy');
+  assert.ok(sync.p.dataViews.websiteDayRead.mock.calls.every(c=>c.length===2),'with the property of the link the tick holds');
+  opened.lately=false;await sync.tick();assert.equal(tables.mock.calls.length,6,'only for a project opened in the last day');
+  // Every tick but the one inside the figures' 15-minute wait after their failure.
+  assert.equal(website.mock.calls.length,13,'the figures are read as before');
+ }finally{vi.useRealTimers();}
+});
 test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{
  vi.useFakeTimers({toFake:['Date']});
  try{

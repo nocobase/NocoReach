@@ -156,17 +156,31 @@ function fixture() {
           totals: { current: { sessions: 5000 }, previous: { sessions: 4200 } },
           daily: daily(() => ({ sessions: 180 })),
           tables: {
+            channel: many(8, (i) => ({
+              key: `ch${i}`,
+              dims: { sessionDefaultChannelGroup: `Channel ${i}` },
+              sessions: 100 - i,
+            })),
+          },
+          changes: {},
+          missing: [],
+          complete: true,
+        };
+      },
+      // The rest of the page's tables, read apart (website-report.ts, `periodTables`).
+      async websiteTables(id, v) {
+        note('websiteTables', v);
+        return {
+          connected: true,
+          cutoff: day(0),
+          window,
+          tables: {
             page: many(300, (i) => ({
               key: `/docs/${i}`,
               dims: { pagePath: `/docs/${i}` },
               title: `Doc ${i}`,
               views: 3000 - i,
               queries: many(8, (j) => ({ keyword: `kw ${j}`, clicks: j })),
-            })),
-            channel: many(8, (i) => ({
-              key: `ch${i}`,
-              dims: { sessionDefaultChannelGroup: `Channel ${i}` },
-              sessions: 100 - i,
             })),
           },
           changes: {
@@ -1191,4 +1205,130 @@ it('gives up after 75 seconds on a read someone else started, before the reply s
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('reads the rest of Traffic’s tables only when one of them is asked for, once, and with its own permission', async () => {
+  const { ask, calls } = setup();
+  const rest = () => calls.filter(([name]) => name === 'websiteTables');
+  const channels = await ask({ source: 'traffic', table: 'channel' });
+  expect(channels.rows).toHaveLength(8);
+  expect(rest()).toHaveLength(0);
+  const pages = await ask({ source: 'traffic', table: 'page', range: '7' });
+  expect(pages).toMatchObject({ total: 300, nextOffset: 20 });
+  expect(pages.rows![0]).toMatchObject({ key: '/docs/0', pagePath: '/docs/0' });
+  expect(rest()).toHaveLength(1);
+  expect(rest()[0][1]).toEqual({ range: '7' });
+  expect(
+    (await ask({ source: 'traffic', table: 'page_changes' })).rows![0],
+  ).toMatchObject({ key: '/docs/0', views: 10, previousViews: 20 });
+  const denied = setup(['nrDataViews.websiteTables']);
+  expect(await denied.ask({ source: 'traffic', table: 'country' })).toEqual({
+    source: 'traffic',
+    accessDenied: true,
+  });
+  expect(
+    (await denied.ask({ source: 'traffic', table: 'channel' })).rows,
+  ).toHaveLength(8);
+});
+
+it('reads the rest of Traffic’s tables beside the summary when the table asked for is one of them, and names a table or change report GA4 left out', async () => {
+  const { sources, calls } = fixture();
+  const views = sources.dataViews as Record<
+    string,
+    (...args: unknown[]) => Promise<Row>
+  >;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: {
+        ...views,
+        website: async (...args: unknown[]) => {
+          await held;
+          return views.website(...args);
+        },
+        // GA4 left out Country's and Landing pages' tables and the pages behind a change; the landing pages behind it came.
+        websiteTables: async (...args: unknown[]) => ({
+          ...(await views.websiteTables(...args)),
+          missing: ['country', 'landing'],
+          changes: {
+            landing: [
+              { key: '/', current: { sessions: 5 }, previous: { sessions: 3 } },
+            ],
+          },
+        }),
+      },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+  });
+  const ask = (args: Row) =>
+    tool.execute(args, new AbortController().signal) as Promise<Answer>;
+  // Pages, the default table, is in the rest: it is asked for before the summary arrives.
+  const pages = ask({ source: 'traffic' });
+  await vi.waitFor(() =>
+    expect(calls.some(([name]) => name === 'websiteTables')).toBe(true),
+  );
+  release();
+  expect((await pages).rows).toHaveLength(20);
+  for (const table of ['country', 'landing', 'page_changes'])
+    expect(await ask({ source: 'traffic', table })).toEqual({
+      source: 'traffic',
+      error: 'notReturned',
+    });
+  // A change report stands apart from the table of the same name.
+  expect(
+    (await ask({ source: 'traffic', table: 'landing_changes' })).rows,
+  ).toHaveLength(1);
+});
+
+it('names a report of Traffic’s first part GA4 left out, and reads no second part for changes over the whole period', async () => {
+  const { sources, calls } = fixture();
+  const views = sources.dataViews as Record<
+    string,
+    (...args: unknown[]) => Promise<Row>
+  >;
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: {
+        ...views,
+        // GA4 left out Devices and the Channel report, which also holds the channels behind a change.
+        website: async (id: unknown, v: Row) => {
+          const out = await views.website(id, v);
+          return {
+            ...out,
+            tables: {},
+            missing: ['channel', 'device'],
+            ...(v.range === 'all'
+              ? { window: { ...(out.window as Row), all: true } }
+              : {}),
+          };
+        },
+      },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+  });
+  const ask = (args: Row) =>
+    tool.execute(args, new AbortController().signal) as Promise<Answer>;
+  const rest = () => calls.filter(([name]) => name === 'websiteTables');
+  for (const table of ['device', 'channel', 'channel_changes'])
+    expect(await ask({ source: 'traffic', table })).toEqual({
+      source: 'traffic',
+      error: 'notReturned',
+    });
+  // A first-part table GA4 did not leave out still answers its rows, none here.
+  expect((await ask({ source: 'traffic', table: 'event' })).rows).toEqual([]);
+  expect(rest()).toHaveLength(0);
+  expect(
+    (await ask({ source: 'traffic', table: 'page_changes', range: 'all' }))
+      .rows,
+  ).toEqual([]);
+  expect(rest()).toHaveLength(0);
 });

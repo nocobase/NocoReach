@@ -17,8 +17,10 @@ type Entry = {
   expiresAt: number;
   value: unknown;
 };
-const MAX_SAVED = 32;
-const MAX_MEMORY = 128;
+// Traffic keeps two parts per view (website-report.ts, `period` and `periodTables`), besides the rows people opened, so
+// both counts are half as large again as before; the byte limits, which the two parts share, stay as they were.
+const MAX_SAVED = 48;
+const MAX_MEMORY = 192;
 const MAX_ENTRY_BYTES = 2 * 1024 * 1024;
 const MAX_SAVED_BYTES = 8 * 1024 * 1024;
 const MAX_MEMORY_BYTES = 16 * 1024 * 1024;
