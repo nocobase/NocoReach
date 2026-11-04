@@ -5305,6 +5305,7 @@
   "taskPages.searchFailed": "Pages could not be searched. Try again later.",
   "taskPages.sitePage": "Site page",
   "taskPages.blogArticle": "Blog post",
+  "taskPages.useLink": "Use this link",
   "taskPages.notOnePage": "Not about one page? {0}",
   "articleTask.changeDeliveryTitle": "Choose where to make the change",
   "taskPages.restArticlesNotHere": "Other blog posts ({0}) are not in this task",

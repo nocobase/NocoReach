@@ -5359,6 +5359,7 @@
   "taskPages.searchFailed": "Không thể tìm kiếm trang. Hãy thử lại sau.",
   "taskPages.sitePage": "Trang của trang web",
   "taskPages.blogArticle": "Bài blog",
+  "taskPages.useLink": "Dùng liên kết này",
   "taskPages.notOnePage": "Không phải thay đổi một trang cụ thể? {0}",
   "articleTask.changeDeliveryTitle": "Chọn nơi thực hiện thay đổi",
   "taskPages.restArticlesNotHere": "Các bài blog khác ({0}) không thuộc tác vụ này",

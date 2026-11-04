@@ -14,6 +14,7 @@ import { VisibleChanges } from './task-detail/visible-changes.js';
 import { DeliveryDialog, DeliverySummary, HandoffLanguage, PrimaryLanguage, WhereField } from './task-detail/article-start.js';
 import { defaultLocales } from '../../shared/article-publishing.js';
 import { PagePicker, RestNotice } from './task-detail/start-pages.js';
+import { linkText, type SiteHit } from './task-detail/page-hits.js';
 import { request } from './strategy/service';
 import type { StrategyState } from './strategy/model';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
@@ -719,16 +720,19 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
   {error&&<p role="alert" className="nr-error">{error}</p>}
  </Card>;
 }
+// Related page: the pages of Website content a search finds, by link too; a link on the site it has not read is offered
+// as Use this link (start-pages.tsx).
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
- const page=data.work.page,[q,setQ]=useState(''),[hits,setHits]=useState<{url:string;title:string;type:string}[]>(),[editing,setEditing]=useState(!page),[focused,setFocused]=useState(false);
+ const page=data.work.page,[q,setQ]=useState(''),[hits,setHits]=useState<SiteHit[]>(),[editing,setEditing]=useState(!page),[focused,setFocused]=useState(false);
  useEffect(()=>{setEditing(!page);},[page?.url]);
- useEffect(()=>{if(!editing)return;const t=setTimeout(()=>{void call<{url:string;title:string;type:string}[]>(projectId,taskId,'pages',{q}).then(r=>setHits(Array.isArray(r)?r:[])).catch(()=>setHits([]));},250);return()=>clearTimeout(t);},[q,editing,projectId,taskId]);
+ useEffect(()=>{if(!editing)return;const t=setTimeout(()=>{void call<SiteHit[]>(projectId,taskId,'pages',{q}).then(r=>setHits(Array.isArray(r)?r:[])).catch(()=>setHits([]));},250);return()=>clearTimeout(t);},[q,editing,projectId,taskId]);
  const path=(u:string)=>{try{return new URL(u).pathname;}catch{return u;}};
+ const link=hits?.find(h=>h.link),shown=[...(hits||[]).filter(h=>!h.link).slice(0,link?5:6),...(link?[link]:[])];
  return <div className="flex flex-col gap-2 text-sm">
   {page&&!editing?<div className="nr-td-page"><a className="nr-link" href={page.url} target="_blank" rel="noreferrer">{page.title||path(page.url)}<ExternalLink aria-hidden="true"/></a><small>{path(page.url)}</small>
    <div className="nr-td-row-actions"><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setEditing(true)}>{$t('taskDetail.change')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>void update('linkPage',{url:''})}>{$t('common.remove')}</Button></div></div>
   :<><label className="nr-td-search"><Search aria-hidden="true"/><input aria-label={$t('common.searchPages')} value={q} placeholder={$t('taskDetail.searchPagesWebsiteContent')} onFocus={()=>setFocused(true)} onChange={e=>setQ(e.target.value)}/></label>
-   {hits&&(focused||q)&&(hits.length?<ul className="nr-td-hits">{hits.slice(0,6).map(h=><li key={h.url}><button type="button" disabled={busy} onClick={()=>void update('linkPage',{url:h.url}).then(d=>{if(d){setQ('');setEditing(false);}})}><b>{h.title||path(h.url)}</b><small>{path(h.url)}</small></button></li>)}</ul>:<p className="nr-td-muted">{q?$t('taskDetail.noMatchingPages'):$t('taskDetail.websiteContentNoPagesYet')}</p>)}
+   {hits&&(focused||q)&&(shown.length?<>{shown.length===1&&link&&<p className='nr-td-muted'>{$t('taskDetail.noMatchingPages')}</p>}<ul className="nr-td-hits">{shown.map(h=><li key={`${h.link?'link':'page'}:${h.url}`}><button type="button" data-use-link={h.link?'':undefined} disabled={busy} onClick={()=>void update('linkPage',{url:h.url}).then(d=>{if(d){setQ('');setEditing(false);}})}><b>{h.link?$t('taskPages.useLink'):h.title||path(h.url)}</b><small>{h.link?linkText(h.url):path(h.url)}</small></button></li>)}</ul></>:<p className="nr-td-muted">{q?$t('taskDetail.noMatchingPages'):$t('taskDetail.websiteContentNoPagesYet')}</p>)}
    {page&&<Button size="sm" variant="ghost" className="self-start" onClick={()=>setEditing(false)}>{$t('common.cancel')}</Button>}</>}
   {!page&&data.work.contentId&&<p className="nr-td-muted">{$t('taskDetail.linkedOldContentMappingPicking')}</p>}
  </div>;

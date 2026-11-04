@@ -12,13 +12,15 @@ import { searchArticles } from '../article-targets-api';
 import type { TaskData } from '../task-execution-types';
 import { restGroups, type PageFound, type PageGroup } from './article-model';
 import { articlePageUrl } from './article-page';
+import { linkText, type SiteHit } from './page-hits';
 import { Field } from './layout';
 import { text } from './styles';
 
 // The start card's pages (2026-10-29, after T-54): a task with no page known asks which page to change, searching the
 // site's pages (Website content) and the CMS articles together, and the page picked decides where the change goes. A
 // task whose pages are in two places changes where most of them are; one line names the others, with Create separate
-// tasks for them (nrStrategy:splitTask), and once those exist, the tasks they are in.
+// tasks for them (nrStrategy:splitTask), and once those exist, the tasks they are in. A link finds the page or the
+// article it is (2026-11-04, shared/page-search.ts); one on the site that neither knows is offered as Use this link.
 
 type Hit = {
   kind: 'page' | 'article';
@@ -65,7 +67,7 @@ export function PagePicker({
     [focused, setFocused] = useState(false),
     [result, setResult] = useState<{
       key: string;
-      pages: { url: string; title: string }[];
+      pages: SiteHit[];
       articles: { targetId: string; hits: ArticleSummary[] }[];
       failed: boolean;
     }>();
@@ -76,7 +78,7 @@ export function PagePicker({
       ids = targetIds ? targetIds.split('\n') : [];
     const t = setTimeout(() => {
       void Promise.allSettled([
-        api.action<{ url: string; title: string }[]>('nrTaskWork', 'pages', {
+        api.action<SiteHit[]>('nrTaskWork', 'pages', {
           method: 'POST',
           body: { projectId: String(projectId), taskId, q },
           unwrap: 'data',
@@ -107,8 +109,8 @@ export function PagePicker({
     };
   }, [projectId, taskId, targetIds, q]);
   const current = result?.key === key ? result : undefined;
-  const hits = useMemo((): Hit[] => {
-    if (!current) return [];
+  const [hits, link] = useMemo((): [Hit[], string] => {
+    if (!current) return [[], ''];
     const articles: Hit[] = current.articles.flatMap(({ targetId, hits }) =>
       hits.map((a) => ({
         kind: 'article' as const,
@@ -123,13 +125,19 @@ export function PagePicker({
       articles.map((a) => pageKey(a.url, data.pageIdentity)).filter(Boolean),
     );
     const site: Hit[] = current.pages
-      .filter((p) => !known.has(pageKey(p.url, data.pageIdentity)))
+      .filter((p) => !p.link && !known.has(pageKey(p.url, data.pageIdentity)))
       .map((p) => ({ kind: 'page', url: p.url, title: p.title }));
+    // A link no page is known by, unless it is an article's.
+    const link = articles.length
+      ? ''
+      : current.pages.find((p) => p.link)?.url || '';
     return [
-      ...site.slice(0, HITS / 2),
-      ...articles,
-      ...site.slice(HITS / 2),
-    ].slice(0, HITS);
+      [...site.slice(0, HITS / 2), ...articles, ...site.slice(HITS / 2)].slice(
+        0,
+        link ? HITS - 1 : HITS,
+      ),
+      link,
+    ];
   }, [current, data]);
   const disabled = busy || !allowed;
   return (
@@ -152,35 +160,55 @@ export function PagePicker({
           <p className='text-sm text-destructive'>
             {$t('taskPages.searchFailed')}
           </p>
-        ) : hits.length ? (
-          <ul className='nr-td-hits' data-page-hits=''>
-            {hits.map((h) => (
-              <li key={`${h.kind}:${h.targetId || ''}:${h.articleId || h.url}`}>
-                <button
-                  type='button'
-                  className='!flex-row items-center justify-between gap-3'
-                  disabled={disabled}
-                  onClick={() =>
-                    h.kind === 'page'
-                      ? onPage(h.url)
-                      : onArticle(h.targetId!, h.articleId!)
-                  }
+        ) : hits.length || link ? (
+          <>
+            {!hits.length && (
+              <p className='nr-td-muted'>{$t('taskDetail.noMatchingPages')}</p>
+            )}
+            <ul className='nr-td-hits' data-page-hits=''>
+              {hits.map((h) => (
+                <li
+                  key={`${h.kind}:${h.targetId || ''}:${h.articleId || h.url}`}
                 >
-                  <span className='flex min-w-0 flex-col'>
-                    <b className='truncate'>{h.title || pathOf(h.url)}</b>
-                    {h.url && <small>{pathOf(h.url)}</small>}
-                  </span>
-                  <Tag tone='grey'>
-                    {$t(
+                  <button
+                    type='button'
+                    className='!flex-row items-center justify-between gap-3'
+                    disabled={disabled}
+                    onClick={() =>
                       h.kind === 'page'
-                        ? 'taskPages.sitePage'
-                        : 'taskPages.blogArticle',
-                    )}
-                  </Tag>
-                </button>
-              </li>
-            ))}
-          </ul>
+                        ? onPage(h.url)
+                        : onArticle(h.targetId!, h.articleId!)
+                    }
+                  >
+                    <span className='flex min-w-0 flex-col'>
+                      <b className='truncate'>{h.title || pathOf(h.url)}</b>
+                      {h.url && <small>{pathOf(h.url)}</small>}
+                    </span>
+                    <Tag tone='grey'>
+                      {$t(
+                        h.kind === 'page'
+                          ? 'taskPages.sitePage'
+                          : 'taskPages.blogArticle',
+                      )}
+                    </Tag>
+                  </button>
+                </li>
+              ))}
+              {link && (
+                <li key='link'>
+                  <button
+                    type='button'
+                    data-use-link=''
+                    disabled={disabled}
+                    onClick={() => onPage(link)}
+                  >
+                    <b>{$t('taskPages.useLink')}</b>
+                    <small>{linkText(link)}</small>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </>
         ) : (
           <p className='nr-td-muted'>{$t('taskDetail.noMatchingPages')}</p>
         ))}

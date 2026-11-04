@@ -5277,6 +5277,7 @@
   "taskPages.searchFailed": "暫時無法搜尋頁面，請稍後再試。",
   "taskPages.sitePage": "網站頁面",
   "taskPages.blogArticle": "部落格文章",
+  "taskPages.useLink": "使用這個連結",
   "taskPages.notOnePage": "不是改某個頁面？{0}",
   "articleTask.changeDeliveryTitle": "更改改動方式",
   "taskPages.restArticlesNotHere": "另外 {0} 篇部落格文章不在這個任務裡",
