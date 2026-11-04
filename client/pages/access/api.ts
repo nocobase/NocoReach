@@ -95,6 +95,7 @@ const REASONS = [
   'invalidInvitation',
   'interactiveOnly',
   'scopeExceedsRoles',
+  'ownPassword',
 ];
 /** The message of a known failure reason, such as one address of a batch invitation. */
 export function accessReasonMessage(reason?: string): string {

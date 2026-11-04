@@ -110,6 +110,7 @@ describe('app client routes', () => {
       { name: 'role-new', authorizedAs: 'members' },
       { name: 'role-edit', authorizedAs: 'members' },
       { name: 'member-roles', authorizedAs: 'members' },
+      { name: 'member-password', authorizedAs: 'members' },
       { name: 'keys', authorizedAs: 'members' },
       { name: 'key-new', authorizedAs: 'members' },
       { name: 'key-history', authorizedAs: 'members' },
@@ -191,6 +192,10 @@ describe('app client routes', () => {
         expect.objectContaining({
           name: 'member-roles',
           path: ':memberId/roles',
+        }),
+        expect.objectContaining({
+          name: 'member-password',
+          path: ':memberId/password',
         }),
         expect.objectContaining({ name: 'role-new', path: 'roles/new' }),
         expect.objectContaining({ name: 'role-edit', path: 'roles/:roleKey' }),
