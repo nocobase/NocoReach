@@ -3,7 +3,7 @@ import type { MockAiOperation } from '../../app-plugins/nocoreach-mock/server/ai
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { ModelPreparationError, OnlineProvider } from './execution/provider.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
 import { record, lastSuccess } from './sync-policy.js';
@@ -24,6 +24,13 @@ const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE=systemMessageText('settings.
 // leaves room for that; the other calls (style rewrite, judging one signal) are short and keep the default. A project's
 // run is held for STALE_MS, which stays above this limit so a slow run is not started a second time.
 const REPORT_TIMEOUT_MS=10*60000;
+// Judging the changes an analysis left without a verdict (judgeMissing) holds an exact set of them (project, analysis
+// and missing keys) only to stop repeated paid model calls for a set the model will not judge: Insights' call is not
+// sent again for 30 minutes after a call that left the set unjudged or a failure that trying again soon would not cure
+// (the model setup, a call the model rejected or that may have been billed), and for 2 minutes after a transient one
+// (the provider could not be reached or turned it away at once). A changed set, a new analysis or a changed model setup
+// is asked about at once. The holds of at most JUDGE_REMEMBERED projects are kept, in memory.
+const JUDGE_HOLD_MS=30*60000,JUDGE_BACKOFF_MS=2*60000,JUDGE_REMEMBERED=200;
 // When the daily analysis fails (2026-10-08 user decision, ROADMAP ④): a schedule the service missed (it was not running
 // at 9:00) runs once when it is back, the same day; a failure that surely cost nothing — before the model was asked, or
 // the provider could not be reached or refused at once — is tried again after 5, 15 and 60 minutes, at most 3 times; a
@@ -144,7 +151,7 @@ function quietSources(connected,signals,cards,areas){
   const facts=[...fromCards,...fromState].slice(0,5);
   return {source:k,name:q.name,facts:facts.length?facts:['已接入，近 28 天规则没有找出变化']};});}
 class DailyAnalysis{
- constructor(plugin,model){this.p=plugin;this.model=model||(async(system,user,operation: MockAiOperation)=>this.invoke(system,user,operation));this.running=null;}
+ constructor(plugin,model){this.p=plugin;this.model=model||(async(system,user,operation: MockAiOperation)=>this.invoke(system,user,operation));this.running=null;this.judging=new Map();this.judgeHolds=new Map();}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  // The project's language for what the AI writes (language.js); Chinese when it cannot be read.
  async language(id){try{return languageOf(await this.p.project(id));}catch{return 'zh-CN';}}
@@ -171,8 +178,6 @@ class DailyAnalysis{
  // a success, or for a failure that may have cost something. A retryable manual failure preserves a planned retry.
  nextRetry(previous,entry){if(entry.ok||!entry.retryable)return null;const done=entry.trigger==='retry'?(previous?.attempt||0):0;if(done>=RETRY_MINUTES.length)return null;
   return {attempt:done+1,nextAt:new Date(Date.parse(entry.at)+RETRY_MINUTES[done]*60000).toISOString(),reason:entry.error};}
- // Changes the analysis left without a verdict (the model skipped some, or the analysis predates verdicts) get one in a
- // single extra call, so 洞察 never shows a change nobody judged.
  // The quiet sources and the knowledge catalogue for the analysis; either is simply left out when it cannot be read.
  async background(id,signals){
   const [connected,overview,summary,knowledge,tasks]=await Promise.all([this.p.health?.connected?.(id).catch(()=>null),this.p.dataViews?.overview?.(id,{range:'28'}).catch(()=>null),this.p.insightSummary?.summary?.(id).catch(()=>null),this.p.knowledge?.list?.(id).catch(()=>null),this.p.taskData?.recent?.(id).catch(()=>null)]);
@@ -181,14 +186,51 @@ class DailyAnalysis{
   // What the Agent did lately (2026-10-08, agent-context-sharing-proposal ②), so a change just made is not proposed again.
   if(tasks?.length)out.recentTasks=tasks;
   return out;}
- async judgeMissing(id){const strategy=this.p.strategy,state=await strategy.state(id),b=state.insights,known=b?.signalReviews||{},cited=new Set((b?.items||[]).flatMap(c=>c.signalIds||[]));
-  const missing=(b?.evidence?.signals?.items||[]).filter(s=>!known[s.key]&&!cited.has(s.key)).slice(0,20);if(!missing.length)return {judged:0};
-  const language=await this.language(id);
-  const rules=state.insights?.evidence?.signals?.analysisSnapshot?.config||await this.p.analysisRules?.config(id).catch(()=>null);
-  const reply=await this.model(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge-many');
-  const r=parseOutput(reply.text,d=>Array.isArray(d.reviews));if(!r)throw Object.assign(new Error(systemMessageText('dailyAnalysis.onlineAiGaveNoVerdict')),{status:502});
-  for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignals(id,{reviews:r.reviews,locale:language,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
-  return {judged:r.reviews.length};}
+ // Changes the analysis left without a verdict (the model skipped some, or the analysis predates verdicts) get one in a
+ // single extra call, so Insights never shows a change nobody judged: at most 20 at a time, and `key` names that set.
+ missingOf(b){const known=b?.signalReviews||{},cited=new Set((b?.items||[]).flatMap(c=>c.signalIds||[]));
+  const missing=(b?.evidence?.signals?.items||[]).filter(s=>!known[s.key]&&!cited.has(s.key)).slice(0,20),analysis=b?.generatedAt||'';return {missing,analysis,key:JSON.stringify([analysis,missing.map(s=>s.key).sort()])};}
+ // One call per project at a time: a call for the same set shares the one in flight; one for another set (run() after a
+ // new analysis) waits for it and looks again. Only Insights' call (`cooldown`) is answered from a hold (JUDGE_HOLD_MS),
+ // after the route, requireAccess and the project check ran; the call after an analysis always asks. What the call uses
+ // is the project's or the system's (the default chat model and its service, the project's network context), so holds
+ // and calls are per project and shared by every member; `locale` only words a refusal.
+ async judgeMissing(id,{cooldown=false,locale=undefined}={}){
+  for(;;){const state=await this.p.strategy.state(id),{missing,key}=this.missingOf(state.insights);if(!missing.length)return {judged:0};
+   const flight=this.judging.get(id);if(flight&&flight.key!==key){await flight.operation.catch(()=>undefined);continue;}
+   if(!flight&&cooldown){const held=this.judgeHolds.get(id);
+    if(held&&(held.key!==key||Date.now()>=held.until))this.judgeHolds.delete(id);
+    else if(held&&!held.failure)return {judged:0};
+    // A failure is held while the model setup is the one it failed with: fixing it lets the next visit ask at once.
+    else if(held){if(await this.modelFingerprint(id)===held.fingerprint)throw this.judgeRefusal(held,locale);this.judgeHolds.delete(id);continue;}}
+   if(flight)return this.judgeAnswer(flight.operation,locale);
+   const entry={key,operation:null};entry.operation=this.judgeNow(id,state,missing,key).finally(()=>{if(this.judging.get(id)===entry)this.judging.delete(id);});this.judging.set(id,entry);
+   return this.judgeAnswer(entry.operation,locale);}}
+ async judgeNow(id,state,missing,key){const strategy=this.p.strategy,b=state.insights,asked=new Set(missing.map(s=>s.key));let phase='prepare';const fingerprint=await this.modelFingerprint(id);
+  try{const language=await this.language(id);
+   const rules=b?.evidence?.signals?.analysisSnapshot?.config||await this.p.analysisRules?.config(id).catch(()=>null);
+   phase='model';const reply=await this.model(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge-many');phase='after';
+   const r=parseOutput(reply.text,d=>Array.isArray(d.reviews));if(!r)throw Object.assign(new Error(systemMessageText('dailyAnalysis.onlineAiGaveNoVerdict')),{status:502});
+   for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignals(id,{reviews:r.reviews,locale:language,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
+   // The changes still missing are held when this call asked about every one of them; a new one is asked about at once.
+   const after=this.missingOf((await strategy.state(id).catch(()=>null))?.insights);
+   if(after.missing.length&&after.analysis===(b?.generatedAt||'')&&after.missing.every(s=>asked.has(s.key)))this.holdJudgement(id,{key:after.key,until:Date.now()+JUDGE_HOLD_MS});else this.judgeHolds.delete(id);
+   return {judged:r.reviews.length};
+  }catch(e){const transient=retryable(e,phase),ms=transient?JUDGE_BACKOFF_MS:JUDGE_HOLD_MS,status=transient?503:Number.isInteger(e?.status)&&e.status>=400&&e.status<600?e.status:502;
+   const held={key,until:Date.now()+ms,failure:true,status,fingerprint};this.holdJudgement(id,held);
+   // Logged once, by the call that failed; neither the prompt nor the model's answer is logged.
+   this.p.app.logger?.warn?.('NocoReach judging changes failed',{projectId:id,phase,retryable:transient,retryInMinutes:ms/60000,name:e?.name,code:e?.code,status:e?.status,message:String(e?.message||'').slice(0,200)});
+   throw Object.assign(new Error(String(e?.message||'')),{cause:e,judgeHold:held});}}
+ judgeAnswer(operation,locale){return operation.catch(e=>{throw e?.judgeHold?this.judgeRefusal(e.judgeHold,locale):e;});}
+ // A held failure: its status, and the minutes until the same set is asked about again.
+ judgeRefusal(held,locale){return Object.assign(new Error(systemMessageText('dailyAnalysis.judgeRetryIn',{0:Math.max(1,Math.ceil((held.until-Date.now())/60000))},locale)),{status:held.status,retryAt:new Date(held.until).toISOString()});}
+ holdJudgement(id,held){this.judgeHolds.delete(id);this.judgeHolds.set(id,held);if(this.judgeHolds.size>JUDGE_REMEMBERED)this.judgeHolds.delete(this.judgeHolds.keys().next().value);}
+ // What the model call would go to, as a short hash: the simulated model's settings, or the system's default chat model
+ // and its service's connection (provider, address and key), which an administrator changes to fix a failure.
+ async modelFingerprint(id){try{const mock=this.p.mock;if(mock?.enabled){const s=mock.status(id);return `mock:${s.enabled}:${s.scenario}:${s.revision}`;}
+  const services=this.p.agents?.models?.services,chat=(await services?.defaults?.())?.effectiveChat;if(!chat)return 'none';
+  let connection;try{connection=await services.connectionFor({modelService:chat.modelService,model:chat.model},'chat');}catch(e){connection={refused:String(e?.code||e?.name||'error')};}
+  return createHash('sha256').update(JSON.stringify([chat.modelService,chat.model,connection])).digest('hex').slice(0,16);}catch{return '';}}
  // 让 AI 现在判断 (洞察 › 最新变化): one change of the latest analysis judged on its own, for analyses made before every
  // change got a verdict; the opportunities already proposed are given so it does not repeat them.
  async judge(id,v){const strategy=this.p.strategy,state=await strategy.state(id),s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===String(v.signalKey||''));if(!s)throw Object.assign(new Error(systemMessageText('dailyAnalysis.changeNoLongerLatestAnalysis')),{status:404});
@@ -230,7 +272,7 @@ class DailyAnalysis{
   class AnalysisInstruction extends Instruction{async run(){if(self.running||self.ticking)return {status:JOB_STATUS.RESOLVED,result:{all:{ok:true,skipped:'已有分析任务正在运行'}}};const operation=this.execute();self.running=operation;try{return await operation;}finally{if(self.running===operation)self.running=null;}}async execute(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:systemMessageText('settings.projectNotExist')}};const timing=(await self.workflow())?.get('config') as {timezone?:string}|undefined;const timezone=timing?.timezone,now=new Date();const results={};for(const id of ids.map(String)){if(self.p.demoProjects?.has(id)){results[id]={ok:true,skipped:'demo project'};continue;}if(await self.succeededToday(id,timezone,now)){results[id]={ok:true,skipped:'今天已经分析成功'};continue;}const state=await self.state(id);if(state.runningSince&&Date.now()-Date.parse(state.runningSince)<STALE_MS){results[id]={ok:true,skipped:'正在分析'};continue;}await self.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));}const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
   wf.registerInstruction(NODE_TYPE,AnalysisInstruction);return true;}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dailyAnalysis.analysisNotCompleteTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap(id=>this.start(id,'manual')),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap(id=>this.judgeMissing(id))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');
+  this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap(id=>this.start(id,'manual')),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap((id,v,ctx)=>this.judgeMissing(id,{cooldown:true,locale:ctx?.getCurrentLocale?.()}))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');
   this.registerInstruction();this.p.app.on('afterStart',()=>this.ensureWorkflow().catch(e=>this.p.app.logger.warn('NocoReach daily analysis workflow not created',{message:e.message})));}
 }
 export { DailyAnalysis, quietSources, scheduledToday, retryable, parseOutput, buildInput, withRules, validInsight, styleIssues, rewriteStyle, width, promptFor, SYSTEM, REWRITE, NODE_TYPE, WORKFLOW_TITLE, DEFAULT_CRON };

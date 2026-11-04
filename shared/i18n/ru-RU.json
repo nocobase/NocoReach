@@ -1632,6 +1632,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "На этот раз онлайн-ИИ не ответил. Повторите попытку позже или добавьте их вручную.",
   "aiQuestions.generationManualFallback": "На этот раз онлайн-ИИ не ответил. Повторите попытку позже или введите темы самостоятельно.",
   "dailyAnalysis.onlineAiGaveNoVerdict": "На этот раз онлайн-ИИ не вынес вердикта. Попробуйте еще раз",
+  "dailyAnalysis.judgeRetryIn": "На этот раз не удалось оценить оставшиеся изменения. Попробуйте еще раз через {0} мин.",
   "messages.onlineAiConnectedMessage": "Онлайн-ИИ подключен.",
   "messages.modelChosenOnlineAiNot": "Модель, выбранная для онлайн-ИИ, сейчас не включена.",
   "taskDetail.sawChangeLive": "Изменение появилось на сайте",

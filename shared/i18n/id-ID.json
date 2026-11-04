@@ -1687,6 +1687,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "AI daring tidak menjawab kali ini. Coba lagi nanti atau tambahkan secara manual",
   "aiQuestions.generationManualFallback": "AI daring tidak menjawab kali ini. Coba lagi nanti atau masukkan topik sendiri",
   "dailyAnalysis.onlineAiGaveNoVerdict": "AI daring tidak memberikan keputusan kali ini. Coba lagi",
+  "dailyAnalysis.judgeRetryIn": "Perubahan yang tersisa tidak dapat dinilai kali ini. Coba lagi dalam {0} menit.",
   "messages.onlineAiConnectedMessage": "AI daring terhubung.",
   "messages.modelChosenOnlineAiNot": "Model yang dipilih untuk AI daring saat ini tidak aktif",
   "taskDetail.sawChangeLive": "Perubahan terdeteksi di situs",

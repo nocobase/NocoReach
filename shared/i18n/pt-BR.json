@@ -1631,6 +1631,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "A IA online não respondeu desta vez. Tente novamente mais tarde ou adicione os concorrentes manualmente",
   "aiQuestions.generationManualFallback": "A IA online não respondeu desta vez. Tente novamente mais tarde ou insira os temas manualmente",
   "dailyAnalysis.onlineAiGaveNoVerdict": "A IA online não chegou a uma conclusão desta vez. Tente novamente",
+  "dailyAnalysis.judgeRetryIn": "Desta vez não foi possível avaliar as mudanças restantes. Tente novamente em {0} min.",
   "messages.onlineAiConnectedMessage": "A IA online está conectada.",
   "messages.modelChosenOnlineAiNot": "O modelo escolhido para a IA online não está ativado no momento",
   "taskDetail.sawChangeLive": "Alteração verificada no site publicado",

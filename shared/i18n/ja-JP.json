@@ -1631,6 +1631,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "今回はオンライン AI から応答がありませんでした。後でもう一度試すか、手動で追加してください",
   "aiQuestions.generationManualFallback": "今回はオンライン AI から応答がありませんでした。後でもう一度試すか、ご自身でトピックを入力してください",
   "dailyAnalysis.onlineAiGaveNoVerdict": "今回はオンライン AI から判定結果が得られませんでした。もう一度お試しください",
+  "dailyAnalysis.judgeRetryIn": "残りの変化は今回判定できませんでした。{0} 分後にもう一度お試しください。",
   "messages.onlineAiConnectedMessage": "オンライン AI に接続しています。",
   "messages.modelChosenOnlineAiNot": "オンライン AI に選択したモデルは、現在有効になっていません",
   "taskDetail.sawChangeLive": "公開された変更を確認済み",
