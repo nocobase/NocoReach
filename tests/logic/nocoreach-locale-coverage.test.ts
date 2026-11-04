@@ -396,6 +396,12 @@ describe('NocoReach semantic-key translations', () => {
         '一次检查一个页面，点了才查，每次约 $0.005，算进 DataForSEO 的月度预算。同一页面、同一设备 10 分钟内不重复检查。',
       '“立即检查”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。':
         '“立即更新”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。',
+      // The Google app is published to production instead of keeping test users (2026-11-04): in Testing status Google
+      // ends the authorization every seven days.
+      'Google 未批准本次授权，请检查测试用户和账号策略后重试。':
+        'Google 未批准本次授权。请确认应用已在“受众”里发布为正式版，并检查账号策略后重试。',
+      '配置 Google Auth Platform 的品牌信息、受众和测试用户；测试用户填写你将用于授权的 Google 邮箱。':
+        '配置 Google Auth Platform 的品牌信息，再在“受众”里把应用发布为正式版。应用处于测试状态时，Google 会让授权每 7 天失效一次。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

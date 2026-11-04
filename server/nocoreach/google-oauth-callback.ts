@@ -19,8 +19,27 @@ interface Host {
     init: RequestInit,
   ): Promise<Record<string, string>>;
   variable(name: string, value: string, secret: boolean): Promise<unknown>;
-  metadata(id: string, values: Record<string, string>): Promise<unknown>;
+  metadata(id: string, values: Record<string, string | null>): Promise<unknown>;
+  link?(id: string): Promise<{ get(field: string): unknown } | null>;
+  sync?: { retryRefused(id: string): Promise<unknown> };
   RETURN: string;
+}
+// The same account authorizing again, while the link still has the resources it confirmed: they stay confirmed, and
+// the syncs Google's refusal failed run again (sync-service.ts `retryRefused`). Another account confirms its own.
+function sameAccount(
+  previous: { get(field: string): unknown } | null | undefined,
+  email: string,
+) {
+  const account = previous?.get('accountEmail');
+  return Boolean(
+    previous &&
+    email &&
+    previous.get('status') !== 'disconnected' &&
+    typeof account === 'string' &&
+    account.toLowerCase() === email.toLowerCase() &&
+    previous.get('ga4PropertyId') &&
+    previous.get('gscSiteUrl'),
+  );
 }
 type OAuthState = { id: string; userId: string; nonceHash: string };
 function fail(code: string): never {
@@ -117,12 +136,25 @@ export async function googleOAuthCallback(
       stage = 'authorization';
       await requireInitiator(host, ctx, saved.userId, saved.id);
       stage = 'save';
+      const email = identity.email || '';
+      const same = sameAccount(await host.link?.(saved.id), email);
       await host.variable(secretKey(saved.id), tokens.refresh_token, true);
       await host.metadata(saved.id, {
-        accountEmail: identity.email || '',
+        accountEmail: email,
         authorizedAt: new Date().toISOString(),
-        status: 'awaiting_selection',
+        authFailedAt: null,
+        status: same ? 'ready_for_sync' : 'awaiting_selection',
       });
+      // The authorization is saved; a retry that cannot be queued leaves the jobs for Retry failed jobs.
+      if (same)
+        await host.sync?.retryRefused(saved.id).catch((error: unknown) =>
+          ctx.logger.warn(
+            'NocoReach Google sync retry after authorization skipped',
+            {
+              message: error instanceof Error ? error.message : String(error),
+            },
+          ),
+        );
       ctx.redirect(host.RETURN + '?google=authorized');
     });
   } catch (error) {

@@ -84,7 +84,7 @@ class SyncService{
   await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
    await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    await this.control(id,'pause');
-   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null});
+   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null,authFailedAt:null});
    await plugin.variable(secretKey(id),null);
   });
  }
@@ -128,6 +128,19 @@ class SyncService{
     if(String(this.inFlight?.job.get('projectId'))===String(id))this.inFlight.controller.abort();
     for(const controller of this.freshFlights.get(String(id))||[])controller.abort();
    });
+  });
+ }
+ // The jobs Google's refusal of the authorization failed (invalid_grant), queued again once the same account has
+ // authorized again (google-oauth-callback.ts), so Data health recovers without waiting for the next daily sync or
+ // Retry failed jobs. Jobs that failed for another reason, or for resources no longer selected, are left as they are.
+ async retryRefused(id: string | number): Promise<number>{
+  const plugin=this.p as {db: LegacyDatabase};
+  return plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+   const link=await this.link(id),current={ga4:link.get('ga4PropertyId'),gsc:link.get('gscSiteUrl')};
+   const refused=(await this.repo('nrSyncJobs').find({filter:{projectId:String(id),status:'failed',errorCode:'invalid_grant'},transaction})).filter(j=>j.get('resource')===current[j.get('source')]).map(j=>j.id);
+   if(refused.length)await this.repo('nrSyncJobs').update({filter:{id:{$in:refused}},values:{status:'queued',attempts:0,retryAt:null,errorCode:null},transaction});
+   return refused.length;
   });
  }
  async currentJob(flight,transaction){
