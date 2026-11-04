@@ -284,7 +284,8 @@ export class ArticleFlow {
   /**
    * The version the change request is about, whole, for the run that revises it (2026-11-04, T-62: asked only to add
    * screenshots to a version the owner had edited by hand, the Agent rewrote the article from its source, since it was
-   * never given that version). `editedByHand` says the person saved it with Edit directly (or recorded it themselves).
+   * never given that version). `editedByHand` says a person wrote its text: saved it with Edit directly, recorded it
+   * themselves, or restored a version they wrote (`writtenByHand`; a restored Agent version is still the Agent's text).
    */
   private async previous(w: Work, tx: any) {
     const out = w.results[w.stageIndex ?? 0];
@@ -294,7 +295,7 @@ export class ArticleFlow {
     const locales = {};
     for (const l of new Set([...Object.keys(base?.locales || {}), ...Object.keys(a.draft.locales)])) locales[l] = { ...base?.locales[l], ...a.draft.locales[l] };
     const slug = a.draft.slug || base?.slug, status = a.draft.status ?? base?.status;
-    return { previous: { version: out.version, editedByHand: out.createdBy !== 'agent', article: { ...(slug ? { slug } : {}), ...(status ? { status } : {}), locales } } };
+    return { previous: { version: out.version, editedByHand: writtenByHand(out), article: { ...(slug ? { slug } : {}), ...(status ? { status } : {}), locales } } };
   }
   /**
    * A Runner's article for the phase it was asked for: the primary language alone (other languages it wrote anyway are

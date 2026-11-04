@@ -2740,3 +2740,50 @@ test('restoring stays within the round under review: the primary versions are no
   });
   expect(review(d).article).toEqual(translated.article);
 });
+
+test('the run after a restore revises the restored version, a hand edit only when a person wrote its text', async () => {
+  const f = await fixture();
+  const { stageKey, v1, v2, v4 } = await versions(f);
+  // The Agent's version 1 restored by the owner is still the Agent's text.
+  let d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v1.id,
+    currentId: v4.id,
+  });
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: 'Add a closing paragraph',
+  });
+  let { run } = await claim(f);
+  expect(run.input.article.previous).toMatchObject({
+    version: 5,
+    editedByHand: false,
+    article: { locales: { zh: { body: '# 你好\n\n第一版' } } },
+  });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '加了结尾。',
+    article: { locales: { zh: { body: '# 你好\n\n第一版\n\n结尾。' } } },
+  });
+  // The owner's version 2 restored is theirs.
+  d = await f.view();
+  d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v2.id,
+    currentId: review(d).id,
+  });
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: 'Fix the title only',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.previous).toMatchObject({
+    version: 7,
+    editedByHand: true,
+    article: { locales: { zh: { title: '你好，世界' } } },
+  });
+});
