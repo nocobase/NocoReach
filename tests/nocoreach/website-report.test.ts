@@ -18,7 +18,8 @@ test('period: deduplicated totals for both periods, the daily line and the first
   const by=o=>m.map(k=>o[k]??1);
   if(dims==='sessionDefaultChannelGroup'&&r.dateRanges.length===2)return report(['sessionDefaultChannelGroup','dateRange'],m,[[['Organic Search','current'],by({screenPageViews:60,sessions:50,keyEvents:3,newUsers:20,activeUsers:40})],[['Organic Search','previous'],by({screenPageViews:90,sessions:70,keyEvents:5,newUsers:30,activeUsers:55})],[['Referral','previous'],by({screenPageViews:10,sessions:8,keyEvents:0,newUsers:2,activeUsers:6})],[['Referral','current'],m.map(()=>0)]]);
   if(dims==='pagePath'&&r.dateRanges.length===2)return report(['pagePath','dateRange'],m,[[['/docs','current'],[300,2]],[['/docs/','current'],[10,0]],[['/docs','previous'],[200,1]]]);
-  if(dims==='landingPagePlusQueryString'&&r.dateRanges.length===2)return report(['landingPagePlusQueryString','dateRange'],m,[[['/?utm_source=x','current'],[5,1]],[['/','current'],[20,4]],[['/','previous'],[30,6]]]);
+  // A landing page seen only in the period before is answered for the current one too, at zero.
+  if(dims==='landingPagePlusQueryString'&&r.dateRanges.length===2)return report(['landingPagePlusQueryString','dateRange'],m,[[['/','previous'],by({sessions:30,newUsers:6})],[['/','current'],by({sessions:20,newUsers:4})],[['/old','previous'],by({sessions:9,newUsers:3})],[['/?utm_source=x','current'],by({sessions:5,newUsers:1})],[['/old','current'],m.map(()=>0)]]);
   if(!dims)return report(['dateRange'],m,[[['current'],[100,60,150,90,9000,400,900,12,0.08]],[['previous'],[80,50,120,60,6000,300,700,6,0.05]]]);
   // GA4 also answers each range on the other range's days, at zero.
   if(dims==='date')return report(['date','dateRange'],m,[[['20261005','current'],[10,6,15,9,900,40,90,1,0.06]],[['20261004','current'],[12,6,15,9,900,40,90,1,0.06]],[['20260928','previous'],[8,5,12,6,600,30,70,1,0.05]],[['20260928','current'],[0,0,0,0,0,0,0,0,0]],[['20261004','previous'],[0,0,0,0,0,0,0,0,0]]]);
@@ -41,10 +42,12 @@ test('period: deduplicated totals for both periods, the daily line and the first
  assert.deepEqual(Object.keys(v.tables).sort(),[...FIRST_TABLES].sort());assert.deepEqual(v.missing,[]);assert.equal(v.complete,true);
  assert.deepEqual(v.tables.sourceMedium.map(r=>r.ai||null),[null,'ChatGPT','Perplexity']);assert.equal(v.ai,undefined,'the AI share is GA4\'s own AI Assistant channel');
  const t=await g.periodTables('1','123',w),later=calls.slice(2);
- assert.deepEqual(later.map(c=>c.body.requests.length),[5,4,1],'the other ten reports, read apart');
- assert.deepEqual(changeRequests(later).map(dimsOf),['pagePath','landingPagePlusQueryString'],'pages and landing pages read for both periods');
+ assert.deepEqual(later.map(c=>c.body.requests.length),[5,4],'the other nine reports, read apart, in one round');
+ assert.deepEqual(changeRequests(later).map(dimsOf),['landingPagePlusQueryString','pagePath'],'landing pages and pages read for both periods');
+ assert.equal(later.flatMap(c=>c.body.requests).filter(r=>dimsOf(r)==='landingPagePlusQueryString').length,1,'landing pages read once, for their table and the change');
  assert.deepEqual(t.changes.page,[{key:'/docs',current:{views:310,keyEvents:2},previous:{views:200,keyEvents:1}}],'/docs and /docs/ are one page');
- assert.deepEqual(t.changes.landing,[{key:'/',current:{sessions:25,newUsers:5},previous:{sessions:30,newUsers:6}}],'a landing page with a query string is its path');
+ assert.deepEqual(t.changes.landing,[{key:'/',current:{sessions:25,newUsers:5},previous:{sessions:30,newUsers:6}},{key:'/old',current:{sessions:0,newUsers:0},previous:{sessions:9,newUsers:3}}],'a landing page with a query string is its path, and one seen only before stays behind the change');
+ assert.deepEqual(t.tables.landing.map(r=>[r.key,r.sessions,r.engaged]),[['/',20,1],['/?utm_source=x',5,1]],'the table holds the current period only, with every column, and not a landing page seen only before it');
  assert.deepEqual(Object.keys(t.tables).sort(),[...REST_TABLES].sort());assert.deepEqual(t.missing,[]);assert.equal(t.complete,true);
  assert.deepEqual([...FIRST_TABLES,...REST_TABLES].sort(),Object.keys(TABLES).sort(),'every table is in one part');
  assert.equal(t.totals,undefined,'the figures come with the first part only');
@@ -60,6 +63,10 @@ test('period: a report GA4 refuses is left out on its own and named; other failu
  const channels=fake((method,body)=>{if(method==='batchRunReports')throw Object.assign(new Error('Field combination invalid'),{status:400,code:'google_api_error'});
   if(dimsOf(body)==='sessionDefaultChannelGroup')throw Object.assign(new Error('Incompatible'),{status:400,code:'google_api_error'});return report(body.dimensions.map(d=>d.name),body.metrics.map(m=>m.name),[]);}).g;
  const c=await channels.period('1','123',w);assert.deepEqual(c.missing,['channel']);assert.equal(c.tables.channel,undefined);assert.equal(c.changes.channel,undefined);assert.ok(c.tables.device);assert.equal(c.complete,false);
+ // So are Landing pages' table and the landing pages behind a change, in the other part; the pages behind a change stay.
+ const landing=fake((method,body)=>{if(method==='batchRunReports')throw Object.assign(new Error('Field combination invalid'),{status:400,code:'google_api_error'});
+  if(dimsOf(body)==='landingPagePlusQueryString')throw Object.assign(new Error('Incompatible'),{status:400,code:'google_api_error'});return report(body.dimensions.map(d=>d.name),body.metrics.map(m=>m.name),[]);}).g;
+ const l=await landing.periodTables('1','123',w);assert.deepEqual(l.missing,['landing']);assert.equal(l.tables.landing,undefined);assert.equal(l.changes.landing,undefined);assert.ok(l.changes.page);assert.ok(l.tables.page);assert.equal(l.complete,false);
  const expired=fake(()=>{throw Object.assign(new Error('expired'),{status:400,code:'invalid_grant'});}).g;
  await assert.rejects(expired.period('1','123',w),e=>e.status===409&&/重新授权/.test(e.message));
  const denied=fake(()=>{throw Object.assign(new Error('forbidden'),{status:403,code:'google_api_error'});}).g;

@@ -70,9 +70,9 @@ const TABLES={
 // Which dimensions identify a row for its detail (a page row is a path; its titles are merged).
 const ROW_KEYS={page:['pagePath']};
 const KEEP={sourceMedium:300,landing:300,page:300,city:200};
-// 变化来自哪里: channels, pages and landing pages read for both periods, so the page can say where a figure's change came
-// from (views and key events by page; sessions and new users by landing page, where a session starts). Kept apart from
-// TABLES, which read the current period only.
+// The change sentence: channels, pages and landing pages read for both periods, so the page can say where a figure's
+// change came from (views and key events by page; sessions and new users by landing page, where a session starts). TABLES
+// read the current period only, but a table of a change's own dimension is read with it (PAIRED).
 const CHANGES={
  channel:{dim:'sessionDefaultChannelGroup',metrics:['screenPageViews','sessions','keyEvents','newUsers','activeUsers'],order:'sessions',limit:200},
  page:{dim:'pagePath',metrics:['screenPageViews','keyEvents'],order:'screenPageViews',limit:2000},
@@ -83,10 +83,15 @@ const CHANGE_KEEP=500;
 // source / medium) come from these; the other tables and the pages behind a change are read with `periodTables`.
 const FIRST_TABLES=['channel','newVsReturning','device','event','sourceMedium'];
 const REST_TABLES=Object.keys(TABLES).filter(n=>!FIRST_TABLES.includes(n));
-const REST_CHANGES=Object.keys(CHANGES).filter(n=>n!=='channel');
-// A report over both periods, keeping the current one's rows: Channel's table and the channels behind a change are one read.
-// GA4 answers each period for every value seen in either, at zero where it had none, so a channel seen only in the period
-// before is dropped, as a report of the current period alone leaves it out.
+// Tables read as one report over both periods with the change of the same dimension: Channel in the first part, and
+// Landing pages in the other, which makes that part nine reports, one round of the nine reads at once (Ga4Requests).
+// Pages are not paired: their table is by path and title. The changes left are read on their own (LONE_CHANGES).
+const PAIRED=Object.keys(CHANGES).filter(n=>TABLES[n]?.dims.join()===CHANGES[n].dim);
+const LONE_CHANGES=Object.keys(CHANGES).filter(n=>!PAIRED.includes(n));
+// A paired report keeps the current period's rows for its table. GA4 answers each period for every value seen in either,
+// at zero where it had none, so a value seen only in the period before is dropped, as a report of the current period alone
+// leaves it out. Its row limit is the change's and covers both periods; the table keeps the current period's first rows
+// (KEEP), which only a period before with far more values ahead of them would push past it.
 const currentOf=report=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');return i<0?report:{...report,rows:(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current'&&(r.metricValues||[]).some(m=>Number(m?.value)))};};
 // One row per value with its current and previous figures; the largest in either period first. A page is its path:
 // GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
@@ -200,32 +205,31 @@ class WebsiteReport{
   return this.history.load(String(id),[part,...this.scope(id,property),w],async()=>({...await read(),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):this.nightRead(property,now)?MORNING_READ_HOUR*HOUR-since:left;},
    (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:[part,...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')];
-  const others=FIRST_TABLES.filter(n=>n!=='channel');
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
    request(['date'],SESSION,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
-   request(TABLES.channel.dims,SESSION,both,'sessions',CHANGES.channel.limit),
-   ...this.tableRequests(w,others,[]),
+   ...this.tableRequests(w,FIRST_TABLES,[]),
   ]);
-  const [totalsReport,dailyReport,channels,...rest]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
+  const [totalsReport,dailyReport,...rest]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
   // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
   const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start,w.end)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
-   ...this.tablesOf(w,others,[],rest),complete:reports.every(Boolean)};
-  if(channels){out.tables.channel=tableRows('channel',currentOf(channels));if(!w.all)out.changes.channel=changeRows('channel',channels);}else out.missing.unshift('channel');
+   ...this.tablesOf(w,FIRST_TABLES,[],rest),complete:reports.every(Boolean)};
   if(w.all){out.totals.previous=null;out.previousDaily=[];}
   return out;}
- async readTables(id,property,w){const reports=await this.batch(id,property,this.tableRequests(w,REST_TABLES,REST_CHANGES));
-  return {...this.tablesOf(w,REST_TABLES,REST_CHANGES,reports),complete:reports.every(Boolean)};}
+ async readTables(id,property,w){const reports=await this.batch(id,property,this.tableRequests(w,REST_TABLES,LONE_CHANGES));
+  return {...this.tablesOf(w,REST_TABLES,LONE_CHANGES,reports),complete:reports.every(Boolean)};}
+ // A table's report, over both periods with the order and limit of its change when PAIRED, then the changes read alone.
  tableRequests(w,names,changeNames){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
-  return [...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
+  return [...names.map(n=>{const t=TABLES[n],c=CHANGES[n];return PAIRED.includes(n)?request(t.dims,t.metrics||SESSION,both,c.order,c.limit):request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
    ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);})];}
- // `missing` names the tables GA4 refused; a change report it refuses only leaves that part out of the explanation.
+ // `missing` names the tables GA4 refused, a paired one with its change; a change report read alone that it refuses only
+ // leaves that part out of the explanation.
  tablesOf(w,names,changeNames,reports){const out={tables:{},missing:[],changes:{}};
-  names.forEach((n,i)=>{if(reports[i])out.tables[n]=tableRows(n,reports[i]);else out.missing.push(n);});
+  names.forEach((n,i)=>{const r=reports[i];if(!r){out.missing.push(n);return;}const paired=PAIRED.includes(n);out.tables[n]=tableRows(n,paired?currentOf(r):r);if(paired&&!w.all)out.changes[n]=changeRows(n,r);});
   if(!w.all)changeNames.forEach((n,i)=>{const r=reports[names.length+i];if(r)out.changes[n]=changeRows(n,r);});
   return out;}
 

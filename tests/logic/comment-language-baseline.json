@@ -155,7 +155,7 @@
   "server/nocoreach/sync-service.ts": 5,
   "server/nocoreach/trends-source.ts": 10,
   "server/nocoreach/watch.ts": 4,
-  "server/nocoreach/website-report.ts": 6,
+  "server/nocoreach/website-report.ts": 5,
   "server/nocoreach/x-source.ts": 1,
   "server/providers/nocoreach.ts": 1,
   "shared/playbook-catalog.ts": 3,

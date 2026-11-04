@@ -480,7 +480,7 @@ const SOURCES: Record<string, Source> = {
           return list(held[name]);
         },
         // The first part's own refusals say so too. Channel's table and the channels behind a change are one report
-        // (website-report.ts, `readPeriod`), so `missing` naming Channel covers both.
+        // (website-report.ts, `PAIRED`), so `missing` naming Channel covers both.
         leftOut = (name: string) =>
           Array.isArray(v.missing) && v.missing.includes(name),
         notReturned = (): Promise<Obj[]> =>

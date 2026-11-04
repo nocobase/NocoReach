@@ -144,7 +144,7 @@ it('coalesces concurrent historical reports and runs nine core reports at once, 
     previousStart: '2026-09-27',
     previousEnd: '2026-10-03',
   };
-  // The page's first part twice and its other tables: seven reports and ten, as five and two, then five, four and one.
+  // The page's first part twice and its other tables: seven reports and nine, as five and two, then five and four.
   const results = Promise.all([
     f.service.period('1', '123', window),
     f.service.period('1', '123', window),
@@ -152,10 +152,10 @@ it('coalesces concurrent historical reports and runs nine core reports at once, 
   ]);
   await vi.runAllTimersAsync();
   await results;
-  expect(f.calls).toHaveLength(5);
+  expect(f.calls).toHaveLength(4);
   expect(
     f.calls.map((c) => (c.body.requests as unknown[] | undefined)?.length),
-  ).toEqual([5, 2, 5, 4, 1]);
+  ).toEqual([5, 2, 5, 4]);
   // One fewer than GA4's ten, for what reaches it outside this queue.
   expect(f.reportPeak()).toBe(9);
 });
