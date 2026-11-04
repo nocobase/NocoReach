@@ -1,5 +1,6 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
+import {ListSkeleton} from '#components/reach/states';
 import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 import { joinList } from '#lib/format';
 import {useEffect,useState} from 'react';
@@ -22,7 +23,7 @@ export function RedditConnect({projectId,suggested,onChange}:{projectId:number;s
  useEffect(()=>{void load().catch(()=>setError(() => ($t('reddit.notLoadRedditStatus'))));},[projectId]);
  useEffect(()=>{if(!status?.checking&&!(status?.connected&&!status.lastRun))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.checking,status?.lastRun,status?.connected]);
  async function run(fn:()=>Promise<RedditStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<ListSkeleton rows={2}/>;
  if(status.connected)return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('common.search',{0:joinList(status.terms!)})}</h3>
   {!status.lastRun?<p role="status">{$t('reddit.firstSearchProgressUsuallyFew')}</p>:<><p>{$tj('reddit.postsRecorded',{0:status.total,1:status.retainedFrom?$t('common.recordingSince',{0:status.retainedFrom}):'',2:status.lastRun.added?$t('reddit.newFoundLastTime',{0:status.lastRun.added}):''})}</p>
   {!!status.recent?.length&&<div><p className="nr-guide-subtitle">{$t('reddit.recentlyFoundPosts')}</p>{status.recent.slice(0,3).map(p=><p key={p.url} className="nr-footnote"><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title}</a> · r/{p.subreddit}</p>)}</div>}

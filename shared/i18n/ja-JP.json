@@ -2523,6 +2523,7 @@
   "effect.notEnoughData": "データ不足",
   "messages.notEnoughDataKeepTracking": "データ不足のため、追跡を継続",
   "dataHealth.dataHealth": "データの健全性",
+  "dataHealth.loadingDataHealth": "データの健全性を読み込み中…",
   "sourceConnections.sourcesTab": "データソース",
   "dataHealth.attentionCount": "要確認: {0}件",
   "dataHealth.attentionNotice": "要確認のデータソース（{0}件）：{1}",

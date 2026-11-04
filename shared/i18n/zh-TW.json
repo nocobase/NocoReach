@@ -2523,6 +2523,7 @@
   "effect.notEnoughData": "資料不足",
   "messages.notEnoughDataKeepTracking": "資料不足，繼續觀察",
   "dataHealth.dataHealth": "資料健康",
+  "dataHealth.loadingDataHealth": "正在讀取資料健康…",
   "sourceConnections.sourcesTab": "資料來源",
   "dataHealth.attentionCount": "{0} 個需要留意",
   "dataHealth.attentionNotice": "{0} 個資料來源需要留意：{1}",

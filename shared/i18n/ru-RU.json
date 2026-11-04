@@ -2525,6 +2525,7 @@
   "effect.notEnoughData": "Недостаточно данных",
   "messages.notEnoughDataKeepTracking": "Недостаточно данных; продолжайте отслеживать",
   "dataHealth.dataHealth": "Состояние данных",
+  "dataHealth.loadingDataHealth": "Загрузка состояния данных…",
   "sourceConnections.sourcesTab": "Источники",
   "dataHealth.attentionCount": "Требует внимания: {0}",
   "dataHealth.attentionNotice": "Источники, требующие внимания ({0}): {1}",

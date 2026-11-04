@@ -2523,6 +2523,7 @@
   "effect.notEnoughData": "Données insuffisantes",
   "messages.notEnoughDataKeepTracking": "Données insuffisantes ; poursuivez le suivi",
   "dataHealth.dataHealth": "État des données",
+  "dataHealth.loadingDataHealth": "Chargement de l’état des données…",
   "sourceConnections.sourcesTab": "Sources",
   "dataHealth.attentionCount": "À surveiller : {0}",
   "dataHealth.attentionNotice": "Sources à surveiller ({0}) : {1}",

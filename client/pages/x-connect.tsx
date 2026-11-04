@@ -1,6 +1,7 @@
 import { formatDateTime, joinList } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError} from '#components/connection-error';
+import {ListSkeleton} from '#components/reach/states';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -19,7 +20,7 @@ export function XConnect({projectId,suggested,onChange}:{projectId:number;sugges
  useEffect(()=>{void load().catch(()=>setError(() => ($t('x.notLoadXStatus'))));},[projectId]);
  useEffect(()=>{if(!status?.checking)return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.checking]);
  async function run(fn:()=>Promise<XStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);setEditing(false);setForm(f=>({...f,token:''}));onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<ListSkeleton rows={2}/>;
  if(status.connected&&(!editing||!canConnect)){const sp=status.spend!;return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('x.search',{0:joinList(status.terms!),1:status.handle?$t('common.excluding',{0:status.handle}):''})}</h3>
   <p>{$tj('x.aboutMonthCapReadSaved',{0:sp.usd.toFixed(2),1:status.cap,2:sp.posts.toLocaleString(getCurrentLocale()),3:status.total})}</p>
   {!status.lastRun?<p role="status">{$t('x.firstSearchProgressLast7')}</p>:<p className="nr-footnote">{$tj('x.lastSearchedDailyAfter',{0:formatDateTime(status.lastRun.at)})}{status.lastRun.capped?<span className="nr-block">{$t('x.monthCapReachedReadingPaused')}</span>:null}{status.lastRun.errors.map(e=><span key={e} className="nr-block">{$tj('common.notFullyCheckedValue',{0:translateSourceError(e)})}</span>)}</p>}

@@ -2525,6 +2525,7 @@
   "effect.notEnoughData": "Not enough data",
   "messages.notEnoughDataKeepTracking": "Not enough data; keep tracking",
   "dataHealth.dataHealth": "Data health",
+  "dataHealth.loadingDataHealth": "Loading data health…",
   "sourceConnections.sourcesTab": "Sources",
   "dataHealth.attentionCount": "Needing attention: {0}",
   "dataHealth.attentionNotice": "Sources needing attention ({0}): {1}",

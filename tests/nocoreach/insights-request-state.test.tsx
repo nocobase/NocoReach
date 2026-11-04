@@ -72,16 +72,21 @@ const blocks = [
     kind: 'tasks',
     title: 'strategy.taskStatus',
     empty: null,
+    // The card with a tag, two task lines and View all.
+    skeletons: 4,
   },
   {
     kind: 'metrics',
     title: 'strategy.keyMetrics',
     empty: 'strategy.noDataYet',
+    // The window line, then five tiles of a label, a number and a sparkline.
+    skeletons: 16,
   },
   {
     kind: 'summary',
     title: 'strategy.currentSituation',
     empty: 'strategy.noCurrentSituation',
+    skeletons: 8,
   },
 ] as const;
 const values = {
@@ -273,9 +278,15 @@ for (const block of blocks) {
     let section = (
       await screen.findAllByRole('region', { name: english[block.title] })
     )[0];
-    expect(within(section).getByRole('status')).toHaveTextContent(
-      english['common.loadingLoading'],
-    );
+    // The first read shows skeletons shaped like the loaded block, not a line of text.
+    expect(
+      within(section)
+        .getByRole('status', { name: english['common.loading'] })
+        .querySelectorAll('[data-slot="skeleton"]'),
+    ).toHaveLength(block.skeletons);
+    expect(
+      within(section).queryByText(english['common.loadingLoading']),
+    ).toBeNull();
     if (block.empty)
       expect(within(section).queryByText(english[block.empty])).toBeNull();
     await act(async () => pending.resolve(values[block.kind]));

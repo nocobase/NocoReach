@@ -2580,6 +2580,7 @@
   "effect.notEnoughData": "Chưa đủ dữ liệu",
   "messages.notEnoughDataKeepTracking": "Chưa đủ dữ liệu; tiếp tục theo dõi",
   "dataHealth.dataHealth": "Tình trạng dữ liệu",
+  "dataHealth.loadingDataHealth": "Đang tải tình trạng dữ liệu…",
   "sourceConnections.sourcesTab": "Nguồn dữ liệu",
   "dataHealth.attentionCount": "{0} mục cần chú ý",
   "dataHealth.attentionNotice": "{0} nguồn dữ liệu cần chú ý: {1}",

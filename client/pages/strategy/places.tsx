@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '#components/ui/dialog';
+import { ListSkeleton } from '#components/reach/states';
 import { cn } from '#lib/utils';
 import { playbookNameOf, type Playbook } from '../playbook-model';
 import { TaskStandingTag } from '../task-status-tag';
@@ -120,9 +121,10 @@ export function OpportunityHandOffDialog({
         </DialogHeader>
         {!parts ? (
           error ? null : (
-            <p role='status' className='text-sm text-muted-foreground'>
-              {$t('opportunityTasks.loadingPlaces')}
-            </p>
+            <ListSkeleton
+              rows={Math.min(Math.max(placesOf(row).length, 1), 5)}
+              label={$t('opportunityTasks.loadingPlaces')}
+            />
           )
         ) : (
           <ul
