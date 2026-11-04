@@ -24,6 +24,7 @@ import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
 import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
+import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
@@ -95,6 +96,8 @@ export class TaskService {
   readonly business: TaskBusiness;
   readonly articleFlow: ArticleFlow;
   private lastArticles = 0;
+  /** The runs the tick has work for (active-runs.ts). */
+  readonly activeRuns = new ActiveRuns(() => this.repo('nrSnapshots') as SnapshotRows);
   /** When this application instance started (the provider's registration, else now); see restarts.ts. */
   startedAt: string;
   private startRecorded = false;
@@ -110,6 +113,7 @@ export class TaskService {
     const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx });
     if (r) await this.repo('nrSnapshots').update({ filterByTk: r.id, values: { payload }, transaction: tx });
     else await this.repo('nrSnapshots').create({ values: { key, payload }, transaction: tx });
+    this.activeRuns.wrote(key, payload, tx);
   }
   async list(kind: string, project: string, task: string, tx?: any) {
     const prefix = this.key(kind, project, task), out: any[] = [];
@@ -1092,18 +1096,13 @@ export class TaskService {
     try {
       // Kept before the runs are synced, so a run this start interrupted is recognized (restarts.ts).
       if (!this.startRecorded) { this.startRecorded = true; await this.recordStart().catch(() => { this.startRecorded = false; }); }
-      // Durable queue: scan bounded pages; restarting never resubmits a running request.
-      for (let offset = 0; !this.stopped; offset += 100) {
-        const rows = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: 'nr-task-run:' } }, sort: 'id', limit: 100, offset });
-        for (const row of rows) {
-          const r: Run = row.get('payload');
-          if (r.simulated && r.status === 'queued') await this.runtime.simulate(r);
-          // Local simulations have no external job to resume after a crash. Settle an interrupted claim.
-          if (r.simulated && r.status === 'running' && Date.now() - Date.parse(r.startedAt || r.createdAt) > 5 * 60000)
-            await this.finish(r, undefined, 'demo_simulation_interrupted');
-          if (r.pluginRunId && !r.pluginSettled) await this.runtime.sync(r);
-        }
-        if (rows.length < 100) break;
+      // Durable queue: only the runs with work left are read (active-runs.ts); restarting never resubmits a running request.
+      for await (const r of this.activeRuns.due(() => this.stopped)) {
+        if (r.simulated && r.status === 'queued') await this.runtime.simulate(r);
+        // Local simulations have no external job to resume after a crash. Settle an interrupted claim.
+        if (r.simulated && r.status === 'running' && Date.now() - Date.parse(r.startedAt || r.createdAt) > 5 * 60000)
+          await this.finish(r, undefined, 'demo_simulation_interrupted');
+        if (r.pluginRunId && !r.pluginSettled) await this.runtime.sync(r);
       }
       if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
       if (Date.now() - this.lastArticles > 60000) { this.lastArticles = Date.now(); await this.articleFlow.tick().catch(() => undefined); }

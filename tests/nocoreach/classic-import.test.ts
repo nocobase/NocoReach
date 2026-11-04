@@ -249,7 +249,8 @@ describe('the nrImport actions', () => {
       nrVariables: [],
     };
     const saved: Record<string, { value: string; secret: boolean }> = {};
-    let loads = 0;
+    let loads = 0,
+      rescans = 0;
     const db = {
       getRepository: (name: string) => ({
         count: async () => tables[name]!.length,
@@ -285,7 +286,10 @@ describe('the nrImport actions', () => {
     } as never);
     const resources = legacy.resources;
     registerClassicImport({
-      plugin: { mock: { enabled: mock } },
+      plugin: {
+        mock: { enabled: mock },
+        taskExecution: { activeRuns: { rescan: () => void rescans++ } },
+      },
       legacy,
       users: { find: async () => accounts } as never,
       variables: {
@@ -324,7 +328,14 @@ describe('the nrImport actions', () => {
       );
       return ctx.body as any;
     };
-    return { tables, saved, call, legacy, loads: () => loads };
+    return {
+      tables,
+      saved,
+      call,
+      legacy,
+      loads: () => loads,
+      rescans: () => rescans,
+    };
   }
 
   it('refuses every import phase when simulation is enabled or a dataset marker exists', async () => {
@@ -360,7 +371,7 @@ describe('the nrImport actions', () => {
   });
 
   it('plans, imports rows with users mapped, saves settings, and refuses to mix with existing data', async () => {
-    const { call, tables, saved, loads } = fixture();
+    const { call, tables, saved, loads, rescans } = fixture();
     const plan = await call('plan', {
       users: [{ id: '1', email: 'x@y.z', admin: true }],
     });
@@ -393,6 +404,8 @@ describe('the nrImport actions', () => {
       users: { '1': 'u-root' },
     });
     expect(sent).toEqual({ inserted: 1, skipped: 2 });
+    // Imported snapshots may hold task runs still in flight: the task tick looks at every run again.
+    expect(rescans()).toBe(1);
     expect(tables.nrSnapshots!.map((r) => r.key)).toEqual([
       'daily-analysis:workflow',
       'nr-members',
