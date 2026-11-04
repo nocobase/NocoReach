@@ -36,6 +36,7 @@ import {
   taskImageIds,
 } from '../../../shared/task-images.js';
 import type { ArticleTargets } from './targets.js';
+import { bodyEdits } from './edits.js';
 
 // Publishing an approved article draft (docs/ARTICLE-PUBLISHING.md). The task stores what was approved; this module
 // does the target I/O outside business transactions and returns an outcome for the task to record.
@@ -371,16 +372,91 @@ export function articlePages(
     .slice(0, 10);
 }
 
-/** A verification phrase only helps when the change actually contains it. */
-export function verifyPhrase(draft: ArticleDraft): string | undefined {
-  const phrase = draft.verifyText?.replace(/\s+/g, ' ').trim();
-  if (!phrase || phrase.length < 8) return undefined;
-  const flat = (s?: string) => (s || '').replace(/\s+/g, ' ');
-  return Object.values(draft.locales).some(
-    (f) => flat(f.body).includes(phrase) || flat(f.title).includes(phrase),
+const flat = (s?: string) => (s || '').replace(/\s+/g, ' ').trim();
+// What rendering may change or drop in a sentence: inline Markdown and HTML, entities, and what typographers rewrite
+// (straight quotes, `--`, `...`). The page check compares text exactly.
+const UNSAFE = /[*_`[\]()<>#|\\~&"'=^{}]|--|\.\.\.|:\/\//;
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
+
+/**
+ * The sentences of a Markdown block as a reader sees them; headings, quotes, tables, code, images and HTML are left
+ * out. A sentence too long to look for is cut at its commas.
+ */
+function sentences(block: string): string[] {
+  if (/^(?:#|>|\||```|~~~|<|!\[| {4}|\t)/.test(block)) return [];
+  const lines = block.split('\n');
+  const texts = LIST_ITEM.test(block)
+    ? lines.map((line) => line.replace(LIST_ITEM, ''))
+    : [lines.join(' ')];
+  return texts
+    .flatMap((t) => t.split(/(?<=[.!?])\s+|(?<=[。！？；])/u))
+    .flatMap((t) =>
+      flat(t).length > 200 ? t.split(/(?<=[,，、;；:：])/u) : [t],
+    )
+    .map(flat);
+}
+
+/**
+ * The phrase the page check looks for after publishing: one the new version shows and the article did not before the
+ * task, so finding it means the change is live. The draft's own (the Agent's) while it still qualifies; otherwise, in
+ * `locales` order (the primary first), a sentence of 8-200 characters from the paragraphs the draft adds or rewrites
+ * against `base`, or else a new title, neither of which `base` shows either. `source` is the article before the task,
+ * which `base` replaces after a rebase. 2026-11-04 (T-62): a hand edit dropped the Agent's phrase from the text and
+ * the release had nothing to check, so the phrase is no longer asked of the person editing.
+ */
+export function verifyPhrase(
+  draft: ArticleDraft,
+  base: ArticleContent | null = null,
+  locales: string[] = Object.keys(draft.locales),
+  source: ArticleContent | null = base,
+): string | undefined {
+  const known = (c: ArticleContent | null) =>
+    Object.values(c?.locales || {})
+      .map((f) => `${flat(f.title)}\n${flat(f.body)}`)
+      .join('\n')
+      .toLowerCase();
+  const before = known(source),
+    was = source === base ? before : `${before}\n${known(base)}`;
+  // A language as readers will see it: the draft's fields over the base's.
+  const shows = (phrase: string, l: string) => {
+    const f = draft.locales[l] || {},
+      at = base?.locales[l];
+    return (
+      phrase.length >= 8 &&
+      phrase.length <= 200 &&
+      `${flat(f.title ?? at?.title)}\n${flat(f.body ?? at?.body)}`.includes(
+        phrase,
+      )
+    );
+  };
+  const own = flat(draft.verifyText);
+  if (
+    own &&
+    !before.includes(own.toLowerCase()) &&
+    Object.keys(draft.locales).some((l) => shows(own, l))
   )
-    ? phrase
-    : undefined;
+    return own;
+  const fits = (t: string, l: string) =>
+    !UNSAFE.test(t) && !was.includes(t.toLowerCase()) && shows(t, l);
+  for (const l of locales) {
+    const f = draft.locales[l];
+    if (!f) continue;
+    const added =
+      f.body === undefined
+        ? []
+        : bodyEdits(base?.locales[l]?.body || '', f.body)
+            .flatMap((e) => e.after.split(/\n[ \t]*\n/))
+            .flatMap((b) => sentences(b.trim()))
+            .filter((t) => fits(t, l));
+    // A sentence of some length says more than a short one; the first such sentence is near the top of the change.
+    const chosen =
+      added.find((t) => t.length >= 20) ||
+      added.sort((a, b) => b.length - a.length)[0];
+    if (chosen) return chosen;
+    const title = flat(f.title);
+    if (title && fits(title, l)) return title;
+  }
+  return undefined;
 }
 
 export class ArticleDelivery {

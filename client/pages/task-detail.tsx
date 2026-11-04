@@ -475,7 +475,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     {round.nothing&&<p className={text.muted}>{round.hint}</p>}
     {!editing&&<PrimaryLanguage data={data} busy={busy} allowed={allowed} onChange={l=>void changePrimary(l)}/>}
     <LastFeedback w={w} stage={stage} out={out}/>
-    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
+    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} onTab={setArticleTab} fullScreenTo={lang=>`article?lang=${encodeURIComponent(lang)}`} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
      <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} tab={articleTab} onTab={setArticleTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
      <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
     </>}

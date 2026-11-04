@@ -25,7 +25,11 @@ import {
   MissingLanguages,
   ViewSwitch,
 } from './article-review.js';
-import { useTaskDraft, useTaskDraftStatus } from './draft-store.js';
+import {
+  useStayWithDrafts,
+  useTaskDraft,
+  useTaskDraftStatus,
+} from './draft-store.js';
 import { TaskDraftScope } from './drafts.js';
 import type { TaskPageContext } from './reader-context.js';
 import { Checklist } from './review-parts.js';
@@ -75,13 +79,21 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
   const [editing, setEditing] = useTaskDraft('editing', false, false);
   const [checked, setChecked] = useState<string[]>([]);
   const { clear } = useTaskDraftStatus();
-  const back = () => void navigate('..', { relative: 'path' });
+  // The task page stays mounted under this one with the same drafts, so going back and forth never asks about them
+  // (2026-11-04: an edit taken full screen comes back to the task still being edited).
+  const stay = useStayWithDrafts();
+  const back = () => {
+    stay();
+    void navigate('..', { relative: 'path' });
+  };
   // After an approval the task moves on: go back once the command has settled, since the task page holds navigation
   // while one is in flight.
   const [leave, setLeave] = useState(false);
   useEffect(() => {
-    if (leave && !busy) void navigate('..', { relative: 'path' });
-  }, [leave, busy, navigate]);
+    if (!leave || busy) return;
+    stay();
+    void navigate('..', { relative: 'path' });
+  }, [leave, busy, navigate, stay]);
   // Esc returns to the task, except while editing (the edit is kept as a draft either way) or typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -92,11 +104,12 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
         el.closest('input, textarea, select, [contenteditable="true"]')
       )
         return;
+      stay();
       void navigate('..', { relative: 'path' });
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [editing, navigate]);
+  }, [editing, navigate, stay]);
 
   const backButton = (
     <Button variant='ghost' size='sm' onClick={back}>
@@ -121,8 +134,10 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
     versions && (askedView === 'preview' || askedView === 'changes')
       ? askedView
       : languages.defaultView(tab);
-  const show = (lang: string, next: ArticleView) =>
+  const show = (lang: string, next: ArticleView) => {
+    stay();
     setParams({ lang, view: next }, { replace: true });
+  };
   const act = async (command: string, body: object) => {
     const result = await update(command, { stageKey: stage.key, ...body });
     if (result) clear();
@@ -255,6 +270,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
             draftKey={out.id}
             tab={tab}
             busy={busy}
+            onTab={(l) => show(l, languages.defaultView(l))}
             onCancel={() => setEditing(false)}
             onSave={async (next) => {
               const d = await act('editArticleDraft', {

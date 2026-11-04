@@ -274,7 +274,22 @@ export class ArticleFlow {
       const approved = { ...t.text, fields: ARTICLE_FIELDS.filter((f) => t.text?.[f]?.trim()) };
       languages = { ...languages, phase: update.length ? 'update' : 'translate', write, approved, ...(update.length ? { update, translate: write.filter((l) => !update.includes(l)), changes: primaryChanges(source.locales[L![0]], t.text, t.fields || []) } : {}) };
     }
-    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null, languages };
+    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null, languages, ...((await this.previous(w, tx)) || {}) };
+  }
+  /**
+   * The version the change request is about, whole, for the run that revises it (2026-11-04, T-62: asked only to add
+   * screenshots to a version the owner had edited by hand, the Agent rewrote the article from its source, since it was
+   * never given that version). `editedByHand` says the person saved it with Edit directly (or recorded it themselves).
+   */
+  private async previous(w: Work, tx: any) {
+    const out = w.results[w.stageIndex ?? 0];
+    if (!out?.rejectedAt || !out.article) return null;
+    const a: ArticleProposal = out.article;
+    const base: ArticleSnapshot | null = a.baseKey ? await this.s.snapshot(a.baseKey, tx) : null;
+    const locales = {};
+    for (const l of new Set([...Object.keys(base?.locales || {}), ...Object.keys(a.draft.locales)])) locales[l] = { ...base?.locales[l], ...a.draft.locales[l] };
+    const slug = a.draft.slug || base?.slug, status = a.draft.status ?? base?.status;
+    return { previous: { version: out.version, editedByHand: out.createdBy !== 'agent', article: { ...(slug ? { slug } : {}), ...(status ? { status } : {}), locales } } };
   }
   /**
    * A Runner's article for the phase it was asked for: the primary language alone (other languages it wrote anyway are
@@ -365,7 +380,14 @@ export class ArticleFlow {
       if (slug) pages.push(...articlePages(this.need().target(project, l.targetId), slug, l.changes.length ? l.changes : l.carried || []));
       return { targetId: l.targetId, articleId: l.articleId, key: randomUUID(), slug, ...(a.also?.length ? { state: 'publishing' } : {}) };
     });
-    const verifyText = verifyPhrase(a.draft);
+    // The phrase is looked for in the primary language first. It must be new against what the draft was written on
+    // and against the article as the task linked it (`w.article`), which a rebase leaves as it was.
+    const target = this.need().target(project, a.targetId),
+      first = this.primaryOn(project, w.delivery, a.targetId) || target.locales[0],
+      sourceKey = w.article?.sourceKey;
+    const base = a.baseKey ? await this.s.snapshot(a.baseKey, tx) : null,
+      source = sourceKey && sourceKey !== a.baseKey ? await this.s.snapshot(sourceKey, tx) : base;
+    const verifyText = verifyPhrase(a.draft, base, [...new Set([first, ...a.changes.filter((c) => c.includes('.')).map((c) => c.split('.')[0])])], source);
     return {
       state: 'publishing',
       note: releaseNote({ owner: note, ...(await this.recordOf(project, w, a, tx)), title: task.title }),

@@ -293,3 +293,35 @@ it('article rules say where the primary language is changed and to name only wha
   expect(rules).toContain('任务页文章审核卡片上的“主语言”');
   expect(rules).toContain('不要提到任务页上没有的设置或按钮');
 });
+
+// 2026-11-04 (T-62): asked only to add screenshots and links to a version the owner had edited by hand, the Agent
+// rewrote the whole article; then "restore version 6", meant as going back to the version before it, was read the
+// other way. Article runs revise the version under review, change only what is asked, keep a person's wording, and
+// ask rather than guess which version to go back to.
+it('article rules revise the version under review, change only what feedback asks, and ask which version to restore', () => {
+  const rules = resultRules('article').join('\n');
+  expect(rules).toContain(
+    '没有 data.article.previous 时，改写在源稿基础上修改',
+  );
+  expect(rules).toContain(
+    'data.article.previous 存在时，是这次审核意见针对的那一版',
+  );
+  expect(rules).toContain(
+    'editedByHand 为 true 表示负责人在任务页上直接改过这一版',
+  );
+  expect(rules).toContain('这次以它为底稿修改');
+  expect(rules).toContain('不要回到源稿或你以前写的版本重新写');
+  expect(rules).toContain('最后一条是针对这一版的意见');
+  expect(rules).toContain('按审核意见修改时只做意见要求的改动');
+  expect(rules).toContain('其余的标题、摘要和正文逐句原样保留');
+  expect(rules).toContain(
+    '不润色、不改写、不调整结构和顺序，也不扩写或缩短全文',
+  );
+  expect(rules).toContain('更要保留负责人的措辞');
+  expect(rules).toContain('拿不到更早的版本');
+  expect(rules).toContain('不要猜，也不要自己重写：原样返回 previous');
+  expect(rules).toContain('在 summary 第一行说明这次没有改动和原因');
+  // Only article runs: a build or a plan has no article version to keep.
+  for (const mode of ['build', 'plan'] as const)
+    expect(resultRules(mode).join('\n')).not.toContain('data.article.previous');
+});
