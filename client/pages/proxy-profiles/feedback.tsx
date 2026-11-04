@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { $t, $legacyText } from '#i18n';
+import { joinSentences, labelValue } from '#lib/format';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import type { NetworkTest } from './api';
@@ -47,15 +48,20 @@ export function ProxyTestResult({ result }: { result: NetworkTest | null }) {
   if (result && !result.reachable)
     return (
       <p role='status' className='text-sm text-destructive'>
-        {$t('network.unreachable')}：{result.target} ·{' '}
+        {labelValue($t('network.unreachable'), result.target)} ·{' '}
         {$t(`network.reasons.${result.reason ?? 'other'}`)}
       </p>
     );
   return result ? (
     <p role='status' className='text-sm text-muted-foreground'>
-      {$t('proxyProfiles.receivedResponseTarget')}：{result.target} · HTTP{' '}
-      {result.status} · {result.elapsedMs} ms。
-      {$t('proxyProfiles.checksNetworkConnectivityNotApi')}
+      {joinSentences([
+        $t('proxyProfiles.receivedResponseTarget', {
+          0: result.target,
+          1: result.status,
+          2: result.elapsedMs,
+        }),
+        $t('proxyProfiles.checksNetworkConnectivityNotApi'),
+      ])}
     </p>
   ) : null;
 }

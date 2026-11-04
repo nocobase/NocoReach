@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { $t, getCurrentLocale, useMessageState } from '#i18n';
+import { $t, useMessageState } from '#i18n';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
@@ -32,8 +32,7 @@ import { agentRequest, type RepoList } from './repo-connect-api';
 type Repo = RepoList['repos'][number];
 type Props = { projectId: number; onChange: () => void };
 
-const listOf = (items: string[]) =>
-  items.join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
+const listOf = (items: string[]) => joinList(items);
 const messageOf = (e: unknown) =>
   e instanceof NocoReachHttpError
     ? e.message

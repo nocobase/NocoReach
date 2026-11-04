@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, ChevronDown, Pencil } from 'lucide-react';
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
+import { joinList } from '#lib/format';
 import { cn } from '#lib/utils';
 import { chipClass, chipButtonClass } from '#components/reach/chip';
 import { Button } from '#components/ui/button';
@@ -74,7 +75,6 @@ export function KeywordQueryBar({
     .sort(
       (a, b) => (b.stat?.picked ?? -1) - (a.stat?.picked ?? -1) || a.i - b.i,
     );
-  const join = getCurrentLocale().startsWith('zh') ? '、' : ', ';
   return (
     <section
       className='flex flex-col gap-2 rounded-xl border bg-card p-4 text-card-foreground'
@@ -164,7 +164,7 @@ export function KeywordQueryBar({
       ) : null}
       {missed.length ? (
         <p className='text-xs text-muted-foreground'>
-          {$t('keywordSuggestions.missedSeeds', { 0: missed.join(join) })}
+          {$t('keywordSuggestions.missedSeeds', { 0: joinList(missed) })}
         </p>
       ) : null}
     </section>

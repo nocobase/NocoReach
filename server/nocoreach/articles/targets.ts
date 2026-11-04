@@ -8,8 +8,11 @@ import {
   type ArticleTargetView,
   slugFromPage,
   looseSlugFromPage,
+  pagePatterns,
   type ArticleMatch,
+  type ArticleSummary,
 } from '../../../shared/article-publishing.js';
+import { searchedLinks } from '../../../shared/page-search.js';
 import { MAX_TASK_PAGES } from '../../../shared/task-start.js';
 import { projectId, requireAccess } from '../policy.js';
 import type { LegacyVariables } from '../legacy/variables.js';
@@ -62,6 +65,25 @@ export type FetcherFor = (
   project: string,
   connection: 'site' | 'github',
 ) => Fetcher;
+
+/** Where one of a task's pages is changed (match): the article a target holds it in, or none. */
+type PageArticle = {
+  url: string;
+  article?: ArticleMatch;
+  unchecked?: boolean;
+  guess?: { targetId: string; slug: string };
+};
+// The hosts a target's articles are read on, from its page patterns: where a searched path is looked for.
+const patternHosts = (pages: ArticleTarget['pages']) =>
+  Object.values(pages || {}).flatMap((list) =>
+    pagePatterns(list).flatMap((pattern) => {
+      try {
+        return [new URL(pattern.split('{slug}').join('x')).host];
+      } catch {
+        return [];
+      }
+    }),
+  );
 
 function fail(key: string, status = 400): never {
   throw Object.assign(new Error(`articles.${key}`), { status });
@@ -352,12 +374,7 @@ export class ArticleTargets {
   ): Promise<{
     article: ArticleMatch | null;
     unchecked: boolean;
-    pages: {
-      url: string;
-      article?: ArticleMatch;
-      unchecked?: boolean;
-      guess?: { targetId: string; slug: string };
-    }[];
+    pages: PageArticle[];
   }> {
     const pages = (Array.isArray(urls) ? urls : [])
       .filter((u): u is string => typeof u === 'string' && u.length <= 2000)
@@ -367,8 +384,29 @@ export class ArticleTargets {
     const targets = [...settings.targets]
       .map((e) => e.target)
       .sort((a, b) => Number(b.id === first) - Number(a.id === first));
+    // A few pages at a time, so an issue spanning many blog posts does not open as many requests at once.
+    const read: PageArticle[] = [];
+    for (let i = 0; i < pages.length; i += 5)
+      read.push(
+        ...(await Promise.all(
+          pages
+            .slice(i, i + 5)
+            .map((url) => this.pageArticle(id, url, targets)),
+        )),
+      );
+    return {
+      article: read.find((p) => p.article)?.article || null,
+      unchecked: read.some((p) => p.unchecked),
+      pages: read,
+    };
+  }
+  // The article of one page among `targets`, in their order: read back through a pattern, else guessed (match above).
+  private async pageArticle(
+    id: string,
+    url: string,
+    targets: ArticleTarget[],
+  ): Promise<PageArticle> {
     const lookup = async (
-      url: string,
       target: ArticleTarget,
       hit: { locale: string; slug: string },
     ) => {
@@ -391,50 +429,61 @@ export class ArticleTargets {
         },
       };
     };
-    const one = async (url: string) => {
-      let unchecked = false,
-        guess: { targetId: string; slug: string } | undefined;
-      const strict = targets.flatMap((t) => {
-        const hit = slugFromPage(t.pages, url);
-        return hit ? [{ target: t, hit }] : [];
-      });
-      const hits = strict.length
-        ? strict
-        : targets.flatMap((t) => {
-            const hit = looseSlugFromPage(t.pages, url, t.locales);
-            return hit ? [{ target: t, hit }] : [];
-          });
-      for (const { target, hit } of hits) {
-        if (!guess && downstreamOf(target))
-          guess = { targetId: target.id, slug: hit.slug };
-        try {
-          const found = await lookup(url, target, hit);
-          if (found) return found;
-        } catch {
-          unchecked = true;
-        }
+    let unchecked = false,
+      guess: { targetId: string; slug: string } | undefined;
+    const strict = targets.flatMap((t) => {
+      const hit = slugFromPage(t.pages, url);
+      return hit ? [{ target: t, hit }] : [];
+    });
+    const hits = strict.length
+      ? strict
+      : targets.flatMap((t) => {
+          const hit = looseSlugFromPage(t.pages, url, t.locales);
+          return hit ? [{ target: t, hit }] : [];
+        });
+    for (const { target, hit } of hits) {
+      if (!guess && downstreamOf(target))
+        guess = { targetId: target.id, slug: hit.slug };
+      try {
+        const found = await lookup(target, hit);
+        if (found) return found;
+      } catch {
+        unchecked = true;
       }
-      return {
-        url,
-        ...(unchecked ? { unchecked } : {}),
-        ...(guess ? { guess } : {}),
-      };
-    };
-    // A few pages at a time, so an issue spanning many blog posts does not open as many requests at once.
-    const read: Awaited<ReturnType<typeof one>>[] = [];
-    for (let i = 0; i < pages.length; i += 5)
-      read.push(...(await Promise.all(pages.slice(i, i + 5).map(one))));
+    }
     return {
-      article: read.find((p) => 'article' in p)?.article || null,
-      unchecked: read.some((p) => 'unchecked' in p && p.unchecked),
-      pages: read,
+      url,
+      ...(unchecked ? { unchecked } : {}),
+      ...(guess ? { guess } : {}),
     };
   }
+  /**
+   * A target's articles for a search (2026-11-04): by title or slug through the target, and, when the search is a link
+   * (shared/page-search.ts), first the article that page is, read back as match does; a path is read on the hosts of
+   * the target's own page patterns. Found by its link even when the target cannot search.
+   */
   async search(id: string, targetId: string, q: unknown) {
-    const provider = this.provider(id, targetId);
-    if (!provider.capabilities.search) return [];
+    const provider = this.provider(id, targetId),
+      target = this.targets(id).find((t) => t.id === targetId)!;
+    const named: ArticleSummary[] = [];
+    for (const url of (
+      searchedLinks(q, patternHosts(target.pages)) || []
+    ).slice(0, 4)) {
+      const found = (await this.pageArticle(id, url, [target])).article;
+      if (found && !named.some((a) => a.id === found.articleId))
+        named.push({
+          id: found.articleId,
+          slug: found.slug,
+          title: found.title,
+        });
+    }
+    if (!provider.capabilities.search) return named;
     try {
-      return await provider.search(typeof q === 'string' ? q : '', 20);
+      const listed = await provider.search(typeof q === 'string' ? q : '', 20);
+      return [
+        ...named,
+        ...listed.filter((a) => !named.some((n) => n.id === a.id)),
+      ];
     } catch (error) {
       if (error instanceof ArticleError)
         throw Object.assign(new Error(providerErrorKey(error.code)), {

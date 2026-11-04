@@ -1,4 +1,5 @@
 import { $t, $legacyText } from '#i18n';
+import { joinList, withDetail } from '#lib/format';
 import type { TaskDraft } from './keyword-hand-off';
 import { subjectOf } from './task-subject';
 import { distinctPages } from '../../shared/task-start.js';
@@ -26,7 +27,7 @@ export function auditDraft(issues: Issue[]): TaskDraft {
       ...(one
         ? []
         : [
-            `## ${$legacyText(issue.title)}（${$t('siteAudit.pageCount', { 0: issue.count })}）`,
+            `## ${withDetail($legacyText(issue.title), $t('siteAudit.pageCount', { 0: issue.count }))}`,
           ]),
       ...(one
         ? [
@@ -39,7 +40,7 @@ export function auditDraft(issues: Issue[]): TaskDraft {
       $legacyText(issue.description),
       '',
       $t('siteAudit.affectedPages'),
-      ...pages.map((p) => `- ${p.url}${p.detail ? `（${p.detail}）` : ''}`),
+      ...pages.map((p) => `- ${withDetail(p.url, p.detail)}`),
       ...(issue.count > pages.length
         ? [
             $t('siteAudit.morePagesSiteAudit', {
@@ -58,7 +59,7 @@ export function auditDraft(issues: Issue[]): TaskDraft {
       ? $t('siteAudit.fixPages', { 0: one.count, 1: $legacyText(one.title) })
       : $t('siteAudit.fixSiteAuditIssues', {
           0: issues.length,
-          1: issues.map((i) => $legacyText(i.title)).join('、'),
+          1: joinList(issues.map((i) => $legacyText(i.title))),
         })
     ).slice(0, 200),
     subject: subjectOf(
@@ -69,7 +70,7 @@ export function auditDraft(issues: Issue[]): TaskDraft {
     objective: (one
       ? $t('siteAudit.pagesNoLongerIssue', { 0: $legacyText(one.title) })
       : $t('siteAudit.clearIssuesPages', {
-          0: issues.map((i) => $legacyText(i.title)).join('、'),
+          0: joinList(issues.map((i) => $legacyText(i.title))),
         })
     ).slice(0, 1000),
     brief: [
