@@ -358,3 +358,82 @@ it.each([null, 'other-admin', 'initiator'])(
     );
   },
 );
+
+// Authorizing again after Google refused the saved authorization (invalid_grant).
+function previousLink(values: Record<string, unknown>) {
+  return { get: (field: string) => values[field] ?? null };
+}
+const confirmed = {
+  status: 'ready_for_sync',
+  accountEmail: 'Test@Example.com',
+  ga4PropertyId: '123',
+  gscSiteUrl: 'sc-domain:example.test',
+  authFailedAt: '2026-11-03T08:24:04.000Z',
+};
+
+it('keeps the confirmed resources and retries the refused syncs when the same account authorizes again', async () => {
+  const f = await fixture();
+  const retryRefused = vi.fn(async () => 2);
+  Object.assign(f.host, {
+    link: vi.fn(async () => previousLink(confirmed)),
+    sync: { retryRefused },
+  });
+  const ctx = await f.run();
+  expect(ctx.redirectTo).toBe('/main/connections?google=authorized');
+  expect(f.host.metadata).toHaveBeenCalledWith('123', {
+    accountEmail: 'test@example.com',
+    authorizedAt: expect.any(String),
+    authFailedAt: null,
+    status: 'ready_for_sync',
+  });
+  expect(retryRefused).toHaveBeenCalledWith('123');
+  // The retry follows the saved authorization, never the other way round.
+  expect(f.host.variable.mock.invocationCallOrder[0]).toBeLessThan(
+    retryRefused.mock.invocationCallOrder[0],
+  );
+});
+
+it.each([
+  ['another account', { accountEmail: 'someone-else@example.com' }],
+  ['missing resources', { gscSiteUrl: null }],
+  ['a disconnected link', { status: 'disconnected' }],
+])(
+  'asks to confirm resources and retries nothing after %s',
+  async (_case, change) => {
+    const f = await fixture();
+    const retryRefused = vi.fn(async () => 0);
+    Object.assign(f.host, {
+      link: vi.fn(async () => previousLink({ ...confirmed, ...change })),
+      sync: { retryRefused },
+    });
+    expect((await f.run()).redirectTo).toBe(
+      '/main/connections?google=authorized',
+    );
+    expect(f.host.metadata).toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        authFailedAt: null,
+        status: 'awaiting_selection',
+      }),
+    );
+    expect(retryRefused).not.toHaveBeenCalled();
+  },
+);
+
+it('keeps the new authorization when the refused syncs cannot be queued again', async () => {
+  const f = await fixture();
+  Object.assign(f.host, {
+    link: vi.fn(async () => previousLink(confirmed)),
+    sync: {
+      retryRefused: vi.fn(async () => Promise.reject(new Error('busy'))),
+    },
+  });
+  expect((await f.run()).redirectTo).toBe(
+    '/main/connections?google=authorized',
+  );
+  expect(f.host.variable).toHaveBeenCalledTimes(1);
+  expect(f.logger.warn).toHaveBeenCalledWith(
+    'NocoReach Google sync retry after authorization skipped',
+    { message: 'busy' },
+  );
+});
