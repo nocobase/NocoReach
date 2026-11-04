@@ -55,6 +55,7 @@ export const ACTIVITY_EVENTS: ReadonlySet<string> = new Set([
   'moveWork',
   'linkArticle',
   'editArticleDraft',
+  'restoreArticleVersion',
   'retryPublish',
   'rebaseArticle',
   'articlePublished',

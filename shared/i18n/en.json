@@ -7810,5 +7810,14 @@
   "common.sentenceSeparator": " ",
   "common.labelValue": "{0}: {1}",
   "common.clauseSeparator": ", ",
-  "common.entrySeparator": "; "
+  "common.entrySeparator": "; ",
+  "articles.cannotRestore": "This version can no longer be restored. Refresh the page to see the current version.",
+  "taskDetail.eventRestoreArticleVersion": "Restored an earlier version of the article draft",
+  "taskDetail.editedArticleVersion": "Edited the article draft, version {0}",
+  "taskDetail.restoredArticleVersion": "Restored version {0} as version {1}",
+  "taskDetail.restoredFromVersion": "restored from version {0}",
+  "taskDetail.editedByHandBy": "Edited by hand by {0}",
+  "taskDetail.restoredFromBy": "Restored from version {1} by {0}",
+  "taskDetail.restoreThisVersion": "Restore this version",
+  "taskDetail.restoreVersionNote": "Restoring creates version {0}, identical to version {1}. The current version {2} stays in the history and can be restored at any time."
 }

@@ -7810,5 +7810,14 @@
   "common.clauseSeparator": "，",
   "common.sentenceSeparator": "",
   "common.labelValue": "{0}：{1}",
-  "common.parenthetical": "（{0}）"
+  "common.parenthetical": "（{0}）",
+  "articles.cannotRestore": "這一版已經不能恢復了，請重新整理頁面查看現在的版本。",
+  "taskDetail.eventRestoreArticleVersion": "恢復到文章稿以前的一版",
+  "taskDetail.editedArticleVersion": "修改了文章稿，第 {0} 版",
+  "taskDetail.restoredArticleVersion": "恢復到第 {0} 版，產生第 {1} 版",
+  "taskDetail.restoredFromVersion": "恢復自第 {0} 版",
+  "taskDetail.editedByHandBy": "{0} 人工修改",
+  "taskDetail.restoredFromBy": "{0} 恢復自第 {1} 版",
+  "taskDetail.restoreThisVersion": "恢復到這一版",
+  "taskDetail.restoreVersionNote": "恢復後會產生第 {0} 版，內容和第 {1} 版完全一樣；現在的第 {2} 版仍在記錄裡，隨時能再恢復。"
 }

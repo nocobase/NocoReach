@@ -4,17 +4,19 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Maximize2} from 'lucide-react';
 import {Button} from '#components/ui/button';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '#components/ui/dialog';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
 import './doc-view.css';
 // Long documents show their beginning in place and open whole in a reading window; short ones show in full.
 export const isLong=(content:string)=>content.length>1200||content.split('\n').length>24;
 export function Markdown({content}:{content:string}){
  return <div className="nr-doc"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a:({node:_n,...p})=><a {...p} target="_blank" rel="noreferrer"/>}}>{content}</ReactMarkdown></div>;
 }
-export function DocReader({open,onClose,title,meta,content,children}:{open:boolean;onClose:()=>void;title:string;meta?:string;content:string;children?:ReactNode}){
+// `footer` stays below the scrolling document: an action on what is being read, with its note.
+export function DocReader({open,onClose,title,meta,content,children,footer}:{open:boolean;onClose:()=>void;title:string;meta?:string;content:string;children?:ReactNode;footer?:ReactNode}){
  return <Dialog open={open} onOpenChange={o=>{if(!o)onClose();}}><DialogContent className="nr-doc-reader">
   <DialogHeader><DialogTitle>{title}</DialogTitle>{meta&&<DialogDescription>{meta}</DialogDescription>}</DialogHeader>
   <div className="nr-doc-reader-body">{children}<Markdown content={content}/></div>
+  {footer&&<DialogFooter className='sm:items-center'>{footer}</DialogFooter>}
  </DialogContent></Dialog>;
 }
 export function DocView({content,title,meta}:{content:string;title:string;meta?:string}){

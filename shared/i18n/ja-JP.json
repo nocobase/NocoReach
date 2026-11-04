@@ -7810,5 +7810,14 @@
   "common.sentenceSeparator": "",
   "common.labelValue": "{0}：{1}",
   "common.clauseSeparator": "、",
-  "common.entrySeparator": "、"
+  "common.entrySeparator": "、",
+  "articles.cannotRestore": "このバージョンはもう復元できません。ページを再読み込みして現在のバージョンを確認してください。",
+  "taskDetail.eventRestoreArticleVersion": "記事の下書きを以前のバージョンに戻しました",
+  "taskDetail.editedArticleVersion": "記事の下書きを編集しました（バージョン {0}）",
+  "taskDetail.restoredArticleVersion": "バージョン {0} を復元し、バージョン {1} にしました",
+  "taskDetail.restoredFromVersion": "バージョン {0} から復元",
+  "taskDetail.editedByHandBy": "{0} が手動で編集",
+  "taskDetail.restoredFromBy": "{0} がバージョン {1} から復元",
+  "taskDetail.restoreThisVersion": "このバージョンに戻す",
+  "taskDetail.restoreVersionNote": "復元するとバージョン {0} が作成され、内容はバージョン {1} とまったく同じになります。現在のバージョン {2} は履歴に残り、いつでも復元できます。"
 }

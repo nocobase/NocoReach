@@ -91,6 +91,7 @@ export const TASK_COMMANDS = [
   'confirmPublish',
   'linkArticle',
   'editArticleDraft',
+  'restoreArticleVersion',
   'retryPublish',
   'rebaseArticle',
 ] as const;

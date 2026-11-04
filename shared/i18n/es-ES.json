@@ -7810,5 +7810,14 @@
   "common.sentenceSeparator": " ",
   "common.labelValue": "{0}: {1}",
   "common.clauseSeparator": ", ",
-  "common.entrySeparator": "; "
+  "common.entrySeparator": "; ",
+  "articles.cannotRestore": "Esta versión ya no se puede restaurar. Actualiza la página para ver la versión actual.",
+  "taskDetail.eventRestoreArticleVersion": "Versión anterior del borrador del artículo restaurada",
+  "taskDetail.editedArticleVersion": "Borrador del artículo editado, versión {0}",
+  "taskDetail.restoredArticleVersion": "Versión {0} restaurada como versión {1}",
+  "taskDetail.restoredFromVersion": "restaurada de la versión {0}",
+  "taskDetail.editedByHandBy": "Editada a mano por {0}",
+  "taskDetail.restoredFromBy": "Restaurada de la versión {1} por {0}",
+  "taskDetail.restoreThisVersion": "Restaurar esta versión",
+  "taskDetail.restoreVersionNote": "Al restaurar se crea la versión {0}, idéntica a la versión {1}. La versión actual {2} queda en el historial y se puede restaurar en cualquier momento."
 }

@@ -2471,3 +2471,319 @@ test('a change request gives the next run the version it is about, whole, and wh
     },
   });
 });
+
+// 2026-11-04 (T-62): the owner wanted back a version they had edited by hand; the Agent asked to restore it first failed
+// and then brought back the wrong one. Any earlier version of the current round is restored directly, as a new version.
+async function versions(f) {
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: {
+      locales: { zh: { body: '# 你好\n\n第一版' } },
+      summary: 'First version',
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  const v1 = review(d);
+  // Version 2, by hand: two languages, a new title and a screenshot pasted into the body.
+  const shot = images.add('shot.png');
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: v1.id,
+    article: {
+      locales: {
+        zh: {
+          title: '你好，世界',
+          body: `# 你好\n\n人工改好的第二版。\n\n![截图](/uploads/task-media/${shot}.png)`,
+        },
+        en: { description: 'Edited by hand' },
+      },
+      verifyText: '人工改好的第二版',
+    },
+  });
+  const v2 = review(d);
+  // Version 3, by hand again, drops the screenshot; the Agent's version 4 rewrites it all.
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: v2.id,
+    article: { locales: { zh: { body: '# 你好\n\n第三版，截图删掉了。' } } },
+  });
+  const v3 = review(d);
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: v3.id,
+    comment: 'Add the screenshots back',
+  });
+  ({ run } = await claim(f));
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '全部重写了。',
+    article: {
+      locales: { zh: { body: '# 你好\n\n整篇重写的第四版。' } },
+      summary: 'Rewrote everything',
+    },
+  });
+  d = await f.view();
+  return { images, shot, stageKey, v1, v2, v3, v4: review(d), d };
+}
+
+test('restoring a version brings back its whole article as a new version under review, without an Agent run', async () => {
+  const f = await fixture();
+  const { shot, stageKey, v1, v2, v4, d: before } = await versions(f);
+  expect([v1, v2, v4].map((v) => v.version)).toEqual([1, 2, 4]);
+  const runs = before.runs.length;
+  let d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v2.id,
+    currentId: v4.id,
+  });
+  const v5 = review(d);
+  expect(v5).toMatchObject({
+    version: 5,
+    stepId: v2.stepId,
+    createdBy: '1',
+    content: v2.content,
+    restoredFrom: { artifactId: v2.id, version: 2, byHand: true },
+  });
+  // Every language, field and image as version 2 had them, against the same article.
+  expect(v5.article).toEqual(v2.article);
+  expect(v5.article.draft.locales.zh.body).toContain(
+    `/uploads/task-media/${shot}.png`,
+  );
+  expect(v5.article.changes).toEqual(['en.description', 'zh.body', 'zh.title']);
+  // Still the same review step: nothing ran, nothing was deleted, and Activity has the restore.
+  expect(d.work.flow.stages[d.work.stageIndex]).toMatchObject({
+    key: stageKey,
+    kind: 'review',
+  });
+  expect(boardState(d.work)).toBe('review');
+  expect(d.runs).toHaveLength(runs);
+  expect(d.artifacts.map((a) => a.version).sort()).toEqual([1, 2, 3, 4, 5]);
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'restoreArticleVersion',
+    actor: '1',
+    artifactId: v5.id,
+    restoredFrom: v2.id,
+  });
+  // The version it replaced can be restored in turn; the Agent's own text is not called a hand edit.
+  d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v4.id,
+    currentId: v5.id,
+  });
+  expect(review(d)).toMatchObject({
+    version: 6,
+    restoredFrom: { version: 4, byHand: false },
+  });
+  expect(review(d).article).toEqual(v4.article);
+  // A restored version restored again keeps saying who wrote the text.
+  d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v5.id,
+    currentId: review(d).id,
+  });
+  expect(review(d)).toMatchObject({
+    version: 7,
+    restoredFrom: { artifactId: v5.id, version: 5, byHand: true },
+  });
+  // Approving it publishes version 2's fields, the screenshot uploaded first.
+  d = await approveCurrent(f);
+  expect(d.work.release).toMatchObject({
+    state: 'verifying',
+    verifyText: '人工改好的第二版',
+  });
+  expect(f.cms.state.uploads.map((u) => u.name)).toEqual(['shot.png']);
+  expect(updates(f.cms)[0].body).toMatchObject({
+    description: 'Edited by hand',
+    title_cn: '你好，世界',
+  });
+  expect(updates(f.cms)[0].body.content_cn).toContain('人工改好的第二版。');
+});
+
+test('restoring is refused to others than the owner, for a stale view, the current version, after approval and on a closed task', async () => {
+  const f = await fixture();
+  const { stageKey, v1, v3, v4 } = await versions(f);
+  const restore = (body = {}, actor = '1', revision?: number) =>
+    f.view().then((d) =>
+      f.s.update(
+        '1',
+        {
+          taskId: '1',
+          revision: revision ?? d.work.revision,
+          requestId: randomUUID(),
+          command: 'restoreArticleVersion',
+          stageKey,
+          artifactId: v1.id,
+          currentId: v4.id,
+          ...body,
+        },
+        actor,
+        'Someone',
+      ),
+    );
+  // Whoever may not Edit directly may not restore either.
+  f.state.users.push({ id: 2, username: 'reader', roles: [] });
+  await expect(restore({}, '2')).rejects.toMatchObject({ status: 403 });
+  // A view of the task from before the latest version, or before any change.
+  await expect(restore({ currentId: v3.id })).rejects.toMatchObject({
+    status: 409,
+  });
+  const stale = (await f.view()).work.revision;
+  await f.command('comment', { comment: 'A note in between' });
+  await expect(restore({}, '1', stale)).rejects.toMatchObject({ status: 409 });
+  // Two restores from the same view: the second finds the task changed.
+  const [first, second] = await Promise.allSettled([
+    restore({}, '1', (await f.view()).work.revision),
+    restore({ artifactId: v3.id }, '1', (await f.view()).work.revision),
+  ]);
+  expect(first.status).toBe('fulfilled');
+  expect(second).toMatchObject({ status: 'rejected', reason: { status: 409 } });
+  let d = await f.view();
+  expect(review(d)).toMatchObject({ version: 5, restoredFrom: { version: 1 } });
+  // The version under review itself, or one that is not a version of this task.
+  await expect(
+    restore({ artifactId: review(d).id, currentId: review(d).id }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(
+    restore({ artifactId: randomUUID(), currentId: review(d).id }),
+  ).rejects.toMatchObject({ status: 409 });
+  // Once approved the article is past review; a closed task restores nothing.
+  d = await approveCurrent(f);
+  expect(d.work.flow.stages[d.work.stageIndex].kind).toBe('release');
+  await expect(
+    restore({ artifactId: v3.id, currentId: review(d)?.id }),
+  ).rejects.toMatchObject({ status: 409 });
+  const g = await fixture();
+  const other = await versions(g);
+  await g.command('cancelTask');
+  await expect(
+    g.command('restoreArticleVersion', {
+      stageKey: other.stageKey,
+      artifactId: other.v1.id,
+      currentId: other.v4.id,
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+});
+
+test('restoring stays within the round under review: the primary versions are not restored while the translation is', async () => {
+  const f = await fixture();
+  await f.command('startTask', {
+    playbookId: 'blog-post',
+    delivery: { targetId: 'cms', locales: ['en', 'zh'] },
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'New post',
+    article: {
+      slug: 'new-post',
+      locales: { en: { title: 'A new post', body: 'Body of the new post' } },
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key,
+    primary = review(d);
+  await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: primary.id,
+    article: {
+      slug: 'new-post',
+      locales: { en: { title: 'A new post', body: 'Edited body' } },
+    },
+  });
+  await approveCurrent(f);
+  ({ run } = await claim(f));
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Translated',
+    article: { locales: { zh: { title: '一篇新文章', body: '新文章的正文' } } },
+  });
+  d = await f.view();
+  const translated = review(d);
+  await expect(
+    f.command('restoreArticleVersion', {
+      stageKey,
+      artifactId: primary.id,
+      currentId: translated.id,
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  // A version of the translation round can be.
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: translated.id,
+    article: {
+      slug: 'new-post',
+      locales: {
+        en: { title: 'A new post', body: 'Edited body' },
+        zh: { title: '新文章', body: '新文章的正文' },
+      },
+    },
+  });
+  d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: translated.id,
+    currentId: review(d).id,
+  });
+  expect(review(d).article).toEqual(translated.article);
+});
+
+test('the run after a restore revises the restored version, a hand edit only when a person wrote its text', async () => {
+  const f = await fixture();
+  const { stageKey, v1, v2, v4 } = await versions(f);
+  // The Agent's version 1 restored by the owner is still the Agent's text.
+  let d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v1.id,
+    currentId: v4.id,
+  });
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: 'Add a closing paragraph',
+  });
+  let { run } = await claim(f);
+  expect(run.input.article.previous).toMatchObject({
+    version: 5,
+    editedByHand: false,
+    article: { locales: { zh: { body: '# 你好\n\n第一版' } } },
+  });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '加了结尾。',
+    article: { locales: { zh: { body: '# 你好\n\n第一版\n\n结尾。' } } },
+  });
+  // The owner's version 2 restored is theirs.
+  d = await f.view();
+  d = await f.command('restoreArticleVersion', {
+    stageKey,
+    artifactId: v2.id,
+    currentId: review(d).id,
+  });
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: 'Fix the title only',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.previous).toMatchObject({
+    version: 7,
+    editedByHand: true,
+    article: { locales: { zh: { title: '你好，世界' } } },
+  });
+});

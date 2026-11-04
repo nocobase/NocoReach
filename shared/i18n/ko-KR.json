@@ -7812,5 +7812,14 @@
   "common.sentenceSeparator": " ",
   "common.labelValue": "{0}: {1}",
   "common.clauseSeparator": ", ",
-  "common.entrySeparator": "; "
+  "common.entrySeparator": "; ",
+  "articles.cannotRestore": "이 버전은 더 이상 복원할 수 없습니다. 페이지를 새로 고쳐 현재 버전을 확인하세요.",
+  "taskDetail.eventRestoreArticleVersion": "글 초안을 이전 버전으로 복원했습니다",
+  "taskDetail.editedArticleVersion": "글 초안을 수정했습니다(버전 {0})",
+  "taskDetail.restoredArticleVersion": "버전 {0}을(를) 버전 {1}(으)로 복원했습니다",
+  "taskDetail.restoredFromVersion": "버전 {0}에서 복원",
+  "taskDetail.editedByHandBy": "{0} 님이 직접 편집",
+  "taskDetail.restoredFromBy": "{0} 님이 버전 {1}에서 복원",
+  "taskDetail.restoreThisVersion": "이 버전으로 복원",
+  "taskDetail.restoreVersionNote": "복원하면 버전 {1}과 내용이 같은 버전 {0}이 만들어집니다. 현재 버전 {2}는 기록에 남아 언제든 다시 복원할 수 있습니다."
 }
