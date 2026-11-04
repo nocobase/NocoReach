@@ -484,7 +484,10 @@ describe('NocoBase API target', () => {
       revision: 2,
       targets: [{ check: { ok: true, at: expect.any(String) } }],
     });
-    await targets.save('1', { revision: 2, target: cmsTarget({ name: 'Again' }) });
+    await targets.save('1', {
+      revision: 2,
+      target: cmsTarget({ name: 'Again' }),
+    });
     expect(targets.list('1').targets[0].check).toBeNull();
   });
 });
@@ -959,6 +962,51 @@ test("finds the article each of a task's pages belongs to, and says when a targe
 });
 
 // 2026-10-27 (T-47): the Agent got `locale:en` back for a Chinese-only new article and took it for a setting to fix.
+test('a searched link finds the article it is through the page patterns, and titles are searched as before', async () => {
+  const cms = fakeNocoBase([
+    row(),
+    { ...row(), id: 8, slug: 'hello-again', title: 'Hello again' },
+  ]);
+  const { targets } = await setup(
+    cmsTarget(),
+    { site: cms.fetcher },
+    { secret: 'cms-key' },
+  );
+  const found = async (q: string) =>
+    (await targets.search('1', 'cms', q)).map((a) => [a.id, a.title]);
+  for (const q of [
+    'https://www.example.com/en/blog/hello',
+    'http://example.com/en/blog/hello/?utm_source=x#top',
+    'example.com/en/blog/hello',
+    'www.example.com/en/blog/hello/',
+    // A path, on the hosts of the target's patterns.
+    '/en/blog/hello',
+    // No pattern reads it, but it looks like the target's article (looseSlugFromPage, as match reads T-55's page).
+    'https://www.example.com/blog/hello/',
+    '/blog/hello',
+  ])
+    expect({ q, found: await found(q) }).toEqual({
+      q,
+      found: [['7', 'Hello']],
+    });
+  // The title of the language whose page it is.
+  expect(await found('https://example.com/cn/blog/hello')).toEqual([
+    ['7', '你好'],
+  ]);
+  for (const q of [
+    'https://other.example/en/blog/hello',
+    'https://www.example.com/en/blog/missing',
+    'https://www.example.com/en/docs/hello',
+  ])
+    expect({ q, found: await found(q) }).toEqual({ q, found: [] });
+  expect(await found('hello')).toEqual([
+    ['7', 'Hello'],
+    ['8', 'Hello again'],
+  ]);
+  // Each article by its own link.
+  expect(await found('/en/blog/hello-again')).toEqual([['8', 'Hello again']]);
+});
+
 describe('a draft the target cannot take is explained in words', () => {
   const cms = {
     ...ARTICLE_TARGET_PRESETS['nocobase-api'],

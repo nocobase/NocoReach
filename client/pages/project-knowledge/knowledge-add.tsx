@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#components/ui/select';
+import { joinEntries, joinList } from '#lib/format';
 
 // 添加资料 (项目知识 step 3), at /project/knowledge/new over the list: a link, text or a file. The online AI suggests the
 // 知识库 title and category and new 记忆 lines; a SKILL.md or a Skill link goes to Skills. Nothing is saved until 确认.
@@ -169,23 +170,23 @@ export default function AddKnowledgeDialog(): ReactElement {
             : { kind: sug.kind, link: sug.source, paths },
       );
       const message: Message = () =>
-        [
-          r.item
-            ? $t('projectKnowledge.savedKnowledgeBase', { 0: r.item.title })
-            : '',
-          r.memory?.length
-            ? $t('projectKnowledge.addedMemory', { 0: r.memory.join('、') })
-            : '',
-          r.skill?.skill
-            ? $t('projectKnowledge.skillImported', { 0: r.skill.skill.name })
-            : r.skill?.imported?.length
-              ? $t('projectKnowledge.skillImported', {
-                  0: r.skill.imported.join('、'),
-                })
+        joinEntries(
+          [
+            r.item
+              ? $t('projectKnowledge.savedKnowledgeBase', { 0: r.item.title })
               : '',
-        ]
-          .filter(Boolean)
-          .join('；') || $t('projectKnowledge.nothingSaved');
+            r.memory?.length
+              ? $t('projectKnowledge.addedMemory', { 0: joinList(r.memory) })
+              : '',
+            r.skill?.skill
+              ? $t('projectKnowledge.skillImported', { 0: r.skill.skill.name })
+              : r.skill?.imported?.length
+                ? $t('projectKnowledge.skillImported', {
+                    0: joinList(r.skill.imported),
+                  })
+                : '',
+          ].filter(Boolean),
+        ) || $t('projectKnowledge.nothingSaved');
       savedRef.current = true;
       void context.reloadItems();
       context.projectSaved(message);

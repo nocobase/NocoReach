@@ -28,7 +28,7 @@ import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import { subjectOf } from './task-subject';
 import type { HandOffResult } from "./strategy/hand-off";
 import { safeLink } from "./analytics";
-import { formatCount, formatDate } from '#lib/format';
+import { formatCount, formatDate, joinList, labelValue } from '#lib/format';
 
 type Source = { url: string; title: string; domain: string; own: boolean; rival: string | null };
 type Question = { key: string; question: string; platform: "chat_gpt" | "google"; topics: string[]; volume: number | null; status: "ours" | "gap" | "open"; weNamed: boolean; weCited: boolean; rivals: string[]; brands: string[]; sources: Source[]; answer: string; at: string | null };
@@ -55,11 +55,11 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
   const rows = useMemo(() => (view?.questions ?? []).filter((q) => filter === "all" || q.status === filter), [view, filter]);
   const columns = useMemo<ColumnDef<Question>[]>(() => [
     makeSelectionColumn<Question>(anchorRef),
-    helper.accessor("question", { header: ({ column }) => <SortableHeader column={column} label={$t('common.question')} />, cell: ({ row }) => { const q = row.original; return <div className="min-w-0 max-w-xl"><span className="block truncate font-medium" title={q.question}>{q.question}</span><span className="block truncate text-xs text-muted-foreground">{getPlatform()[q.platform]} · {q.topics.join("、")}</span></div>; } }) as ColumnDef<Question>,
+    helper.accessor("question", { header: ({ column }) => <SortableHeader column={column} label={$t('common.question')} />, cell: ({ row }) => { const q = row.original; return <div className="min-w-0 max-w-xl"><span className="block truncate font-medium" title={q.question}>{q.question}</span><span className="block truncate text-xs text-muted-foreground">{getPlatform()[q.platform]} · {joinList(q.topics)}</span></div>; } }) as ColumnDef<Question>,
     helper.accessor((q) => q.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.aiSearchVolume')} align="right" />, cell: ({ row }) => n(row.original.volume), meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } }) as ColumnDef<Question>,
     helper.display({ id: "us", header: () => $t('common.us'), cell: ({ row }) => { const q = row.original; return q.status === "ours" ? <Tag tone="green">{[q.weNamed ? $t('aiQuestions.mentioned') : "", q.weCited ? $t('aiQuestions.cited') : ""].filter(Boolean).join(" · ")}</Tag> : <Tag tone={getStatus()[q.status].tone}>{getStatus()[q.status].label}</Tag>; } }) as ColumnDef<Question>,
-    helper.display({ id: "brands", header: () => $t('aiQuestions.brandsMentioned'), cell: ({ row }) => { const q = row.original; return q.rivals.length || q.brands.length ? <span className="block max-w-56 truncate text-xs" title={[...q.rivals, ...q.brands].join("、")}>{q.rivals.length ? <b className="font-medium">{q.rivals.join(" · ")}</b> : null}{q.rivals.length && q.brands.length ? " · " : ""}<span className="text-muted-foreground">{q.brands.join(" · ")}</span></span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Question>,
-    helper.display({ id: "sources", header: () => $t('aiQuestions.sitesAiCites'), cell: ({ row }) => { const d = [...new Set(row.original.sources.map((s) => s.domain))]; return d.length ? <span className="block max-w-56 truncate text-xs text-muted-foreground" title={d.join("、")}>{d.slice(0, 3).join(" · ")}{d.length > 3 ? $t('common.moreSuffixValue',{0:d.length}) : ""}</span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Question>,
+    helper.display({ id: "brands", header: () => $t('aiQuestions.brandsMentioned'), cell: ({ row }) => { const q = row.original; return q.rivals.length || q.brands.length ? <span className="block max-w-56 truncate text-xs" title={joinList([...q.rivals, ...q.brands])}>{q.rivals.length ? <b className="font-medium">{q.rivals.join(" · ")}</b> : null}{q.rivals.length && q.brands.length ? " · " : ""}<span className="text-muted-foreground">{q.brands.join(" · ")}</span></span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Question>,
+    helper.display({ id: "sources", header: () => $t('aiQuestions.sitesAiCites'), cell: ({ row }) => { const d = [...new Set(row.original.sources.map((s) => s.domain))]; return d.length ? <span className="block max-w-56 truncate text-xs text-muted-foreground" title={joinList(d)}>{d.slice(0, 3).join(" · ")}{d.length > 3 ? $t('common.moreSuffixValue',{0:d.length}) : ""}</span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Question>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (q) => q.key });
   const selected = (view?.questions ?? []).filter((q) => rowSelection[q.key]);
@@ -152,7 +152,7 @@ function Topics({ projectId, view, onView }: { projectId: number; view: View; on
     finally { setBusy(false); }
   };
   const list = view.topics.map((t) => t.keyword);
-  const failed = view.topics.flatMap((t) => Object.values(t.platforms).filter((x) => x?.error).map((x) => `${t.keyword}：${$legacyText(x!.error)}`));
+  const failed = view.topics.flatMap((t) => Object.values(t.platforms).filter((x) => x?.error).map((x) => labelValue(t.keyword, $legacyText(x!.error))));
   return (
     <div className="space-y-1.5" data-topics>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -177,7 +177,7 @@ function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => vo
     <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:formatDate(q.at)}) : ""})}
       actions={<Button size="sm" onClick={onHand}><Bot data-icon="inline-start" />{$t('common.handOffAgent')}</Button>}>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2"><Tag tone={getStatus()[q.status].tone} dot>{q.status === "ours" ? [q.weNamed ? $t('aiQuestions.mentionsUs') : "", q.weCited ? $t('common.citesSite') : ""].filter(Boolean).join("、") : getStatus()[q.status].label}</Tag>{q.rivals.map((r) => <Tag key={r} tone="grey">{r}</Tag>)}{q.brands.map((b) => <span key={b} className="text-xs text-muted-foreground">{b}</span>)}</div>
+        <div className="flex flex-wrap items-center gap-2"><Tag tone={getStatus()[q.status].tone} dot>{q.status === "ours" ? joinList([q.weNamed ? $t('aiQuestions.mentionsUs') : "", q.weCited ? $t('common.citesSite') : ""].filter(Boolean)) : getStatus()[q.status].label}</Tag>{q.rivals.map((r) => <Tag key={r} tone="grey">{r}</Tag>)}{q.brands.map((b) => <span key={b} className="text-xs text-muted-foreground">{b}</span>)}</div>
         <section className="space-y-1"><h3 className="text-sm font-semibold">{$t('aiQuestions.aiAnswerBeginning')}</h3><p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm leading-relaxed">{q.answer || $t('aiQuestions.noAnswerText')}{q.answer.length >= 900 ? "…" : ""}</p></section>
         <section className="space-y-1"><h3 className="text-sm font-semibold">{$t('aiQuestions.citedPages')}</h3>
           {q.sources.length ? q.sources.map((s) => { const href = safeLink(s.url); return <p key={s.url || s.domain} className="flex items-center gap-2 text-sm">{href ? <a className="nr-link min-w-0 flex-1 truncate" href={href} target="_blank" rel="noreferrer" title={s.url}>{s.title || s.domain}</a> : <span className="min-w-0 flex-1 truncate">{s.title || s.domain}</span>}<span className="shrink-0 text-xs text-muted-foreground">{s.domain}</span>{s.own ? <Tag tone="blue">{$t('common.site')}</Tag> : s.rival ? <Tag tone="grey">{s.rival}</Tag> : null}</p>; }) : <p className="text-sm text-muted-foreground">{$t('aiQuestions.answerNotCitePages')}</p>}
@@ -190,7 +190,7 @@ function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => vo
 // The questions picked become one task: how AI answers now, who it names and cites, and what to do.
 function questionsDraft(rows: Question[]): TaskDraft {
   const head = rows[0].question;
-  const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? questionBrandEvidence(q.weNamed, q.weCited) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:[...q.rivals, ...q.brands].slice(0, 6).join("、")}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
+  const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? questionBrandEvidence(q.weNamed, q.weCited) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:joinList([...q.rivals, ...q.brands].slice(0, 6))}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:joinList([...new Set(q.sources.map((s) => s.domain))].slice(0, 5))}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
   return {
     title: (rows.length === 1 ? $t('common.getAiMentionUsWhen',{0:head}) : $t('aiQuestions.getAiMentionUsWhen',{0:head,1:rows.length})).slice(0, 200),
     subject: subjectOf(head, rows.length, 'questions').slice(0, 160),

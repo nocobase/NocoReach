@@ -2,6 +2,7 @@ import {citedSignals,type Row} from '../../../shared/strategy-pending.js';
 // eslint-disable-next-line react-refresh/only-export-components -- retain the existing public predicate exports
 export {rowsFor,opportunityState,opportunityKeepDays,citedSignals,todaySuggestions,priorityRank,overviewPeriodDays,type Row,type OpportunityState} from '../../../shared/strategy-pending.js';
 import { getCurrentLocale, $t, $tj } from "#i18n";
+import { joinList, withDetail } from '#lib/format';
 import {useState} from 'react';
 import {MoreHorizontal} from 'lucide-react';
 import {Button} from '#components/ui/button';
@@ -37,10 +38,10 @@ export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boole
 // record ids are long generated numbers and are never shown).
 export const oppNo=(card:{no?:number})=>card.no?`O-${card.no}`:'';
 export const taskNo=(no?:number)=>no?`T-${no}`:'';
-export const getSourceNames = (): Record<string,string> => ({youtube:'YouTube',bilibili:'Bilibili',xiaohongshu:$t('socialSignals.xiaohongshu'),gsc:'Search Console',ga4:'GA4',site:$t('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:$t('common.communityForum'),packages:$t('common.downloads'),hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:$t('common.competitorActivity'),x:'X','discord-slack':'Discord、Slack',discord:'Discord',slack:'Slack',rank:$t('common.rankTracking'),'ai-search':$t('common.aiSearch')});
+export const getSourceNames = (): Record<string,string> => ({youtube:'YouTube',bilibili:'Bilibili',xiaohongshu:$t('socialSignals.xiaohongshu'),gsc:'Search Console',ga4:'GA4',site:$t('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:$t('common.communityForum'),packages:$t('common.downloads'),hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:$t('common.competitorActivity'),x:'X','discord-slack':joinList(['Discord','Slack']),discord:'Discord',slack:'Slack',rank:$t('common.rankTracking'),'ai-search':$t('common.aiSearch')});
 // Where an opportunity comes from: the sources of its cited signals, else the sources the analysis named.
 export function sourcesOf(row:Row){const ids=[...new Set(citedSignals(row).map(s=>s.source))];return (ids.length?ids:row.card.sources||[]).map(s=>getSourceNames()[s]||sourceLabels(row.batch).get(s)||s);}
 // "本期观察": a few sentences grounded in signals; shown even when there is nothing to act on.
 export function Observations({batch,generating}:{batch?:InsightBatch;generating:boolean}){const obs=batch?.evidence.analysisVersion===3?batch.observations||[]:[];const sig=batch?.evidence.signals;
  return <section className="nr-observations" aria-label={$t('strategy.periodObservations')}><h2>{$t('strategy.periodObservations')}</h2>{obs.length?<ul>{obs.map(o=><li key={o}>{o}</li>)}</ul>:<p className="nr-muted">{generating?$t('strategy.analyzingSignalsDataSource'):$t('strategy.noSignalBasedAnalysisYet')}</p>}
- {sig&&<p className="nr-footnote">{$tj('strategy.analysisUsedSignalsTotal',{0:Object.entries(sig.coverage).filter(([,v])=>v).map(([k,v])=>`${getSourceNames()[k]||k}（${v}）`).join('、')||$t('strategy.none'),1:sig.missing.length?$t('strategy.notConnectedNoData',{0:sig.missing.map(k=>getSourceNames()[k]||k).join('、')}):'',2:sig.items.length})}</p>}</section>;}
+ {sig&&<p className="nr-footnote">{$tj('strategy.analysisUsedSignalsTotal',{0:joinList(Object.entries(sig.coverage).filter(([,v])=>v).map(([k,v])=>withDetail(getSourceNames()[k]||k,String(v))))||$t('strategy.none'),1:sig.missing.length?$t('strategy.notConnectedNoData',{0:joinList(sig.missing.map(k=>getSourceNames()[k]||k))}):'',2:sig.items.length})}</p>}</section>;}

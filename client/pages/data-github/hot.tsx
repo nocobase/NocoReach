@@ -21,7 +21,7 @@ import type { TaskDraft } from "../keyword-hand-off";
 import { subjectOf } from '../task-subject';
 import { Segmented } from "#components/reach/segmented";
 import { num } from "./model";
-import { formatDate, formatDateTime } from "#lib/format";
+import { formatDate, formatDateTime, joinList } from "#lib/format";
 import { Delta } from '#components/reach/delta';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
@@ -38,9 +38,9 @@ const call = <T,>(projectId: number, action: string, body: object = {}) => api.a
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 function topicsDraft(rows: Topic[]): TaskDraft {
-  const lines = rows.map((t) => $t('githubHot.topicLine', { 0: t.name, 1: num(t.total), 2: num(t.new7), 3: num(t.lastWeek), 4: num(t.priorAverage, 1), 5: t.leaders.slice(0, 3).map((r) => r.repo).join("、") }));
+  const lines = rows.map((t) => $t('githubHot.topicLine', { 0: t.name, 1: num(t.total), 2: num(t.new7), 3: num(t.lastWeek), 4: num(t.priorAverage, 1), 5: joinList(t.leaders.slice(0, 3).map((r) => r.repo)) }));
   return {
-    title: clip(rows.length === 1 ? $t('githubHot.topicTaskTitle', { 0: rows[0].name }) : $t('githubHot.topicsTaskTitle', { 0: rows.map((t) => t.name).join("、") }), 200),
+    title: clip(rows.length === 1 ? $t('githubHot.topicTaskTitle', { 0: rows[0].name }) : $t('githubHot.topicsTaskTitle', { 0: joinList(rows.map((t) => t.name)) }), 200),
     subject: clip(subjectOf(rows[0].name, rows.length, 'topics'), 160),
     objective: clip($t('githubHot.topicsObjective'), 1000),
     brief: clip([$t('githubHot.topicsBrief'), ...lines, "", $t('githubHot.topicsSuggestion')].join("\n"), 20000),
@@ -140,7 +140,7 @@ export function HotTab({ projectId }: { projectId: number }) {
                 <td className="py-2 text-right tabular-nums">{num(t.total)}</td><td className="py-2 text-right tabular-nums">{num(t.new7)}</td>
                 <td className="py-2 text-right tabular-nums">{num(t.lastWeek)}{c != null ? <Delta value={c} className="ml-1.5 text-xs" /> : null}</td>
                 <td className="py-2 pl-4"><Spark weeks={t.weeks} /></td>
-                <td className="max-w-xs py-2 pr-4 text-xs text-muted-foreground"><span className="block truncate">{t.leaders.slice(0, 3).map((r) => r.repo).join("、") || "—"}</span></td>
+                <td className="max-w-xs py-2 pr-4 text-xs text-muted-foreground"><span className="block truncate">{joinList(t.leaders.slice(0, 3).map((r) => r.repo)) || "—"}</span></td>
               </tr>); })}</tbody>
           </table>
         ) : <Empty>{$t('githubHot.noTopics')}</Empty>}

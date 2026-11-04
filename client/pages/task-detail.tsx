@@ -1,4 +1,4 @@
-import { formatDateTime, formatDate } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { Skeleton } from '#components/ui/skeleton';
 import {matchesObservation} from '../../shared/result-comparison.js';
 import {shownInActivity} from '../../shared/task-activity.js';
@@ -14,9 +14,11 @@ import { VisibleChanges } from './task-detail/visible-changes.js';
 import { DeliveryDialog, DeliverySummary, HandoffLanguage, PrimaryLanguage, WhereField } from './task-detail/article-start.js';
 import { defaultLocales } from '../../shared/article-publishing.js';
 import { PagePicker, RestNotice } from './task-detail/start-pages.js';
+import { linkText, type SiteHit } from './task-detail/page-hits.js';
 import { request } from './strategy/service';
 import type { StrategyState } from './strategy/model';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
+import { choicePlace } from './task-detail/step-place.js';
 import { StartedCard } from './task-detail/started-card.js';
 import { startBrief } from './task-detail/started-model.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
@@ -357,7 +359,7 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
    </Select>
    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
    {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
-   <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
+   <PlaybookDrawer playbook={p} place={changes?choicePlace(data,current,translate):undefined} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
   {changes&&(picking?<PagePicker data={data} projectId={projectId} taskId={taskId} allowed={allowed} busy={busy} onPage={url=>void update('linkPage',{url})} onArticle={(targetId,articleId)=>void link(targetId,articleId)} onChange={()=>setChoosing(true)}/>
    :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} hidePlace={showWhere} onChange={()=>setChoosing(true)}>
@@ -463,7 +465,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // translated or updated in place, or a version that changed none of them, which offers Update again first (T-53).
    const simulated=mockSettingsAvailable()||Boolean(data.task.evidence?.simulated),round=reviewRound(data,out.article,simulated);
    // Another primary before it is approved (2026-10-30): the Agent writes a new version in it; asked first.
-   const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=(w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)).join(ui.startsWith('zh')?'、':', ');
+   const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=joinList((w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)));
     if(await confirmAction({title:()=>$t('articleTask.changePrimaryTitle',{0:lang}),description:()=>$t('articleTask.changePrimaryDescription',{0:lang,1:others}),action:()=>$t('articleTask.changePrimaryAction',{0:lang}),destructive:false}))
      await act('changePrimary',{artifactId:out.id,locale:l,comment:$t('articleTask.primaryChangedComment',{0:lang})});};
    const approve=!targetGone&&<Button variant={round.nothing?'outline':'default'} disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}>{!round.nothing&&<Rocket/>}{round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish')}</Button>;
@@ -723,16 +725,19 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
   {error&&<p role="alert" className="nr-error">{error}</p>}
  </Card>;
 }
+// Related page: the pages of Website content a search finds, by link too; a link on the site it has not read is offered
+// as Use this link (start-pages.tsx).
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
- const page=data.work.page,[q,setQ]=useState(''),[hits,setHits]=useState<{url:string;title:string;type:string}[]>(),[editing,setEditing]=useState(!page),[focused,setFocused]=useState(false);
+ const page=data.work.page,[q,setQ]=useState(''),[hits,setHits]=useState<SiteHit[]>(),[editing,setEditing]=useState(!page),[focused,setFocused]=useState(false);
  useEffect(()=>{setEditing(!page);},[page?.url]);
- useEffect(()=>{if(!editing)return;const t=setTimeout(()=>{void call<{url:string;title:string;type:string}[]>(projectId,taskId,'pages',{q}).then(r=>setHits(Array.isArray(r)?r:[])).catch(()=>setHits([]));},250);return()=>clearTimeout(t);},[q,editing,projectId,taskId]);
+ useEffect(()=>{if(!editing)return;const t=setTimeout(()=>{void call<SiteHit[]>(projectId,taskId,'pages',{q}).then(r=>setHits(Array.isArray(r)?r:[])).catch(()=>setHits([]));},250);return()=>clearTimeout(t);},[q,editing,projectId,taskId]);
  const path=(u:string)=>{try{return new URL(u).pathname;}catch{return u;}};
+ const link=hits?.find(h=>h.link),shown=[...(hits||[]).filter(h=>!h.link).slice(0,link?5:6),...(link?[link]:[])];
  return <div className="flex flex-col gap-2 text-sm">
   {page&&!editing?<div className="nr-td-page"><a className="nr-link" href={page.url} target="_blank" rel="noreferrer">{page.title||path(page.url)}<ExternalLink aria-hidden="true"/></a><small>{path(page.url)}</small>
    <div className="nr-td-row-actions"><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setEditing(true)}>{$t('taskDetail.change')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>void update('linkPage',{url:''})}>{$t('common.remove')}</Button></div></div>
   :<><label className="nr-td-search"><Search aria-hidden="true"/><input aria-label={$t('common.searchPages')} value={q} placeholder={$t('taskDetail.searchPagesWebsiteContent')} onFocus={()=>setFocused(true)} onChange={e=>setQ(e.target.value)}/></label>
-   {hits&&(focused||q)&&(hits.length?<ul className="nr-td-hits">{hits.slice(0,6).map(h=><li key={h.url}><button type="button" disabled={busy} onClick={()=>void update('linkPage',{url:h.url}).then(d=>{if(d){setQ('');setEditing(false);}})}><b>{h.title||path(h.url)}</b><small>{path(h.url)}</small></button></li>)}</ul>:<p className="nr-td-muted">{q?$t('taskDetail.noMatchingPages'):$t('taskDetail.websiteContentNoPagesYet')}</p>)}
+   {hits&&(focused||q)&&(shown.length?<>{shown.length===1&&link&&<p className='nr-td-muted'>{$t('taskDetail.noMatchingPages')}</p>}<ul className="nr-td-hits">{shown.map(h=><li key={`${h.link?'link':'page'}:${h.url}`}><button type="button" data-use-link={h.link?'':undefined} disabled={busy} onClick={()=>void update('linkPage',{url:h.url}).then(d=>{if(d){setQ('');setEditing(false);}})}><b>{h.link?$t('taskPages.useLink'):h.title||path(h.url)}</b><small>{h.link?linkText(h.url):path(h.url)}</small></button></li>)}</ul></>:<p className="nr-td-muted">{q?$t('taskDetail.noMatchingPages'):$t('taskDetail.websiteContentNoPagesYet')}</p>)}
    {page&&<Button size="sm" variant="ghost" className="self-start" onClick={()=>setEditing(false)}>{$t('common.cancel')}</Button>}</>}
   {!page&&data.work.contentId&&<p className="nr-td-muted">{$t('taskDetail.linkedOldContentMappingPicking')}</p>}
  </div>;

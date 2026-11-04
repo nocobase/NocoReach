@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { $t, isChinese } from '#i18n';
+import { $t } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
 import { Tag } from '#components/reach/tag';
 import { useMe } from '../me';
 import type { SearchReport } from './index';
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 
 export type CoveragePeriod = {
   start: string;
@@ -190,9 +190,8 @@ export function SearchHistory({
 
 // A range across years names both years, so "2025-10-12 to 2026-08-16" never reads as "2025-10-12 to 08-16".
 const dateRanges = (list: { start: string; end: string }[]) =>
-  list
-    .slice(0, 3)
-    .map((r) => {
+  joinList(
+    list.slice(0, 3).map((r) => {
       const withYear = r.start.slice(0, 4) !== r.end.slice(0, 4);
       return r.start === r.end
         ? formatDate(r.start)
@@ -200,8 +199,8 @@ const dateRanges = (list: { start: string; end: string }[]) =>
             0: formatDate(r.start, { withYear }),
             1: formatDate(r.end, { withYear }),
           });
-    })
-    .join(isChinese() ? '、' : ', ') + (list.length > 3 ? '…' : '');
+    }),
+  ) + (list.length > 3 ? '…' : '');
 
 // How the saved days are counted, for the page's ⓘ: when they were last saved, blank days, why there is no comparison,
 // how far back gaps are filled, and whether scheduled sync is off.

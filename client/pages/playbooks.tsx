@@ -1,4 +1,5 @@
 import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { joinList } from '#lib/format';
 import {useEffect,useState} from 'react';
 import {useSearchParams} from 'react-router';
 import {ArrowDownIcon,ArrowUpIcon,MoreHorizontal,PencilIcon,PlusIcon,SparklesIcon,XIcon} from 'lucide-react';
@@ -72,7 +73,7 @@ function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playboo
    </DropdownMenuContent></DropdownMenu>}</div>
   {p.description&&<p className="text-sm text-muted-foreground">{p.description}</p>}
   <div><h3 className="text-xs font-medium text-muted-foreground">{$t('common.steps')}</h3><PlaybookSteps steps={p.steps} skills={skills}/></div>
-  {next.length>0&&<p className="text-xs text-muted-foreground">{$tj('playbooks.continue',{0:next.join('、')})}</p>}
+  {next.length>0&&<p className="text-xs text-muted-foreground">{$tj('playbooks.continue',{0:joinList(next)})}</p>}
  </section>;
 }
 // In-place editing: name, category, one line of description, and the steps — move, remove, add; a review's items one per line.

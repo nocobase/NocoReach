@@ -10,6 +10,7 @@ import {marketLabel,metric,type SiteRank} from './keyword-api';
 import {getIntentLabels,toIntent} from '#components/seo/intent-badge';
 import {subjectOf} from './task-subject';
 import {distinctPages} from '../../shared/task-start.js';
+import {joinList} from '#lib/format';
 // 交给 Agent from 关键词 (SPEC "OpenSEO 数据页面"): the chosen keywords become one task, with 优化现有页面 suggested when
 // the site already ranks (that page linked), otherwise 内容选题与大纲.
 export type HandOffKeyword={keyword:string;market:{locationCode:number;language:string}|null;volume:number|null;difficulty:number|null;intent:string|null;rank?:SiteRank};
@@ -24,7 +25,7 @@ export function keywordDraft(rows:HandOffKeyword[]){
  );
  const lines=rows.map(r=>$t('keywordHandOff.monthlyVolumeDifficultyIntent',{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t('keywordHandOff.averagePositionOverLast28',{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t('keywordHandOff.siteNotRankYet')}));
  const brief=[$t('keywordHandOff.keywords'),...lines,'',$t('keywordHandOff.evidenceSearchVolumeDifficultyIntent'),$t('keywordHandOff.suggestionCoverKeywordsOnePiece')].join('\n');
- return {pages:distinctPages([rankedPage(rows),...ranked.map(r=>r.rank!.page)]),title:title.slice(0,200),subject:subjectOf(head,rows.length,'keywords').slice(0,160),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
+ return {pages:distinctPages([rankedPage(rows),...ranked.map(r=>r.rank!.page)]),title:title.slice(0,200),subject:subjectOf(head,rows.length,'keywords').slice(0,160),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:joinList(rows.map(r=>r.keyword))}).slice(0,1000),brief:brief.slice(0,20000)};
 }
 // The best ranking page among the keywords, if any (it is linked to the task when it is in 网站内容).
 export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,b)=>b.rank!.clicks-a.rank!.clicks||a.rank!.position-b.rank!.position)[0]?.rank?.page;
@@ -37,7 +38,7 @@ export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,
 export type TaskDraft={title:string;objective:string;brief:string;signalKey?:string;why?:string;subject?:string;pages?:string[]};
 // Creates a task from a draft (not from an opportunity), not started (2026-10-08 user decision: the person starts it on
 // the task page with 确定开始执行 after reading it); the suggested 做法 is preselected there, and the page is linked when
-// it is in 网站内容. Shared by every 交给 Agent on the data pages.
+// it is in Website content or on the site's own hosts. Shared by every 交给 Agent on the data pages.
 export async function createDraftTask(projectId:number,draft:TaskDraft,playbookId:string,page?:string,requestId:string=crypto.randomUUID()):Promise<{taskId?:number;started:boolean;title?:string}>{
  const state=await request<StrategyState>(projectId,'state');
  // `entry`: the page it is handed off from, shown on the task as where it was found (2026-10-22).
@@ -45,7 +46,7 @@ export async function createDraftTask(projectId:number,draft:TaskDraft,playbookI
  const created=next.proposals.find(p=>!p.insight&&p.taskId&&!state.proposals.some(o=>o.id===p.id)),taskId=created?.taskId;
  if(!taskId)return {started:false};
  refreshNavBadges();
- if(page){try{const d=await work<{work:{revision:number}}>(projectId,taskId,'get');await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'linkPage',url:page});}catch{/* not in 网站内容: the task still names it */}}
+ if(page){try{const d=await work<{work:{revision:number}}>(projectId,taskId,'get');await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'linkPage',url:page});}catch{/* not on the site: the task still names it */}}
  // The title the task got, which the server builds from the playbook and the subject.
  return {taskId,started:false,title:created?.title||draft.title};
 }
