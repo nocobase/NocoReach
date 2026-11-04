@@ -34,7 +34,7 @@ import { distTagLabel } from "./dist-tag";
 import { ReportCard } from "./tables";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, otherName, pct, REGISTRY, type Item, type Row, type Share, type View } from "./model";
 import "../data-views.css";
-import { formatDate } from '#lib/format';
+import { formatDate, joinEntries } from '#lib/format';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "#7F77DD", "#D4537E", "#1D9E75", "#BA7517", "#888780", "#378ADD"];
@@ -59,7 +59,7 @@ export default function DataDownloads() {
       {view && !view.connected ? <EmptyState icon={<Package />} title={$t('dataDownloads.oncePackagesConnectedDailyDownloads')} description={$t('dataDownloads.enterNpmPypiPackageNames')} action={<Button onClick={() => navigate("/connections?source=packages")}>{$t('dataDownloads.connectPackages')}</Button>} /> : null}
       {view?.connected && chosen ? (
         <>
-          {view.sync && !view.sync.ok && view.sync.errors.length ? <InlineError>{$t('dataDownloads.lastReadFailed', { 0: view.sync.errors.slice(0, 3).join("；") })}</InlineError> : null}
+          {view.sync && !view.sync.ok && view.sync.errors.length ? <InlineError>{$t('dataDownloads.lastReadFailed', { 0: joinEntries(view.sync.errors.slice(0, 3)) })}</InlineError> : null}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="group" aria-label={$t('dataDownloads.figures')}>
             {items.map((it) => <Tile key={it.id} item={it} active={it.id === chosen.id} onPick={() => setPicked(it.id)} />)}
           </div>

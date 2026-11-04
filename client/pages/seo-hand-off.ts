@@ -1,4 +1,4 @@
-import { formatDate } from '#lib/format';
+import { formatDate, joinList, labelValue, parenthetical, withDetail } from '#lib/format';
 import { getCurrentLocale, $t } from "#i18n";
 // 交给 Agent from the search pages (2026-10-03): what the person selected becomes one task whose brief carries the data
 // behind it (where it ranks, how many people see and click it, which page), with the 做法 that fits by default.
@@ -32,7 +32,7 @@ export function queryDraft(rows: QueryRow[], w: Period): TaskDraft {
     pages: pagesOf([page, ...rows.map((r) => r.page)]),
     title: clip(rows.length === 1 ? $t('seoHandOff.pushTopResults',{0:head}) : $t('seoHandOff.pushMoreQueriesTopResults',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'queries'), 160),
-    objective: clip($t('seoHandOff.queriesRankGoogleTop5',{0:rows.map((r) => r.query).join("、")}), 1000),
+    objective: clip($t('seoHandOff.queriesRankGoogleTop5',{0:joinList(rows.map((r) => r.query))}), 1000),
     brief: clip([$t('seoHandOff.queriesSearchConsoleWhereSite',{0:since(w)}), ...lines, ...(rows.length > 40 ? [$t('seoHandOff.moreSearchPerformance',{0:rows.length - 40})] : []), "", page ? $t('seoHandOff.mainLandingPage',{0:page}) : $t('seoHandOff.rankingPagesRowAbove'), $t('seoHandOff.queryOptimizationAdvice')].join("\n"), 20000),
   };
 }
@@ -46,7 +46,7 @@ export function pageDraft(rows: PageRow[], w: Period): TaskDraft {
     pages: pagesOf(rows.map((r) => r.page)),
     title: clip(rows.length === 1 ? $t('seoHandOff.improveSearchPerformance',{0:head}) : $t('seoHandOff.improveSearchPerformanceMorePages',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'pages'), 160),
-    objective: clip($t('seoHandOff.pagesGetMoreClicksGoogle',{0:rows.map((r) => pathOf(r.page)).join("、")}), 1000),
+    objective: clip($t('seoHandOff.pagesGetMoreClicksGoogle',{0:joinList(rows.map((r) => pathOf(r.page)))}), 1000),
     brief: clip([$t('seoHandOff.pageDataSearchConsole',{0:since(w)}), ...lines, "", $t('seoHandOff.searchPerformanceAdvice')].join("\n"), 20000),
   };
 }
@@ -60,7 +60,7 @@ export function indexDraft(rows: IndexPage[]): TaskDraft {
     pages: pagesOf(rows.map((r) => r.url)),
     title: clip(rows.length === 1 ? $t('seoHandOff.fixIndexing',{0:head}) : $t('seoHandOff.fixIndexingMorePages',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'pages'), 160),
-    objective: clip($t('seoHandOff.pagesIndexedProperly',{0:rows.map((r) => pathOf(r.url)).join("、")}), 1000),
+    objective: clip($t('seoHandOff.pagesIndexedProperly',{0:joinList(rows.map((r) => pathOf(r.url)))}), 1000),
     brief: clip([$t('seoHandOff.indexDataSearchConsole'), ...lines, ...(rows.length > 40 ? [$t('seoHandOff.moreIndexPages',{0:rows.length - 40})] : []), "", $t('seoHandOff.indexAdvice')].join("\n"), 20000),
   };
 }
@@ -69,11 +69,11 @@ export function indexDraft(rows: IndexPage[]): TaskDraft {
 export type CompetitorKeyword = { keyword: string; position: number | null; volume: number | null; traffic?: number | null; url?: string | null; difficulty?: number | null; intent?: string | null; ownClicks?: number | null };
 export function competitorKeywordsDraft(domain: string, market: string, rows: CompetitorKeyword[]): TaskDraft {
   const head = rows[0].keyword;
-  const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.rankMonthlyVolume',{0:r.keyword,1:domain,2:r.position ?? "—",3:r.url ? `（${r.url}）` : "",4:n(r.volume),5:r.traffic != null ? $t('seoHandOff.estimatedTraffic',{0:n(r.traffic)}) : "",6:r.difficulty != null ? $t('seoHandOff.difficulty',{0:n(r.difficulty)}) : "",7:r.ownClicks != null ? $t('seoHandOff.clicksLast28Days',{0:n(r.ownClicks)}) : ""}));
+  const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.rankMonthlyVolume',{0:r.keyword,1:domain,2:r.position ?? "—",3:parenthetical(r.url),4:n(r.volume),5:r.traffic != null ? $t('seoHandOff.estimatedTraffic',{0:n(r.traffic)}) : "",6:r.difficulty != null ? $t('seoHandOff.difficulty',{0:n(r.difficulty)}) : "",7:r.ownClicks != null ? $t('seoHandOff.clicksLast28Days',{0:n(r.ownClicks)}) : ""}));
   return {
     title: clip(rows.length === 1 ? $t('seoHandOff.catchUp',{0:head,1:domain}) : $t('seoHandOff.catchUpMoreKeywords',{0:head,1:rows.length,2:domain}), 200),
     subject: clip(subjectOf(head, rows.length, 'keywords'), 160),
-    objective: clip($t('seoHandOff.siteReachesTopResultsKeywords',{0:domain,1:rows.map((r) => r.keyword).join("、")}), 1000),
+    objective: clip($t('seoHandOff.siteReachesTopResultsKeywords',{0:domain,1:joinList(rows.map((r) => r.keyword))}), 1000),
     brief: clip([$t('seoHandOff.keywordsCompetitorRanksGoogle',{0:domain,1:market}), ...lines, "", $t('seoHandOff.evidenceRankingsSearchVolumeTraffic'), $t('seoHandOff.suggestionFirstLookWhatCompetitor')].join("\n"), 20000),
   };
 }
@@ -107,12 +107,12 @@ export function contentPageDraft(p: ContentPage, rangeLabel: string): TaskDraft 
 export type TrackedRow = { keyword: string; market: string; latest: { at: string; position: number | null; url: string | null } | null; previous: { at: string; position: number | null } | null; gsc?: { position: number; clicks: number; page: string } };
 export function trackedDraft(rows: TrackedRow[]): TaskDraft {
   const head = rows[0].keyword, ranked = rows.some((r) => r.latest?.position || r.gsc);
-  const lines = rows.slice(0, 40).map((r) => `- ${r.keyword}（${r.market}）：${r.latest ? $t('seoHandOff.googleRank',{0:formatDate(r.latest.at),1:r.latest.position ?? $t('common.beyond100'),2:r.latest.position ? $t('seoHandOff.personMeasure') : "",3:r.latest.url ? `（${r.latest.url}）` : ""}) : $t('seoHandOff.notCheckedYet')}${r.previous ? $t('seoHandOff.lastTimeRank',{0:r.previous.position ?? $t('common.beyond100'),1:r.previous.position ? $t('seoHandOff.personMeasure') : ""}) : ""}${r.gsc ? $t('seoHandOff.searchConsoleAveragePositionOver',{0:r.gsc.position.toFixed(1),1:n(r.gsc.clicks)}) : ""}`);
+  const lines = rows.slice(0, 40).map((r) => `- ${labelValue(withDetail(r.keyword, r.market), r.latest ? $t('seoHandOff.googleRank',{0:formatDate(r.latest.at),1:r.latest.position ?? $t('common.beyond100'),2:r.latest.position ? $t('seoHandOff.personMeasure') : "",3:parenthetical(r.latest.url)}) : $t('seoHandOff.notCheckedYet'))}${r.previous ? $t('seoHandOff.lastTimeRank',{0:r.previous.position ?? $t('common.beyond100'),1:r.previous.position ? $t('seoHandOff.personMeasure') : ""}) : ""}${r.gsc ? $t('seoHandOff.searchConsoleAveragePositionOver',{0:r.gsc.position.toFixed(1),1:n(r.gsc.clicks)}) : ""}`);
   return {
     pages: pagesOf([trackedPage(rows), ...rows.map((r) => r.latest?.url || r.gsc?.page)]),
     title: clip(rows.length === 1 ? $t('seoHandOff.improveRanking',{0:head}) : $t('seoHandOff.improveRankingMoreKeywords',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'keywords'), 160),
-    objective: clip($t('seoHandOff.trackedKeywordsReachTopResults',{0:rows.map((r) => r.keyword).join("、")}), 1000),
+    objective: clip($t('seoHandOff.trackedKeywordsReachTopResults',{0:joinList(rows.map((r) => r.keyword))}), 1000),
     brief: clip([$t('seoHandOff.rankTrackingResultsGoogleDesktop'), ...lines, "", ranked ? $t('seoHandOff.suggestionImprovePageAlreadyRanks') : $t('seoHandOff.suggestionSiteNotRankYet')].join("\n"), 20000),
   };
 }
@@ -134,7 +134,7 @@ export function ownPagesDraft(domain: string, market: string, rows: CompetitorPa
 export type DiscussionItem = { title: string; url: string; meta?: string; excerpt?: string };
 // 起草社区回复 (2026-10-08): posts nobody answered, for the Agent to draft one reply each (you post them yourself).
 export function replyDraft(where: string, noun: string, items: DiscussionItem[]): TaskDraft {
-  const lines = items.slice(0, 40).map((i) => `- ${i.title}${i.meta ? `（${i.meta}）` : ""}：${i.url}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
+  const lines = items.slice(0, 40).map((i) => `- ${labelValue(withDetail(i.title, i.meta), i.url)}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
   return {
     title: clip($t('seoHandOff.draftReplies',{0:where,1:items.length,2:noun}), 200),
     subject: clip(countOf(where, items.length, noun), 160),
@@ -143,7 +143,7 @@ export function replyDraft(where: string, noun: string, items: DiscussionItem[])
   };
 }
 export function discussionsDraft(where: string, noun: string, items: DiscussionItem[]): TaskDraft {
-  const lines = items.slice(0, 40).map((i) => `- ${i.title}${i.meta ? `（${i.meta}）` : ""}：${i.url}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
+  const lines = items.slice(0, 40).map((i) => `- ${labelValue(withDetail(i.title, i.meta), i.url)}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
   return {
     title: clip($t('seoHandOff.summarize',{0:where,1:items.length,2:noun}), 200),
     subject: clip(countOf(where, items.length, noun), 160),
@@ -167,7 +167,7 @@ export function visitPageDraft(page: string, period: string, views: number, conv
 // 趋势: related searches picked on the 趋势 page, to see whether a page should answer them (内容选题与大纲).
 export type TrendQuery = { query: string; value: number; kind: "rising" | "top" };
 export function trendsDraft(term: string, place: string, rows: TrendQuery[]): TaskDraft {
-  const lines = rows.slice(0, 40).map((r) => `- ${r.query}：${r.kind === "rising" ? $t('seoHandOff.rising',{0:n(r.value)}) : $t('seoHandOff.interest',{0:n(r.value)})}`);
+  const lines = rows.slice(0, 40).map((r) => `- ${labelValue(r.query, r.kind === "rising" ? $t('seoHandOff.rising',{0:n(r.value)}) : $t('seoHandOff.interest',{0:n(r.value)}))}`);
   return {
     title: clip(rows.length === 1 ? $t('seoHandOff.contentTopic',{0:rows[0].query}) : $t('seoHandOff.contentTopicRelatedSearches',{0:rows.length,1:term}), 200),
     subject: clip(rows.length === 1 ? rows[0].query : $t('taskSubject.relatedSearches', { 0: rows.length, 1: term }), 160),
@@ -183,8 +183,8 @@ export function competitorEventsDraft(rows: CompetitorEvent[]): TaskDraft {
   const label = { page: $t('common.newPages'), release: $t('common.newRelease'), site: $t('common.websiteChanges') } as const;
   const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.found',{0:r.competitor,1:label[r.type],2:r.title,3:formatDate(r.at),4:r.url,5:r.detail ? `\n  ${r.detail}` : ""}));
   return {
-    title: clip($t('seoHandOff.competitorComparisonNewActivities',{0:names.join("、"),1:rows.length}), 200),
-    subject: clip(countOf(names.join('、'), rows.length, 'activities'), 160),
+    title: clip($t('seoHandOff.competitorComparisonNewActivities',{0:joinList(names),1:rows.length}), 200),
+    subject: clip(countOf(joinList(names), rows.length, 'activities'), 160),
     objective: clip($t('seoHandOff.seeWhatCompetitorsRecentlyWhether'), 1000),
     brief: clip([$t('seoHandOff.recentCompetitorActivitySeenWeekly'), ...lines, "", $t('seoHandOff.competitorChangesAdvice')].join("\n"), 20000),
   };

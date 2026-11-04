@@ -1,4 +1,4 @@
-import { formatTime, localDateKey } from '#lib/format';
+import { formatTime, joinList, localDateKey } from '#lib/format';
 import { $t, $tj, $legacyText, getCurrentLocale } from '#i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -613,7 +613,7 @@ function HealthNote({ projectId }: { projectId: number }) {
         {$t('strategy.syncFailed')}
       </Tag>
       {$tj('dataHealth.failedSyncOverDayOpportunities', {
-        0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
+        0: joinList(items.map((i) => healthText(i.name, i.nameText))),
       })}
       <Link className='nr-link ml-1.5 text-xs' to='/connections?tab=health'>
         {$t('dataHealth.fix')} →

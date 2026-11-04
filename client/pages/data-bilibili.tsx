@@ -48,7 +48,7 @@ import {
   type BilibiliVideo,
 } from './bilibili-api';
 import './data-views.css';
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, joinList } from '#lib/format';
 
 type Report = Omit<BilibiliStatus, 'recent'> &
   CollectorReport & { videos: BilibiliVideo[] };
@@ -219,10 +219,10 @@ export default function DataBilibili() {
           <CollectorSourceLine
             parts={[
               $t('common.searchTermValue', {
-                0: data.terms.join('、') || '—',
+                0: joinList(data.terms) || '—',
               }),
               data.bvids.length > 0 &&
-                $t('bilibili.trackedVideos', { 0: data.bvids.join('、') }),
+                $t('bilibili.trackedVideos', { 0: joinList(data.bvids) }),
               $t('bilibili.lastSuccessfulCollection', {
                 0: stamp(data.verifiedAt),
               }),

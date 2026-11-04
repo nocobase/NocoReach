@@ -53,7 +53,7 @@ import {
 } from '#components/ui/dropdown-menu';
 import { confirmAction } from '#components/reach/confirm';
 import { Tag, type Tone } from '#components/reach/tag';
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { StatusCard, StatusRow } from './connection-status-card';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
@@ -804,10 +804,7 @@ function TargetCard({
         {t.locales.length > 1
           ? $t('articlePublishing.primaryLanguages', {
               0: localeName(t.locales[0], ui),
-              1: t.locales
-                .slice(1)
-                .map((l) => localeName(l, ui))
-                .join(ui.startsWith('zh') ? '、' : ', '),
+              1: joinList(t.locales.slice(1).map((l) => localeName(l, ui))),
             })
           : localeName(t.locales[0], ui)}
       </StatusRow>

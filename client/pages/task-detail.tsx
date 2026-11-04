@@ -1,4 +1,4 @@
-import { formatDateTime, formatDate } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { Skeleton } from '#components/ui/skeleton';
 import {matchesObservation} from '../../shared/result-comparison.js';
 import {shownInActivity} from '../../shared/task-activity.js';
@@ -467,7 +467,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // translated or updated in place, or a version that changed none of them, which offers Update again first (T-53).
    const simulated=mockSettingsAvailable()||Boolean(data.task.evidence?.simulated),round=reviewRound(data,out.article,simulated);
    // Another primary before it is approved (2026-10-30): the Agent writes a new version in it; asked first.
-   const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=(w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)).join(ui.startsWith('zh')?'、':', ');
+   const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=joinList((w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)));
     if(await confirmAction({title:()=>$t('articleTask.changePrimaryTitle',{0:lang}),description:()=>$t('articleTask.changePrimaryDescription',{0:lang,1:others}),action:()=>$t('articleTask.changePrimaryAction',{0:lang}),destructive:false}))
      await act('changePrimary',{artifactId:out.id,locale:l,comment:$t('articleTask.primaryChangedComment',{0:lang})});};
    const approve=!targetGone&&<Button variant={round.nothing?'outline':'default'} disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}>{!round.nothing&&<Rocket/>}{round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish')}</Button>;
