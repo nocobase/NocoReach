@@ -118,6 +118,7 @@ export async function googleOAuthCallback(
       await requireInitiator(host, ctx, saved.userId, saved.id);
       stage = 'save';
       await host.variable(secretKey(saved.id), tokens.refresh_token, true);
+      ctx.state.connectionStatusProject = saved.id;
       await host.metadata(saved.id, {
         accountEmail: identity.email || '',
         authorizedAt: new Date().toISOString(),

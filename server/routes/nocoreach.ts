@@ -140,7 +140,9 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         });
         throw failure(500, 'proxyProfiles.requestNotCompletedTryAgain', undefined, getRequestLocale(context));
       }
-      runtime.connectionStatus.changed(params.resource, params.action, projectSelector(body?.projectId || query.projectId));
+      const callbackProject = projectSelector(ctx.state.connectionStatusProject);
+      if (params.resource !== 'nrGoogle' || params.action !== 'callback' || callbackProject)
+        runtime.connectionStatus.changed(params.resource, params.action, callbackProject || projectSelector(body?.projectId || query.projectId));
       for (const [name, value] of Object.entries(ctx.headers)) context.header(name, value);
       for (const cookie of ctx.cookiesOut) {
         const o = cookie.options as { httpOnly?: boolean; sameSite?: string; secure?: boolean; maxAge?: number; path?: string };

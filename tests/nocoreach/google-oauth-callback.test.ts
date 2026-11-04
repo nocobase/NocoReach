@@ -300,7 +300,8 @@ it.each([null, 'other-admin', 'initiator'])(
     const f = await fixture();
     const container = new ServiceContainer();
     const connectionStatus = new ConnectionStatusCache();
-    await connectionStatus.read('1', 'oauth-session', async () => 'before');
+    await connectionStatus.read('123', 'oauth-session', async () => 'before');
+    await connectionStatus.read('1', 'other-project', async () => 'other');
     container.instance(authorizationToken, { middleware: () => async (_context: unknown, next: () => Promise<void>) => next() } as never);
     container.instance(scopedApiKeysToken, { resolve: async () => null } as never);
     container.instance(authenticationToken, {
@@ -345,10 +346,12 @@ it.each([null, 'other-admin', 'initiator'])(
       },
     );
     expect(response.status).toBe(302);
-    if (userId === 'initiator')
-      expect(
-        await connectionStatus.read('1', 'oauth-session', async () => 'after'),
-      ).toBe('after');
+    expect(
+      await connectionStatus.read('123', 'oauth-session', async () => 'after'),
+    ).toBe(userId === 'initiator' ? 'after' : 'before');
+    expect(
+      await connectionStatus.read('1', 'other-project', async () => 'changed'),
+    ).toBe('other');
     expect(response.headers.get('location')).toBe(
       userId === 'initiator'
         ? '/main/connections?google=authorized'
