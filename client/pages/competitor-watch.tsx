@@ -123,7 +123,7 @@ export function CompetitorsConnect({ projectId, onChange }: { projectId: number;
   useEffect(() => { void load(); }, [projectId]);
   useEffect(() => { if (!status?.checking) return; const t = setInterval(() => void load().then(onChange), 4000); return () => clearInterval(t); }, [status?.checking]);
   const remove = async (c: Competitor) => { if (!(await confirmAction({ title: () => ($t('common.stopWatching',{0:c.name})), description: () => ($t('competitorWatch.activityHistoryDeletedToo')), action: 'competitorWatch.stopWatching' }))) return; try { setStatus(await call<CompetitorStatus>(projectId, "remove", { competitorId: c.id })); onChange(); } catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notComplete'))); } };
-  if (!status) return error ? <p className="nr-error" role="alert">{error}</p> : <p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+  if (!status) return error ? <p className="nr-error" role="alert">{error}</p> : <ListSkeleton rows={2} />;
   return (
     <div className="flex flex-col gap-3">
       {error ? <p className="nr-error" role="alert">{error}</p> : null}

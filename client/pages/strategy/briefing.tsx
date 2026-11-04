@@ -8,6 +8,7 @@ import { formatCount, formatDate } from '#lib/format';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
+import { Skeleton } from '#components/ui/skeleton';
 import { useLinkInMenu } from '#components/app-shell/nav-sources';
 import { healthText, loadHealth, type HealthItem } from '../data-health';
 import { WAITING_TASKS_URL } from '../task-waiting';
@@ -98,6 +99,7 @@ export function MetricTiles({
       request={overview}
       empty={!items.length}
       emptyText={$t('strategy.noDataYet')}
+      placeholder={<MetricTilesSkeleton />}
     >
       {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle): the
           shared window's dates, written as the data pages write their range (2026-10-29 user request), so the line
@@ -112,17 +114,17 @@ export function MetricTiles({
               })
             : $t('strategy.metricWindow', { 0: days })}
         </p>
-        <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
+        <div className={TILE_GRID}>
           {items.map((i) => (
             <PageLink
               key={i.label}
               to={i.to}
-              className='flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground'
+              className={TILE}
               linkClassName='transition-colors hover:border-ring/60'
             >
               <span className='text-xs text-muted-foreground'>{i.label}</span>
               <span className='flex flex-wrap items-baseline gap-x-2'>
-                <span className='text-xl leading-7 font-medium tabular-nums sm:text-[1.375rem]'>
+                <span className={`${TILE_VALUE} font-medium tabular-nums`}>
                   {number(i)}
                 </span>
                 {i.change == null && !smallBase(i) ? (
@@ -151,6 +153,36 @@ export function MetricTiles({
         </div>
       </div>
     </RequestBlock>
+  );
+}
+
+const TILE_GRID =
+  'grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3';
+const TILE =
+  'flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground';
+const TILE_VALUE = 'text-xl leading-7 sm:text-[1.375rem]';
+// The first read of the numbers: the window line and five tiles built like the loaded ones, each line a bar inside a
+// line of the same text size, so the conversation below stays where it will be once the numbers arrive.
+function MetricTilesSkeleton() {
+  return (
+    <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+      <div className='text-xs'>
+        <Skeleton className='inline-block h-3 w-40 align-middle' />
+      </div>
+      <div className={TILE_GRID}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className={TILE}>
+            <div className='text-xs'>
+              <Skeleton className='inline-block h-3 w-16 align-middle' />
+            </div>
+            <div className={TILE_VALUE}>
+              <Skeleton className='inline-block h-5 w-20 align-middle' />
+            </div>
+            <Skeleton className='h-6 w-full' />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -579,6 +611,26 @@ export function WaitingNote({
       >
         {$t('strategy.view')} →
       </button>
+    </Bubble>
+  );
+}
+
+/**
+ * The first read of the waiting tasks: the card above with a tag, two task lines as wide as a long title and View all,
+ * wrapping as the loaded card does, so it keeps its size at every width.
+ */
+export function WaitingNoteSkeleton() {
+  return (
+    <Bubble className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+      <Skeleton className='h-4.5 w-24 rounded-full' />
+      {[0, 1].map((i) => (
+        <span key={i} className='w-[24rem] max-w-full'>
+          <Skeleton className='inline-block h-3.5 w-4/5 align-middle' />
+        </span>
+      ))}
+      <span className='ml-auto text-xs'>
+        <Skeleton className='inline-block h-3 w-12 align-middle' />
+      </span>
     </Bubble>
   );
 }

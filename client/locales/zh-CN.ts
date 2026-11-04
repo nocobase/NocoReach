@@ -101,7 +101,6 @@ const zhCN: AppResource = {
   'navigation.brandHome': 'NocoReach 首页',
   'navigation.brandApps': 'NocoReach 应用',
   shell: {
-    templateVersionUnknown: '版本未知',
     buildFreely: 'AI 找出增长机会，',
     reliability: '交给 Agent 执行',
   },

@@ -615,3 +615,13 @@ it('Watching colours the current value as its change, once, without a tag beside
   expect(row.textContent).not.toContain('strategy.now');
   expect(row.querySelector('td')!.textContent).not.toContain('↓ 18%');
 });
+
+it('shows the shared skeleton while the opportunities load', () => {
+  fixture.action.mockImplementation(() => new Promise(() => {}));
+  show();
+  expect(
+    screen
+      .getByRole('status', { name: 'strategy.loadingOpportunities' })
+      .querySelectorAll('[data-slot="skeleton"]'),
+  ).toHaveLength(6);
+});

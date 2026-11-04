@@ -13,8 +13,8 @@ export const GOOGLE_SAVED_COPY_RETRY_MS = 30 * 1000;
 // read ahead often enough to keep Traffic's default view within it.
 export const GOOGLE_SAVED_COPY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // How often a page reads again while the server is reading a new report, and how many times before it stops asking:
-// 240 seconds, past the slowest report (Traffic's two GA4 rounds, each up to 30 seconds and asked again three times
-// after a 429, waiting 100 seconds in all). Each read only answers from memory.
+// 240 seconds, past the slowest report (a Traffic part read while the other is, two GA4 rounds between them, each up to
+// 30 seconds and asked again three times after a 429, waiting 100 seconds in all). Each read only answers from memory.
 export const GOOGLE_REFRESH_POLL_MS = 5 * 1000;
 export const GOOGLE_REFRESH_POLLS = 48;
 
@@ -108,6 +108,7 @@ export function isGoogleReportKey(
   }
   return [
     'data-view:website',
+    'data-view:website-tables',
     'data-view:website-row',
     'today',
     'live',

@@ -208,9 +208,11 @@ describe('NocoReach language integration', () => {
       </I18nProvider>
     );
     const view = render(content);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      $t('sourceConnections.checkingDataSources'),
-    );
+    expect(
+      screen.getByRole('status', {
+        name: $t('sourceConnections.checkingDataSources'),
+      }),
+    ).toBeVisible();
     expect(connectionApi.request).not.toHaveBeenCalled();
     viewer.projectId = 1;
     view.rerender(
@@ -223,7 +225,9 @@ describe('NocoReach language integration', () => {
     await waitFor(() => expect(connectionApi.request).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(
-        screen.queryByText($t('sourceConnections.checkingDataSources')),
+        screen.queryByRole('status', {
+          name: $t('sourceConnections.checkingDataSources'),
+        }),
       ).not.toBeInTheDocument(),
     );
   });

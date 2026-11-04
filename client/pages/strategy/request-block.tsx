@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 import { $t } from '#i18n';
+import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
+import { Skeleton } from '#components/ui/skeleton';
 import { cn } from '#lib/utils';
 
 export type RequestState = {
@@ -22,6 +24,8 @@ export function RequestBlock({
   info,
   compact = false,
   quiet = false,
+  placeholder,
+  skeletonRows = 3,
   children,
 }: {
   title: string;
@@ -35,6 +39,13 @@ export function RequestBlock({
   /** A side block (Insights' Current situation): its heading in 14px semibold with spacing doing the rest (2026-10-24
    * user-approved design), and Retry only after a failure (the page's own refresh reads it again). */
   quiet?: boolean;
+  /**
+   * What the first read shows where the content goes, at the loaded content's size so the page does not move (the
+   * metric tiles, the waiting tasks). Without it: the shared list skeleton, or a bar in a compact row.
+   */
+  placeholder?: ReactNode;
+  /** Rows of that list skeleton, about as many as the loaded list shows (Current situation: 8). */
+  skeletonRows?: number;
   request: RequestState;
   empty?: boolean;
   emptyText?: string;
@@ -59,11 +70,25 @@ export function RequestBlock({
               : $t('strategy.blockFailed')}
     </p>
   );
-  const loading = request.loading && (
-    <p role='status' className='text-sm text-muted-foreground'>
-      {$t('common.loadingLoading')}
-    </p>
-  );
+  // The first read shows skeletons where the content goes (a bar in a compact row); a refresh keeps the content and
+  // says it is loading.
+  const loading =
+    request.loading &&
+    (hasData ? (
+      <p role='status' className='text-sm text-muted-foreground'>
+        {$t('common.loadingLoading')}
+      </p>
+    ) : placeholder || compact ? (
+      <div
+        role='status'
+        aria-label={$t('common.loading')}
+        className='min-w-0 flex-1'
+      >
+        {placeholder ?? <Skeleton className='h-4 w-48' />}
+      </div>
+    ) : (
+      <ListSkeleton rows={skeletonRows} />
+    ));
   const body =
     hasData &&
     (empty

@@ -195,6 +195,28 @@ const report = {
   },
   missing: ['city'],
 };
+// `website` answers the figures with the tables shown before a tab is opened; `websiteTables` the rest, asked for once
+// the page shows (website-report.ts, `period` and `periodTables`).
+const FIRST = ['channel', 'sourceMedium', 'event', 'newVsReturning', 'device'];
+type Full = typeof report;
+const firstOf = (full: Full) => ({
+  ...full,
+  tables: Object.fromEntries(
+    Object.entries(full.tables).filter(([n]) => FIRST.includes(n)),
+  ),
+  changes: { channel: full.changes.channel },
+  missing: full.missing.filter((n) => FIRST.includes(n)),
+});
+const restOf = (full: Full) => ({
+  connected: full.connected,
+  cutoff: full.cutoff,
+  window: full.window,
+  tables: Object.fromEntries(
+    Object.entries(full.tables).filter(([n]) => !FIRST.includes(n)),
+  ),
+  changes: { page: full.changes.page },
+  missing: full.missing.filter((n) => !FIRST.includes(n)),
+});
 const hours = Array.from({ length: 24 }, (_, h) => ({
   hour: h,
   today: h < 14 ? 50 : null,
@@ -274,7 +296,8 @@ describe('访问', () => {
     project.analyticsPropertyId = '123';
     project.searchConsoleProperty = 'sc-domain:x.com';
     action.mockImplementation(async (_resource: string, name: string) => {
-      if (name === 'website') return report;
+      if (name === 'website') return firstOf(report);
+      if (name === 'websiteTables') return restOf(report);
       if (name === 'websiteToday') return today;
       if (name === 'websiteRealtime') return live;
       if (name === 'websiteRow')
@@ -304,7 +327,12 @@ describe('访问', () => {
     await act(async () => router.navigate('/other'));
     await act(async () => router.navigate('/website'));
     await screen.findByText('今天浏览量');
-    for (const name of ['website', 'websiteToday', 'websiteRealtime'])
+    for (const name of [
+      'website',
+      'websiteTables',
+      'websiteToday',
+      'websiteRealtime',
+    ])
       expect(
         action.mock.calls.filter(([, actionName]) => actionName === name),
       ).toHaveLength(1);
@@ -458,6 +486,12 @@ describe('访问', () => {
     expect(
       action.mock.calls.filter(([, name]) => name === 'website'),
     ).toHaveLength(2);
+    // Page rows' queries come with the other tables, so they are read again too.
+    await waitFor(() =>
+      expect(
+        action.mock.calls.filter(([, name]) => name === 'websiteTables'),
+      ).toHaveLength(2),
+    );
     for (const name of ['websiteToday', 'websiteRealtime'])
       expect(
         action.mock.calls.filter(([, actionName]) => actionName === name),
@@ -499,6 +533,7 @@ describe('访问', () => {
       const { router } = renderPage();
       await screen.findByText('今天浏览量');
       const relatedKeys = [
+        'website-tables',
         'search',
         'search-breakdown',
         'search-row',
@@ -559,7 +594,15 @@ describe('访问', () => {
       );
       if (mutation === 'disconnect')
         expect(screen.queryByText('今天浏览量')).toBeNull();
-      else await screen.findByText('今天浏览量');
+      else {
+        await screen.findByText('今天浏览量');
+        // The other tables are read again too, not kept from the old connection.
+        await waitFor(() =>
+          expect(
+            action.mock.calls.filter(([, name]) => name === 'websiteTables'),
+          ).toHaveLength(2),
+        );
+      }
     },
   );
 
@@ -764,6 +807,97 @@ describe('访问', () => {
       within(tiles).getByRole('button', { name: '互动率', pressed: false }),
     );
     expect(document.querySelector('[data-change-drivers]')).toBeNull();
+  });
+
+  it('reads the other tables as soon as the figures show, and a tab whose table is not there yet waits for it', async () => {
+    const fallback = action.getMockImplementation()!;
+    let answer!: (value: unknown) => void;
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteTables'
+        ? new Promise((resolve) => (answer = resolve))
+        : fallback(resource, name),
+    );
+    const tables = () =>
+      action.mock.calls.filter(([, name]) => name === 'websiteTables');
+    const { router } = renderPage();
+    // Channels come with the figures; nothing waits for the other tables.
+    await screen.findByRole('combobox', { name: '按什么看' });
+    expect(document.querySelector('[data-tables-loading]')).toBeNull();
+    await waitFor(() => expect(tables()).toHaveLength(1));
+    await act(async () => router.navigate('/website?tab=geo'));
+    expect(document.querySelector('[data-tables-loading]')).toBeTruthy();
+    await act(async () => answer(restOf(report)));
+    expect(await screen.findByRole('button', { name: '美国' })).toBeTruthy();
+    expect(tables()).toHaveLength(1);
+  });
+
+  it('shows a failure of the other tables on their tabs only', async () => {
+    const fallback = action.getMockImplementation()!;
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteTables'
+        ? Promise.reject(new Error('quota exceeded'))
+        : fallback(resource, name),
+    );
+    const { router } = renderPage('/website?tab=geo');
+    expect(await screen.findByText('quota exceeded')).toBeTruthy();
+    await act(async () => router.navigate('/website'));
+    await screen.findByRole('combobox', { name: '按什么看' });
+    expect(screen.queryByText('quota exceeded')).toBeNull();
+    expect(document.querySelector('[data-tables-loading]')).toBeNull();
+  });
+
+  it('reads the other tables again when Retry is clicked, without searching a table that is not there', async () => {
+    const fallback = action.getMockImplementation()!;
+    let fail = true;
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteTables' && fail
+        ? Promise.reject(new Error('quota exceeded'))
+        : fallback(resource, name),
+    );
+    renderPage('/website?tab=geo');
+    expect(await screen.findByText('quota exceeded')).toBeTruthy();
+    // A failed read waits before it is asked again; Retry does not.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(await screen.findByRole('button', { name: '美国' })).toBeTruthy();
+    expect(screen.queryByText('quota exceeded')).toBeNull();
+    expect(screen.getByRole('textbox')).toBeTruthy();
+  });
+
+  it('names the pages behind a change only when the other tables cover the same days as the figures', async () => {
+    const fallback = action.getMockImplementation()!;
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteTables'
+        ? {
+            ...restOf(report),
+            window: {
+              ...report.window,
+              start: '2026-10-03',
+              end: '2026-10-09',
+            },
+            refreshing: true,
+            savedAt: Date.now() - 60000,
+          }
+        : fallback(resource, name),
+    );
+    const { router } = renderPage('/website?tab=geo');
+    // The copy of the previous window is shown on the tabs it holds, and said to be there…
+    expect(await screen.findByRole('button', { name: '美国' })).toBeTruthy();
+    await waitFor(() =>
+      expect(document.querySelectorAll('[data-saved-report]')).toHaveLength(1),
+    );
+    // …not above the figures, which are not a copy, nor on Channels, which come with them.
+    await act(async () => router.navigate('/website'));
+    await screen.findByRole('combobox', { name: '按什么看' });
+    expect(document.querySelector('[data-saved-report]')).toBeNull();
+    const tiles = screen.getByRole('group', { name: '指标' });
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '浏览量', pressed: false }),
+    );
+    expect(document.querySelector('[data-change-drivers]')?.textContent).toBe(
+      '浏览量比前一期多了 600，主要来自自然搜索（+400，占 67%）和引荐（+200，占 33%）。',
+    );
   });
 
   it('switches reports and dimensions, and opens a row with its days against the period before', async () => {

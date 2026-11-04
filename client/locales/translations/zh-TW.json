@@ -262,7 +262,6 @@
   "status.deniedDescription": "你沒有存取 {{label}} 的權限。",
   "status.routeFailedDescription": "無法載入 {{packageName}} 的路由 {{label}}。",
   "shell": {
-    "templateVersionUnknown": "版本未知",
     "buildFreely": "AI 找出成長機會，",
     "reliability": "交給 Agent 執行"
   },

@@ -84,7 +84,7 @@ class SyncService{
   await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
    await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    await this.control(id,'pause');
-   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null});
+   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null,authFailedAt:null});
    await plugin.variable(secretKey(id),null);
   });
  }
@@ -128,6 +128,19 @@ class SyncService{
     if(String(this.inFlight?.job.get('projectId'))===String(id))this.inFlight.controller.abort();
     for(const controller of this.freshFlights.get(String(id))||[])controller.abort();
    });
+  });
+ }
+ // The jobs Google's refusal of the authorization failed (invalid_grant), queued again once the same account has
+ // authorized again (google-oauth-callback.ts), so Data health recovers without waiting for the next daily sync or
+ // Retry failed jobs. Jobs that failed for another reason, or for resources no longer selected, are left as they are.
+ async retryRefused(id: string | number): Promise<number>{
+  const plugin=this.p as {db: LegacyDatabase};
+  return plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+   const link=await this.link(id),current={ga4:link.get('ga4PropertyId'),gsc:link.get('gscSiteUrl')};
+   const refused=(await this.repo('nrSyncJobs').find({filter:{projectId:String(id),status:'failed',errorCode:'invalid_grant'},transaction})).filter(j=>j.get('resource')===current[j.get('source')]).map(j=>j.id);
+   if(refused.length)await this.repo('nrSyncJobs').update({filter:{id:{$in:refused}},values:{status:'queued',attempts:0,retryAt:null,errorCode:null},transaction});
+   return refused.length;
   });
  }
  async currentJob(flight,transaction){
@@ -233,7 +246,7 @@ class SyncService{
   // again each time that ends, all day, if Google goes on refusing the same part: it waits PARTIAL_RETRY_MS instead.
   let idleReads=0;
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
-   const authorizedAt=links.find(l=>String(l.get('projectId'))===id)?.get('authorizedAt'),active=!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt);
+   const link=links.find(l=>String(l.get('projectId'))===id),authorizedAt=link?.get('authorizedAt'),active=!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt);
    const lately=active&&(!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt,MORNING_REREAD_WITHIN_MS));
    // An idle project's next read waits IDLE_READ_MS, unless someone opens it meanwhile. Traffic is read ahead once per
    // window (`readAhead`): a report held for today's window answers whatever its age. A project opened in the last day is
@@ -243,7 +256,15 @@ class SyncService{
    // that mark for the next one 15 minutes later.
    const webNext=this.webNext=this.webNext||new Map(),next=webNext.get(id);
    if((!next||Date.now()>=next.at||(active&&next.idle))&&(active||idleReads<IDLE_READS_PER_TICK)){if(!active)idleReads++;
-    await (next?.partial||lately?waitForFresh:readAhead)(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS,partial:true});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000,...(next?.partial?{partial:true}:{})}));}
+    await (next?.partial||lately?waitForFresh:readAhead)(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS,partial:true});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000,failed:true,...(next?.partial?{partial:true}:{})}));}
+   // A project opened in the last day also has Traffic's other tables read (website-report.ts, `periodTables`), so its tabs
+   // and the online agent's Pages answer at once, but once a day: not in the night (`websiteDayRead`), when the read would
+   // hold yesterday low and be read again in the morning. Within the day the report held answers; one refused in part
+   // waits PARTIAL_RETRY_MS and a failure 15 minutes, as for the figures. While the figures' last read failed they wait
+   // with it: the same GA4 or sign-in failure would only be met twice, and the page asks for them only once its figures show.
+   if(lately&&!webNext.get(id)?.failed){const tablesNext=this.tablesNext=this.tablesNext||new Map();
+    if(Date.now()>=(tablesNext.get(id)||0)&&await this.p.dataViews?.websiteDayRead?.(id,link?.get('ga4PropertyId'))?.catch(()=>false))
+     await waitForFresh(()=>this.p.dataViews.websiteTables(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)tablesNext.set(id,Date.now()+PARTIAL_RETRY_MS);else tablesNext.delete(id);},()=>tablesNext.set(id,Date.now()+15*60000));}
    if(!active)continue;
    const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;

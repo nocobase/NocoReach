@@ -98,6 +98,9 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           // the page, never where the review stands.
           'release 是发布记录里的说明，负责人在任务页和成果页都会看到：最多三行，用读者能懂的话说页面上改了什么，不写时间戳和规则名，也不写审核和流程（如“等待人工审核”“已提交审核”“按你的意见”）；verifyText 是改动后可在公开页面找到的独特短句（最多 200 字符）；pages 是待验证的页面 URL。无法通过页面文字验证时，verifyText 返回空字符串、pages 返回空数组，并在 release 说明原因，不得编造。',
           'changes 提供实际修改文本的前后对比，最多 10 个文件，正文合计不超过 40000 字符，截断时标记 truncated=true；二进制文件只列在 files。完整 JSON 不超过 90000 字符。',
+          // The repository's own duties for a new page (2026-11-04): the built-in step instructions say what to write in
+          // words that also hold for an article in a CMS, which has no folder, frontmatter or navigation to fill in.
+          '新建页面（如博客文章、文档页面、发布说明）时，照仓库里同类页面的做法：放到它们所在的目录，补全它们都有的页面信息（如 frontmatter 里的标题、描述、日期和标签）；同类页面都列在导航里时，把新页面也加进导航。',
           '文字要求放进页面的图片：从 images.json 解码出原图，放到仓库里网站存放图片的位置，按仓库现有的写法在页面里引用，随 PR 一起提交；visibleChanges 里写明新增或替换了哪张图片。只用来指出问题的截图不要提交。',
         ]
       : []),

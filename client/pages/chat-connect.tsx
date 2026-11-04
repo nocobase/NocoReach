@@ -1,6 +1,7 @@
 import { formatDateTime, joinList } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError} from '#components/connection-error';
+import {ListSkeleton} from '#components/reach/states';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -26,7 +27,7 @@ export function ChatConnect({projectId,platform,onChange}:{projectId:number;plat
  useEffect(()=>{if(!status?.syncing)return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.syncing]);
  async function run<T>(fn:()=>Promise<T>,done:(r:T)=>void){setBusy(true);setError('');try{done(await fn());}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
  const inspect=(guildId=guild)=>run(()=>call<Info>(projectId,'inspect',{platform,token,guildId}),i=>{setInfo(i);setGuild(i.guildId||'');const saved=status?.[platform].channels?.map(c=>c.id)||[];setPicked(i.channels.filter(c=>saved.includes(c.id)).map(c=>c.id));});
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<ListSkeleton rows={2}/>;
  const side=status[platform],label=platform==='discord'?'Discord':'Slack';
  if(side.connected&&(!editing||!canInspect||!canConnect))return <><div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('chat.connectionBot',{0:label,1:side.name,2:side.bot})}</h3><p>{$tj('chat.read',{0:joinList(side.channels!.map(c=>`#${c.name}`))})}</p>
   {(side.lastRun||status.lastRun)?<p className="nr-footnote">{$tj('chat.lastReadMessagesReadsOnce',{0:formatDateTime((side.lastRun||status.lastRun)!.at),1:(side.lastRun||status.lastRun)!.read})}{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">{$tj('chat.notFullyRead',{0:translateSourceError(e)})}</span>)}</p>:<p role="status">{$t('chat.readingFirstTimeLast14')}</p>}

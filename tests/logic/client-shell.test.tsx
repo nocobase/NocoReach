@@ -27,6 +27,7 @@ import type { ComponentType, ReactElement } from 'react';
 import { Outlet, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import manifest from '../../package.json';
 import { AppRouter } from '../../client/routing/app-router.tsx';
 import { AppThemeProvider } from '../../client/theme/index.ts';
 
@@ -51,6 +52,9 @@ vi.mock('../../client/pages/access/api', () => ({
 }));
 
 afterEach(() => vi.unstubAllGlobals());
+
+/** The footer's name and version: NocoReach's own release. */
+const versionLine = `NocoReach v${manifest.version}`;
 
 /** The sidebar's entries; the header's breadcrumb names the current page as well. */
 const sidebar = (): HTMLElement =>
@@ -116,9 +120,12 @@ describe('application shell', () => {
     // NocoReach's slogan, as on the sign-in page.
     expect(screen.getByText('AI finds growth opportunities.')).toBeVisible();
     expect(screen.getByText('Agents put them into action.')).toBeVisible();
-    // The template's name is gone and the version is in the account menu.
+    // Then the name and version, as NocoCRM and NocoProject show theirs; the template's name is gone.
+    expect(within(sidebar()).getByText(versionLine)).toHaveAttribute(
+      'title',
+      versionLine,
+    );
     expect(screen.queryByText('Default Template')).not.toBeInTheDocument();
-    expect(screen.queryByText('Version unknown')).not.toBeInTheDocument();
     // shadcn's edge rail, with a translated label in place of its built-in one.
     expect(
       screen.getByRole('button', { name: 'Expand or collapse navigation' }),
@@ -128,15 +135,26 @@ describe('application shell', () => {
     ).toBeVisible();
   });
 
-  it('shows the adopted template baseline in the account menu rather than application or host identity', async () => {
-    vi.stubGlobal('__NOCOREACH_TEMPLATE_VERSION__', '1.0.0-beta.67');
+  it("shows NocoReach's release in the sidebar footer, not a host's identity", async () => {
+    renderApplication('/', true);
+    // `version`, which the release commits bump, not `nocobase.defaultTemplateVersion`.
+    expect(await within(sidebar()).findByText(versionLine)).toBeVisible();
+    // The host publishes its own name and version (see renderApplication); neither replaces the build's.
+    expect(screen.queryByText(/9\.9\.9/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Studio host/)).not.toBeInTheDocument();
+  });
+
+  it('shows no version in the account menu', async () => {
     renderApplication('/', true);
     fireEvent.click(
       await screen.findByRole('button', { name: 'Open account menu' }),
     );
-    expect(await screen.findByText('NocoReach v1.0.0-beta.67')).toBeVisible();
-    expect(screen.queryByText('v9.9.9')).not.toBeInTheDocument();
-    expect(screen.queryByText('Studio host')).not.toBeInTheDocument();
+    const menu = await screen.findByRole('menu');
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Sign out' }),
+    ).toBeVisible();
+    expect(within(menu).queryByText(/NocoReach v|\bv\d/)).toBeNull();
+    expect(menu.querySelector('[data-app-version]')).toBeNull();
   });
 
   it.each(['/settings', '/settings/users', '/settings/schedules/bookmark'])(
@@ -234,13 +252,18 @@ describe('application shell', () => {
     expect(
       await screen.findByRole('button', { name: 'Expand navigation' }),
     ).toHaveAttribute('aria-pressed', 'true');
-    // The footer keeps only its shield; focusing it shows the slogan.
+    // The footer keeps only its shield; focusing it shows the slogan, then the name and version.
     const footerIcon = screen.getByRole('img', {
-      name: 'AI finds growth opportunities. Agents put them into action.',
+      name: `AI finds growth opportunities. Agents put them into action. ${versionLine}`,
     });
     act(() => footerIcon.focus());
     expect(
       await screen.findByText('Agents put them into action.', {
+        selector: '[data-slot="tooltip-content"] span',
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(versionLine, {
         selector: '[data-slot="tooltip-content"] span',
       }),
     ).toBeVisible();
@@ -340,6 +363,9 @@ function renderApplication(
   const app = {
     config: createAppClientConfig({
       rawConfig: { app: { displayName: 'Studio host', version: '9.9.9' } },
+      rawPublicConfig: {
+        app: { displayName: 'Studio host', version: '9.9.9' },
+      },
     }),
     runtime: { routes: clientRoutes },
     services: {

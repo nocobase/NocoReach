@@ -17,6 +17,7 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {Button} from '#components/ui/button';
 import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {Tag,stateToneOf} from '#components/reach/tag';
+import {Skeleton} from '#components/ui/skeleton';
 import {SourceLogo} from '#components/reach/source-logo';
 import {GoogleConnection} from './google-connection';
 import {KeywordConnection} from './keyword-connection';
@@ -50,7 +51,7 @@ import './source-connections.css';
 type Item={type:string;title:string;url:string;text:string};
 type Source={id:string;kind:string;url:string;title:string;capturedAt:string;items:Item[];warnings:string[];status:string;error?:string;previewId?:string};
 const collectorActions = ['nrCollectors.status','nrCollectors.save'] as const;
-export default function SourceConnections(){const api=useApiClient();const {project,error:projectError}=useProject(),navigate=useNavigate();const [snapshot,setSnapshot]=useState<{projectId:number;status:StatusInput&{publicSources:Source[]}}|null>(null),[error,setError]=useMessageState(''),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
+export default function SourceConnections(){const api=useApiClient();const {project,error:projectError}=useProject(),navigate=useNavigate();const [snapshot,setSnapshot]=useState<{projectId:number;status:StatusInput&{publicSources:Source[]}}|null>(null),[error,setError]=useMessageState(''),[loadFailed,setLoadFailed]=useState(false),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
  const projectId=project?.id;
  const status:StatusInput=snapshot&&snapshot.projectId===projectId?snapshot.status:{};
  const sources=status.publicSources as Source[]|undefined??[];
@@ -101,7 +102,7 @@ export default function SourceConnections(){const api=useApiClient();const {proj
  const refresh=useCallback(()=>{cache.invalidate(key=>key===`connection-status:${projectId}`);return load();},[cache,projectId,load]);
  // Saved collector reports are reused for the day; a change made here makes the data pages read them again.
  const collectorChanged=(resource:'nrXiaohongshu'|'nrBilibili'|'nrYouTube',id:number)=>{cache.invalidate(key=>key.startsWith(collectorReportKey(resource,id)));void refresh();};
- useEffect(()=>{void Promise.resolve().then(load).catch(()=>setError(() => ($t('sourceConnections.notLoadDataSourceStatus'))));},[load,setError]);
+ useEffect(()=>{void Promise.resolve().then(load).catch(()=>{setLoadFailed(true);setError(() => ($t('sourceConnections.notLoadDataSourceStatus')));});},[load,setError]);
  function run(fn:()=>Promise<void>){setError('');void fn().catch(e=>setError(() => (e instanceof Error?e.message:$t('common.operationFailedRetry'))));}
  function closePanel() {
    const source = open?.id;
@@ -131,6 +132,9 @@ export default function SourceConnections(){const api=useApiClient();const {proj
  usePageTab(tab==='health'?$t('dataHealth.dataHealth'):$t('sourceConnections.sourcesTab'));
  function setTab(next:string){const p=new URLSearchParams(params);if(next==='health')p.set('tab','health');else p.delete('tab');setParams(p,{replace:true});}
  const attention=health.filter(needsAttention);
+ // A failed first check shows the cards as before, with the error and Retry; opening a drawer clears the error, so the
+ // failure is kept apart from it.
+ const checking=!loaded&&!loadFailed&&!projectError;
  // Website source can be several repositories (2026-10-29): the card names them.
  const repoCount=status.repos?.length||0;
  // Change on a Data health row opens that source's drawer, or the page that holds the setting.
@@ -145,13 +149,14 @@ export default function SourceConnections(){const api=useApiClient();const {proj
  {tab==='health'?project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void refresh().catch(()=>undefined)} settingsOf={settingsOf}/>:<>
  {attention.length?<div role='status' className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'><TriangleAlertIcon className='size-4 shrink-0' aria-hidden='true'/><span className='min-w-0 flex-1'>{$tj('dataHealth.attentionNotice',{0:attention.length,1:sourceList(attention.map(i=>healthText(i.name,i.nameText)))})}</span><button type='button' className='underline-offset-4 hover:underline' onClick={()=>setTab('health')}>{$t('common.view')}</button></div>:null}
  {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void refresh().catch(()=>undefined)}/>}
- {!loaded&&!error&&<p role='status'>{$t('sourceConnections.checkingDataSources')}</p>}
  {/* Groups use the shared section heading: a plain h2 here took the page-wide `.nr-page h2:not([class])` style, which
-     left it grey and touching its cards. Groups sit further apart than a heading from its own cards. */}
- <div className='mt-8 flex flex-col gap-8'>{categories.map(cat=><section key={cat.id} className='nr-source-group flex flex-col gap-3' aria-labelledby={`source-group-${cat.id}`}><SectionHeading id={`source-group-${cat.id}`} title={$t(cat.label)} className='[&_h2]:text-base [&_h2]:font-medium'/><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=attentionOf(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={shown}>
-  <div className='nr-catalog-top'><div className='flex min-w-0 items-center gap-2.5'><SourceLogo source={s.id}/><h3>{s.name}</h3></div><Tag tone={stateToneOf(shown)} dot>{repoCount>1&&s.id==='repo'&&shown==='connected'?$t('repos.connectedCount',{0:repoCount}):getStateLabels()[shown]}</Tag></div>
+     left it grey and touching its cards. Groups sit further apart than a heading from its own cards. Until the first
+     check is back, each card keeps its name and description and shows skeletons for its state and action, so no card
+     says Connect before its real state is known. */}
+ <div className='mt-8 flex flex-col gap-8' {...(checking?{role:'status','aria-label':$t('sourceConnections.checkingDataSources'),'aria-busy':true}:{})}>{categories.map(cat=><section key={cat.id} className='nr-source-group flex flex-col gap-3' aria-labelledby={`source-group-${cat.id}`}><SectionHeading id={`source-group-${cat.id}`} title={$t(cat.label)} className='[&_h2]:text-base [&_h2]:font-medium'/><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=attentionOf(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available',unknown=checking&&(actionable||s.id==='bilibili');return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={unknown?'checking':shown}>
+  <div className='nr-catalog-top'><div className='flex min-w-0 items-center gap-2.5'><SourceLogo source={s.id}/><h3>{s.name}</h3></div>{unknown?<Skeleton className='h-4.5 w-13 shrink-0 rounded-full' data-state-skeleton=''/>:<Tag tone={stateToneOf(shown)} dot>{repoCount>1&&s.id==='repo'&&shown==='connected'?$t('repos.connectedCount',{0:repoCount}):getStateLabels()[shown]}</Tag>}</div>
   <p>{s.detects}</p>{s.prerequisite&&<div className='nr-footnote' data-prerequisite=''>{s.prerequisite}</div>}{s.id==='repo'&&repoCount>0&&<p className='break-all !text-foreground' data-repo-names=''>{status.repos!.map(r=>r.repo).join(' · ')}</p>}{problem&&<HealthLine item={problem}/>}
-  <div className='nr-catalog-bottom'>{actionable?<SourceAction source={s} projectId={projectId} canOpenNetwork={canOpenNetwork&&Boolean(sourceConnection[s.id])&&!isCollectorPlatform(s.id)} outlined={st==='connected'||st==='done'} connected={st==='connected'||st==='partial'} onOpen={()=>show(s)}/>:<span className='nr-footnote'>{s.availability==='soon'?$t('sourceConnections.development'):s.priority}</span>}</div>
+  <div className='nr-catalog-bottom'>{unknown&&actionable?<Skeleton className='h-7 w-13' data-action-skeleton=''/>:actionable?<SourceAction source={s} projectId={projectId} canOpenNetwork={canOpenNetwork&&Boolean(sourceConnection[s.id])&&!isCollectorPlatform(s.id)} outlined={st==='connected'||st==='done'} connected={st==='connected'||st==='partial'} onOpen={()=>show(s)}/>:<span className='nr-footnote'>{s.availability==='soon'?$t('sourceConnections.development'):s.priority}</span>}</div>
  </article>;})}</div></section>)}</div>
  </>}
  <Sheet open={Boolean(open)} onOpenChange={(o,details)=>{if(!o&&savingOwnersRef.current.size){details.cancel();return;}if(!o)closePanel();}}><SheetContent side='right' className='nr-guide-sheet' showCloseButton={!connectionSaving}>{open&&<><SheetHeader><SheetTitle className='flex items-center gap-2.5'><SourceLogo source={open.id}/>{$tj('common.connectValue',{0:open.name})}</SheetTitle></SheetHeader><div className='nr-guide-body'>

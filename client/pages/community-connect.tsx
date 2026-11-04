@@ -1,6 +1,7 @@
 import { formatDateTime, joinEntries, joinList } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
+import {ListSkeleton} from '#components/reach/states';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -21,7 +22,7 @@ export function CommunityConnect({projectId,suggestedUrl,onChange}:{projectId:nu
  // The first sync runs in the background; poll until it has finished.
  useEffect(()=>{if(!status?.syncing&&!(status?.connected&&!status.lastSync))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.syncing,status?.lastSync,status?.connected]);
  async function run(fn:()=>Promise<CommunityStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<ListSkeleton rows={2}/>;
  if(status.connected)return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3><a className="nr-link" href={status.origin} target="_blank" rel="noreferrer">{status.title||status.origin}</a></h3>
   {!status.lastSync?<p role="status">{$t('community.syncingPublicPostsLast90')}</p>:<><p>{$tj('community.last90DaysTopicsUnanswered',{0:status.total,1:status.unanswered,2:status.solved})}</p>
   {!!status.categories?.length&&<p className="nr-footnote">{$tj('community.mainCategories',{0:joinList(status.categories.map(c=>`${c.name} ${c.count}`))})}</p>}
