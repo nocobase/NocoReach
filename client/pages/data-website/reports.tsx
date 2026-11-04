@@ -375,6 +375,7 @@ export function ReportCard({
             tables: rest.tables,
             window: rest.window ?? report.window,
             cutoff: rest.cutoff ?? report.cutoff,
+            settledThrough: rest.settledThrough ?? report.settledThrough,
             queriesWindow: rest.queriesWindow ?? report.queriesWindow,
             totals: sameDays ? report.totals : undefined,
           }

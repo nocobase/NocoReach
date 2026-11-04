@@ -1284,3 +1284,51 @@ it('reads the rest of Traffic’s tables beside the summary when the table asked
     (await ask({ source: 'traffic', table: 'landing_changes' })).rows,
   ).toHaveLength(1);
 });
+
+it('names a report of Traffic’s first part GA4 left out, and reads no second part for changes over the whole period', async () => {
+  const { sources, calls } = fixture();
+  const views = sources.dataViews as Record<
+    string,
+    (...args: unknown[]) => Promise<Row>
+  >;
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: {
+        ...views,
+        // GA4 left out Devices and the Channel report, which also holds the channels behind a change.
+        website: async (id: unknown, v: Row) => {
+          const out = await views.website(id, v);
+          return {
+            ...out,
+            tables: {},
+            missing: ['channel', 'device'],
+            ...(v.range === 'all'
+              ? { window: { ...(out.window as Row), all: true } }
+              : {}),
+          };
+        },
+      },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+  });
+  const ask = (args: Row) =>
+    tool.execute(args, new AbortController().signal) as Promise<Answer>;
+  const rest = () => calls.filter(([name]) => name === 'websiteTables');
+  for (const table of ['device', 'channel', 'channel_changes'])
+    expect(await ask({ source: 'traffic', table })).toEqual({
+      source: 'traffic',
+      error: 'notReturned',
+    });
+  // A first-part table GA4 did not leave out still answers its rows, none here.
+  expect((await ask({ source: 'traffic', table: 'event' })).rows).toEqual([]);
+  expect(rest()).toHaveLength(0);
+  expect(
+    (await ask({ source: 'traffic', table: 'page_changes', range: 'all' }))
+      .rows,
+  ).toEqual([]);
+  expect(rest()).toHaveLength(0);
+});

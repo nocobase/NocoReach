@@ -459,11 +459,12 @@ const SOURCES: Record<string, Source> = {
             await call(s, 'dataViews', 'websiteTables', q.id, rangeOf(q)),
           );
         })());
-      const asked = q.table ?? TRAFFIC_TABLES[0];
+      const asked = q.table ?? TRAFFIC_TABLES[0],
+        // The whole period has no period before it, so no changes to read the second part for.
+        whole = !q.from && q.range === 'all';
       if (
         (TRAFFIC_TABLES.includes(asked) && !FIRST_TABLES.includes(asked)) ||
-        asked === 'page_changes' ||
-        asked === 'landing_changes'
+        (!whole && (asked === 'page_changes' || asked === 'landing_changes'))
       )
         void more().catch(() => {});
       const v = obj(await call(s, 'dataViews', 'website', q.id, rangeOf(q)));
@@ -484,19 +485,33 @@ const SOURCES: Record<string, Source> = {
           )
             throw new QueryError('notReturned');
           return list(held[name]);
-        };
+        },
+        // The first part's own refusals say so too. Channel's table and the channels behind a change are one report
+        // (website-report.ts, `readPeriod`), so `missing` naming Channel covers both.
+        leftOut = (name: string) =>
+          Array.isArray(v.missing) && v.missing.includes(name),
+        notReturned = (): Promise<Obj[]> =>
+          Promise.reject(new QueryError('notReturned'));
       for (const name of TRAFFIC_TABLES)
         tables[name] =
-          FIRST_TABLES.includes(name) || name in reports
+          name in reports
             ? list(reports[name]).map(flatten)
-            : async () => (await later('tables', name)).map(flatten);
+            : !FIRST_TABLES.includes(name)
+              ? async () => (await later('tables', name)).map(flatten)
+              : leftOut(name)
+                ? notReturned
+                : [];
       tables.daily = list(v.daily);
       // The whole period has no period before it, so no changes.
       for (const name of ['page', 'landing', 'channel'])
         tables[`${name}_changes`] =
-          name === 'channel' || name in changes || obj(v.window).all === true
+          name in changes || obj(v.window).all === true
             ? list(changes[name]).map(changeRow)
-            : async () => (await later('changes', name)).map(changeRow);
+            : name !== 'channel'
+              ? async () => (await later('changes', name)).map(changeRow)
+              : leftOut(name)
+                ? notReturned
+                : [];
       const settled = text(v.settledThrough),
         through = text(obj(v.window).end),
         searched = obj(v.queriesWindow),
