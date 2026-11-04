@@ -7,7 +7,10 @@ import {
   authorizationToken,
   type AuthorizationEnv,
 } from '@nocobase/app-plugin-authorization/server';
-import { scopedApiKeysToken } from '@nocobase/app-plugin-api-keys/server';
+import {
+  scopedApiKeysToken,
+  isApiKeySession,
+} from '@nocobase/app-plugin-api-keys/server';
 import {
   ApiError,
   apiErrorResponses,
@@ -90,6 +93,15 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
   const auth = app.container.resolve(authenticationToken);
   const keys = app.container.resolve(scopedApiKeysToken);
   const runtime = () => app.container.resolve(nocoReachToken);
+  const roots = new WeakMap<Request, Promise<boolean>>();
+  const rootOf = (c: Context<Env>) => {
+    let root = roots.get(c.req.raw);
+    if (!root) {
+      root = runtime().users.isRoot(String(c.get('auth')!.user.id));
+      roots.set(c.req.raw, root);
+    }
+    return root;
+  };
   // The source's panel, as an address the person can open: the deployment's public origin, else the one asked.
   const page = (c: Context<Env>, source: string) =>
     `${(runtime().plugin as { publicOrigin?: string }).publicOrigin || new URL(c.req.url).origin}${app.publicBasePath}/connections?source=${encodeURIComponent(source)}`;
@@ -98,14 +110,29 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
 
   routes.use(
     '/nocoreachConnect/*',
-    auth.required(),
+    auth.required({ scopedKeys: true }),
     app.container.resolve(authorizationToken).middleware(),
     async (c, next) => {
       const host = runtime();
       await host.ready;
       const user = c.get('auth')!.user;
+      if (c.req.header('x-api-key')) {
+        const session = c.get('auth')!;
+        const scope = await keys.resolve(session, c.req.raw);
+        if (
+          !isApiKeySession(session, c.req.raw.headers) ||
+          !scope ||
+          scope.permissions === null
+        )
+          throw new ApiError({
+            status: 'UNAUTHENTICATED',
+            reason: 'SCOPED_NOCOREACH_KEY_REQUIRED',
+            domain: 'nocoreach',
+            message: 'A valid scoped NocoReach API key is required.',
+          });
+      }
       if (
-        !(await host.users.isRoot(String(user.id))) &&
+        !(await rootOf(c)) &&
         !(await roleOf(host.legacy.db, String(user.id)))
       )
         throw new ApiError({
@@ -124,6 +151,7 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
     resource: string,
     action: string,
     values: Record<string, unknown>,
+    cached = false,
   ): Promise<T> {
     const host = runtime();
     const fn = host.legacy.resources.action(resource, action);
@@ -131,45 +159,77 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
     const session = c.get('auth')!;
     const user = session.user;
     const locale = getRequestLocale(c);
-    const ctx = legacyContext({
-      resource,
-      action,
-      method: 'POST',
-      query: {},
-      body: values,
-      header: () => undefined,
-      cookie: () => undefined,
-      user: {
-        id: String(user.id),
-        name: user.name,
-        email: user.email,
-        kind: isServiceAccount(user) ? 'service' : 'person',
-      },
-      roles: (await host.users.isRoot(String(user.id))) ? ['root'] : [],
-      app: host.legacy,
-      cache: host.cache,
-      logger: host.logger,
-      locale,
-    });
+    const root = await rootOf(c);
+    const makeContext = () =>
+      legacyContext({
+        resource,
+        action,
+        method: 'POST',
+        query: {},
+        body: values,
+        header: () => undefined,
+        cookie: () => undefined,
+        user: {
+          id: String(user.id),
+          name: user.name,
+          email: user.email,
+          kind: isServiceAccount(user) ? 'service' : 'person',
+        },
+        roles: root ? ['root'] : [],
+        app: host.legacy,
+        cache: host.cache,
+        logger: host.logger,
+        locale,
+      });
+    const ctx = makeContext();
     const project = String(values.projectId);
     const keyScope = await keys.resolve(session, c.req.raw);
+    const scope = {
+      userId: String(user.id),
+      http: c.req.raw,
+      context: c.get('authz'),
+      ...(keyScope ? { keyScope } : {}),
+    };
     try {
-      await host.legacy.db.access!.run(
-        {
-          userId: String(user.id),
-          http: c.req.raw,
-          context: c.get('authz'),
-          ...(keyScope ? { keyScope } : {}),
-        },
-        async () => {
-          await host.legacy.db.access!.require(resource, action, project);
-          await requireAccess(ctx);
-          const invoke = () => fn(ctx, async () => {});
-          if (host.plugin.mock?.enabled)
-            await host.plugin.network.runProject(project, invoke);
-          else await host.plugin.network.run(project, invoke);
-        },
-      );
+      await host.legacy.db.access!.run(scope, async () => {
+        await host.legacy.db.access!.require(resource, action, project);
+        await requireAccess(ctx);
+        // Background reads own an access lifetime and body independent of the response request.
+        const invoke = () =>
+          host.legacy.db.access!.run(scope, async () => {
+            const readContext = makeContext();
+            await requireAccess(readContext);
+            if (host.plugin.mock?.enabled)
+              await host.plugin.network.runProject(project, () =>
+                fn(readContext, async () => {}),
+              );
+            else
+              await host.plugin.network.run(project, () =>
+                fn(readContext, async () => {}),
+              );
+            return readContext.body as T;
+          });
+        // Authorize each item even on a hit. Key sessions use the key id, never its token.
+        if (cached) {
+          const identity = JSON.stringify([
+            project,
+            user.id,
+            session.session.id,
+            Boolean(keyScope),
+            locale,
+            resource,
+            action,
+          ]);
+          ctx.body = await host.connectionStatus.read(
+            project,
+            identity,
+            invoke,
+          );
+        } else {
+          ctx.body = await invoke();
+          host.connectionStatus.changed(resource, action, project);
+        }
+      });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       const status = (error as { status?: number }).status;
@@ -194,7 +254,9 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
     projectId: string,
   ): Promise<StatusInput> {
     const read = <T>(resource: string, action: string, extra = {}) =>
-      run<T>(c, resource, action, { projectId, ...extra }).catch(() => null);
+      run<T>(c, resource, action, { projectId, ...extra }, true).catch(
+        () => null,
+      );
     const [
       list,
       google,
@@ -319,6 +381,23 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
       { command: 'connect guide', identities: ['person'] },
     ),
     (c) => c.json({ data: { guide: GUIDE } }),
+  );
+
+  routes.get(
+    '/nocoreachConnect/status',
+    describeRoute({
+      tags: ['NocoReach Connect'],
+      operationId: 'readConnectStatus',
+      summary: 'Read all connection states for a project',
+      description:
+        'Authorizes every source for the current identity. Successful reads are cached for ten minutes; expired results are returned while one background refresh runs.',
+      responses: { 200: dataResponse(z.unknown()), ...apiErrorResponses },
+    }),
+    apiValidator('query', ProjectQuery),
+    async (c) => {
+      c.header('Cache-Control', 'private, no-store');
+      return c.json({ data: await status(c, c.req.valid('query').projectId) });
+    },
   );
 
   routes.get(

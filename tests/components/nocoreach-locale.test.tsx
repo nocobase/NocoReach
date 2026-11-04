@@ -36,9 +36,23 @@ const { viewer, collector } = vi.hoisted(() => ({
     onSavingChange: undefined as ((saving: boolean) => void) | undefined,
   },
 }));
+const connectionApi = vi.hoisted(() => ({
+  request: vi.fn(async (): Promise<{ data: Record<string, unknown> }> => ({
+    data: { publicSources: [] },
+  })),
+}));
+vi.mock('@nocobase/app-client', async (original) => ({
+  ...(await original<object>()),
+  useApiClient: () => connectionApi,
+}));
+const workspaceCache = {
+  invalidate: vi.fn(),
+  revision: () => 0,
+  load: async (_key: string, fetcher: () => Promise<unknown>) => fetcher(),
+};
 vi.mock('../../client/pages/workspace-cache', async (actual) => ({
   ...(await actual<object>()),
-  useWorkspaceCache: () => ({ invalidate: vi.fn() }),
+  useWorkspaceCache: () => workspaceCache,
 }));
 vi.mock('../../client/hooks/use-business-access', () => ({
   useBusinessAccess: (action: string | readonly string[]) => ({
@@ -120,6 +134,8 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
 let disconnect: (() => void) | undefined;
 afterEach(() => {
   cleanup();
+  connectionApi.request.mockReset();
+  connectionApi.request.mockResolvedValue({ data: { publicSources: [] } });
   viewer.can = true;
   viewer.networkOnly = false;
   collector.onSavingChange = undefined;
@@ -176,6 +192,29 @@ describe('NocoReach language integration', () => {
       expect(document.body).toHaveTextContent($t('dataSources.available'));
     },
   );
+
+  it('reads the catalog through one aggregate request per visit or close', async () => {
+    const i18n = await runtime('en-US');
+    const user = userEvent.setup();
+    render(
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter>
+          <Page />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(connectionApi.request).toHaveBeenCalledTimes(1));
+    expect(connectionApi.request).toHaveBeenLastCalledWith({
+      path: 'nocoreachConnect/status?projectId=1',
+      method: 'GET',
+    });
+    await user.click(document.querySelector('[data-source-id="site"] button')!);
+    await screen.findByRole('dialog');
+    expect(connectionApi.request).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(connectionApi.request).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 
   it('switches an already-open source drawer twice without losing its form or source identity', async () => {
     const i18n = await runtime('zh-CN');
@@ -307,9 +346,19 @@ describe('NocoReach language integration', () => {
       const action = vi.mocked(nocobaseClient.action);
       const original = action.getMockImplementation()!;
       const before = action.mock.calls.length;
+      connectionApi.request.mockResolvedValue({
+        data: {
+          publicSources: [],
+          xiaohongshu: {
+            configured: true,
+            connected: false,
+            verifiedAt: null,
+            lastRun: null,
+            collectors: [{ id: 'team', name: 'Team browser' }],
+          },
+        },
+      });
       action.mockImplementation(async (resource: string, name?: string) => {
-        // The status load needs an article list to finish.
-        if (resource === 'nrArticles') return { targets: [] };
         if (resource !== 'nrXiaohongshu') return original(resource);
         if (name === 'test') {
           if (answers === true) return {};

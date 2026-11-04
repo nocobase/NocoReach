@@ -117,9 +117,9 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         // Public OAuth callbacks resolve their target only after validating the stored state/nonce.
         if (runtime.plugin.mock?.enabled && runtime.legacy.resources.level(params.resource, params.action) !== 'public' && !(params.resource === 'nrMembers' && params.action === 'me')) {
           await requireAccess(ctx);
-          await runtime.plugin.network.runProject(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+          await runtime.plugin.network.runProject(projectSelector((ctx.action.params.values as Record<string, unknown>)?.projectId) || '', () => fn(ctx, async () => {}));
         } else {
-          await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+          await runtime.plugin.network.run(projectSelector((ctx.action.params.values as Record<string, unknown>)?.projectId) || '', () => fn(ctx, async () => {}));
         }
         };
         if (session && !(params.resource === 'nrMembers' && params.action === 'me') && runtime.legacy.resources.level(params.resource, params.action) !== 'public') {
@@ -140,6 +140,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         });
         throw failure(500, 'proxyProfiles.requestNotCompletedTryAgain', undefined, getRequestLocale(context));
       }
+      runtime.connectionStatus.changed(params.resource, params.action, projectSelector(body?.projectId || query.projectId));
       for (const [name, value] of Object.entries(ctx.headers)) context.header(name, value);
       for (const cookie of ctx.cookiesOut) {
         const o = cookie.options as { httpOnly?: boolean; sameSite?: string; secure?: boolean; maxAge?: number; path?: string };
