@@ -52,6 +52,14 @@ const getZh = (): Record<string, string> => ({
   "errors-in-console": $t('lighthouseCard.errorsBrowserConsole'), "image-aspect-ratio": $t('lighthouseCard.imagesShowWrongAspectRatio'), "image-size-responsive": $t('lighthouseCard.imagesLowResolution'), "valid-source-maps": $t('lighthouseCard.missingSourceMaps'), deprecations: $t('lighthouseCard.usesDeprecatedApis'), "inspector-issues": $t('lighthouseCard.browserReportedIssues'),
 });
 const zh = (i: Issue) => getZh()[i.key] || i.title;
+// Metric names by Lighthouse key, in the reader's language. A run also stores a label, but in the language the server
+// used when it was checked (the server response's was always zh-CN), so it is read only for a key not listed here. The
+// abbreviations are the same in every language.
+const getMetricNames = (): Record<string, string> => ({ "largest-contentful-paint": "LCP", "cumulative-layout-shift": "CLS", "total-blocking-time": "TBT", "first-contentful-paint": "FCP", "speed-index": "Speed Index", interactive: "TTI", "server-response-time": $t('lighthouse.serverResponse') });
+const metricName = (m: Metric) => getMetricNames()[m.key] || $legacyText(m.label);
+// Lighthouse words the server response as an English sentence ("Root document took 490 ms"); only its time is shown,
+// as the other metrics show only theirs.
+const metricValue = (m: Metric) => (m.key === "server-response-time" && String(m.value).match(/\d[\d.,]*\s*ms\b/)?.[0]) || m.value;
 const pathOf = (u: string) => { try { const x = new URL(u); return x.pathname === "/" ? x.host : x.pathname; } catch { return u; } };
 function draft(r: Result): TaskDraft {
   const device = r.strategy === "mobile" ? $t('lighthouseCard.mobile') : $t('lighthouseCard.computer');
@@ -59,7 +67,7 @@ function draft(r: Result): TaskDraft {
     pages: distinctPages([r.finalUrl]),
     title: $t('lighthouseCard.improvePagePerformance',{0:pathOf(r.finalUrl),1:device}).slice(0, 200),
     objective: $t('lighthouseCard.getLighthousePerformanceScore90',{0:r.finalUrl}).slice(0, 1000),
-    brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`).join("，")}), $t('lighthouseCard.metrics',{0:r.metrics.map((m) => `${m.label} ${m.value}`).join("，")}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${zh(i)}${getZh()[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
+    brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`).join("，")}), $t('lighthouseCard.metrics',{0:r.metrics.map((m) => `${metricName(m)} ${metricValue(m)}`).join("，")}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${zh(i)}${getZh()[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
   };
 }
 
@@ -211,7 +219,7 @@ function RunDrawer({ id, records, projectId, getRun, onOpen, onClose }: { id: st
         <div className="flex flex-col gap-4" data-lighthouse-result="">
           {safeLink(r.finalUrl) ? <a className="nr-link block break-all text-sm" href={safeLink(r.finalUrl)!} target="_blank" rel="noreferrer">{r.finalUrl}</a> : null}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(r.scores).map(([k, v]) => <div key={k} className="rounded-lg border p-3" data-score={k}><p className="text-xs text-muted-foreground"><WithInfo help={help(getCategory()[k])}>{getCategory()[k]}</WithInfo></p><p className={`font-heading text-2xl font-semibold tabular-nums ${ink(v)}`}>{v ?? "—"}</p></div>)}</div>
-          {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground"><WithInfo help={help(m.label)}>{m.label}</WithInfo></span> <span className={ink(m.score)}>{m.value}</span></span>)}</div> : null}
+          {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground"><WithInfo help={help(metricName(m))}>{metricName(m)}</WithInfo></span> <span className={ink(m.score)}>{metricValue(m)}</span></span>)}</div> : null}
           <section>
             <h3 className="mb-1 text-sm font-semibold">{$t('auditPerformance.failedChecksCount', { 0: r.issues.length })}</h3>
             {r.issues.length ? (
