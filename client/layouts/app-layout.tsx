@@ -88,7 +88,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                 </AppSidebar>
                 <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
                   <LayoutHeader className='sticky top-0 z-40 gap-1 px-2 sm:gap-2 sm:px-3 md:px-4'>
-                    <div className='flex min-w-0 flex-1 items-center gap-1 sm:flex-initial sm:shrink-0 sm:gap-3'>
+                    <div className='flex min-w-0 flex-1 items-center gap-1 sm:flex-initial sm:shrink-0 sm:gap-3 md:shrink'>
                       <AppSidebarToggle />
                       {/* NocoReach: below md the header has no room for the trail, so a page below another one puts its
                     way back where the compact brand would be; its page has no BackButton of its own (L6). */}
