@@ -220,10 +220,8 @@ export const connectRoutes = defineApiRoutes<Application>((app) => {
             resource,
             action,
           ]);
-          ctx.body = await host.connectionStatus.read(
-            project,
-            identity,
-            invoke,
+          ctx.body = await host.connectionStatus.read(project, identity, () =>
+            host.legacy.importHold.track(invoke()),
           );
         } else {
           ctx.body = await invoke();
