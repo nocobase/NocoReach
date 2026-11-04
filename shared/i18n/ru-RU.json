@@ -5304,6 +5304,7 @@
   "taskPages.searchFailed": "Не удалось найти страницы. Повторите попытку позже.",
   "taskPages.sitePage": "Страница сайта",
   "taskPages.blogArticle": "Статья блога",
+  "taskPages.useLink": "Использовать эту ссылку",
   "taskPages.notOnePage": "Не про одну страницу? {0}",
   "articleTask.changeDeliveryTitle": "Выбрать, где вносить изменения",
   "taskPages.restArticlesNotHere": "Другие статьи блога ({0}) не входят в эту задачу",

@@ -5277,6 +5277,7 @@
   "taskPages.searchFailed": "Die Seiten konnten nicht durchsucht werden. Versuchen Sie es später erneut.",
   "taskPages.sitePage": "Seite der Website",
   "taskPages.blogArticle": "Blogbeitrag",
+  "taskPages.useLink": "Diesen Link verwenden",
   "taskPages.notOnePage": "Betrifft es keine einzelne Seite? {0}",
   "articleTask.changeDeliveryTitle": "Festlegen, wo geändert wird",
   "taskPages.restArticlesNotHere": "Weitere Blogbeiträge ({0}) sind nicht Teil dieser Aufgabe",

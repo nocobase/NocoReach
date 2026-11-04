@@ -5359,6 +5359,7 @@
   "taskPages.searchFailed": "Halaman tidak dapat dicari. Coba lagi nanti.",
   "taskPages.sitePage": "Halaman situs",
   "taskPages.blogArticle": "Artikel blog",
+  "taskPages.useLink": "Gunakan tautan ini",
   "taskPages.notOnePage": "Bukan tentang satu halaman? {0}",
   "articleTask.changeDeliveryTitle": "Pilih tempat perubahan dibuat",
   "taskPages.restArticlesNotHere": "Artikel blog lainnya ({0}) tidak termasuk dalam tugas ini",

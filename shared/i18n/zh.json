@@ -5305,6 +5305,7 @@
   "taskPages.searchFailed": "暂时无法搜索页面，请稍后再试。",
   "taskPages.sitePage": "网站页面",
   "taskPages.blogArticle": "博客文章",
+  "taskPages.useLink": "使用这个链接",
   "taskPages.notOnePage": "不是改某个页面？{0}",
   "articleTask.changeDeliveryTitle": "更改改动方式",
   "taskPages.restArticlesNotHere": "另外 {0} 篇博客文章不在这个任务里",

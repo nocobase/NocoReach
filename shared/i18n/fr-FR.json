@@ -5277,6 +5277,7 @@
   "taskPages.searchFailed": "Impossible de rechercher les pages. Réessayez plus tard.",
   "taskPages.sitePage": "Page du site",
   "taskPages.blogArticle": "Article de blog",
+  "taskPages.useLink": "Utiliser ce lien",
   "taskPages.notOnePage": "Ce n’est pas une page en particulier ? {0}",
   "articleTask.changeDeliveryTitle": "Choisir où effectuer la modification",
   "taskPages.restArticlesNotHere": "Les autres articles de blog ({0}) ne font pas partie de cette tâche",

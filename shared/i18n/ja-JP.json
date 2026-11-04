@@ -5277,6 +5277,7 @@
   "taskPages.searchFailed": "ページを検索できませんでした。しばらくしてからもう一度お試しください。",
   "taskPages.sitePage": "サイトのページ",
   "taskPages.blogArticle": "ブログ記事",
+  "taskPages.useLink": "このリンクを使う",
   "taskPages.notOnePage": "特定のページの変更ではありませんか？{0}",
   "articleTask.changeDeliveryTitle": "変更する場所を選択",
   "taskPages.restArticlesNotHere": "ほかのブログ記事（{0} 件）はこのタスクに含まれません",

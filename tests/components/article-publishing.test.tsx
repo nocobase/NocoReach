@@ -1686,6 +1686,66 @@ it('asks which page to change when the task names none, searching site pages and
   fetch.mockRestore();
 });
 
+it('offers Use this link for a link on the site no page or post is, and lists the post a link finds instead', async () => {
+  const d = {
+    ...data,
+    task: { id: 5, title: 'T', brief: '', evidence: {} },
+    articleTargets: [
+      { ...target, pages: { en: 'https://www.example.com/blog/{slug}' } },
+    ],
+    work: {},
+  } as unknown as TaskData;
+  const link = 'https://www.example.com/blog/new-post';
+  // nrTaskWork:pages offers the link last, marked, when no page of Website content is it.
+  const fetch = vi
+    .spyOn(nocobaseClient, 'action')
+    .mockResolvedValue([
+      { url: link, title: '', type: '', link: true },
+    ] as never);
+  vi.mocked(searchArticles).mockResolvedValue([]);
+  const onPage = vi.fn();
+  const picker = () =>
+    render(
+      <PagePicker
+        data={d}
+        projectId={1}
+        taskId='5'
+        allowed
+        busy={false}
+        onPage={onPage}
+        onArticle={vi.fn()}
+        onChange={vi.fn()}
+      />,
+    );
+  picker();
+  const user = userEvent.setup();
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Which page to change?' }),
+    { target: { value: `${link}?utm_source=x` } },
+  );
+  const use = await screen.findByRole('button', { name: /Use this link/ });
+  expect(use).toHaveTextContent('www.example.com/blog/new-post');
+  expect(screen.getByText('No matching pages.')).toBeInTheDocument();
+  await user.click(use);
+  expect(onPage).toHaveBeenCalledWith(link);
+  cleanup();
+  // The CMS has the post: it is listed, and the link is not offered.
+  vi.mocked(searchArticles).mockResolvedValue([
+    { id: '9', slug: 'new-post', title: 'New post' },
+  ]);
+  picker();
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Which page to change?' }),
+    { target: { value: link } },
+  );
+  expect(
+    await screen.findByRole('button', { name: /New post/ }),
+  ).toHaveTextContent('Blog post');
+  expect(screen.queryByRole('button', { name: /Use this link/ })).toBeNull();
+  expect(screen.queryByText('No matching pages.')).toBeNull();
+  fetch.mockRestore();
+});
+
 it('names the pages left to other tasks: Create separate tasks for them, then the tasks they are in', async () => {
   const hello = {
     targetId: 'cms',

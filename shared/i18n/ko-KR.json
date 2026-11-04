@@ -5304,6 +5304,7 @@
   "taskPages.searchFailed": "페이지를 검색할 수 없습니다. 잠시 후 다시 시도하세요.",
   "taskPages.sitePage": "사이트 페이지",
   "taskPages.blogArticle": "블로그 글",
+  "taskPages.useLink": "이 링크 사용",
   "taskPages.notOnePage": "특정 페이지의 변경이 아닌가요? {0}",
   "articleTask.changeDeliveryTitle": "변경 방식 선택",
   "taskPages.restArticlesNotHere": "다른 블로그 글({0}개)은 이 작업에 포함되지 않습니다",
