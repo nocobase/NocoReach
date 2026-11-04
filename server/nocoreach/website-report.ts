@@ -85,7 +85,9 @@ const FIRST_TABLES=['channel','newVsReturning','device','event','sourceMedium'];
 const REST_TABLES=Object.keys(TABLES).filter(n=>!FIRST_TABLES.includes(n));
 const REST_CHANGES=Object.keys(CHANGES).filter(n=>n!=='channel');
 // A report over both periods, keeping the current one's rows: Channel's table and the channels behind a change are one read.
-const currentOf=report=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');return i<0?report:{...report,rows:(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current')};};
+// GA4 answers each period for every value seen in either, at zero where it had none, so a channel seen only in the period
+// before is dropped, as a report of the current period alone leaves it out.
+const currentOf=report=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');return i<0?report:{...report,rows:(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current'&&(r.metricValues||[]).some(m=>Number(m?.value)))};};
 // One row per value with its current and previous figures; the largest in either period first. A page is its path:
 // GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
 const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};

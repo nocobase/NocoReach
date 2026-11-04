@@ -16,7 +16,7 @@ test('period: deduplicated totals for both periods, the daily line and the first
  const w=windowFor('2026-10-10','7');
  const answer=(dims,r)=>{const m=r.metrics.map(x=>x.name);
   const by=o=>m.map(k=>o[k]??1);
-  if(dims==='sessionDefaultChannelGroup'&&r.dateRanges.length===2)return report(['sessionDefaultChannelGroup','dateRange'],m,[[['Organic Search','current'],by({screenPageViews:60,sessions:50,keyEvents:3,newUsers:20,activeUsers:40})],[['Organic Search','previous'],by({screenPageViews:90,sessions:70,keyEvents:5,newUsers:30,activeUsers:55})],[['Referral','previous'],by({screenPageViews:10,sessions:8,keyEvents:0,newUsers:2,activeUsers:6})]]);
+  if(dims==='sessionDefaultChannelGroup'&&r.dateRanges.length===2)return report(['sessionDefaultChannelGroup','dateRange'],m,[[['Organic Search','current'],by({screenPageViews:60,sessions:50,keyEvents:3,newUsers:20,activeUsers:40})],[['Organic Search','previous'],by({screenPageViews:90,sessions:70,keyEvents:5,newUsers:30,activeUsers:55})],[['Referral','previous'],by({screenPageViews:10,sessions:8,keyEvents:0,newUsers:2,activeUsers:6})],[['Referral','current'],m.map(()=>0)]]);
   if(dims==='pagePath'&&r.dateRanges.length===2)return report(['pagePath','dateRange'],m,[[['/docs','current'],[300,2]],[['/docs/','current'],[10,0]],[['/docs','previous'],[200,1]]]);
   if(dims==='landingPagePlusQueryString'&&r.dateRanges.length===2)return report(['landingPagePlusQueryString','dateRange'],m,[[['/?utm_source=x','current'],[5,1]],[['/','current'],[20,4]],[['/','previous'],[30,6]]]);
   if(!dims)return report(['dateRange'],m,[[['current'],[100,60,150,90,9000,400,900,12,0.08]],[['previous'],[80,50,120,60,6000,300,700,6,0.05]]]);
@@ -36,8 +36,8 @@ test('period: deduplicated totals for both periods, the daily line and the first
  const changeRequests=c=>c.flatMap(c=>c.body.requests).filter(r=>r.dateRanges.length===2&&r.dimensions.length===1&&r.dimensions[0].name!=='date');
  assert.deepEqual(changeRequests(calls).map(dimsOf),['sessionDefaultChannelGroup'],'channels read once, for both periods, with the figures');
  assert.equal(calls.flatMap(c=>c.body.requests).filter(r=>dimsOf(r)==='sessionDefaultChannelGroup').length,1);
- assert.deepEqual(v.tables.channel.map(r=>[r.key,r.sessions,r.engaged]),[['Organic Search',50,1]],'the table holds the current period only, with every column');
- assert.deepEqual(v.changes.channel,[{key:'Organic Search',current:{users:40,newUsers:20,sessions:50,views:60,keyEvents:3},previous:{users:55,newUsers:30,sessions:70,views:90,keyEvents:5}},{key:'Referral',current:{},previous:{users:6,newUsers:2,sessions:8,views:10,keyEvents:0}}]);
+ assert.deepEqual(v.tables.channel.map(r=>[r.key,r.sessions,r.engaged]),[['Organic Search',50,1]],'the table holds the current period only, with every column, and not a channel seen only before it');
+ assert.deepEqual(v.changes.channel,[{key:'Organic Search',current:{users:40,newUsers:20,sessions:50,views:60,keyEvents:3},previous:{users:55,newUsers:30,sessions:70,views:90,keyEvents:5}},{key:'Referral',current:{users:0,newUsers:0,sessions:0,views:0,keyEvents:0},previous:{users:6,newUsers:2,sessions:8,views:10,keyEvents:0}}]);
  assert.deepEqual(Object.keys(v.tables).sort(),[...FIRST_TABLES].sort());assert.deepEqual(v.missing,[]);assert.equal(v.complete,true);
  assert.deepEqual(v.tables.sourceMedium.map(r=>r.ai||null),[null,'ChatGPT','Perplexity']);assert.equal(v.ai,undefined,'the AI share is GA4\'s own AI Assistant channel');
  const t=await g.periodTables('1','123',w),later=calls.slice(2);

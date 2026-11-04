@@ -472,12 +472,18 @@ const SOURCES: Record<string, Source> = {
       const tables: Record<string, TableSource> = {},
         reports = obj(v.tables),
         changes = obj(v.changes),
-        // A table GA4 left out says so, rather than reading as no traffic.
+        // A table GA4 left out says so, rather than reading as no traffic. `missing` names tables; a change report GA4
+        // refused is only absent from `changes`, whatever became of the table of the same name.
         later = async (part: 'tables' | 'changes', name: string) => {
-          const r = await more();
-          if (Array.isArray(r.missing) && r.missing.includes(name))
+          const r = await more(),
+            held = obj(r[part]);
+          if (
+            part === 'tables'
+              ? Array.isArray(r.missing) && r.missing.includes(name)
+              : r.changes !== undefined && !(name in held)
+          )
             throw new QueryError('notReturned');
-          return list(obj(r[part])[name]);
+          return list(held[name]);
         };
       for (const name of TRAFFIC_TABLES)
         tables[name] =

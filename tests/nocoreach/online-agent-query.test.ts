@@ -1231,7 +1231,7 @@ it('reads the rest of Traffic’s tables only when one of them is asked for, onc
   ).toHaveLength(8);
 });
 
-it('reads the rest of Traffic’s tables beside the summary when the table asked for is one of them, and names one GA4 left out', async () => {
+it('reads the rest of Traffic’s tables beside the summary when the table asked for is one of them, and names a table or change report GA4 left out', async () => {
   const { sources, calls } = fixture();
   const views = sources.dataViews as Record<
     string,
@@ -1248,9 +1248,15 @@ it('reads the rest of Traffic’s tables beside the summary when the table asked
           await held;
           return views.website(...args);
         },
+        // GA4 left out Country's and Landing pages' tables and the pages behind a change; the landing pages behind it came.
         websiteTables: async (...args: unknown[]) => ({
           ...(await views.websiteTables(...args)),
-          missing: ['country'],
+          missing: ['country', 'landing'],
+          changes: {
+            landing: [
+              { key: '/', current: { sessions: 5 }, previous: { sessions: 3 } },
+            ],
+          },
         }),
       },
     } as QuerySources,
@@ -1268,8 +1274,13 @@ it('reads the rest of Traffic’s tables beside the summary when the table asked
   );
   release();
   expect((await pages).rows).toHaveLength(20);
-  expect(await ask({ source: 'traffic', table: 'country' })).toEqual({
-    source: 'traffic',
-    error: 'notReturned',
-  });
+  for (const table of ['country', 'landing', 'page_changes'])
+    expect(await ask({ source: 'traffic', table })).toEqual({
+      source: 'traffic',
+      error: 'notReturned',
+    });
+  // A change report stands apart from the table of the same name.
+  expect(
+    (await ask({ source: 'traffic', table: 'landing_changes' })).rows,
+  ).toHaveLength(1);
 });
