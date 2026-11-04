@@ -1430,3 +1430,148 @@ test('generic invitation metadata cannot replay a bound application offer', asyn
   expect(list.map((row) => row.id)).toContain(legitimate.invitationId);
   expect(list.map((row) => row.id)).not.toContain(forged.invitationId);
 });
+
+test('administrators reset a member password within what they may grant; people change their own', async ({
+  testApp,
+  connection,
+}) => {
+  const f = await fixture(testApp);
+  const session = async (client: { fetch: typeof f.admin.fetch }) =>
+    (await (await client.fetch('/auth/get-session')).json())?.user?.id ?? null;
+  const member = await f.createPerson('forgetful');
+  await f.sets.assign({
+    permissionSet: 'nr.member',
+    subject: { type: 'user', id: member.user.id },
+  });
+  expect(await session(member.client)).toBe(member.user.id);
+
+  const short = await f.request(`/members/${member.user.id}/password`, {
+    password: 'short',
+  });
+  expect(short.status).toBe(400);
+  expect((await short.json()).error.reason).toBe('PASSWORD_TOO_SHORT');
+  const reset = await f.request(`/members/${member.user.id}/password`, {
+    password: 'fresh-password-456',
+  });
+  expect(reset.status).toBe(200);
+  // Every session of the member ends; only the new password signs them in.
+  expect(await session(member.client)).toBeNull();
+  await expect(
+    signIn(testApp, {
+      email: member.user.email,
+      password: 'fictional-password-123',
+    }),
+  ).rejects.toThrow();
+  const again = await signIn(testApp, {
+    email: member.user.email,
+    password: 'fresh-password-456',
+  });
+  expect(await session(again)).toBe(member.user.id);
+  expect(
+    await connection.repository('nrAccessEvents').findMany({
+      filter: { action: 'member.password', targetId: member.user.id },
+    }),
+  ).toHaveLength(1);
+
+  const own = await f.request(`/members/${f.actor}/password`, {
+    password: 'fresh-password-456',
+  });
+  expect(own.status).toBe(403);
+  expect((await own.json()).error.reason).toBe('ownPassword');
+  const outsider = await f.createPerson('outsider');
+  expect(
+    (
+      await f.request(`/members/${outsider.user.id}/password`, {
+        password: 'fresh-password-456',
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await f.request(
+        `/members/${member.user.id}/password`,
+        {
+          password: 'fresh-password-456',
+        },
+        'POST',
+        again,
+      )
+    ).status,
+  ).toBe(403);
+
+  // A manager who may only assign members cannot take over a fuller account or a system administrator.
+  await f.sets.create({
+    key: 'nr.manager',
+    grants: f.runtime.legacy.db.access!.grants(
+      [
+        { resource: 'nrMembers', action: 'setRole' },
+        { resource: 'nrMembers', action: 'list' },
+      ],
+      '$app',
+    ),
+  });
+  const manager = await f.createPerson('limited-manager');
+  const peer = await f.createPerson('peer-manager');
+  for (const id of [manager.user.id, peer.user.id])
+    await f.sets.assign({
+      permissionSet: 'nr.manager',
+      subject: { type: 'user', id },
+    });
+  // Every new account also holds the framework's member set; its default grants do not block a reset.
+  expect(
+    (
+      await f.sets.getEffective({
+        principal: { type: 'user', id: peer.user.id },
+      })
+    ).map((set) => set.key),
+  ).toContain('member');
+  const byManager = (id: string) =>
+    f.request(
+      `/members/${id}/password`,
+      { password: 'fresh-password-789' },
+      'POST',
+      manager.client,
+    );
+  const fuller = await byManager(member.user.id);
+  expect(fuller.status).toBe(403);
+  expect((await fuller.json()).error.reason).toBe('ungrantable');
+  await f.sets.assign({
+    permissionSet: 'nr.member',
+    subject: { type: 'user', id: f.actor },
+  });
+  const system = await byManager(f.actor);
+  expect(system.status).toBe(403);
+  expect((await system.json()).error.reason).toBe('systemAccount');
+  expect((await byManager(peer.user.id)).status).toBe(200);
+  expect(await session(peer.client)).toBeNull();
+
+  // Account menu > Change password: Better Auth checks the current password and ends the other sessions.
+  const first = await signIn(testApp, {
+    email: member.user.email,
+    password: 'fresh-password-456',
+  });
+  const change = (currentPassword: string) =>
+    again.fetch('/auth/change-password', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword: 'chosen-password-000',
+        revokeOtherSessions: true,
+      }),
+    });
+  const wrong = await change('not-the-password');
+  expect(wrong.status).toBe(400);
+  expect((await wrong.json()).code).toBe('INVALID_PASSWORD');
+  const changed = await change('fresh-password-456');
+  expect(changed.status).toBe(200);
+  expect(changed.headers.get('set-cookie')).toBeTruthy();
+  expect(await session(first)).toBeNull();
+  await signIn(testApp, {
+    email: member.user.email,
+    password: 'chosen-password-000',
+  });
+});

@@ -309,7 +309,9 @@ test('account menu offers invitations with their count only while one is pending
   expect(items[0]).toHaveAttribute('href', '/member-invitations');
   expect(items[0]).toHaveTextContent('2');
   expect(items[1]).toHaveTextContent('Use NocoReach in your agent');
-  expect(items[2]).toHaveTextContent('Language');
+  // Change password is NocoReach copy, which this test leaves in the default Chinese.
+  expect(items[2]).toHaveTextContent('修改密码');
+  expect(items[3]).toHaveTextContent('Language');
   fireEvent.click(items[1]);
   expect(await prompt()).toBeVisible();
 });
