@@ -7776,8 +7776,6 @@
   "collectorQueue.help": "約 10 分後に自動で再試行します（最大 3 回）。操作は不要です。",
   "collectorQueue.gaveUp": "コレクターが他の取得で使用中のままだったため、今回は取得できませんでした",
   "taskImages.add": "画像を追加",
-  "taskImages.hint": "貼り付けまたはドラッグで追加 · PNG、JPG、WebP、GIF、1 枚 20 MB まで、最大 {0} 枚",
-  "taskImages.hintEditor": "本文に画像を貼り付けまたはドラッグで追加 · PNG、JPG、WebP、GIF、1 枚 20 MB まで",
   "taskImages.number": "画像 {0}",
   "taskImages.images": "画像",
   "taskImages.uploading": "{0} をアップロード中…",

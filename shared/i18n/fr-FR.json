@@ -7776,8 +7776,6 @@
   "collectorQueue.help": "Nouvel essai automatique dans 10 minutes environ, jusqu’à 3 fois. Aucune action nécessaire.",
   "collectorQueue.gaveUp": "Le collecteur est resté occupé par d’autres lectures : rien n’a été lu cette fois",
   "taskImages.add": "Ajouter une image",
-  "taskImages.hint": "Collez ou déposez des images ici · PNG, JPG, WebP ou GIF, 20 Mo maximum chacune, {0} au plus",
-  "taskImages.hintEditor": "Collez ou déposez des images dans le corps · PNG, JPG, WebP ou GIF, 20 Mo maximum chacune",
   "taskImages.number": "Image {0}",
   "taskImages.images": "Images",
   "taskImages.uploading": "Envoi de {0}…",

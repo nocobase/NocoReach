@@ -7776,8 +7776,6 @@
   "collectorQueue.help": "Akan dicoba lagi otomatis dalam sekitar 10 menit, hingga 3 kali. Tidak perlu melakukan apa pun.",
   "collectorQueue.gaveUp": "Pengumpul terus sibuk dengan pembacaan lain, jadi kali ini tidak ada yang terbaca",
   "taskImages.add": "Tambahkan gambar",
-  "taskImages.hint": "Tempel atau seret gambar ke sini · PNG, JPG, WebP, atau GIF, masing-masing hingga 20 MB, paling banyak {0}",
-  "taskImages.hintEditor": "Tempel atau seret gambar ke isi · PNG, JPG, WebP, atau GIF, masing-masing hingga 20 MB",
   "taskImages.number": "Gambar {0}",
   "taskImages.images": "Gambar",
   "taskImages.uploading": "Mengunggah {0}…",

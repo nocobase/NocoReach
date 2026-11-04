@@ -38,7 +38,7 @@ import type {
 import { useStayWithDrafts, useTaskDraft } from './draft-store.js';
 import { AgentNotes } from './agent-notes.js';
 import { ArticlePreview } from './article-preview.js';
-import { ImageHint, ImageProblem } from './task-images.js';
+import { ImageProblem } from './task-images.js';
 import {
   ArticleImageNotesContext,
   imageNote,
@@ -936,11 +936,6 @@ export function ArticleEditor({
       </fieldset>
       <ImageProblem>{pasted.problem}</ImageProblem>
       <div className='flex flex-wrap items-center justify-end gap-2'>
-        {takesImages && (
-          <span className='mr-auto'>
-            <ImageHint />
-          </span>
-        )}
         <Button
           type='button'
           variant='ghost'

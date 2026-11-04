@@ -7776,8 +7776,6 @@
   "collectorQueue.help": "Sẽ tự động thử lại sau khoảng 10 phút, tối đa 3 lần. Bạn không cần làm gì.",
   "collectorQueue.gaveUp": "Bộ thu thập luôn bận với các lượt đọc khác, nên lần này không đọc được",
   "taskImages.add": "Thêm hình ảnh",
-  "taskImages.hint": "Dán hoặc kéo thả hình ảnh vào đây · PNG, JPG, WebP hoặc GIF, mỗi tệp tối đa 20 MB, tối đa {0} tệp",
-  "taskImages.hintEditor": "Dán hoặc kéo thả hình ảnh vào nội dung · PNG, JPG, WebP hoặc GIF, mỗi tệp tối đa 20 MB",
   "taskImages.number": "Hình {0}",
   "taskImages.images": "Hình ảnh",
   "taskImages.uploading": "Đang tải lên {0}…",

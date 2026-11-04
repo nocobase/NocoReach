@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Plus, X } from 'lucide-react';
+import { PaperclipIcon, X } from 'lucide-react';
 import { $t } from '#i18n';
 import { cn } from '#lib/utils';
 import { Spinner } from '#components/ui/spinner';
@@ -13,7 +13,7 @@ import {
 import { taskImageSrc, type ComposerImage } from './task-images-model.js';
 
 // How a started task's images show (2026-11-03 user request): in Activity's message box while they are added, under a
-// sent message, and the hint and problems beside the box and the editor. What they do is in task-images-model.ts.
+// sent message, and the problems beside the box and the editor. What they do is in task-images-model.ts.
 
 const MIME: Record<string, string> = {
   png: 'image/png',
@@ -111,7 +111,10 @@ export function ComposerImages({
   );
 }
 
-/** Add image: a link that opens the file picker for images. */
+/**
+ * Add image: the chat composer's round paperclip button (2026-11-04 user request), named by its label and title; the
+ * box takes pasted and dropped images without a line saying so, and the limits show only when a file breaks one.
+ */
 export function AddImageButton({
   disabled,
   onFiles,
@@ -136,14 +139,15 @@ export function AddImageButton({
         }}
       />
       <Button
-        variant='link'
-        size='sm'
+        variant='ghost'
+        size='icon-sm'
         disabled={disabled}
-        className='h-auto shrink-0 gap-1 p-0 font-normal'
+        className='shrink-0 rounded-full text-muted-foreground'
+        aria-label={$t('taskImages.add')}
+        title={$t('taskImages.add')}
         onClick={() => pickerRef.current?.click()}
       >
-        <Plus aria-hidden='true' />
-        {$t('taskImages.add')}
+        <PaperclipIcon />
       </Button>
     </>
   );
@@ -189,15 +193,6 @@ export function MessageImages({ images }: { images: MessageImage[] }) {
         files={images.map(previewRecord)}
       />
     </>
-  );
-}
-
-/** The paste-and-drop hint under the message box and the editor. */
-export function ImageHint({ max }: { max?: number }) {
-  return (
-    <span className='min-w-0 text-xs text-muted-foreground'>
-      {max ? $t('taskImages.hint', { 0: max }) : $t('taskImages.hintEditor')}
-    </span>
   );
 }
 

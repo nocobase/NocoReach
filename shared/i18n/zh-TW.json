@@ -7776,8 +7776,6 @@
   "collectorQueue.help": "約 10 分鐘後自動再試，最多再試 3 次。不需要手動操作。",
   "collectorQueue.gaveUp": "擷取器一直在處理其他讀取，這次沒有讀到",
   "taskImages.add": "新增圖片",
-  "taskImages.hint": "可直接貼上或拖入 · PNG、JPG、WebP、GIF，每張 20 MB 以內，最多 {0} 張",
-  "taskImages.hintEditor": "可直接貼上或拖入圖片 · PNG、JPG、WebP、GIF，每張 20 MB 以內",
   "taskImages.number": "圖 {0}",
   "taskImages.images": "圖片",
   "taskImages.uploading": "正在上傳 {0}…",
