@@ -1,0 +1,5 @@
+## Tasks: a published article's record says what changed on the page
+
+- Results › What was done, and the task's publish record, no longer copy the Agent's summary for the reviewer, which could end with "awaiting human review" or, with several languages, describe only the translation step. The Agent now returns a separate `release` sentence for the record; the record keeps the owner's own note when there is one, otherwise the sentence of the approved primary-language version and a line the system writes, in the project language, naming the languages updated in place or translated. The task title remains the last fallback.
+- The release note of a page change follows the same rule: what changed on the page, never review or process status.
+- Article releases recorded before are written again once on startup by the same rule, without a model call: the approved primary version's summary without its sentences about review, and the languages line. Notes the owner wrote are left as they are.

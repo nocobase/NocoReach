@@ -238,9 +238,30 @@ it('asks article runs for a short summary the reviewer reads first, and keeps th
   expect(rules).toContain('最多三行');
   expect(rules).toContain('不要重复改前改后的标题和摘要');
   expect(rules).toContain('content 是完整的修改说明');
-  expect(resultRules('build').join('\n')).toContain(
-    'release 是给负责人看的发布说明，最多三行',
+});
+
+// 2026-11-04 (T-33): the publish record copied an article summary ending "awaiting human review"; the record now has
+// a sentence of its own, and a page change's release note has the same rule.
+it('asks article runs for a release sentence for the record, apart from the summary, without review or process wording', () => {
+  const rules = resultRules('article').join('\n');
+  expect(rules).toContain('verifyText?,summary?,release?}');
+  expect(rules).toContain('release 必填，是发布记录里“做了什么”的一两句话');
+  expect(rules).toContain('用 data.language 写');
+  expect(rules).toContain(
+    '不写审核和流程（如“等待人工审核”“已提交审核”“按你的意见”“审核通过后再同步”）',
   );
+  expect(rules).toContain('不写给审核人的提醒、建议和时间戳');
+  // The translation and update steps leave it to the system.
+  expect(rules).toContain('phase 为 translate 或 update 时不用写 release');
+  // The summary is still the reviewer's.
+  expect(rules).toContain('summary 必填，是审核人最先看到的说明');
+  const build = resultRules('build').join('\n');
+  expect(build).toContain('release 是发布记录里的说明');
+  expect(build).toContain('最多三行');
+  expect(build).toContain(
+    '也不写审核和流程（如“等待人工审核”“已提交审核”“按你的意见”）',
+  );
+  expect(resultRules('plan').join('\n')).not.toContain('release 必填');
 });
 
 // 2026-10-27 (T-47): the article was written in the project's language instead of the target's primary one.

@@ -7146,6 +7146,8 @@
   "articles.draft.format": "글의 {0} 항목이 올바른 형식이 아닙니다. 글에는 slug, status(draft 또는 published), locales(언어 코드별로 title, description, body를 포함하는 항목 하나), verifyText(최대 200자), summary(최대 2000자)만 포함할 수 있습니다.",
   "articles.draft.forTarget": "“{0}”에 게시: {1}",
   "articles.noChanges": "초안은 글을 변경하지 않습니다.",
+  "articles.releaseUpdated": "{0}에도 같은 변경을 적용했습니다.",
+  "articles.releaseTranslated": "{0}로 번역했습니다.",
   "articles.linkBeforeStart": "작업이 시작되기 전에 글을 선택하세요.",
   "articles.nothingToRetry": "재시도할 실패한 게시가 없습니다.",
   "articles.nothingToRebase": "해결할 충돌이 없습니다.",

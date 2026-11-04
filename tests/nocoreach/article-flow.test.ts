@@ -28,7 +28,11 @@ const article = () => ({
 });
 
 // The task-flow.test.ts fixture, with a CMS publishing target (and optionally its Git export) attached.
-async function fixture({ downstream = false, news = null } = {}) {
+async function fixture({
+  downstream = false,
+  news = null,
+  language = '',
+} = {}) {
   const state = {
     nrTasks: [
       {
@@ -163,7 +167,11 @@ async function fixture({ downstream = false, news = null } = {}) {
     articles: new ArticleDelivery(articleTargets),
     project: async (id) => {
       if (id !== '1') throw Object.assign(Error('project'), { status: 404 });
-      return { name: 'Synthetic', writingStyle: 'Plain' };
+      return {
+        name: 'Synthetic',
+        writingStyle: 'Plain',
+        ...(language ? { language } : {}),
+      };
     },
     db: {
       getRepository: repo,
@@ -1942,4 +1950,156 @@ test('task pages: the tasks split off a task are listed as its siblings, with th
       pages: [pricing, hello],
     }),
   ]);
+});
+
+// 2026-11-04 (T-33): the record of a published article (Results › What was done) copied the Agent's summary for the
+// reviewer, "awaiting human review" included.
+test('release note: the record says what the approved version changed, not where the review stood; a note the owner writes wins', async () => {
+  const draft = {
+    locales: { zh: { body: '# 你好\n\n改写后的中文正文，包含新的内链。' } },
+    verifyText: '改写后的中文正文',
+    summary: '按你的意见改写了中文正文。保留其他语言，等待人工审核。',
+  };
+  let f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  let { d } = await draftAndApprove(f, {
+    ...draft,
+    release: '改写了中文正文，新增一处内链。',
+  });
+  expect(d.work.release.note).toBe('改写了中文正文，新增一处内链。');
+  // The summary stays the reviewer's.
+  expect(
+    d.work.results.find((x) => x?.id === d.work.release.article.artifactId)
+      .article.draft.summary,
+  ).toBe(draft.summary);
+  // Without a release sentence (a Runner from before), the summary without the review.
+  f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  ({ d } = await draftAndApprove(f, draft));
+  expect(d.work.release.note).toBe('改写了中文正文。');
+  // The owner's own note is kept as written.
+  f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: draft,
+  });
+  d = await f.view();
+  d = await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+    release: { note: '负责人写的发布说明' },
+  });
+  expect(d.work.release.note).toBe('负责人写的发布说明');
+});
+
+// 2026-11-04 (T-52): with several languages the record held the last step's summary, about translating, and nothing of
+// what the approved primary version changed.
+async function updateInLanguages(f, primary, others) {
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', {
+    playbookId: 'optimize-page',
+    delivery: { locales: ['en', 'zh', 'ja'] },
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Changed the English title.',
+    article: { locales: { en: { title: 'Hello, world' } }, ...primary },
+  });
+  await approveCurrent(f);
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    phase: 'update',
+    update: ['zh'],
+    translate: ['ja'],
+  });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Updated Chinese and translated Japanese.',
+    article: {
+      locales: {
+        zh: { title: '你好，世界' },
+        ja: { title: 'こんにちは、世界', body: '# こんにちは\n\n本文' },
+      },
+      ...others,
+    },
+  });
+  return approveCurrent(f);
+}
+test('release note: with several languages, the primary version approved and a line for the languages updated or translated, in the project language', async () => {
+  const f = await fixture({ language: 'en-US' });
+  const d = await updateInLanguages(
+    f,
+    {
+      summary:
+        'Per your feedback, a shorter English title. Chinese and Japanese follow once it is approved.',
+      release: 'Shortened the English title.',
+    },
+    {
+      summary: 'Updated the Chinese title and translated Japanese.',
+      release: 'Translated the title.',
+    },
+  );
+  expect(d.work.release.note).toBe(
+    'Shortened the English title.\nMade the same changes in Chinese. Translated into Japanese.',
+  );
+});
+
+test('release note: notes copied from a summary before are written again once by the same rule; a note the owner wrote stays', async () => {
+  const f = await fixture();
+  const primary = '按你的意见改写了英文标题。中文、日文在审核通过后再同步。';
+  let d = await updateInLanguages(
+    f,
+    { summary: primary },
+    { summary: '把英文标题的改动同步到了中文，并翻译成日语。' },
+  );
+  const shipped = d.work.results.find(
+    (x) => x?.id === d.work.release.article.artifactId,
+  );
+  const expected =
+    '改写了英文标题。\n已在中文版本中做了相同修改。已翻译成日语。';
+  expect(d.work.release.note).toBe(expected);
+  // As recorded before: the translation step's summary, in the release and the receipt.
+  const work = () => f.state.nrTasks[0].evidence.work;
+  const old = shipped.article.draft.summary;
+  work().release.note = old;
+  work().receipt = {
+    note: old,
+    url: '',
+    recordedAt: '2026-11-01T00:00:00.000Z',
+    recordedBy: 'system',
+  };
+  const history = work().history.length;
+  expect(await f.s.articleFlow.repairNotes()).toBe(1);
+  d = await f.view();
+  expect(d.work.release.note).toBe(expected);
+  expect(d.work.receipt.note).toBe(expected);
+  expect(d.work.history).toHaveLength(history);
+  // Once only.
+  work().release.note = old;
+  expect(await f.s.articleFlow.repairNotes()).toBe(0);
+  expect((await f.view()).work.release.note).toBe(old);
+  // A note the owner wrote is never rewritten, nor a receipt that is not a copy of the note.
+  f.state.nrSnapshots = f.state.nrSnapshots.filter(
+    (r) => r.key !== 'nr-migrations:release-notes-1',
+  );
+  work().release.note = 'Typed by the owner';
+  work().receipt.note = old;
+  expect(await f.s.articleFlow.repairNotes()).toBe(0);
+  d = await f.view();
+  expect(d.work.release.note).toBe('Typed by the owner');
+  expect(d.work.receipt.note).toBe(old);
 });

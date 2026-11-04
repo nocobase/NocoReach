@@ -81,6 +81,7 @@ export class TaskService {
   private lastVerify = 0;
   private lastEffects = 0;
   private legacyDone = false;
+  private notesDone = false;
   private stopped = false;
   private unregisterRuntime?: () => void;
   readonly provider: OnlineProvider;
@@ -802,7 +803,7 @@ export class TaskService {
             await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
-            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
+            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, w, output, optional(v.release?.note, 2000), tx);
             else if (w.flow!.stages[index + 1]?.kind === 'release') {
               const pr = output.pr, rel = v.release || {};
               const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
@@ -1070,6 +1071,7 @@ export class TaskService {
       if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
       if (Date.now() - this.lastArticles > 60000) { this.lastArticles = Date.now(); await this.articleFlow.tick().catch(() => undefined); }
       if (!this.legacyDone) { this.legacyDone = true; await this.archiveLegacy().catch(() => { this.legacyDone = false; }); }
+      if (!this.notesDone) { this.notesDone = true; await this.articleFlow.repairNotes().catch(() => { this.notesDone = false; }); }
       if (Date.now() - this.lastEffects > HOUR) { this.lastEffects = Date.now(); await this.observeEffects().catch(() => undefined); }
     } finally { this.busy = false; }
   }

@@ -7150,6 +7150,8 @@
   "articles.draft.format": "文章的 {0} 格式不对。文章只能有 slug、status（draft 或 published）、locales（按语言代码分开，每种语言有 title、description、body）、verifyText（最多 200 个字符）和 summary（最多 2000 个字符）。",
   "articles.draft.forTarget": "发布到“{0}”时：{1}",
   "articles.noChanges": "草稿没有改动文章。",
+  "articles.releaseUpdated": "已在{0}版本中做了相同修改。",
+  "articles.releaseTranslated": "已翻译成{0}。",
   "articles.linkBeforeStart": "请在任务开始前选择文章。",
   "articles.nothingToRetry": "没有需要重试的发布。",
   "articles.nothingToRebase": "没有需要处理的冲突。",

@@ -7146,6 +7146,8 @@
   "articles.draft.format": "Поле {0} статьи имеет неверный формат. Допустимы только slug, status (draft или published), locales (по одной записи на код языка с полями title, description и body), verifyText (до 200 символов) и summary (до 2000 символов).",
   "articles.draft.forTarget": "Публикация в «{0}»: {1}",
   "articles.noChanges": "Черновик не вносит изменений в статью.",
+  "articles.releaseUpdated": "Те же изменения внесены в версии на языках: {0}.",
+  "articles.releaseTranslated": "Переведено на языки: {0}.",
   "articles.linkBeforeStart": "Выберите статью до запуска задачи.",
   "articles.nothingToRetry": "Нет неудачных публикаций, которые можно было бы повторить.",
   "articles.nothingToRebase": "Нет конфликта, который нужно было бы разрешить.",

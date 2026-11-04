@@ -7116,6 +7116,8 @@
   "articles.draft.format": "Le champ {0} de l’article n’a pas la forme attendue. Un article contient seulement slug, status (draft ou published), locales (une entrée par code de langue, chacune avec title, description et body), verifyText (200 caractères au maximum) et summary (2000 caractères au maximum).",
   "articles.draft.forTarget": "Publication vers « {0} » : {1}",
   "articles.noChanges": "Le brouillon ne modifie pas l’article.",
+  "articles.releaseUpdated": "Mêmes modifications apportées en {0}.",
+  "articles.releaseTranslated": "Traduit en {0}.",
   "articles.linkBeforeStart": "Choisissez l’article avant le démarrage de la tâche.",
   "articles.nothingToRetry": "Aucune publication en échec à relancer.",
   "articles.nothingToRebase": "Aucun conflit à résoudre.",

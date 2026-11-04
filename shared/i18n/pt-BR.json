@@ -7116,6 +7116,8 @@
   "articles.draft.format": "O campo {0} do artigo não está no formato esperado. Um artigo tem apenas slug, status (draft ou published), locales (uma entrada por código de idioma, cada uma com title, description e body), verifyText (no máximo 200 caracteres) e summary (no máximo 2000 caracteres).",
   "articles.draft.forTarget": "Ao publicar em “{0}”: {1}",
   "articles.noChanges": "O rascunho não altera o artigo.",
+  "articles.releaseUpdated": "As mesmas alterações foram feitas em {0}.",
+  "articles.releaseTranslated": "Traduzido para {0}.",
   "articles.linkBeforeStart": "Escolha o artigo antes de iniciar a tarefa.",
   "articles.nothingToRetry": "Não há nenhuma publicação com falha para tentar novamente.",
   "articles.nothingToRebase": "Não há nenhum conflito para resolver.",

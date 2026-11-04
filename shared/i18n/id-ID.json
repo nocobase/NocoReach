@@ -7207,6 +7207,8 @@
   "articles.draft.format": "Bagian {0} artikel tidak sesuai format. Artikel hanya berisi slug, status (draft atau published), locales (satu entri per kode bahasa, masing-masing dengan title, description, dan body), verifyText (maksimal 200 karakter), dan summary (maksimal 2000 karakter).",
   "articles.draft.forTarget": "Saat menerbitkan ke “{0}”: {1}",
   "articles.noChanges": "Draf ini tidak mengubah artikel.",
+  "articles.releaseUpdated": "Perubahan yang sama juga diterapkan pada versi bahasa {0}.",
+  "articles.releaseTranslated": "Diterjemahkan ke bahasa {0}.",
   "articles.linkBeforeStart": "Pilih artikel sebelum tugas dimulai.",
   "articles.nothingToRetry": "Tidak ada penerbitan yang gagal untuk dicoba ulang.",
   "articles.nothingToRebase": "Tidak ada konflik yang perlu diselesaikan.",

@@ -90,7 +90,10 @@ export const articleDraftSchema = z
     status: z.enum(['draft', 'published']).optional(),
     locales: z.record(z.string().regex(LOCALE), fieldsSchema),
     verifyText: z.string().max(200).optional(),
+    // For the reviewer: what this version did, answering their feedback.
     summary: z.string().max(2000).optional(),
+    // For the publish record: what changed on the page (execution/release-note.ts).
+    release: z.string().max(2000).optional(),
   })
   .strict();
 export type ArticleDraft = z.infer<typeof articleDraftSchema>;
