@@ -1,6 +1,6 @@
 import { ApiClientError, useApiClient } from '@nocobase/app-client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
+import { usePermissionGeneration } from '#hooks/use-permission-generation';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { $t } from '#i18n';
@@ -40,7 +40,7 @@ export function useAccessQuery<T>(
 ) {
   const call = useAccessApi(namespace);
   const { session } = useAuthentication();
-  const revision = useAuthorizationRevision();
+  const revision = usePermissionGeneration();
   return useQuery({
     queryKey: [
       'reach-access',

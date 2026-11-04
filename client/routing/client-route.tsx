@@ -25,8 +25,8 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     useState<AppClientRouteComponentModule>();
   const [loadError, setLoadError] = useState<unknown>();
 
+  // The page's code downloads beside the access check: it is public, and only rendering waits for access.
   useEffect(() => {
-    if (checkAccess && !allowed) return;
     let active = true;
 
     componentLoader!().then(
@@ -46,14 +46,14 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     return () => {
       active = false;
     };
-  }, [allowed, checkAccess, componentLoader]);
+  }, [componentLoader]);
+
+  if (checkAccess && accessLoading) return <ClientPageLoading />;
+  if (checkAccess && !allowed) return <ClientPageDenied route={route} />;
 
   if (loadError) {
     return <ClientPageError route={route} />;
   }
-
-  if (checkAccess && accessLoading) return <ClientPageLoading />;
-  if (checkAccess && !allowed) return <ClientPageDenied route={route} />;
 
   if (!componentModule) {
     return <ClientPageLoading />;
