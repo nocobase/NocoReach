@@ -11,7 +11,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
+import { usePermissionGeneration } from '#hooks/use-permission-generation';
 import { TaskDraftProvider } from './task-detail/drafts.js';
 import { PageSkeleton as SharedSkeleton } from '#components/reach/states';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
@@ -262,7 +262,7 @@ class WorkspaceCache {
 const Context = createContext<WorkspaceCache | null>(null);
 export function WorkspaceCacheProvider({ children }: PropsWithChildren) {
   const { session, isPending } = useAuthentication();
-  const revision = useAuthorizationRevision();
+  const revision = usePermissionGeneration();
   if (isPending || !session) return null;
   const owner = JSON.stringify([session.user.id, session.session.id, revision]);
   return (
