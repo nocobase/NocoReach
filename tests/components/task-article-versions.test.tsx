@@ -284,6 +284,8 @@ test('Activity is the version history: versions edited by hand are numbered and 
   const dialog = await openVersion(user, '修改了文章稿，第 4 版');
   expect(dialog).toHaveAccessibleName('修改 · 第 4 版');
   expect(dialog).toHaveTextContent(/tianqi 人工修改 · /);
+  // The Agent's notes it kept from version 3 are not shown as if they were the person's.
+  expect(dialog).not.toHaveTextContent('第 3 版的修改说明');
 });
 
 test('a version opens against the one before it, and an earlier one is restored as a new version', async () => {
@@ -338,6 +340,7 @@ test('the first version compares with nothing; the version under review has noth
   );
   const first = await openVersion(user, '交付了修改第 1 版');
   expect(within(first).queryByRole('button', { name: '改动' })).toBeNull();
+  expect(first).toHaveTextContent('第 1 版的修改说明');
   expect(
     within(first).getByRole('button', { name: '恢复到这一版' }),
   ).toBeVisible();

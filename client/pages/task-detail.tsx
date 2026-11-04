@@ -647,14 +647,15 @@ function VersionChange({data,artifact,notes,previous}:{data:Data;artifact:Artifa
 // A version opened from Activity (2026-11-04, T-62): the Agent's versions, the ones edited by hand and the restored ones
 // alike, compared with the version before. While the article waits for review, an earlier version of the same round can
 // be restored as a new one (shared/article-versions.ts), by whoever may use Edit directly; nothing runs and nothing is
-// deleted. The reader closes either way, so the new version, or why it could not be made, shows on the page.
+// deleted. The reader closes either way, so the new version, or why it could not be made, shows on the page. A version a
+// person made shows no notes: Edit directly keeps the Agent's notes from the version it replaced.
 function VersionReader({data,artifact,versions,who,title,update,busy,onClose}:{data:Data;artifact:Artifact;versions:Artifact[];who:string;title:string;update:Update;busy:boolean;onClose:()=>void}){
  const w=data.work,{allowed}=useContext(TaskAccess),index=w.stageIndex||0,stage=w.flow?.stages[index],current=w.results[index-1],at=when(artifact.createdAt);
  const meta=artifact.createdBy==='agent'?at:`${artifact.restoredFrom?$t('taskDetail.restoredFromBy',{0:who,1:artifact.restoredFrom.version}):$t('taskDetail.editedByHandBy',{0:who})} · ${at}`;
  const open=allowed&&w.stage!=='done'&&!w.cancelledAt&&!w.archivedAt&&stage?.kind==='review'&&current&&!current.rejectedAt&&restorable(w.history||[],current,artifact)?{stage,current}:undefined;
  const footer=open&&<><p className={cn(text.muted,'flex-1')}>{$t('taskDetail.restoreVersionNote',{0:nextVersion(versions,open.current.stepId),1:artifact.version,2:open.current.version})}</p>
   <PendingButton disabled={busy} onClick={async()=>{await update('restoreArticleVersion',{stageKey:open.stage.key,artifactId:artifact.id,currentId:open.current.id});onClose();}}>{$t('taskDetail.restoreThisVersion')}</PendingButton></>;
- return <DocReader open onClose={onClose} title={title} meta={meta} content={artifact.pr||artifact.article?'':artifact.content} footer={footer||undefined}><VersionChange data={data} artifact={artifact} notes previous={artifact.article?previousVersion(versions,artifact):undefined}/></DocReader>;
+ return <DocReader open onClose={onClose} title={title} meta={meta} content={artifact.pr||artifact.article?'':artifact.content} footer={footer||undefined}><VersionChange data={data} artifact={artifact} notes={artifact.createdBy==='agent'} previous={artifact.article?previousVersion(versions,artifact):undefined}/></DocReader>;
 }
 // Once live, the card names what changed in one line; the change itself opens on demand.
 function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
