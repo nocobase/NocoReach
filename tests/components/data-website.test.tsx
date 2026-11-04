@@ -846,6 +846,25 @@ describe('访问', () => {
     expect(document.querySelector('[data-tables-loading]')).toBeNull();
   });
 
+  it('reads the other tables again when Retry is clicked, without searching a table that is not there', async () => {
+    const fallback = action.getMockImplementation()!;
+    let fail = true;
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteTables' && fail
+        ? Promise.reject(new Error('quota exceeded'))
+        : fallback(resource, name),
+    );
+    renderPage('/website?tab=geo');
+    expect(await screen.findByText('quota exceeded')).toBeTruthy();
+    // A failed read waits before it is asked again; Retry does not.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(await screen.findByRole('button', { name: '美国' })).toBeTruthy();
+    expect(screen.queryByText('quota exceeded')).toBeNull();
+    expect(screen.getByRole('textbox')).toBeTruthy();
+  });
+
   it('names the pages behind a change only when the other tables cover the same days as the figures', async () => {
     const fallback = action.getMockImplementation()!;
     action.mockImplementation(async (resource: string, name: string) =>

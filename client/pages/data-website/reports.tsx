@@ -35,6 +35,7 @@ import {
   YAxis,
 } from 'recharts';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
+import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
 import { Input } from '#components/ui/input';
 import { TabsTrigger } from '#components/ui/tabs';
@@ -325,6 +326,7 @@ export function ReportCard({
   report,
   rest,
   restError,
+  onRetryRest,
   range,
   projectId,
   propertyId,
@@ -334,6 +336,8 @@ export function ReportCard({
   /** The other tables (`websiteTables`), asked for once the page shows. */
   rest?: Report;
   restError?: unknown;
+  /** Reads the other tables again at once, past the wait a failed read otherwise keeps. */
+  onRetryRest?: () => void;
   range: Range;
   projectId?: number;
   propertyId?: string;
@@ -432,20 +436,23 @@ export function ReportCard({
                 </SelectContent>
               </Select>
             ) : null}
-            <label className='relative flex items-center'>
-              <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
-              <Input
-                aria-label={$t('dataWebsite.searchDimension', {
-                  0: $t(view.label),
-                })}
-                className='h-8 w-64 pl-8'
-                placeholder={$t('dataWebsite.searchDimension', {
-                  0: $t(view.label),
-                })}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
+            {/* Nothing to search while the table is still being read or failed to arrive. */}
+            {holder ? (
+              <label className='relative flex items-center'>
+                <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
+                <Input
+                  aria-label={$t('dataWebsite.searchDimension', {
+                    0: $t(view.label),
+                  })}
+                  className='h-8 w-64 pl-8'
+                  placeholder={$t('dataWebsite.searchDimension', {
+                    0: $t(view.label),
+                  })}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+            ) : null}
           </>
         }
       >
@@ -464,7 +471,15 @@ export function ReportCard({
       {!holder ? (
         <div className='px-4 py-6' data-tables-loading=''>
           {restError ? (
-            <InlineError>
+            <InlineError
+              action={
+                onRetryRest ? (
+                  <Button variant='outline' size='sm' onClick={onRetryRest}>
+                    {$t('common.retry')}
+                  </Button>
+                ) : null
+              }
+            >
               {restError instanceof Error
                 ? restError.message
                 : $t('common.tryAgainLater')}

@@ -165,11 +165,11 @@ export default function DataWebsite() {
   const ready = Boolean(report?.connected && report.cutoff && report.totals);
   // The tables behind the tabs and the pages behind a change are read once the page shows, not ahead
   // (website-report.ts, `periodTables`), so they are asked for as soon as the figures are there, before any tab is opened.
-  const { data: rest, error: restError } = useTrafficPart(
-    'websiteTables',
-    valid && ready ? project : undefined,
-    r,
-  );
+  const {
+    data: rest,
+    error: restError,
+    reload: retryRest,
+  } = useTrafficPart('websiteTables', valid && ready ? project : undefined, r);
   // Pages explain a change only when they cover the same days as the figures; a copy of another window waits for its new one.
   const explained =
     ready &&
@@ -317,6 +317,7 @@ export default function DataWebsite() {
             report={report!}
             rest={rest}
             restError={restError}
+            onRetryRest={retryRest}
             range={r}
             projectId={project?.id}
             propertyId={project?.analyticsPropertyId}
