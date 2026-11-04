@@ -148,6 +148,59 @@ test('tick: a project nobody opened lately has only Traffic read ahead, every si
  }finally{vi.useRealTimers();}
 });
 
+// Partitions and nrSnapshots kept apart, rows stored as JSON as a database would, so services built over the same
+// store behave like the process before and after a restart.
+function durableSetup(){
+ const parts=[],calls={find:0,writes:0},saved=new Map();let transaction=null;
+ const add=(source,grain,date,payload,updatedAt='2026-09-30T00:00:00Z')=>parts.push({id:parts.length+1,projectId:1,source,grain,date,resource:source==='ga4'?'123':'sc-domain:example.com',payload,updatedAt});
+ for(const date of ['2026-09-25','2026-09-26','2026-09-27']){add('ga4','overview',date,[{date,views:10,sessions:5,conversions:1}]);add('gsc','overview',date,[{date,clicks:3,impressions:90}]);}
+ const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};
+ const partitions={
+  find:async({offset=0,limit=200})=>{calls.find++;return parts.slice(offset,offset+limit).map(p=>({toJSON:()=>JSON.parse(JSON.stringify(p))}));},
+  count:async()=>parts.length,
+  findOne:async()=>{const p=[...parts].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];return p&&{get:k=>p[k]};}
+ };
+ const snapshots={
+  findOne:async({filter})=>saved.has(filter.key)?{get:k=>k==='payload'?JSON.parse(saved.get(filter.key)):undefined}:null,
+  create:async({values})=>{calls.writes++;saved.set(values.key,JSON.stringify(values.payload));},
+  update:async({filter,values})=>{calls.writes++;saved.set(filter.key,JSON.stringify(values.payload));},
+  destroy:async({filter})=>{calls.writes++;saved.delete(filter.key);}
+ };
+ const plugin={link:async()=>({id:1,get:k=>links[k]}),env:()=>'secret',project:async()=>({id:1,name:'Demo',analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com',domains:['example.com']}),db:{getRepository:n=>n==='nrSnapshots'?snapshots:partitions,transactionContext:()=>transaction}};
+ const kept=async s=>{await Promise.all([...(s.keeping?.values()||[])]);};
+ return {service:()=>new SyncService(plugin),parts,calls,add,saved,kept,inTransaction:v=>{transaction=v;}};
+}
+
+test('a restarted service restores the snapshots its previous build kept instead of rebuilding them',async()=>{
+ const {service,calls,saved,kept}=durableSetup();
+ const before=service(),first=await before.snapshots('1');await kept(before);
+ assert.equal(calls.find,1);assert.ok(saved.has('sync-snapshots:1'));
+ const after=service(),restored=await after.snapshots('1');
+ assert.equal(calls.find,1);assert.deepEqual(restored,first);
+ assert.throws(()=>restored.find(s=>s.key==='history-web').payload.push({}),TypeError);
+ assert.equal(await after.snapshots('1'),restored);assert.equal(calls.find,1);
+});
+
+test('a kept copy of other stored data is not restored: the snapshots are rebuilt and kept again',async()=>{
+ const {service,calls,add,saved,kept}=durableSetup();
+ const before=service();await before.snapshots('1');await kept(before);
+ add('ga4','overview','2026-09-28',[{date:'2026-09-28',views:12,sessions:6,conversions:0}],'2026-10-01T00:00:00Z');add('gsc','overview','2026-09-28',[{date:'2026-09-28',clicks:4,impressions:95}],'2026-10-01T00:00:00Z');
+ const after=service(),next=await after.snapshots('1');await kept(after);
+ assert.equal(calls.find,2);assert.equal(next.find(s=>s.key==='project').payload.end,'2026-09-28');
+ assert.equal(JSON.parse(saved.get('sync-snapshots:1')).value.find(s=>s.key==='project').payload.end,'2026-09-28');
+});
+
+test('a build inside a transaction is never kept, while a committed copy may be restored there',async()=>{
+ const {service,calls,saved,kept,inTransaction}=durableSetup();
+ inTransaction({id:'tx'});
+ const inside=service();await inside.snapshots('1');await kept(inside);
+ assert.equal(calls.find,1);assert.equal(calls.writes,0);assert.equal(saved.size,0);
+ inTransaction(null);
+ const outside=service(),built=await outside.snapshots('1');await kept(outside);assert.equal(calls.writes,1);
+ inTransaction({id:'tx2'});
+ assert.deepEqual(await service().snapshots('1'),built);assert.equal(calls.find,2);assert.equal(calls.writes,1);
+});
+
 test('concurrent requests share one build',async()=>{
  const {sync,calls}=setup();
  const [a,b,c]=await Promise.all([sync.snapshots('1'),sync.snapshots('1'),sync.snapshots('1')]);

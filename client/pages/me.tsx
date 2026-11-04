@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
+import { usePermissionGeneration } from '#hooks/use-permission-generation';
 import { UserRoundX } from 'lucide-react';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
@@ -26,7 +26,7 @@ const Context = createContext<MeState | null>(null);
 
 export function MeProvider({ children }: PropsWithChildren): ReactNode {
   const { session, isPending } = useAuthentication();
-  const revision = useAuthorizationRevision();
+  const revision = usePermissionGeneration();
   if (isPending || !session) return null;
   // A new session or permission revision cannot render the previous member or retain its page state.
   const key = JSON.stringify([session.user.id, session.session.id, revision]);

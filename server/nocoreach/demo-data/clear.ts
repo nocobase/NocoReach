@@ -59,6 +59,7 @@ export const PROJECT_SNAPSHOTS = new Set([
   'nr-playbooks',
   'nr-site-preview',
   'report-reads',
+  'sync-snapshots',
   'nr-skills-enabled',
   'nr-source-preview',
   'nr-task',
