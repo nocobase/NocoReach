@@ -13,6 +13,7 @@ import {
 } from '../../server/nocoreach/legacy/context';
 import { LegacyUsers } from '../../server/nocoreach/legacy/users';
 import { CALLBACK_PATH } from '../../server/nocoreach/policy';
+import { ConnectionStatusCache } from '../../server/nocoreach/connection-status-cache';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -298,6 +299,9 @@ it.each([null, 'other-admin', 'initiator'])(
     const { nocoReachToken } = await import('../../server/providers/nocoreach');
     const f = await fixture();
     const container = new ServiceContainer();
+    const connectionStatus = new ConnectionStatusCache();
+    await connectionStatus.read('123', 'oauth-session', async () => 'before');
+    await connectionStatus.read('1', 'other-project', async () => 'other');
     container.instance(authorizationToken, { middleware: () => async (_context: unknown, next: () => Promise<void>) => next() } as never);
     container.instance(scopedApiKeysToken, { resolve: async () => null } as never);
     container.instance(authenticationToken, {
@@ -330,6 +334,7 @@ it.each([null, 'other-admin', 'initiator'])(
       },
       users: { isRoot: async () => false },
       cache: f.cache,
+      connectionStatus,
       logger: f.logger,
       plugin: { network: f.host.network },
     } as never);
@@ -341,6 +346,12 @@ it.each([null, 'other-admin', 'initiator'])(
       },
     );
     expect(response.status).toBe(302);
+    expect(
+      await connectionStatus.read('123', 'oauth-session', async () => 'after'),
+    ).toBe(userId === 'initiator' ? 'after' : 'before');
+    expect(
+      await connectionStatus.read('1', 'other-project', async () => 'changed'),
+    ).toBe('other');
     expect(response.headers.get('location')).toBe(
       userId === 'initiator'
         ? '/main/connections?google=authorized'

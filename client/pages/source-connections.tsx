@@ -1,8 +1,8 @@
-import { useNavigationGuard } from '@nocobase/app-client';
+import { useApiClient, useNavigationGuard } from '@nocobase/app-client';
 import { CollectorConnection } from '#components/collector-connection';
 import { isCollectorPlatform } from '#lib/collector-platforms';
 import {BilibiliConnect} from './bilibili-connect';
-import {bilibiliErrorMessage,bilibiliMessage,bilibiliRequest,type BilibiliStatus} from './bilibili-api';
+import {bilibiliErrorMessage,bilibiliMessage,bilibiliRequest} from './bilibili-api';
 import {xiaohongshuRequest} from './xiaohongshu-api';
 import {xiaohongshuErrorMessage,xiaohongshuRunMessage} from './xiaohongshu-errors';
 import { ConnectionNetwork } from '#components/connection-network';
@@ -14,7 +14,6 @@ import {useSourceAccess} from './source-access';
 import {sourceConnection} from './proxy-profiles/api';
 import {PageContainer,PageHeader,SectionHeading} from '#components/reach/page';
 import {useNavigate,useSearchParams} from 'react-router';
-import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {Button} from '#components/ui/button';
 import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {Tag,stateToneOf} from '#components/reach/tag';
@@ -22,24 +21,21 @@ import {Skeleton} from '#components/ui/skeleton';
 import {SourceLogo} from '#components/reach/source-logo';
 import {GoogleConnection} from './google-connection';
 import {KeywordConnection} from './keyword-connection';
-import {keywordRequest,type KeywordConnectionState} from './keyword-api';
 import {SiteContentConnect} from './site-content-connect';
-import {GitHubConnect,type GitHubStatus} from './github-connect';
-import {CommunityConnect,type CommunityStatus} from './community-connect';
-import {PackagesConnect,type PackagesStatus} from './packages-connect';
+import {GitHubConnect} from './github-connect';
+import {CommunityConnect} from './community-connect';
+import {PackagesConnect} from './packages-connect';
 import {HackerNewsConnect} from './hackernews-connect';
 import {XiaohongshuConnect} from './xiaohongshu-connect';
 import {RedditConnect} from './reddit-connect';
 import {TrendsConnect} from './trends-connect';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {CompetitorsConnect} from './competitor-watch';
-import {YouTubeConnect,type YouTubeStatus} from './youtube-connect';
+import {YouTubeConnect} from './youtube-connect';
 import {XConnect} from './x-connect';
 import {ChatConnect} from './chat-connect';
 import {RepoConnect} from './repo-connect';
 import {ArticleTargetsConnect} from './article-targets-connect';
-import {articleRequest,type TargetList} from './article-targets-api';
-import {agentRequest,type AgentStatus} from './repo-connect-api';
 import {DiscoveryBox} from './discovery-box';
 import {HealthPanel,HealthLine,loadHealth,healthText,needsAttention,sourceList,type HealthItem} from './data-health';
 import {Tabs,TabsList,TabsTrigger} from '#components/ui/tabs';
@@ -55,9 +51,11 @@ import './source-connections.css';
 type Item={type:string;title:string;url:string;text:string};
 type Source={id:string;kind:string;url:string;title:string;capturedAt:string;items:Item[];warnings:string[];status:string;error?:string;previewId?:string};
 const collectorActions = ['nrCollectors.status','nrCollectors.save'] as const;
-const call=<T,>(id:number,action:string,body:object={})=>api.action<T>('nrSources',action,{method:'POST',body:{projectId:id,...body},unwrap:'data'});
-export default function SourceConnections(){const {project,error:projectError}=useProject(),navigate=useNavigate();const [sources,setSources]=useState<Source[]>([]),[status,setStatus]=useState<StatusInput>({}),[error,setError]=useMessageState(''),[loaded,setLoaded]=useState(false),[loadFailed,setLoadFailed]=useState(false),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
+export default function SourceConnections(){const api=useApiClient();const {project,error:projectError}=useProject(),navigate=useNavigate();const [snapshot,setSnapshot]=useState<{projectId:number;status:StatusInput&{publicSources:Source[]}}|null>(null),[error,setError]=useMessageState(''),[loadFailed,setLoadFailed]=useState(false),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
  const projectId=project?.id;
+ const status:StatusInput=snapshot&&snapshot.projectId===projectId?snapshot.status:{};
+ const sources=status.publicSources as Source[]|undefined??[];
+ const loaded=Boolean(snapshot&&snapshot.projectId===projectId);
  const {can:canManageOpen}=useSourceAccess(open?.id,projectId);
  const {can:canDiscover}=useBusinessAccess('nrDiscovery.discover',projectId??null);
  const {can:canSelectNetwork}=useBusinessAccess('nrProxyProfiles.select',projectId??null);
@@ -84,9 +82,26 @@ export default function SourceConnections(){const {project,error:projectError}=u
    else savingOwnersRef.current.delete(owner);
    setConnectionSaving(savingOwnersRef.current.size > 0);
  }
- const load=useCallback(async()=>{if(!projectId)return;const [list,google,site,keyword,github,community,repo,packages,hackernews,reddit,trends,competitors,x,chat,xiaohongshu,bilibili,youtube]=await Promise.all([call<{sources:Source[]}>(projectId,'list'),api.action<StatusInput['google']>('nrGoogle','status',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'}).catch(()=>null),api.action<{pages:number}>('nrSiteContent','summary',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),keywordRequest<KeywordConnectionState>('status').catch(()=>null),api.action<GitHubStatus>('nrGitHub','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<CommunityStatus>('nrCommunity','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),agentRequest<AgentStatus>('status',projectId).catch(()=>null),api.action<PackagesStatus>('nrPackages','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrHackerNews','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrReddit','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrTrends','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrCompetitors','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrX','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<StatusInput['chat']>('nrChat','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<StatusInput['xiaohongshu']>('nrXiaohongshu','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),bilibiliRequest<BilibiliStatus>(projectId,'status').catch(()=>null),api.action<YouTubeStatus>('nrYouTube','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null)]);const articles=await articleRequest<TargetList>('targets',projectId).catch(()=>null);setSources(list.sources);setStatus({google,publicSources:list.sources,site,keyword,github,community,repos:repo?.repos??null,packages,hackernews,reddit,trends,competitors,x,chat,xiaohongshu,bilibili,youtube,articles:articles?{targets:articles.targets.length}:null});refreshNavBadges();setHealthKey(k=>k+1);void loadHealth(projectId).then(h=>setHealth(h.items)).catch(()=>undefined);setLoaded(true);},[projectId]);
+ const cache=useWorkspaceCache();
+ const activeLoadRef=useRef(0);
+ useEffect(()=>()=>{activeLoadRef.current+=1;},[projectId]);
+ const load=useCallback(async()=>{
+  if(!projectId)return;
+  const sequence=++activeLoadRef.current;
+  const key=`connection-status:${projectId}`;
+  const revision=cache.revision(key);
+  const result=await cache.load(key,async()=>{
+   const response=await api.request<{data:StatusInput&{publicSources:Source[]}}>({path:`nocoreachConnect/status?projectId=${projectId}`,method:'GET'});
+   return response.data;
+  },false,{staleTime:0});
+  if(sequence!==activeLoadRef.current||cache.revision(key)!==revision)return;
+  setSnapshot({projectId,status:result});
+  refreshNavBadges();setHealthKey(k=>k+1);
+  void loadHealth(projectId).then(h=>{if(sequence===activeLoadRef.current)setHealth(h.items);}).catch(()=>undefined);
+ },[projectId,cache,api]);
+ const refresh=useCallback(()=>{cache.invalidate(key=>key===`connection-status:${projectId}`);return load();},[cache,projectId,load]);
  // Saved collector reports are reused for the day; a change made here makes the data pages read them again.
- const cache=useWorkspaceCache();const collectorChanged=(resource:'nrXiaohongshu'|'nrBilibili'|'nrYouTube',id:number)=>{cache.invalidate(key=>key.startsWith(collectorReportKey(resource,id)));void load();};
+ const collectorChanged=(resource:'nrXiaohongshu'|'nrBilibili'|'nrYouTube',id:number)=>{cache.invalidate(key=>key.startsWith(collectorReportKey(resource,id)));void refresh();};
  useEffect(()=>{void Promise.resolve().then(load).catch(()=>{setLoadFailed(true);setError(() => ($t('sourceConnections.notLoadDataSourceStatus')));});},[load,setError]);
  function run(fn:()=>Promise<void>){setError('');void fn().catch(e=>setError(() => (e instanceof Error?e.message:$t('common.operationFailedRetry'))));}
  function closePanel() {
@@ -94,7 +109,8 @@ export default function SourceConnections(){const {project,error:projectError}=u
    const p = new URLSearchParams(params);
    p.delete('source');
    setParams(p);
-   void load().catch(() => undefined);
+   // Panels without change callbacks (Google and Keywords) still update their cards on close.
+   void refresh().catch(() => undefined);
    requestAnimationFrame(() => {
      const trigger = document.querySelector<HTMLElement>(`[data-source-trigger="${source}"]`);
      if (trigger) {
@@ -130,9 +146,9 @@ export default function SourceConnections(){const {project,error:projectError}=u
   <TabsTrigger value='sources'>{$t('sourceConnections.sourcesTab')}</TabsTrigger>
   <TabsTrigger value='health'>{$t('dataHealth.dataHealth')}{attention.length?<><span aria-hidden='true' className='rounded-full bg-attention px-1.5 text-xs leading-4 text-attention-foreground tabular-nums'>{attention.length}</span><span className='sr-only'>{$t('dataHealth.attentionCount',{0:attention.length})}</span></>:null}</TabsTrigger>
  </TabsList></Tabs>
- {tab==='health'?project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)} settingsOf={settingsOf}/>:<>
+ {tab==='health'?project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void refresh().catch(()=>undefined)} settingsOf={settingsOf}/>:<>
  {attention.length?<div role='status' className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'><TriangleAlertIcon className='size-4 shrink-0' aria-hidden='true'/><span className='min-w-0 flex-1'>{$tj('dataHealth.attentionNotice',{0:attention.length,1:sourceList(attention.map(i=>healthText(i.name,i.nameText)))})}</span><button type='button' className='underline-offset-4 hover:underline' onClick={()=>setTab('health')}>{$t('common.view')}</button></div>:null}
- {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
+ {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void refresh().catch(()=>undefined)}/>}
  {/* Groups use the shared section heading: a plain h2 here took the page-wide `.nr-page h2:not([class])` style, which
      left it grey and touching its cards. Groups sit further apart than a heading from its own cards. Until the first
      check is back, each card keeps its name and description and shows skeletons for its state and action, so no card
@@ -150,8 +166,8 @@ export default function SourceConnections(){const {project,error:projectError}=u
   {open.guide&&<section className='nr-guide-needs'><h3>{$t('sourceConnections.needProvide')}</h3><ul>{open.guide.needs.map(n=>{const hint=open.guide?.hints?.[n];return <li key={n}>{n}{met(n,status,open.id,collector)&&<><CheckIcon className='nr-ok ml-1 inline-block align-[-3px]' aria-hidden='true'/><span className='sr-only'>{$t('sourceConnections.needMet')}</span></>}{hint&&<span className='text-muted-foreground'>{' · '}{hint.text}</span>}{hint?.href&&<a className='nr-link ml-2' href={hint.href} target='_blank' rel='noreferrer'>{$t('sourceConnections.deployGuide')}</a>}</li>;})}</ul></section>}
   {open.guide?.limits&&<section className='nr-guide-needs'><h3>{$t('sourceConnections.limits')}</h3><p className='text-muted-foreground'>{open.guide.limits}</p></section>}
   {error&&<ConnectionError message={error}/>}
-  {project&&canConfigureCollector&&collectorPlatform&&<CollectorConnection layout='row' health={collector?.ok?<span className='nr-ok'>{' · '}{$t('collectorConnection.connectionOk')}</span>:collector?<span className='text-destructive'>{' · '}{collector.problem.replace(/[。.]$/u,'')}</span>:null} onClose={closePanel} projectId={project.id} platform={collectorPlatform} disabled={connectionSaving||!canSaveCollector} onSavingChange={saving=>setSaving(`collector:${project.id}:${open.id}`,saving)} onSaved={()=>{setCollectorVersion(v=>v+1);void load().catch(()=>undefined);}}/>}
-  <fieldset disabled={connectionSaving} key={`${project?.id}:${open.id}`} className='min-w-0 shrink-0 border-0 p-0'><section className='nr-guide-form'>{canManageOpen||collectorPlatform||open.id==='youtube'?<>{open.id==='youtube'&&project&&<YouTubeConnect projectId={project.id} readOnly={!canManageOpen} suggested={project.name} network={canOpenNetwork?<ConnectionNetwork projectId={project.id} source='youtube'/>:null} onOpenSource={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onChange={()=>collectorChanged('nrYouTube',project.id)}/>} {open.id==='bilibili'&&project&&<BilibiliConnect projectId={project.id} refreshKey={collectorVersion} isAdmin={canManageOpen} onChange={()=>collectorChanged('nrBilibili',project.id)} onSavingChange={saving=>setSaving(`bilibili:${project.id}`,saving)}/>}{open.id==='xiaohongshu'&&project&&<XiaohongshuConnect key={project.id} projectId={project.id} refreshKey={collectorVersion} onChange={()=>collectorChanged('nrXiaohongshu',project.id)}/>}{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{(open.id==='github'||open.id==='github-traffic'||open.id==='github-discussions')&&project&&<GitHubConnect projectId={project.id} focus={open.id==='github-traffic'||open.id==='github-discussions'?'traffic':'repo'} suggestedUrl={sources.find(x=>x.kind==='github'&&x.status!=='disconnected')?.url} onChange={()=>void load()}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='repo'&&project&&<RepoConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='articles'&&project&&<ArticleTargetsConnect projectId={project.id} onChange={()=>void load()} onSavingChange={saving=>setSaving(`articles:`,saving)}/>}{open.id==='keywords'&&project&&<KeywordConnection projectId={project.id}/>}{open.id==='discourse'&&project&&<CommunityConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='packages'&&project&&<PackagesConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='mentions'&&project&&<HackerNewsConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='reddit'&&project&&<RedditConnect projectId={project.id} suggested={project.name} onChange={()=>void load()}/>}{open.id==='trends'&&project&&<TrendsConnect projectId={project.id} suggested={project.name} onChange={()=>void load()}/>}{open.id==='competitors'&&project&&<CompetitorsConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='social'&&project&&<XConnect projectId={project.id} suggested={project.name} onChange={()=>void load()}/>}{(open.id==='discord'||open.id==='slack')&&project&&<ChatConnect key={open.id} projectId={project.id} platform={open.id} onChange={()=>void load()}/>}{open.id==='ai-visibility'&&<section className='nr-guide-step'>{status?.keyword?.verifiedAt?<><h3>{$t('sourceConnections.readyUse')}</h3><p>{$t('sourceConnections.dataforseoConnectedCheckBrandMentions')}</p><div className='nr-step-actions'><Button onClick={()=>void navigate('/ai-search')}>{$t('sourceConnections.goAiSearch')}</Button></div></>:<><h3>{$t('common.connectDataforseoFirst')}</h3><p>{$t('sourceConnections.aiSearchUsesDataforseoWorks')}</p><div className='nr-step-actions'><Button onClick={()=>{const k=getCatalog().find(x=>x.id==='keywords');if(k)show(k);}}>{$t('common.connectDataforseo')}</Button></div></>}</section>}</>:<p>{$t('accessMembers.errors.denied')}</p>}</section>
+  {project&&canConfigureCollector&&collectorPlatform&&<CollectorConnection layout='row' health={collector?.ok?<span className='nr-ok'>{' · '}{$t('collectorConnection.connectionOk')}</span>:collector?<span className='text-destructive'>{' · '}{collector.problem.replace(/[。.]$/u,'')}</span>:null} onClose={closePanel} projectId={project.id} platform={collectorPlatform} disabled={connectionSaving||!canSaveCollector} onSavingChange={saving=>setSaving(`collector:${project.id}:${open.id}`,saving)} onSaved={()=>{setCollectorVersion(v=>v+1);void refresh().catch(()=>undefined);}}/>}
+  <fieldset disabled={connectionSaving} key={`${project?.id}:${open.id}`} className='min-w-0 shrink-0 border-0 p-0'><section className='nr-guide-form'>{canManageOpen||collectorPlatform||open.id==='youtube'?<>{open.id==='youtube'&&project&&<YouTubeConnect projectId={project.id} readOnly={!canManageOpen} suggested={project.name} network={canOpenNetwork?<ConnectionNetwork projectId={project.id} source='youtube'/>:null} onOpenSource={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onChange={()=>collectorChanged('nrYouTube',project.id)}/>} {open.id==='bilibili'&&project&&<BilibiliConnect projectId={project.id} refreshKey={collectorVersion} isAdmin={canManageOpen} onChange={()=>collectorChanged('nrBilibili',project.id)} onSavingChange={saving=>setSaving(`bilibili:${project.id}`,saving)}/>}{open.id==='xiaohongshu'&&project&&<XiaohongshuConnect key={project.id} projectId={project.id} refreshKey={collectorVersion} onChange={()=>collectorChanged('nrXiaohongshu',project.id)}/>}{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{(open.id==='github'||open.id==='github-traffic'||open.id==='github-discussions')&&project&&<GitHubConnect projectId={project.id} focus={open.id==='github-traffic'||open.id==='github-discussions'?'traffic':'repo'} suggestedUrl={sources.find(x=>x.kind==='github'&&x.status!=='disconnected')?.url} onChange={()=>void refresh()}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void refresh()}/>}{open.id==='repo'&&project&&<RepoConnect projectId={project.id} onChange={()=>void refresh()}/>}{open.id==='articles'&&project&&<ArticleTargetsConnect projectId={project.id} onChange={()=>void refresh()} onSavingChange={saving=>setSaving(`articles:`,saving)}/>}{open.id==='keywords'&&project&&<KeywordConnection projectId={project.id}/>}{open.id==='discourse'&&project&&<CommunityConnect projectId={project.id} onChange={()=>void refresh()}/>}{open.id==='packages'&&project&&<PackagesConnect projectId={project.id} onChange={()=>void refresh()}/>}{open.id==='mentions'&&project&&<HackerNewsConnect projectId={project.id} onChange={()=>void refresh()}/>}{open.id==='reddit'&&project&&<RedditConnect projectId={project.id} suggested={project.name} onChange={()=>void refresh()}/>}{open.id==='trends'&&project&&<TrendsConnect projectId={project.id} suggested={project.name} onChange={()=>void refresh()}/>}{open.id==='competitors'&&project&&<CompetitorsConnect projectId={project.id} onChange={()=>void refresh()}/>}{open.id==='social'&&project&&<XConnect projectId={project.id} suggested={project.name} onChange={()=>void refresh()}/>}{(open.id==='discord'||open.id==='slack')&&project&&<ChatConnect key={open.id} projectId={project.id} platform={open.id} onChange={()=>void refresh()}/>}{open.id==='ai-visibility'&&<section className='nr-guide-step'>{status?.keyword?.verifiedAt?<><h3>{$t('sourceConnections.readyUse')}</h3><p>{$t('sourceConnections.dataforseoConnectedCheckBrandMentions')}</p><div className='nr-step-actions'><Button onClick={()=>void navigate('/ai-search')}>{$t('sourceConnections.goAiSearch')}</Button></div></>:<><h3>{$t('common.connectDataforseoFirst')}</h3><p>{$t('sourceConnections.aiSearchUsesDataforseoWorks')}</p><div className='nr-step-actions'><Button onClick={()=>{const k=getCatalog().find(x=>x.id==='keywords');if(k)show(k);}}>{$t('common.connectDataforseo')}</Button></div></>}</section>}</>:<p>{$t('accessMembers.errors.denied')}</p>}</section>
   </fieldset>
   {/* The connection's network sits under its form: a live deployment shows one switch here. YouTube places it above
       its own closing links; collector sources have none, their traffic leaves from the collector's host. */}

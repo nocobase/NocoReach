@@ -42,6 +42,7 @@ import { DEFAULT_CRON, NODE_TYPE, WORKFLOW_TITLE } from '../nocoreach/daily-anal
 import { registerClassicImport } from '../nocoreach/classic-import.js';
 import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
+import { ConnectionStatusCache } from '../nocoreach/connection-status-cache.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
 import { LegacyNotifications } from '../nocoreach/legacy/notifications.js';
 import {
@@ -86,6 +87,7 @@ export interface NocoReachRuntime {
   readonly users: LegacyUsers;
   readonly variables: LegacyVariables;
   readonly cache: LegacyCache;
+  readonly connectionStatus: ConnectionStatusCache;
   readonly logger: LegacyLogger;
   /** The classic workflow plugin: the daily analysis registers its instruction here and its schedule is read here. */
   readonly workflows: LegacyWorkflows;
@@ -201,7 +203,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
       const schedules = new ScheduleManagement(db, workflows, this.app.container.resolve(schedulerServiceToken));
-      return { legacy, plugin, users, variables, cache: new LegacyCache(), logger, workflows, analysisRuns, schedules, ready };
+      return { legacy, plugin, users, variables, cache: new LegacyCache(), connectionStatus: new ConnectionStatusCache(), logger, workflows, analysisRuns, schedules, ready };
     });
   }
 
@@ -380,7 +382,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     await runtime.plugin.agents.agents.applyDefaults();
     if (this.app.container.has(demoDataToken)) {
       const demoData = this.app.container.resolve(demoDataToken);
-      demoData.register(createNocoReachDemo(runtime.plugin, this.app.container.resolve(driveManagerToken), () => runtime.cache.clear(), users));
+      demoData.register(createNocoReachDemo(runtime.plugin, this.app.container.resolve(driveManagerToken), () => { runtime.cache.clear(); runtime.connectionStatus.invalidate(); }, users));
       const configuration = this.app.container.resolve(demoConfigurationToken);
       registerDemoAdapters(runtime.plugin, configuration);
       runtime.plugin.demoConfiguration = configuration;

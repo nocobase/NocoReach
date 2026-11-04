@@ -139,6 +139,7 @@ export async function googleOAuthCallback(
       const email = identity.email || '';
       const same = sameAccount(await host.link?.(saved.id), email);
       await host.variable(secretKey(saved.id), tokens.refresh_token, true);
+      ctx.state.connectionStatusProject = saved.id;
       await host.metadata(saved.id, {
         accountEmail: email,
         authorizedAt: new Date().toISOString(),

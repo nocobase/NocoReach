@@ -12,9 +12,14 @@ import { getCatalog } from '../../client/pages/data-sources';
 // Data sources and Data health wait for their first read behind the shared skeleton (np-states), not a line of text.
 const state = vi.hoisted(() => ({
   action: vi.fn(),
+  api: { request: vi.fn() },
   sources: undefined as
     | undefined
     | { promise: Promise<unknown>; resolve: (value: unknown) => void },
+}));
+vi.mock('@nocobase/app-client', async (original) => ({
+  ...(await original<object>()),
+  useApiClient: () => state.api,
 }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: { action: state.action, wrapRequests: () => {} },
@@ -28,9 +33,14 @@ vi.mock('@nocobase/app-plugin-authorization/client', async (original) => ({
   ...(await original<object>()),
   useCan: () => ({ can: false }),
 }));
+const workspaceCache = {
+  invalidate: vi.fn(),
+  revision: () => 0,
+  load: async (_key: string, fetcher: () => Promise<unknown>) => fetcher(),
+};
 vi.mock('../../client/pages/workspace-cache', async (actual) => ({
   ...(await actual<object>()),
-  useWorkspaceCache: () => ({ invalidate: vi.fn() }),
+  useWorkspaceCache: () => workspaceCache,
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({
@@ -52,9 +62,12 @@ beforeEach(() => {
   let resolve: (value: unknown) => void = () => {};
   const promise = new Promise((done) => (resolve = done));
   state.sources = { promise, resolve };
+  state.api.request.mockReset();
+  state.api.request.mockImplementation(async () => ({
+    data: await state.sources!.promise,
+  }));
   state.action.mockReset();
   state.action.mockImplementation(async (resource: string) => {
-    if (resource === 'nrSources') return state.sources!.promise;
     if (resource === 'nrArticles') return { targets: [] };
     if (resource === 'nrHealth') return { checkedAt: '', items: [] };
     return {};
@@ -94,7 +107,7 @@ it('keeps each source card readable and shows skeletons for its state and action
   }
   expect(screen.queryByText(english['dataSources.available'])).toBeNull();
 
-  await act(async () => state.sources!.resolve({ sources: [] }));
+  await act(async () => state.sources!.resolve({ publicSources: [] }));
   expect(
     screen.queryByRole('status', {
       name: english['sourceConnections.checkingDataSources'],
@@ -109,10 +122,7 @@ it('keeps each source card readable and shows skeletons for its state and action
 });
 
 it('shows the cards with the error and Retry when the first check fails, even after a drawer clears the error', async () => {
-  state.action.mockImplementation(async (resource: string) => {
-    if (resource === 'nrSources') throw new Error('offline');
-    return {};
-  });
+  state.api.request.mockRejectedValue(new Error('offline'));
   page();
   expect(await screen.findByRole('alert')).toHaveTextContent(
     english['sourceConnections.notLoadDataSourceStatus'],
