@@ -1,6 +1,7 @@
 import {
   ClientApplicationContext,
   NavigationGuardProvider,
+  realtimeClientToken,
   type ClientApplication,
 } from '@nocobase/app-client';
 import {
@@ -139,10 +140,50 @@ const routes = [
 function session(user: string, id = `${user}-session`) {
   authentication.session = { user: { id: user }, session: { id } };
 }
-function setup(strict = false) {
+// A realtime client the permission generation can watch: topic events, readiness and connection states.
+function fakeRealtime() {
+  const readies = new Set<() => void>();
+  const states = new Set<(state: string) => void>();
+  const events = new Map<string, Set<() => void>>();
+  return {
+    client: {
+      ready: true,
+      watch: (topic: string, { onEvent }: { onEvent: () => void }) => {
+        const listeners = events.get(topic) ?? new Set<() => void>();
+        listeners.add(onEvent);
+        events.set(topic, listeners);
+        return { close: () => listeners.delete(onEvent) };
+      },
+      onReady: (listener: () => void) => {
+        readies.add(listener);
+        return () => readies.delete(listener);
+      },
+      onStateChange: (listener: (state: string) => void) => {
+        states.add(listener);
+        return () => states.delete(listener);
+      },
+    },
+    event: (topic: string) =>
+      events.get(topic)?.forEach((listener) => listener()),
+    ready: () => readies.forEach((listener) => listener()),
+    state: (state: string) => states.forEach((listener) => listener(state)),
+  };
+}
+function setup(
+  strict = false,
+  live?: {
+    realtime: ReturnType<typeof fakeRealtime>;
+    snapshot: { value: unknown };
+  },
+) {
   const container = new ServiceContainer();
-  const authz = new AuthorizationClient({ request: vi.fn() } as never);
+  const authz = new AuthorizationClient({
+    request: live
+      ? vi.fn(async () => ({ data: live.snapshot.value }))
+      : vi.fn(),
+  } as never);
   container.instance(authorizationClientToken, authz);
+  if (live) container.instance(realtimeClientToken, live.realtime.client);
   const app = { services: container } as unknown as ClientApplication;
   const tree = () => {
     const content = (
@@ -199,6 +240,49 @@ beforeEach(() => {
     );
   authentication.client.signOut.mockReset().mockResolvedValue({ data: null });
   authentication.refresh.mockReset().mockResolvedValue(undefined);
+});
+
+describe('NocoReach identity follows permission changes, not connection refreshes', () => {
+  it('keeps the member through the refreshes a connection sends, and reloads it on a change, a drop or another snapshot', async () => {
+    const live = {
+      realtime: fakeRealtime(),
+      snapshot: { value: { unrestricted: true, permissions: [] } as unknown },
+    };
+    const view = setup(false, live);
+    await screen.findByText('Protected page');
+    await waitFor(() => expect(memberCalls()).toHaveLength(1));
+    // What a new connection sends: an invalidation when it opens and when each permission topic is ready.
+    await act(async () => {
+      view.authz.invalidate();
+      live.realtime.ready();
+      view.authz.invalidate();
+      view.authz.invalidate();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(memberCalls()).toHaveLength(1);
+    expect(screen.getByText('Protected page')).toBeVisible();
+
+    await act(async () => {
+      live.realtime.event('authorization:permissions-changed');
+      view.authz.invalidate();
+    });
+    await waitFor(() => expect(memberCalls()).toHaveLength(2));
+    await screen.findByText('Protected page');
+
+    await act(async () => {
+      live.realtime.state('reconnecting');
+      live.realtime.ready();
+      view.authz.invalidate();
+    });
+    await waitFor(() => expect(memberCalls()).toHaveLength(3));
+
+    live.snapshot.value = { unrestricted: false, permissions: [] };
+    await act(async () => {
+      view.authz.invalidate();
+    });
+    await waitFor(() => expect(memberCalls()).toHaveLength(4));
+    await screen.findByText('Protected page');
+  });
 });
 
 describe('NocoReach identity in the real authenticated route tree', () => {

@@ -20,6 +20,9 @@ const IDLE_READ_MS=GOOGLE_SAVED_COPY_MAX_AGE_MS-86400000,IDLE_READS_PER_TICK=3;
 // A project opened within this has Traffic read again by the tick once GA4 has most of yesterday (website-report.ts,
 // MORNING_READ_HOUR), so the morning's first visit sees it whole instead of the night's report being replaced.
 const MORNING_REREAD_WITHIN_MS=86400000;
+// Built snapshots are kept in nrSnapshots under this namespace (`sync-snapshots:<project>`), up to this size, so a
+// restart restores them instead of rebuilding from every stored day.
+const SAVED_SNAPSHOTS='sync-snapshots',MAX_SAVED_SNAPSHOT_BYTES=4*1024*1024;
 const active=['queued','running','retrying'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
@@ -286,8 +289,26 @@ class SyncService{
   const {cache,building}=caches;
   if(cache.get(id)?.key===key)return cache.get(id).value;
   const running=building.get(id);if(running?.key===key)return running.promise;
-  const started=Date.now(),promise=this.build(id,link,project).then(value=>{cache.set(id,{key,value:deepFreeze(value)});this.p.app?.logger?.info('NocoReach snapshots rebuilt',{projectId:id,partitions:count,ms:Date.now()-started});return value;}).finally(()=>{if(building.get(id)?.promise===promise)building.delete(id);});
+  const started=Date.now(),promise=(async()=>{
+   const saved=await this.restore(id,key);
+   if(saved){cache.set(id,{key,value:deepFreeze(saved)});this.p.app?.logger?.info('NocoReach snapshots restored',{projectId:id,partitions:count,ms:Date.now()-started});return saved;}
+   const value=await this.build(id,link,project);cache.set(id,{key,value:deepFreeze(value)});this.p.app?.logger?.info('NocoReach snapshots rebuilt',{projectId:id,partitions:count,ms:Date.now()-started});
+   // Only a build outside a transaction is committed data; one inside may still roll back.
+   if(!transaction)void this.keep(id,key,value);
+   return value;})().finally(()=>{if(building.get(id)?.promise===promise)building.delete(id);});
   building.set(id,{key,promise});return promise;}
+ // A rebuild after a restart read every stored day while the whole process waited (6 to 18 seconds for a production
+ // project), so each build is kept with its key and a later one for the same key restores it. A read inside a
+ // transaction sees only committed rows, so it may restore too.
+ async restore(id,key){try{const saved=(await this.repo('nrSnapshots').findOne({filter:{key:`${SAVED_SNAPSHOTS}:${id}`}}))?.get('payload');return saved?.key===key&&Array.isArray(saved.value)?saved.value:null;}catch{return null;}}
+ // Writes for a project run one after another, so an older build never replaces a newer one's copy; a copy over the
+ // size limit is dropped rather than kept for a key it no longer matches.
+ async keep(id,key,value){const keeping=this.keeping=this.keeping||new Map();
+  const write=(keeping.get(id)||Promise.resolve()).then(async()=>{try{const repo=this.repo('nrSnapshots'),snapshot=`${SAVED_SNAPSHOTS}:${id}`,payload={key,value},row=await repo.findOne({filter:{key:snapshot}});
+   if(JSON.stringify(payload).length>MAX_SAVED_SNAPSHOT_BYTES){if(row)await repo.destroy({filter:{key:snapshot}});return;}
+   if(row)await repo.update({filter:{key:snapshot},values:{payload}});else await repo.create({values:{key:snapshot,payload}});}
+   catch(e){this.p.app?.logger?.warn?.('NocoReach snapshots not saved',{projectId:id,message:e?.message});}});
+  keeping.set(id,write);try{await write;}finally{if(keeping.get(id)===write)keeping.delete(id);}}
  async build(id,link,project){const rows=[];for(let offset=0;;offset+=200){const page=await this.repo('nrSyncPartitions').find({filter:{projectId:id},sort:['id'],offset,limit:200});rows.push(...page.map(r=>r.toJSON()).filter(r=>r.resource===(r.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'))));if(page.length<200)break;if(rows.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}return buildSnapshots(rows,project);}
 }
 export { SyncService, StagedSync };
