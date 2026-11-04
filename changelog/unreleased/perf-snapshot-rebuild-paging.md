@@ -1,0 +1,4 @@
+## Google data: rebuilding the snapshots reads each stored day once and lets other requests through
+
+- The snapshots built from every synced Google day are rebuilt after each sync write and after a restart without a matching saved copy. A rebuild read the days 200 at a time with an offset, so the database read and sorted all of the project's days again, with their data, for every 200, and no other request was answered until it finished. It now reads the days' ids once, then the days by id, 200 at a time, answering other requests between reads. Measured locally on the demo data: with 972 stored days a rebuild took 1.7 s and held every request that long; it now takes 0.7 s, and a request arriving meanwhile waits about 50 ms. With 486 days the longest wait fell from 0.6 s to 0.25 s. The snapshots are the same as before.
+- A project over the limit of 12 000 stored daily reports is refused before any report's data is read.
