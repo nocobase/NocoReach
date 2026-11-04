@@ -196,7 +196,8 @@ export default function DataWebsite() {
             : undefined
         }
       />
-      <SavedReportNote {...savedCopyNote(report, ready ? rest : undefined)} />
+      {/* The figures' copy only: a copy of the other tables is said in the report card, on their tabs. */}
+      <SavedReportNote {...savedCopyNote(report)} />
       {/* The date range sits right under the header, as on every data page; Today follows it (UI review 2026-10-22). */}
       {report?.connected ? (
         <TodayCard

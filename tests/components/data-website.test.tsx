@@ -862,12 +862,17 @@ describe('访问', () => {
           }
         : fallback(resource, name),
     );
-    renderPage();
-    const tiles = await screen.findByRole('group', { name: '指标' });
-    // The copy of the previous window is shown, and said to be.
+    const { router } = renderPage('/website?tab=geo');
+    // The copy of the previous window is shown on the tabs it holds, and said to be there…
+    expect(await screen.findByRole('button', { name: '美国' })).toBeTruthy();
     await waitFor(() =>
-      expect(document.querySelector('[data-saved-report]')).toBeTruthy(),
+      expect(document.querySelectorAll('[data-saved-report]')).toHaveLength(1),
     );
+    // …not above the figures, which are not a copy, nor on Channels, which come with them.
+    await act(async () => router.navigate('/website'));
+    await screen.findByRole('combobox', { name: '按什么看' });
+    expect(document.querySelector('[data-saved-report]')).toBeNull();
+    const tiles = screen.getByRole('group', { name: '指标' });
     await userEvent.click(
       within(tiles).getByRole('button', { name: '浏览量', pressed: false }),
     );

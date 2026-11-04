@@ -455,6 +455,12 @@ export function ReportCard({
           </TabsTrigger>
         ))}
       </DataTableTabs>
+      {/* A table of `rest` says when it is a saved copy, here rather than above the figures, which may be newer. */}
+      {holder && holder !== report ? (
+        <div className='px-4 pt-3 empty:hidden'>
+          <SavedReportNote {...savedCopyNote(rest)} />
+        </div>
+      ) : null}
       {!holder ? (
         <div className='px-4 py-6' data-tables-loading=''>
           {restError ? (
