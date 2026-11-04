@@ -1,6 +1,6 @@
 import { $t, $legacyText, getCurrentLocale } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
-import {EMPTY,formatDate,formatDateTime} from '#lib/format';
+import {EMPTY,formatDate,formatDateTime,labelValue,parenthetical} from '#lib/format';
 import {effectSummary,type EffectResult} from './effect-model';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
@@ -11,8 +11,9 @@ export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
 export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
 export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;edited?:boolean;stages:Stage[]};
-// Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no repository change) or changes the
-// repository; you review. 上线 and 观察 follow by themselves when a step changes the repository. kind is derived.
+// Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no change to the site) or changes the
+// site, its repository by PR or an article in a publishing target; you review. Publish and Track impact follow by
+// themselves when a step changes something. kind is derived.
 export type PlaybookKind='plan'|'build';
 export type StepKind='analyze'|'change'|'review';
 // skills: ids of the Skills an Agent step always uses (see skill-model.ts), at most 5.
@@ -23,7 +24,8 @@ export const categoryName=(c?:Category)=>getCategories().find(([k])=>k===c)?.[1]
 export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string};
 export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
-export const getStepKinds = (): Record<StepKind,{name:string;label:string;hint:string}> => ({analyze:{name:$t('common.analyze'),label:$t('playbook.agentAnalysis'),hint:$t('playbook.writesDocumentWithoutChangingRepository')},change:{name:$t('common.modify'),label:$t('playbook.agentChange'),hint:$t('playbook.changesRepositoryOpensPr')},review:{name:$t('common.review'),label:$t('playbook.review'),hint:$t('playbook.approveRequestChangesAfterReviewing')}});
+// A playbook's own words, before a task says where it changes things (PlaybookSteps' place words a task's steps).
+export const getStepKinds = (): Record<StepKind,{name:string;label:string;hint:string}> => ({analyze:{name:$t('common.analyze'),label:$t('playbook.agentAnalysis'),hint:$t('playbook.writesDocumentWithoutChangingSite')},change:{name:$t('common.modify'),label:$t('playbook.agentChange'),hint:$t('playbook.changesSiteOrArticle')},review:{name:$t('common.review'),label:$t('playbook.review'),hint:$t('playbook.approveRequestChangesAfterReviewing')}});
 export const getStageExecutor = (): Record<StageKind,string> => ({agent:$t('common.localAgent'),review:$t('common.you'),publish:$t('playbook.confirmSystemRuns'),release:$t('playbook.automatic'),observe:$t('common.system')});
 export const producesOutput=(s?:Stage)=>s?.kind==='agent';
 export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mode===undefined&&s.key==='plan'));
@@ -79,7 +81,7 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||"")})};
   case 'runQueued':return {who:executor,text:$t('playbook.started',{0:(e.note||$t('common.run'))})};
   case 'runSucceeded':return {who:executor,text:$t('playbook.finishedDeliveredNewVersion')};
-  case 'runFailed':return {who:$t('common.system'),text:$t('playbook.runNotCompleteRetried',{0:e.note?`（${$legacyText(e.note)}）`:''})};
+  case 'runFailed':return {who:$t('common.system'),text:$t('playbook.runNotCompleteRetried',{0:parenthetical($legacyText(e.note))})};
   case 'flowWaiting':return {who:$t('common.system'),text:$t('playbook.nextStepNotStart',{0:$legacyText(e.note||"")})};
   // A primary language approved before its translation (2026-10-24) says so instead of handing over.
   case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):e.note==='update'?$t('articleTask.approvedPrimaryUpdate'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
@@ -93,7 +95,7 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'confirmPublish':return {who:$t('common.you'),text:$t('common.confirmedPublished')};
   case 'comment':return {who:$t('common.you'),text:e.comment||''};
   case 'linkContent':return {who:$t('common.you'),text:$t('playbook.linkedPage')};
-  case 'cancelTask':return {who:$t('common.you'),text:$t('playbook.closedTaskStoppedRun',{0:e.note?`：${$legacyText(e.note)}`:''})};
+  case 'cancelTask':return {who:$t('common.you'),text:labelValue($t('playbook.closedTaskStoppedRun',{0:''}),$legacyText(e.note))};
   case 'archiveTask':return e.note?{who:$t('common.system'),text:$t('playbook.closedTaskValue',{0:$legacyText(e.note)})}:{who:$t('common.you'),text:$t('playbook.closedTask')};
   // Reopened (2026-10-29): the step a task stopped halfway went back to.
   case 'unarchiveTask':return {who:$t('common.you'),text:e.stageKey?$t('playbook.reopenedTaskAt',{0:s}):$t('playbook.reopenedTask')};
@@ -102,7 +104,7 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'revertRelease':return {who:$t('common.you'),text:$t('playbook.reverted',{0:e.note||$t('playbook.change')})};
   case 'revertOpened':return {who:$t('common.localAgent'),text:$t('playbook.openedRevertTakesEffectOnce',{0:e.note||'PR'})};
   case 'simulatedRelease':return {who:$t('common.system'),text:$t('taskDetail.simulatedRelease')};
-  case 'live':return {who:$t('common.system'),text:$t('playbook.sawChangeLiveStartedTracking',{0:e.note?`（${$legacyText(e.note)}）`:''})};
+  case 'live':return {who:$t('common.system'),text:$t('playbook.sawChangeLiveStartedTracking',{0:parenthetical($legacyText(e.note))})};
   case 'notSeen':return {who:$t('common.system'),text:$t('playbook.changeNotSeenLiveWithin')};
   // A checkpoint's effect, read by the hourly observation (2026-11-02): in the words of the task's status chip.
   case 'effect':{const r=effects?.find(x=>String(x.day)===e.note);return {who:$t('common.system'),text:$t('playbook.effectRecorded',{0:e.note||'',1:r?effectSummary(r):EMPTY})};}

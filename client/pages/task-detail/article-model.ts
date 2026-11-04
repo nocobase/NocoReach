@@ -1,4 +1,5 @@
 import { $t, getCurrentLocale } from '#i18n';
+import { joinList } from '#lib/format';
 import {
   ARTICLE_FIELDS,
   inPlaceLocales,
@@ -351,8 +352,7 @@ export const nameOf = (data: TaskData, targetId?: string) =>
 export const targetName = (data: TaskData, r: Release) =>
   nameOf(data, r.article?.targetId);
 /** Names as a list in the interface language: 、 in Chinese, a comma otherwise. */
-export const joinNames = (names: string[]) =>
-  names.join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
+export const joinNames = (names: string[]) => joinList(names);
 
 /**
  * Every target a release publishes to, the primary first, each with its own state (article-flow.ts `stateOf`). A

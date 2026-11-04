@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Loader2 } from 'lucide-react';
-import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
+import { $t, $legacyText, useMessageState } from '#i18n';
+import { joinList } from '#lib/format';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { serviceUnavailable } from '#lib/transport-error';
 import { cn } from '#lib/utils';
@@ -256,7 +257,7 @@ export function KeywordRunCard({
             <>
               <dt className='text-muted-foreground'>{$t('keywordRun.kept')}</dt>
               <dd className='text-xs leading-5 text-muted-foreground'>
-                {kept.join(getCurrentLocale().startsWith('zh') ? '、' : ', ')}
+                {joinList(kept)}
               </dd>
             </>
           ) : null}
@@ -272,9 +273,7 @@ export function KeywordRunCard({
       {p.restore?.length ? (
         <p className='text-muted-foreground'>
           {$t('keywordRun.restore', {
-            0: p.restore.join(
-              getCurrentLocale().startsWith('zh') ? '、' : ', ',
-            ),
+            0: joinList(p.restore),
           })}
         </p>
       ) : null}

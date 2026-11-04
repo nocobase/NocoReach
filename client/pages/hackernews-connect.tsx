@@ -1,4 +1,4 @@
-import { formatDateTime, formatDate } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -22,7 +22,7 @@ export function HackerNewsConnect({projectId,suggested,onChange}:{projectId:numb
  useEffect(()=>{if(!status?.syncing&&!(status?.connected&&!status.lastSync))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.syncing,status?.lastSync,status?.connected]);
  async function run(fn:()=>Promise<HackerNewsStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
  if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
- if(status.connected)return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('common.search',{0:status.terms!.join('、')})}</h3>
+ if(status.connected)return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('common.search',{0:joinList(status.terms!)})}</h3>
   {!status.lastSync?<p role="status">{$t('hackernews.readingMentionsPastYearUsually')}</p>:<><p>{$tj('hackernews.mentionsLast30DaysThem',{0:status.last30,1:status.stories30,2:status.retainedFrom?$t('common.recordingSince',{0:status.retainedFrom}):''})}</p>
   {!!status.top?.length&&<div><p className="nr-guide-subtitle">{$t('common.topScoringPosts')}</p>{status.top.slice(0,3).map(t=><p key={t.hnUrl} className="nr-footnote"><a className="nr-link" href={t.hnUrl} target="_blank" rel="noreferrer">{t.title}</a>  {$tj('hackernews.pointsComments',{0:t.points,1:t.comments,2:formatDate(t.createdAt)})}</p>)}</div>}
   <p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:formatDateTime(status.lastSync.at)})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p></>}

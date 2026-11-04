@@ -22,7 +22,7 @@ import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { discussionsDraft, githubTrafficDraft } from "../seo-hand-off";
 import { dateOf, hours, num, pct, type Contributor, type Discussion, type Item, type Kind, type PopularPath, type Referrer, type Release, type Snapshot, type View } from "./model";
-import { formatDate, formatSigned } from '#lib/format';
+import { formatDate, formatSigned, withDetail } from '#lib/format';
 
 export const KIND: Record<Kind, { label: () => string; tone: Tone }> = {
   own: { label: () => $t('dataGithub.kindOwn'), tone: "blue" }, ai: { label: () => $t('dataGithub.kindAi'), tone: "violet" }, search: { label: () => $t('dataGithub.kindSearch'), tone: "green" },
@@ -96,7 +96,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
           ]} />
       ) : tab === "paths" ? (
         <Grid<Pop> key={tab} id="github-paths" {...common} empty={t.paths ? $t('dataGithub.noRecordsInRange') : trafficEmpty} rows={(t.paths?.items ?? []).filter((r) => has(r.path, r.title))} rowId={(r) => r.key} sort="count" onOpen={(r) => setOpen({ kind: "paths", key: r.key })}
-          handOff={(ticked) => ({ noun: $t('common.pagesSelected'), playbookId: "content-outline", description: $t('dataGithub.tickedPopularPagesBecomeOne'), draft: () => githubTrafficDraft(repo, "paths", ticked.map((p) => ({ name: `${p.title || p.path}（${p.path}）`, count: p.count, uniques: p.uniques }))) })}
+          handOff={(ticked) => ({ noun: $t('common.pagesSelected'), playbookId: "content-outline", description: $t('dataGithub.tickedPopularPagesBecomeOne'), draft: () => githubTrafficDraft(repo, "paths", ticked.map((p) => ({ name: withDetail(p.title || p.path, p.path), count: p.count, uniques: p.uniques }))) })}
           columns={[
             { id: "name", accessorFn: (r) => r.path, header: ({ column }) => <SortableHeader column={column} label={$t('dataGithub.path')} help={false} />, cell: ({ row }) => <button type="button" className="flex max-w-md min-w-0 flex-col text-left" onClick={() => setOpen({ kind: "paths", key: row.original.key })}><span className="truncate text-primary underline-offset-4 hover:underline">{short(row.original.path)}</span>{row.original.title ? <span className="truncate text-xs text-muted-foreground">{row.original.title}</span> : null}</button> },
             plain<Pop>("area", $t('dataGithub.area'), (r) => (AREA[r.area] ?? (() => $t('dataGithub.kindOther')))(), "text-muted-foreground"),
@@ -112,7 +112,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
           ]} />
       ) : tab === "issues" || tab === "pulls" ? (
         <Grid<Item> key={tab} id={`github-${tab}`} {...common} empty={view.history?.state === "complete" ? $t('dataGithub.noRecordsInRange') : historyEmpty} rows={t[tab].filter((i) => has(i.title, i.author, `#${i.number}`))} rowId={(i) => String(i.number)} sort="created"
-          handOff={tab === "issues" ? (ticked) => ({ noun: $t('dataGithub.issuesSelected'), playbookId: "community-summary", description: $t('dataGithub.tickedIssuesBecomeOne'), draft: () => discussionsDraft(`GitHub Issues（${repo}）`, "issue", ticked.map((i) => ({ title: i.title, url: i.url, meta: $t('dataGithub.comments', { 0: i.comments ?? 0, 1: STATE[i.state].label() }) }))) }) : undefined}
+          handOff={tab === "issues" ? (ticked) => ({ noun: $t('dataGithub.issuesSelected'), playbookId: "community-summary", description: $t('dataGithub.tickedIssuesBecomeOne'), draft: () => discussionsDraft(withDetail('GitHub Issues', repo), "issue", ticked.map((i) => ({ title: i.title, url: i.url, meta: $t('dataGithub.comments', { 0: i.comments ?? 0, 1: STATE[i.state].label() }) }))) }) : undefined}
           columns={[
             { id: "title", accessorFn: (i) => i.number, header: ({ column }) => <SortableHeader column={column} label={$t('common.title')} help={false} />, cell: ({ row }) => <span className="flex max-w-xl min-w-0 items-center gap-1.5"><span className="shrink-0 text-muted-foreground tabular-nums">#{row.original.number}</span><span className="truncate"><Ext href={row.original.url}>{row.original.title}</Ext></span></span> },
             plain<Item>("author", $t('dataGithub.author'), (i) => <span className="flex items-center gap-1.5 whitespace-nowrap">{i.author ?? "—"}<Who external={i.external} /></span>),
@@ -128,7 +128,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
           ]} />
       ) : (
         <Grid<Discussion> key={tab} id="github-discussions" {...common} empty={t.discussionsEnabled === false ? $t('dataGithub.discussionsNotEnabledRepository') : t.discussions ? $t('dataGithub.noDiscussions') : $t('dataGithub.readTrafficTokenDiscussionsLast')} rows={(t.discussions ?? []).filter((d) => has(d.title, d.category))} rowId={(d) => d.url} sort="comments"
-          handOff={(ticked) => ({ noun: $t('dataGithub.discussionsSelected'), playbookId: "community-summary", description: $t('dataGithub.tickedDiscussionsBecomeOne'), draft: () => discussionsDraft(`GitHub Discussions（${repo}）`, $t('dataGithub.discussions'), ticked.map((d) => ({ title: d.title, url: d.url, meta: $t('dataGithub.comments', { 0: d.comments, 1: d.answerable ? (d.answered ? $t('dataGithub.answered') : $t('dataGithub.notAnsweredYet')) : d.category }) }))) })}
+          handOff={(ticked) => ({ noun: $t('dataGithub.discussionsSelected'), playbookId: "community-summary", description: $t('dataGithub.tickedDiscussionsBecomeOne'), draft: () => discussionsDraft(withDetail('GitHub Discussions', repo), $t('dataGithub.discussions'), ticked.map((d) => ({ title: d.title, url: d.url, meta: $t('dataGithub.comments', { 0: d.comments, 1: d.answerable ? (d.answered ? $t('dataGithub.answered') : $t('dataGithub.notAnsweredYet')) : d.category }) }))) })}
           columns={[
             { id: "title", accessorFn: (d) => d.title.toLowerCase(), header: ({ column }) => <SortableHeader column={column} label={$t('common.title')} help={false} />, cell: ({ row }) => <span className="block max-w-xl truncate"><Ext href={row.original.url}>{row.original.title}</Ext></span> },
             plain<Discussion>("category", $t('common.category'), (d) => d.category, "text-muted-foreground"),

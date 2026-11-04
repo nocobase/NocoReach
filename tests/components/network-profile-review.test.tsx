@@ -221,7 +221,7 @@ it('uses network profile terminology for deleting a simulated profile', async ()
     await screen.findByRole('menuitem', { name: 'Delete', exact: true }),
   );
   expect(await screen.findByRole('alertdialog')).toHaveTextContent(
-    `Delete network profile「${profile.name}」`,
+    `Delete network profile “${profile.name}”?`,
   );
 });
 it('uses network profile terminology for the management link and missing selection', async () => {

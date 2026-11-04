@@ -1,4 +1,5 @@
 import { $legacyText, $t, $tj, useMessageState, type Message } from '#i18n';
+import { joinList } from '#lib/format';
 import { usePageTab } from '#hooks/use-page-tab';
 import {
   useCallback,
@@ -295,7 +296,7 @@ function useMemoryUpdates(projectId?: number): MemoryUpdates {
         act('accept', { ids: [id] }, (r) => {
           toast.success(() =>
             $t('projectKnowledge.memoryUpdated', {
-              0: (r.memory || []).join('、'),
+              0: joinList(r.memory || []),
             }),
           );
           window.dispatchEvent(new Event('reach-project-saved'));

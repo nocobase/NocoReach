@@ -248,3 +248,45 @@ export function formatDuration(seconds: number | null | undefined): string {
     1: Math.round((s % 3600) / 60),
   });
 }
+
+// Punctuation a page puts between pieces of its own text, in the interface language: Chinese and Japanese use
+// full-width marks, the other languages ASCII marks and spaces ("Performance 62, LCP 3.8 s", not "Performance 62，LCP
+// 3.8 s"). Hand-off briefs are shown on the task page and read by the Agent in that language too. Never write "、",
+// "，", "；", "（）" or "：" into a template literal.
+
+type Part = string | number | null | undefined;
+
+/** Short names in a row: "a, b, c". */
+export const joinList = (items: readonly Part[]): string =>
+  items.join($t('common.listSeparator'));
+
+/** Phrases that each hold a value: "Performance 62, LCP 3.8 s". */
+export const joinClauses = (items: readonly Part[]): string =>
+  items.join($t('common.clauseSeparator'));
+
+/** Longer entries that may hold commas themselves, such as titles or error messages: "a; b". */
+export const joinEntries = (items: readonly Part[]): string =>
+  items.join($t('common.entrySeparator'));
+
+/** Whole sentences one after another: a space between them, none in Chinese and Japanese. */
+export const joinSentences = (items: readonly Part[]): string =>
+  items.filter(Boolean).join($t('common.sentenceSeparator'));
+
+/** A detail in parentheses to put after a text: " (Mobile)"; nothing without a detail. */
+export const parenthetical = (detail: string | null | undefined): string =>
+  detail ? $t('common.parenthetical', { 0: detail }) : '';
+
+/** A text and its detail in parentheses: "x.com/pricing (Mobile)"; the text alone without a detail. */
+export const withDetail = (
+  text: string,
+  detail: string | null | undefined,
+): string => text + parenthetical(detail);
+
+/** A value after its label: "Workspace: Acme"; the label alone without a value. */
+export const labelValue = (
+  label: string,
+  value: string | number | null | undefined,
+): string =>
+  value == null || value === ''
+    ? label
+    : $t('common.labelValue', { 0: label, 1: value });

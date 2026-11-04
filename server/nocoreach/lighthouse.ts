@@ -13,6 +13,8 @@ import { DataForSeo, RECENT_MS } from './dataforseo.js';
 // says when it is reused.
 const error=(message,status=400)=>{throw new VisibilityError(message,status);};
 const CATEGORIES=['performance','accessibility','best-practices','seo'];
+// Each metric keeps its label in the stored result, but Audit › Performance names it by key in the reader's language
+// (client/pages/audit-performance.tsx), so a new metric needs its name there too.
 const METRICS=[['largest-contentful-paint','LCP'],['cumulative-layout-shift','CLS'],['total-blocking-time','TBT'],['first-contentful-paint','FCP'],['speed-index','Speed Index'],['interactive','TTI'],['server-response-time',systemMessageText('lighthouse.serverResponse')]];
 const SKIP=new Set(['largest-contentful-paint-element','layout-shifts','diagnostics','metrics','network-requests','network-rtt','network-server-latency','main-thread-tasks','resource-summary','screenshot-thumbnails','final-screenshot','full-page-screenshot','script-treemap-data']);
 const pct=v=>typeof v==='number'&&!Number.isNaN(v)?Math.round(v*100):null;

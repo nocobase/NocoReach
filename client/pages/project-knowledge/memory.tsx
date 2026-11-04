@@ -41,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#components/ui/select';
+import { joinList } from '#lib/format';
 
 // 记忆 tab: how full it is, the AI's update suggestions to accept or ignore, and one row per item — the project name,
 // the language the AI writes in, and the nine handbook sections. One Edit opens every item in a dialog over this tab
@@ -217,7 +218,7 @@ function MemoryUpdates({
                   : '',
                 2: day(d.at),
                 3: d.filled?.length
-                  ? $t('projectKnowledge.filled', { 0: d.filled.join('、') })
+                  ? $t('projectKnowledge.filled', { 0: joinList(d.filled) })
                   : $t('projectKnowledge.nothingFoundEmptySections'),
                 4: d.suggested
                   ? $t(
