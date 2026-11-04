@@ -3,7 +3,7 @@
 import { test, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { WebsiteReport, TABLES, FIRST_TABLES, REST_TABLES } from '../../server/nocoreach/website-report.js';
-import { websiteView, windowFor } from '../../server/nocoreach/data-views.js';
+import { DataViews, websiteView, windowFor } from '../../server/nocoreach/data-views.js';
 import { GA4_PARTIAL_CACHE_MS } from '../../shared/ga4-cache.js';
 
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
@@ -236,6 +236,19 @@ test('a period is kept until midnight in the zone its window ends in',async()=>{
  g.zones.set('123',{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
  const v=await g.period('1','123',windowFor('2026-10-30','7'));
  assert.equal(v.cacheExpiresAt,Date.parse('2026-10-31T07:00:00Z'),'23:00 in Los Angeles: an hour left, not six');
+});
+
+test('the tick reads the other tables only when a read lasts until midnight: from the hour before the morning in the property\'s zone',async()=>{
+ const {g}=fake(()=>({}));g.zones.set('123',{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ // Los Angeles is seven hours behind UTC on 2026-10-31.
+ assert.equal(g.nightRead('123',Date.parse('2026-10-31T07:00:00Z')),true,'midnight');
+ assert.equal(g.nightRead('123',Date.parse('2026-10-31T11:59:00Z')),true,'04:59: lives until the morning');
+ assert.equal(g.nightRead('123',Date.parse('2026-10-31T12:00:00Z')),false,'05:00: has most of yesterday and lasts until midnight');
+ assert.equal(g.nightRead('123',Date.parse('2026-10-31T06:00:00Z')),false,'23:00 the day before');
+ const views=new DataViews({sync:{link:async()=>({get:k=>k==='ga4PropertyId'?'123':null})}});views.ga4=g;
+ vi.useFakeTimers({now:new Date('2026-10-31T11:00:00Z')});
+ try{assert.equal(await views.websiteDayRead('1'),false,'04:00 there');vi.setSystemTime(new Date('2026-10-31T13:00:00Z'));assert.equal(await views.websiteDayRead('1'),true,'06:00 there');}
+ finally{vi.useRealTimers();}
 });
 
 test('all-time daily reports increase the row limit and omit previous data',async()=>{

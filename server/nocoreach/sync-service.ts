@@ -244,6 +244,13 @@ class SyncService{
    const webNext=this.webNext=this.webNext||new Map(),next=webNext.get(id);
    if((!next||Date.now()>=next.at||(active&&next.idle))&&(active||idleReads<IDLE_READS_PER_TICK)){if(!active)idleReads++;
     await (next?.partial||lately?waitForFresh:readAhead)(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS,partial:true});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000,...(next?.partial?{partial:true}:{})}));}
+   // A project opened in the last day also has Traffic's other tables read (website-report.ts, `periodTables`), so its tabs
+   // and the online agent's Pages answer at once, but once a day: not in the night (`websiteDayRead`), when the read would
+   // hold yesterday low and be read again in the morning. Within the day the report held answers; one refused in part
+   // waits PARTIAL_RETRY_MS and a failure 15 minutes, as for the figures.
+   if(lately){const tablesNext=this.tablesNext=this.tablesNext||new Map();
+    if(Date.now()>=(tablesNext.get(id)||0)&&await this.p.dataViews?.websiteDayRead?.(id)?.catch(()=>false))
+     await waitForFresh(()=>this.p.dataViews.websiteTables(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)tablesNext.set(id,Date.now()+PARTIAL_RETRY_MS);else tablesNext.delete(id);},()=>tablesNext.set(id,Date.now()+15*60000));}
    if(!active)continue;
    const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;

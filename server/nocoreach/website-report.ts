@@ -6,7 +6,8 @@
 //   that ends yesterday in the property's time zone; kept until midnight there, when yesterday moves on, except that a
 //   report read in the night is read again in the morning, once GA4 has most of yesterday (MORNING_READ_HOUR). The sync
 //   tick reads it ahead. `periodTables`, the other report tables (着陆页, 页面, 地区, 技术…), follows the same rules but is
-//   read only when the page is opened: they are most of the rows, and most visits never open their tabs.
+//   read when the page is opened, and by the tick only once a day for a project opened in the last day: they are most
+//   of the rows, and most visits never open their tabs.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -183,12 +184,15 @@ class WebsiteReport{
  // is unconfirmed: it then asks again and moves to the property's own yesterday once the lookup succeeds. A new day's
  // window is answered from the view's previous one while it is read, so the report keeps the window it holds, and the
  // `settledThrough` of the day it was read: its days after that were still being processed when GA4 gave them.
+ // Whether a period report read at `now` is a night read, which lives only until MORNING_READ_HOUR: one read before the
+ // hour before it. The sync tick reads `periodTables` ahead only when it is not, so once a day, with yesterday whole.
+ nightRead(property:string,now:number){return 24*HOUR-untilMidnight(this.endZone(property),now)<(MORNING_READ_HOUR-1)*HOUR;}
  period(id:string|number,property:string,w:unknown,options:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){return this.periodPart('period',id,property,w,options,()=>this.readPeriod(id,property,w));}
  // The other report tables of the same window, with the same lifetime; their own family, so neither part's copy retires
  // the other's.
  periodTables(id:string|number,property:string,w:unknown,options:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){return this.periodPart('period-tables',id,property,w,options,()=>this.readTables(id,property,w));}
  periodPart(part:string,id:string|number,property:string,w:unknown,{cutoff,settledThrough,view}:{cutoff?:string;settledThrough?:string;view?:unknown[]},read:()=>Promise<unknown>){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
-  return this.history.load(String(id),[part,...this.scope(id,property),w],async()=>({...await read(),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):since<(MORNING_READ_HOUR-1)*HOUR?MORNING_READ_HOUR*HOUR-since:left;},
+  return this.history.load(String(id),[part,...this.scope(id,property),w],async()=>({...await read(),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):this.nightRead(property,now)?MORNING_READ_HOUR*HOUR-since:left;},
    (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:[part,...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')];
   const others=FIRST_TABLES.filter(n=>n!=='channel');
