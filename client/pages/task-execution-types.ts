@@ -3,6 +3,7 @@ import type { ArticleDraft, ArticleSnapshot } from '../../shared/article-publish
 import {localizeWorkSnapshots} from './playbook-snapshot';
 import {stageName} from './playbook-model';
 import {reopening} from '../../shared/task-reopen.js';
+import {awaitingRestart} from '../../shared/task-pending.js';
 import type { MaterialNotice } from './task-detail/material-notices.js';
 import type { AgentRunExecution, RunTranscriptEvent } from '#components/agent-run-history';
 import { $t } from "#i18n";
@@ -57,13 +58,9 @@ export function closedWhen(w?:Partial<Work>){
 }
 export const getCloseConfirm = () => ($t('taskExecution.executorStopsUnmergedPrsClosed'));
 // An Agent step reopened after the closing stopped it or withdrew its change, not started again yet: it waits for a
-// person (Start this step again) rather than reading as a failure or as the Agent at work.
-export function restartOf(w?:Partial<Work>):'stopped'|'withdrawn'|undefined{
- const st=w?.flow?.stages[w.stageIndex||0];if(!w||w.stage!=='flow'||st?.kind!=='agent'||isClosed(w))return;
- const h=w.history||[],i=h.map(e=>e.action).lastIndexOf('unarchiveTask'),e=h[i];
- if(!e||e.stageKey!==st.key||(e.note!=='stopped'&&e.note!=='withdrawn'))return;
- return h.slice(i+1).some(x=>x.action==='runQueued'||x.action==='recordManual')?undefined:e.note;
-}
+// person (Start this step again) rather than reading as a failure or as the Agent at work. The task's state reads the
+// same rule (shared/task-pending.ts), so it counts as Needs you.
+export const restartOf=(w?:Partial<Work>)=>awaitingRestart(w);
 // What Reopen does, on the closed card: where the task goes back to, as the server moves it (shared/task-reopen.ts).
 export function reopenHint(w:Work,runs:Run[]){
  const back=reopening(w,runs);w=localizeWorkSnapshots(w);

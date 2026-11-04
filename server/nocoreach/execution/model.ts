@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { TaskResultSource } from '../../../shared/task-result.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { taskState } from '../../../shared/task-pending.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
 import type { FlowSnapshot } from './flow';
@@ -101,18 +102,13 @@ export function canApplyRun(w: Work, run: Run): boolean {
 }
 
 export type BoardState = 'todo' | 'doing' | 'review' | 'done';
+// The pages' rule (shared/task-pending.ts `taskState`), so the status text, notifications and the online agent agree
+// with the task list and the Tasks badge. Flow tasks: an Agent at work is in progress; a step waiting on a person (a
+// review, publishing, a failed run or merge, a step to start again, a change not seen online) needs confirmation; once
+// live, watching the effect is the system's job and the task counts as done for you.
 export function boardState(w: Work): BoardState {
   if (w.cancelledAt) return 'done';
-  if (w.boardState) return w.boardState;
-  if (w.stage === 'done') return 'done';
-  // Flow tasks: stages done by a Runner agent are in progress, stages waiting on a person need confirmation.
-  // The automatic release waits for you only when the merge failed or the change was not seen online.
-  // Once live, watching the effect is the system's job: the task counts as done for you.
-  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; if (kind === 'observe') return 'done'; return kind === 'review' || kind === 'publish' || (kind === 'release' && ['merge_failed', 'not_seen', 'publish_failed', 'publish_conflict', 'export_late'].includes(w.release?.state || '')) ? 'review' : 'doing'; }
-  if (w.stage === 'verification') return w.receipt?.note ? 'done' : 'review';
-  if (w.stage === 'execution') return 'review';
-  if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';
-  return 'todo';
+  return taskState(w);
 }
 /**
  * Where a task stands for people, closed apart (2026-10-23 user feedback: a cancelled task read "Completed · Closed"):
