@@ -35,7 +35,7 @@ import type {
   ArticleTargetRef,
   TaskData,
 } from '../task-execution-types';
-import { useTaskDraft } from './draft-store.js';
+import { useStayWithDrafts, useTaskDraft } from './draft-store.js';
 import { AgentNotes } from './agent-notes.js';
 import { ArticlePreview } from './article-preview.js';
 import { ImageHint, ImageProblem } from './task-images.js';
@@ -539,6 +539,7 @@ export function ArticleReview({
   const [views, setViews] = useState<Record<string, ArticleView>>({});
   const versions = languages.versions(tab);
   const view = views[tab] ?? languages.defaultView(tab);
+  const stay = useStayWithDrafts();
   return (
     <div className='flex flex-col gap-4'>
       <AgentNotes summary={a.draft.summary} notes={notes} />
@@ -583,7 +584,7 @@ export function ArticleReview({
               aria-label={$t('articleTask.readFullScreen')}
               title={$t('articleTask.readFullScreen')}
               nativeButton={false}
-              render={<Link to={readerTo(tab, view)} />}
+              render={<Link to={readerTo(tab, view)} onClick={stay} />}
             >
               <Maximize2 />
             </Button>
@@ -608,7 +609,6 @@ const LABEL = `${text.muted} font-normal`;
 type EditForm = {
   slug: string;
   status: ArticleStatus;
-  verifyText: string;
   locales: Record<string, Record<ArticleField, string>>;
 };
 
@@ -621,7 +621,6 @@ function initialForm(
   return {
     slug: a.draft.slug || base?.slug || '',
     status: a.draft.status ?? base?.status ?? 'draft',
-    verifyText: a.draft.verifyText || '',
     locales: Object.fromEntries(
       locales.map((l) => [
         l,
@@ -644,6 +643,8 @@ export function ArticleEditor({
   busy,
   onSave,
   onCancel,
+  onTab,
+  fullScreenTo,
 }: {
   data: TaskData;
   article: ArticleProposal;
@@ -654,6 +655,10 @@ export function ArticleEditor({
   busy: boolean;
   onSave: (article: ArticleDraft) => Promise<boolean>;
   onCancel: () => void;
+  /** The language chosen in the editor. */
+  onTab?: (tab: string) => void;
+  /** Where Edit full screen opens the editor on a language; left out on the article page itself. */
+  fullScreenTo?: (tab: string) => string;
 }) {
   const id = useId();
   const languages = articleLanguages(data, a);
@@ -674,17 +679,32 @@ export function ArticleEditor({
     : locales.filter(
         (l) => languages.locales.includes(l) || (create && l === primary),
       );
-  const [tab, setTab] = useState(
-    asked && editable.includes(asked)
-      ? asked
-      : editable.find(languages.changed) || editable[0],
-  );
   // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page. One
-  // draft per version, so an edit left on an older version never replaces a newer one.
-  const [raw, setRaw, clear] = useTaskDraft(
+  // draft per version, so an edit left on an older version never replaces a newer one. The language being edited is
+  // kept with it, so the task page and the article page (Edit full screen, 2026-11-04 user request) edit the same one.
+  const [raw, setRaw, clearForm] = useTaskDraft(
     `article:${draftKey}`,
     JSON.stringify(initialForm(a, base, locales)),
   );
+  const [shownTab, setShownTab, clearTab] = useTaskDraft(
+    `article:${draftKey}:tab`,
+    '',
+    false,
+  );
+  const tab = editable.includes(shownTab)
+    ? shownTab
+    : asked && editable.includes(asked)
+      ? asked
+      : editable.find(languages.changed) || editable[0];
+  const setTab = (l: string) => {
+    setShownTab(l);
+    onTab?.(l);
+  };
+  const clear = () => {
+    clearForm();
+    clearTab();
+  };
+  const stay = useStayWithDrafts();
   // Draft or published, where the target stores a status; a new article starts as a draft.
   const withStatus = Boolean(target?.status);
   const initial = initialForm(a, base, locales);
@@ -717,8 +737,6 @@ export function ArticleEditor({
           0: ARTICLE_LIMITS.description,
         });
     }
-    if (f.verifyText.length > 200)
-      e.verifyText = $t('articleTask.tooLong', { 0: 200 });
     return e;
   }
   const set = (next: EditForm) => {
@@ -755,9 +773,6 @@ export function ArticleEditor({
             : {}),
         ...(create ? { slug: form.slug } : {}),
         locales: draftLocales,
-        ...(form.verifyText.trim()
-          ? { verifyText: form.verifyText.trim() }
-          : {}),
       })
     )
       clear();
@@ -825,7 +840,24 @@ export function ArticleEditor({
           </Field>
         )}
         <div className='flex min-w-0 flex-col gap-3'>
-          <LanguageTabs locales={editable} tab={tab} onTab={setTab} />
+          <div className='flex flex-wrap items-end justify-between gap-x-4 gap-y-2'>
+            <LanguageTabs locales={editable} tab={tab} onTab={setTab} />
+            {fullScreenTo && (
+              // The editor on the article's own page, with the same draft (2026-11-04 user request: there was no full
+              // screen once editing).
+              <Button
+                variant='ghost'
+                size='icon'
+                className='mb-1.5'
+                aria-label={$t('articleTask.editFullScreen')}
+                title={$t('articleTask.editFullScreen')}
+                nativeButton={false}
+                render={<Link to={fullScreenTo(tab)} onClick={stay} />}
+              >
+                <Maximize2 />
+              </Button>
+            )}
+          </div>
           <MissingLanguages languages={languages} />
         </div>
         {editable.map((l) => (
@@ -895,18 +927,6 @@ export function ArticleEditor({
             })}
           </fieldset>
         ))}
-        <Field data-invalid={Boolean(errors.verifyText)}>
-          <FieldLabel htmlFor={`${id}-verifyText`} className={LABEL}>
-            {$t('articleTask.verifyText')}
-          </FieldLabel>
-          <Input
-            value={form.verifyText}
-            onChange={(e) => set({ ...form, verifyText: e.target.value })}
-            {...aria('verifyText')}
-          />
-          <FieldDescription>{$t('articleTask.verifyHelp')}</FieldDescription>
-          {err('verifyText')}
-        </Field>
       </fieldset>
       <ImageProblem>{pasted.problem}</ImageProblem>
       <div className='flex flex-wrap items-center justify-end gap-2'>

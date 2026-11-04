@@ -826,7 +826,7 @@ export class TaskService {
             await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
-            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
+            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, output, optional(v.release?.note, 2000), tx);
             else if (w.flow!.stages[index + 1]?.kind === 'release') {
               const pr = output.pr, rel = v.release || {};
               const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };

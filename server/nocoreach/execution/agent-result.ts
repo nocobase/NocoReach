@@ -102,7 +102,13 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
     ...(mode === 'article'
       ? [
           'article 是文章写作：不需要仓库，不提交、不推送、不开 PR，也不要调用任何 CMS、网站或发布接口；审核通过后由 NocoReach 发布。',
-          'data.article.source 是当前源稿文件（JSON：id、slug、status 和 locales 下各语言的 title、description、body，body 为 Markdown），先完整读取，改写时在源稿基础上修改。data.article.action 为 create 时 source 为 null，是新文章。',
+          'data.article.source 是当前源稿文件（JSON：id、slug、status 和 locales 下各语言的 title、description、body，body 为 Markdown），先完整读取；没有 data.article.previous 时，改写在源稿基础上修改。data.article.action 为 create 时 source 为 null，是新文章。',
+          // 2026-11-04 (T-62): asked only to add screenshots and links to a version the owner had edited by hand, the
+          // Agent, which was never given that version, rewrote the whole article (4,500 characters became 10,900).
+          'data.article.previous 存在时，是这次审核意见针对的那一版：version 是它的版本号，editedByHand 为 true 表示负责人在任务页上直接改过这一版，article 指向这一版的完整内容文件（格式和源稿相同），先完整读取。这次以它为底稿修改，phase 为 update 时也以它里面各语言的文字为底稿；不要回到源稿或你以前写的版本重新写。feedback 按时间排列，最后一条是针对这一版的意见，更早的是对更早版本提的，只用来了解来龙去脉。返回时仍只返回和源稿相比改了的语言和字段。',
+          '按审核意见修改时只做意见要求的改动。意见只要求增删或修改某一处或某一类内容（例如加截图、加内链、改标题、删一段）时，只在需要的位置改：其余的标题、摘要和正文逐句原样保留，不润色、不改写、不调整结构和顺序，也不扩写或缩短全文。editedByHand 为 true 时，这一版的文字是负责人自己定的，更要保留负责人的措辞；意见没提到的地方即使你觉得能写得更好也不要改，可以在 summary 里提建议。',
+          // The same task: "restore version 6", meant as going back to the version before it, was taken the other way.
+          '意见要求回到以前的某一版时（例如“还原”“恢复”“退回”“回到第 N 版”），你只拿得到源稿（发布目标上现在的文章）和 previous（第 previous.version 版），拿不到更早的版本。要的就是 previous 这一版时原样返回它。说法能有不止一种理解（例如“还原第六版”可以是回到第 6 版，也可以是撤销第 6 版的改动、回到它之前的一版），或者要的那一版你拿不到时，不要猜，也不要自己重写：原样返回 previous，在 summary 第一行说明这次没有改动和原因，写出你看到的几种理解，请负责人在任务页的留言里说明要哪一版。',
           'article 成功必须返回 article:{slug?,status?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}；verifyText 和 summary 都放在 article 里面。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
           'status 只能是 draft 或 published，仅在 data.article.target.status 为 true 时有效：新文章默认 draft，任务明确要求直接公开时才写 published；改写已有文章时不要改变状态，除非任务明确要求。提交前先用 JSON 解析器检查结果是合法 JSON。',
           '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及主语言 data.article.languages.primary 的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',

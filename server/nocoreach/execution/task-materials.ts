@@ -154,7 +154,13 @@ export function taskMaterials(
     sources = null,
     article,
     ...context
-  } = input as TaskInput & { article?: { source?: unknown } };
+  } = input as TaskInput & {
+    article?: {
+      source?: unknown;
+      previous?: { version: number; editedByHand: boolean; article: unknown };
+    };
+  };
+  const previous = article?.previous;
   const files = [
     { path: 'knowledge.json', content: JSON.stringify(knowledge) },
     { path: 'skills.json', content: JSON.stringify(skills) },
@@ -166,6 +172,10 @@ export function taskMaterials(
             content: JSON.stringify(article.source ?? null),
           },
         ]
+      : []),
+    // The version the change request is about holds complete bodies too.
+    ...(previous
+      ? [{ path: 'previous.json', content: JSON.stringify(previous.article) }]
       : []),
   ];
   const plan = attachmentPlan(attachments);
@@ -208,6 +218,14 @@ export function taskMaterials(
             article: {
               ...article,
               source: article.source ? `${TARGET}/article.json` : null,
+              ...(previous
+                ? {
+                    previous: {
+                      ...previous,
+                      article: `${TARGET}/previous.json`,
+                    },
+                  }
+                : {}),
             },
           }
         : {}),

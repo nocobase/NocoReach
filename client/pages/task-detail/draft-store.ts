@@ -6,6 +6,13 @@ export const DraftContext = createContext<{
   drafts: Drafts;
   set: (key: string, entry: Entry | undefined) => void;
   clear: (prefix: string) => void;
+  /**
+   * Let the navigation that follows at once go without asking about drafts: it moves between the task page and its
+   * article page, which stays mounted over the task page, so nothing is left behind.
+   */
+  stay: () => void;
+  /** Whether such a navigation is under way (read by the navigation guard). */
+  staying: () => boolean;
 } | null>(null);
 export const ScopeContext = createContext('');
 
@@ -40,6 +47,14 @@ export function useTaskDraft<T extends string | boolean>(
     () => context.clear(key),
   ];
 }
+/**
+ * Call right before navigating between the task page and its article page: the drafts are on both. Without the draft
+ * provider (an article shown on its own) there are no drafts to keep.
+ */
+export function useStayWithDrafts() {
+  return useContext(DraftContext)?.stay ?? noop;
+}
+const noop = () => {};
 export function useTaskDraftStatus() {
   const context = useDraftContext();
   const scope = useContext(ScopeContext);

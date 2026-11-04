@@ -11,6 +11,7 @@ import {
   cleanDraft,
   DraftRejected,
   draftRejection,
+  verifyPhrase,
 } from '../../server/nocoreach/articles/delivery.js';
 import {
   readFrontmatter,
@@ -484,7 +485,10 @@ describe('NocoBase API target', () => {
       revision: 2,
       targets: [{ check: { ok: true, at: expect.any(String) } }],
     });
-    await targets.save('1', { revision: 2, target: cmsTarget({ name: 'Again' }) });
+    await targets.save('1', {
+      revision: 2,
+      target: cmsTarget({ name: 'Again' }),
+    });
     expect(targets.list('1').targets[0].check).toBeNull();
   });
 });
@@ -1217,4 +1221,110 @@ test('T-55: the article of a page in another form is found by its last path part
     },
     { url: 'https://www.example.com/pricing' },
   ]);
+});
+
+// 2026-11-04 (T-62): Edit directly no longer asks for a page check phrase. The page check keeps the Agent's while the
+// approved text still shows it, and otherwise picks a sentence the new version shows and the old one does not.
+describe('the phrase the page check looks for', () => {
+  const old = {
+    slug: 'no-code-ai-tools',
+    locales: {
+      en: {
+        title: 'Open source no-code AI tools',
+        description: 'A short list.',
+        body: '# Tools\n\nNocoBase is a self-hosted platform.\n\nTeable is a spreadsheet database.',
+      },
+      zh: {
+        title: '开源无代码 AI 工具',
+        description: '简短的列表。',
+        body: '# 工具\n\nNocoBase 是可以自托管的平台。',
+      },
+    },
+  };
+  test("keeps the Agent's phrase while the new text shows it and the old one does not", () => {
+    const body = `${old.locales.en.body}\n\nNocoBase 3 adds an AI workspace for every team.`;
+    expect(
+      verifyPhrase(
+        { locales: { en: { body } }, verifyText: 'adds an AI workspace' },
+        old,
+        ['en'],
+      ),
+    ).toBe('adds an AI workspace');
+    // Already on the old page: finding it would prove nothing.
+    expect(
+      verifyPhrase(
+        {
+          locales: { en: { body } },
+          verifyText: 'NocoBase is a self-hosted platform.',
+        },
+        old,
+        ['en'],
+      ),
+    ).toBe('NocoBase 3 adds an AI workspace for every team.');
+  });
+  test('picks a plain new sentence from what a hand edit added, in the primary language first', () => {
+    const body = [
+      '# Tools',
+      '',
+      'NocoBase is a self-hosted platform.',
+      '',
+      '![The workspace](/uploads/task-media/1.png)',
+      '',
+      'See the **new** [docs](https://docs.nocobase.com) for details.',
+      '',
+      'Short one.',
+      'Each tool below was installed and tried on the same laptop.',
+      '',
+      'Teable is a spreadsheet database.',
+    ].join('\n');
+    const draft = {
+      // The Agent's phrase, gone from the text after the person's edit.
+      verifyText: 'The Agent wrote this sentence',
+      locales: {
+        zh: {
+          body: `${old.locales.zh.body}\n\n每个工具都在同一台电脑上安装试用过。`,
+        },
+        en: { body },
+      },
+    };
+    expect(verifyPhrase(draft, old, ['en', 'zh'])).toBe(
+      'Each tool below was installed and tried on the same laptop.',
+    );
+    expect(verifyPhrase(draft, old, ['zh', 'en'])).toBe(
+      '每个工具都在同一台电脑上安装试用过。',
+    );
+  });
+  test('cuts a long sentence at its commas, and falls back to a new title', () => {
+    const long = `${'这一段很长，'.repeat(40)}最后写的是 NocoBase 3 的新工作台。`;
+    expect(
+      verifyPhrase(
+        { locales: { zh: { body: `${old.locales.zh.body}\n\n${long}` } } },
+        old,
+        ['zh'],
+      ),
+    ).toBe('最后写的是 NocoBase 3 的新工作台。');
+    expect(
+      verifyPhrase(
+        {
+          locales: {
+            en: {
+              title: 'The 12 best open source no-code AI tools in 2026',
+              body: `${old.locales.en.body}\n\n![Only a picture](/uploads/task-media/2.png)`,
+            },
+          },
+        },
+        old,
+        ['en'],
+      ),
+    ).toBe('The 12 best open source no-code AI tools in 2026');
+  });
+  test('gives none when nothing new can be read on the page', () => {
+    expect(
+      verifyPhrase(
+        { locales: { en: { description: 'A longer summary for search.' } } },
+        old,
+        ['en'],
+      ),
+    ).toBeUndefined();
+  });
 });

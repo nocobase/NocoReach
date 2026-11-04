@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -26,6 +27,16 @@ import {
 export function TaskDraftProvider({ children }: PropsWithChildren) {
   const [drafts, setDrafts] = useState<Drafts>({});
   const dirty = Object.values(drafts).some((entry) => entry.dirty);
+  // Set for the navigation started in the same task as `stay`: a Link that opens a new tab never navigates here, so
+  // the flag lapses on its own.
+  const stayingRef = useRef(false);
+  const stay = useCallback(() => {
+    stayingRef.current = true;
+    setTimeout(() => {
+      stayingRef.current = false;
+    }, 0);
+  }, []);
+  const staying = useCallback(() => stayingRef.current, []);
   useEffect(() => {
     if (!dirty) return;
     const unload = (event: BeforeUnloadEvent) => {
@@ -54,6 +65,8 @@ export function TaskDraftProvider({ children }: PropsWithChildren) {
               ),
             ),
           ),
+        stay,
+        staying,
       }}
     >
       {children}
@@ -74,9 +87,11 @@ export function TaskDraftScope({
 // Mounted beside the authenticated Outlet: drafts may outlive their task page,
 // but a guest/optional route destroys this subtree even without a browser reload.
 export function TaskDraftNavigationGuard() {
-  const { drafts } = useDraftContext();
+  const { drafts, staying } = useDraftContext();
   const acknowledgedRef = useRef<Drafts>({});
   useNavigationGuard(async () => {
+    // Between the task page and its article page the drafts stay on screen: neither left nor acknowledged.
+    if (staying()) return true;
     const changed = Object.entries(drafts).some(
       ([key, entry]) => entry.dirty && acknowledgedRef.current[key] !== entry,
     );
