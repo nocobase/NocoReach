@@ -256,6 +256,13 @@ describe('Google fixtures', () => {
     });
     expect(token.scope).toContain('webmasters.readonly');
     expect(token.refresh_token).toMatch(/^mock-/);
+    // A consent page left with the Search Console box unticked grants Analytics alone.
+    const partial = await request('https://oauth2.googleapis.com/token', {
+      grant_type: 'authorization_code',
+      code: 'simulated-partial-consent',
+    });
+    expect(partial.scope).toContain('analytics.readonly');
+    expect(partial.scope).not.toContain('webmasters.readonly');
     const identity = await request(
       'https://openidconnect.googleapis.com/v1/userinfo',
     );

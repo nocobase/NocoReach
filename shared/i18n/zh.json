@@ -4359,6 +4359,8 @@
   "google.authorizationLapsed": "授权已失效",
   "google.googleRefusedAuthorizationAt": "Google 在 {0} 拒绝了授权，请重新授权。",
   "google.testingAppExpiresWeekly": "应用可能还在 Google Cloud 的测试状态；在“受众”里把应用发布为正式版后，授权不会再每 7 天失效。",
+  "google.authorizationAttemptFailedAt": "{0} 的授权未成功。{1}",
+  "google.checkBothPermissions": "在 Google 页面上请勾选两项权限：Analytics 和 Search Console。",
   "google.setUpGoogleAppAdmin": "配置 Google 应用（管理员）",
   "dataforseo.settingsChangedVerifyAgain": "配置已变化，请重新验证",
   "messages.comeBackChooseOne": "里启用模型，再回来选择。",

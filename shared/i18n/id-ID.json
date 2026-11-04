@@ -4413,6 +4413,8 @@
   "google.authorizationLapsed": "Otorisasi kedaluwarsa",
   "google.googleRefusedAuthorizationAt": "Google menolak otorisasi pada {0}. Otorisasi ulang.",
   "google.testingAppExpiresWeekly": "Aplikasi mungkin masih berstatus pengujian di Google Cloud. Setelah Anda memublikasikannya ke produksi di Audiens, otorisasi tidak akan lagi kedaluwarsa setiap 7 hari.",
+  "google.authorizationAttemptFailedAt": "Otorisasi pada {0} tidak berhasil. {1}",
+  "google.checkBothPermissions": "Di halaman Google, centang kedua izin: Analytics dan Search Console.",
   "google.setUpGoogleAppAdmin": "Siapkan aplikasi Google (admin)",
   "dataforseo.settingsChangedVerifyAgain": "Pengaturan diubah. Verifikasi lagi",
   "messages.comeBackChooseOne": ", lalu kembali untuk memilih salah satu.",

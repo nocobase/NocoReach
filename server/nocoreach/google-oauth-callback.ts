@@ -22,6 +22,7 @@ interface Host {
   metadata(id: string, values: Record<string, string | null>): Promise<unknown>;
   link?(id: string): Promise<{ get(field: string): unknown } | null>;
   sync?: { retryRefused(id: string): Promise<unknown> };
+  authAttemptFailed?(id: string, reason: string): Promise<unknown>;
   RETURN: string;
 }
 // The same account authorizing again, while the link still has the resources it confirmed: they stay confirmed, and
@@ -44,6 +45,37 @@ function sameAccount(
 type OAuthState = { id: string; userId: string; nonceHash: string };
 function fail(code: string): never {
   throw Object.assign(new Error(code), { code });
+}
+
+// googleJson fails with these codes only when fetch itself failed, before Google answered anything.
+const UNANSWERED = ['network_timeout', 'network_unreachable'];
+const EXCHANGE_RETRY_MS = 1000;
+// The authorization code works once, so a request Google answered, even with an error, is never sent again. A
+// connection that failed before any answer is tried once more after a short pause: the server's way out to Google
+// sometimes drops for a moment (Studio, 2026-11-04). If the first request did reach Google and used the code before its
+// answer was lost, the second is refused with invalid_grant; the lost connection is still what went wrong.
+async function exchangeCode(host: Host, id: string, body: URLSearchParams) {
+  const send = () =>
+    host.googleJson(id, g.GOOGLE_ENDPOINTS.token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(20000),
+    });
+  try {
+    return await send();
+  } catch (first) {
+    if (!UNANSWERED.includes((first as { code?: string })?.code ?? ''))
+      throw first;
+    await new Promise((resolve) => setTimeout(resolve, EXCHANGE_RETRY_MS));
+    try {
+      return await send();
+    } catch (second) {
+      throw (second as { code?: string })?.code === 'invalid_grant'
+        ? first
+        : second;
+    }
+  }
 }
 
 async function requireInitiator(
@@ -77,6 +109,8 @@ export async function googleOAuthCallback(
     signed: false,
   });
   let stage = 'state';
+  // The project of an attempt whose state and browser were verified; its failure is kept on the Google link.
+  let attempt: string | undefined;
   try {
     const state = String(ctx.request.query.state || '');
     if (!state) fail('state_expired');
@@ -90,6 +124,7 @@ export async function googleOAuthCallback(
     )
       fail('state_expired');
     await host.project(saved.id);
+    attempt = String(saved.id);
     if (ctx.request.query.error) fail('authorization_denied');
     stage = 'authorization';
     await requireInitiator(host, ctx, saved.userId, saved.id);
@@ -99,18 +134,17 @@ export async function googleOAuthCallback(
     await run(String(saved.id), async () => {
       stage = 'exchange';
       const c = host.config();
-      const tokens = await host.googleJson(saved.id, g.GOOGLE_ENDPOINTS.token, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
+      const tokens = await exchangeCode(
+        host,
+        saved.id,
+        new URLSearchParams({
           client_id: c.clientId,
           client_secret: c.clientSecret,
           redirect_uri: c.redirectUri,
           code: String(ctx.request.query.code || ''),
           grant_type: 'authorization_code',
         }),
-        signal: AbortSignal.timeout(20000),
-      });
+      );
       if (!tokens.refresh_token || !tokens.access_token) fail('missing_token');
       const required = g.GOOGLE_SCOPES.filter((s) => s.startsWith('https:'));
       if (
@@ -143,6 +177,8 @@ export async function googleOAuthCallback(
         accountEmail: email,
         authorizedAt: new Date().toISOString(),
         authFailedAt: null,
+        authAttemptFailedAt: null,
+        authAttemptReason: null,
         status: same ? 'ready_for_sync' : 'awaiting_selection',
       });
       // The authorization is saved; a retry that cannot be queued leaves the jobs for Retry failed jobs.
@@ -160,6 +196,10 @@ export async function googleOAuthCallback(
   } catch (error) {
     const reason = String(callbackReason(error, stage));
     ctx.logger.warn('NocoReach Google callback failed', { stage, reason });
+    // Data sources › Google and Data health show it until an authorization succeeds; the redirect's reason alone was
+    // gone once the address changed. Recording never fails the callback.
+    if (attempt)
+      await host.authAttemptFailed?.(attempt, reason).catch(() => undefined);
     ctx.redirect(host.RETURN + '?google=error&reason=' + reason);
   }
   await next();

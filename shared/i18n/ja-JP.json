@@ -4331,6 +4331,8 @@
   "google.authorizationLapsed": "認可が失効",
   "google.googleRefusedAuthorizationAt": "Google が {0} に認可を拒否しました。再度認可してください。",
   "google.testingAppExpiresWeekly": "アプリが Google Cloud でまだテスト中の可能性があります。「対象ユーザー」でアプリを本番環境に公開すると、認可が 7 日ごとに失効しなくなります。",
+  "google.authorizationAttemptFailedAt": "{0} の認可は成功しませんでした。{1}",
+  "google.checkBothPermissions": "Google の画面では、Analytics と Search Console の両方の権限にチェックを入れてください。",
   "google.setUpGoogleAppAdmin": "Google アプリを設定 (管理者)",
   "dataforseo.settingsChangedVerifyAgain": "設定が変更されました。再度検証してください",
   "messages.comeBackChooseOne": ", その後、ここに戻って選択してください。",

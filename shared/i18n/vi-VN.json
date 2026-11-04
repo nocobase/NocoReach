@@ -4413,6 +4413,8 @@
   "google.authorizationLapsed": "Quyền đã hết hạn",
   "google.googleRefusedAuthorizationAt": "Google đã từ chối quyền truy cập vào {0}. Vui lòng cấp quyền lại.",
   "google.testingAppExpiresWeekly": "Ứng dụng có thể vẫn ở trạng thái thử nghiệm trong Google Cloud. Sau khi bạn phát hành ứng dụng ở chế độ chính thức trong mục Đối tượng, quyền truy cập sẽ không còn hết hạn sau mỗi 7 ngày.",
+  "google.authorizationAttemptFailedAt": "Lần cấp quyền lúc {0} không thành công. {1}",
+  "google.checkBothPermissions": "Trên trang của Google, hãy chọn cả hai quyền: Analytics và Search Console.",
   "google.setUpGoogleAppAdmin": "Thiết lập ứng dụng Google (quản trị viên)",
   "dataforseo.settingsChangedVerifyAgain": "Thiết lập đã thay đổi. Vui lòng xác minh lại",
   "messages.comeBackChooseOne": ", rồi quay lại để chọn.",

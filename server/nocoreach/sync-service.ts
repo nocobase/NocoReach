@@ -84,7 +84,7 @@ class SyncService{
   await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
    await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    await this.control(id,'pause');
-   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null,authFailedAt:null});
+   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null,authFailedAt:null,authAttemptFailedAt:null,authAttemptReason:null});
    await plugin.variable(secretKey(id),null);
   });
  }

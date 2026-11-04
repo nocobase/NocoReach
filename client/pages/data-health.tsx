@@ -14,17 +14,19 @@ import {SourceLogo} from '#components/reach/source-logo';
 import {ListSkeleton} from '#components/reach/states';
 import {Skeleton} from '#components/ui/skeleton';
 import {help} from './glossary';
-export type HealthText={key:string;params?:Record<string,string|number|HealthText|{systemError:string}|{date:string}>};
+export type HealthText={key:string;params?:Record<string,string|number|HealthText|{systemError:string}|{date:string}|{dateTime:string}>};
 // A missing descriptor is legacy or user-authored content: preserve the original verbatim. A `date` is an instant the
-// browser writes as a day, as the drawers do (when YouTube resumes after the month's budget ran out).
+// browser writes as a day, as the drawers do (when YouTube resumes after the month's budget ran out); a `dateTime` is
+// one it writes with its time (when authorizing Google again last failed).
 export function healthText(original:string|undefined,text?:HealthText):string{
  if(!text)return original||'';
- const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSourceError(value.systemError):'date' in value?formatDate(value.date):healthText('',value)):value]));
+ const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSourceError(value.systemError):'date' in value?formatDate(value.date):'dateTime' in value?formatDateTime(value.dateTime):healthText('',value)):value]));
  return $legacyText(text.key,params);
 }
 // A message joins " · Last success …", so its closing full stop goes: "…access · Last success …", not "…access. · Last success …".
 const sentence=(text:string)=>text.replace(/[。.]$/u,'');
-export type HealthItem={nameText?:HealthText;noteText?:HealthText;messageText?:HealthText;id:string;name:string;state:'healthy'|'warning'|'failing'|'pending';message:string;lastSuccessAt:string|null;dataThrough:string|null;nextSyncAt:string|null;note?:string;cadence?:'daily'|'weekly'|'manual';schedule?:{time:string;timezone:string;enabled:boolean};retry:{resource:string;action:string;body:object}|null;fix?:HealthFix};
+// `attempt`: on a Google row, when and why authorizing again last failed (server/nocoreach/data-health.ts).
+export type HealthItem={nameText?:HealthText;noteText?:HealthText;messageText?:HealthText;attempt?:string;attemptText?:HealthText;id:string;name:string;state:'healthy'|'warning'|'failing'|'pending';message:string;lastSuccessAt:string|null;dataThrough:string|null;nextSyncAt:string|null;note?:string;cadence?:'daily'|'weekly'|'manual';schedule?:{time:string;timezone:string;enabled:boolean};retry:{resource:string;action:string;body:object}|null;fix?:HealthFix};
 export type Health={checkedAt:string;items:HealthItem[]};
 export const getStateText = (): Record<HealthItem['state'],string> => ({healthy:$t('dataHealth.ok'),warning:$t('dataHealth.needsAttention'),failing:$t('dataHealth.needsFixing'),pending:$t('dataHealth.waitingSync')});
 export function ago(v:string|null,now=Date.now()){if(!v)return $t('dataHealth.never');const m=Math.round((now-Date.parse(v))/60000);if(m<1)return $t('common.now');if(m<60)return $t('common.minAgo',{0:m});const h=Math.round(m/60);if(h<48)return $t('common.hAgo',{0:h});return $t('dataHealth.daysAgo',{0:Math.round(h/24)});}
@@ -67,7 +69,7 @@ export function HealthPanel({projectId,reloadKey,onChange,settingsOf}:{projectId
   {attention.map(i=>i.retry?<RetryAccess key={i.id} projectId={projectId} item={i} onAccess={onAccess}/>:null)}
   {error&&<p className="nr-error" role="alert">{error}</p>}
   {attention.length?<ul className="divide-y rounded-lg border bg-card">{attention.map(i=>{const run=runs[i.id],fix=fixOf(i),open=fix==='settings'?settingsOf?.(i)??null:null;return <li key={i.id} data-health-row={i.id} data-fix={fix} className={'flex flex-wrap items-center gap-3 px-4 py-3 text-sm nr-health-'+i.state}><span className="nr-health-dot" aria-hidden="true"/><SourceLogo source={i.id} size="sm"/>
-   <div className="min-w-0 flex-1"><p className="font-medium">{healthText(i.name,i.nameText)}</p><p className="text-muted-foreground">{$tj('dataHealth.lastSuccessValue',{0:sentence(healthText(i.message,i.messageText)),1:ago(i.lastSuccessAt)})}</p>{fix==='settings'?<p className="text-nr-ink-amber">{$t('dataHealth.settingsFirst')}</p>:null}{run?.status==='failed'?<p className="text-destructive">{run.error}</p>:null}</div>
+   <div className="min-w-0 flex-1"><p className="font-medium">{healthText(i.name,i.nameText)}</p><p className="text-muted-foreground">{$tj('dataHealth.lastSuccessValue',{0:sentence(healthText(i.message,i.messageText)),1:ago(i.lastSuccessAt)})}</p>{i.attempt||i.attemptText?<p className='text-muted-foreground' data-health-attempt=''>{healthText(i.attempt,i.attemptText)}</p>:null}{fix==='settings'?<p className="text-nr-ink-amber">{$t('dataHealth.settingsFirst')}</p>:null}{run?.status==='failed'?<p className="text-destructive">{run.error}</p>:null}</div>
    {run?.status==='running'?<span role="status" className="text-muted-foreground">{$t('dataHealth.retryingLoading')}</span>:run?.status==='started'?<span role="status" className="text-muted-foreground">{$t('dataHealth.retryStarted')}</span>
     :fix==='retry'&&may(i)?<Button size="sm" variant="outline" disabled={running} onClick={()=>void retry([i])}>{$t('common.retry')}</Button>
     :fix==='verify'&&may(i)?<Button size="sm" variant="outline" disabled={running} onClick={()=>void verify(i)}>{$t('dataHealth.verifyRetry')}</Button>

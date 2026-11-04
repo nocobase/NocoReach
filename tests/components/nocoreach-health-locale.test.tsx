@@ -256,3 +256,57 @@ test('a used-up YouTube budget says the day reading resumes, in each language, a
     'raise the budget, or reading resumes on Dec 1',
   );
 });
+
+test('a Google row says when and why authorizing again last failed, in each language', async () => {
+  const at = '2026-11-04T12:02:00.000Z';
+  const refused = item('gsc', 'Google Search Console', {
+    fix: 'settings',
+    message: '同步失败超过 1 天：Google 授权已失效，请重新授权',
+    messageText: {
+      key: 'dataHealth.extendedFailure',
+      params: { 0: { systemError: 'Google 授权已失效，请重新授权' } },
+    },
+    attempt: `${at} 的授权未成功。本次授权缺少 Analytics 或 Search Console 只读权限，请重新授权并勾选这两项权限。`,
+    attemptText: {
+      key: 'google.authorizationAttemptFailedAt',
+      params: {
+        0: { dateTime: at },
+        1: { key: 'google.authorizationLacksReadAccessAnalytics' },
+      },
+    },
+  });
+  action.mockResolvedValue({
+    checkedAt: new Date().toISOString(),
+    items: [refused, item('ga4', 'GA4', { state: 'healthy' })],
+  });
+  const runtime = new I18nRuntime({
+    defaultLocale: 'zh-CN',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  render(
+    <I18nProvider runtime={runtime}>
+      <MemoryRouter>
+        <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+  const line = await screen.findByText(/的授权未成功。/);
+  expect(line).toHaveTextContent(
+    /^(\d{4}-)?11-04 \d\d:\d\d 的授权未成功。本次授权缺少 Analytics 或 Search Console 只读权限，请重新授权并勾选这两项权限。$/,
+  );
+  // The ISO time is for older clients only.
+  expect(line).not.toHaveTextContent('2026-11-04T');
+  expect(line.closest('[data-health-row]')).toHaveAttribute(
+    'data-health-row',
+    'gsc',
+  );
+  expect(document.querySelectorAll('[data-health-attempt]')).toHaveLength(1);
+  await act(() => runtime.changeLanguage('en-US'));
+  expect(line).toHaveTextContent(
+    /^The authorization on Nov 4, .+ didn't succeed\. This authorization lacks read-only access to Analytics or Search Console\. Authorize again and check both permissions\.$/,
+  );
+});

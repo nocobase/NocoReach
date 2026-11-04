@@ -153,7 +153,7 @@ nocoreachMock:
 | Bilibili                    | 同一模拟采集器；搜索词 `NocoBloom`；详情样例 `BV1NB411c7m1` 或 `https://www.bilibili.com/video/BV1NB411c7m1`                                    | 按现有面板检查、保存连接并手动采集搜索/详情；不需要部署真实采集器                                                                                      |
 | YouTube                     | 先接入 DataForSEO；搜索词 `NocoBloom`；跟踪视频样例 `https://www.youtube.com/watch?v=NocoBloom01`                                               | 填写搜索词 → 保存并读取；模拟插件按 DataForSEO 的响应格式返回合成视频，不调用 DataForSEO 或 YouTube                                                    |
 
-Google 授权使用当前应用的本地回调及现有 state/nonce 校验，返回当前项目域名对应的模拟账号（旧演示为 `demo@nocobloom.example`）；它不会显示或访问真实 Google 同意页，不验证 Google OAuth 配置，也不授予 Google 权限。GA4 ID、Slack channel ID、Discord guild/channel ID 随项目和 seed 生成，请选择接口返回的选项，不要抄其他项目的 ID。
+Google 授权使用当前应用的本地回调及现有 state/nonce 校验，返回当前项目域名对应的模拟账号（旧演示为 `demo@nocobloom.example`）；它不会显示或访问真实 Google 同意页，不验证 Google OAuth 配置，也不授予 Google 权限。验证授权失败时：把授权跳转地址里的 `code=simulated-local-consent` 改为 `code=simulated-partial-consent`，相当于在同意页没有勾选 Search Console 权限（原因 `missing_permissions`）；把项目 Profile 的场景设为 `timeout`，相当于后台连不上 Google（原因 `network_timeout`，换取令牌会先重试一次）。失败原因会一直显示在 Google 接入和数据健康里，直到下次授权成功。GA4 ID、Slack channel ID、Discord guild/channel ID 随项目和 seed 生成，请选择接口返回的选项，不要抄其他项目的 ID。
 
 需要核对原始虚构目录时，可在应用根目录运行这个不读取运行时配置的本地命令，并把 projectId、seed、clock 改为该项目设置。它只打印 `fixtureCatalog`，不创建连接或请求第三方：
 

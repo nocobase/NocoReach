@@ -4359,6 +4359,8 @@
   "google.authorizationLapsed": "Authorization expired",
   "google.googleRefusedAuthorizationAt": "Google refused the authorization on {0}. Authorize again.",
   "google.testingAppExpiresWeekly": "The app may still be in Testing status in Google Cloud. After you publish it to production under Audience, the authorization no longer expires every 7 days.",
+  "google.authorizationAttemptFailedAt": "The authorization on {0} didn't succeed. {1}",
+  "google.checkBothPermissions": "On Google's page, check both permissions: Analytics and Search Console.",
   "google.setUpGoogleAppAdmin": "Set up the Google app (admin)",
   "dataforseo.settingsChangedVerifyAgain": "Settings changed. Verify again",
   "messages.comeBackChooseOne": ", then come back to choose one.",

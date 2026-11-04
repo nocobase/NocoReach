@@ -171,3 +171,17 @@ test('YouTube: one missed term is a grey note, three daily misses in a row need 
  assert.equal(paused.message,'DataForSEO 本月预算已用完，可以调高预算，或等 2026-12-01 自动恢复');
  assert.deepEqual(paused.messageText,{key:'youtube.budgetPausedHealth',params:{0:{date:'2026-12-01T00:00:00.000Z'}}});
 });
+test('Google: a failed authorization attempt is said on the rows that need attention, not on a working sync',async()=>{
+ const t=new Date(Date.now()-H).toISOString(),tried=new Date(Date.now()-10*60000).toISOString();
+ const link={authAttemptFailedAt:tried,authAttemptReason:'network_timeout',ga4PropertyId:'123',gscSiteUrl:'sc-domain:ex.com',status:'ready_for_sync'};
+ const plugin=(gsc)=>({env:()=>'refresh',link:async()=>({get:k=>link[k]??null}),sync:{status:async()=>({lastSyncAt:null,scheduleEnabled:true,nextSyncAt:null,coverage:[],jobs:[{source:'gsc',...gsc},{source:'ga4',status:'succeeded',finishedAt:t}]})}});
+ const items=Object.fromEntries((await new DataHealth(plugin({status:'failed',errorCode:'invalid_grant',finishedAt:t})).list('1')).items.map(i=>[i.id,i]));
+ assert.equal(items.gsc.state,'failing');assert.equal(items.gsc.fix,'settings');
+ assert.deepEqual(items.gsc.attemptText,{key:'google.authorizationAttemptFailedAt',params:{0:{dateTime:tried},1:{key:'google.serverTimedOutConnectingGoogle'}}});
+ assert.equal(items.gsc.attempt,`${tried} 的授权未成功。后台连接 Google 超时，请检查服务端网络或代理后重新授权。`);
+ assert.equal(items.ga4.state,'healthy');assert.equal(items.ga4.attemptText,undefined);
+ // An unknown reason still says the authorization did not succeed.
+ link.authAttemptReason='something_new';
+ const unknown=(await new DataHealth(plugin({status:'failed',errorCode:'invalid_grant',finishedAt:t})).list('1')).items.find(i=>i.id==='gsc');
+ assert.equal(unknown.attemptText.params[1].key,'google.authorizationCallbackFailedAskAdmin');
+});
