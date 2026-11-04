@@ -512,6 +512,7 @@ export function ArticleReview({
   data,
   article: a,
   notes,
+  summary = a.draft.summary,
   settled = false,
   readerTo,
   tab: asked,
@@ -520,6 +521,8 @@ export function ArticleReview({
   data: TaskData;
   article: ArticleProposal;
   notes: string;
+  /** The text above the fields, the Agent's summary for the reviewer unless the caller has the publish record. */
+  summary?: string;
   /** Looking back at a delivered version rather than reviewing it: what review settled (conflicts, adoption) is left out. */
   settled?: boolean;
   /** Where Read full screen opens the language and view being shown; left out where there is no reading page. */
@@ -541,7 +544,7 @@ export function ArticleReview({
   const view = views[tab] ?? languages.defaultView(tab);
   return (
     <div className='flex flex-col gap-4'>
-      <AgentNotes summary={a.draft.summary} notes={notes} />
+      <AgentNotes summary={summary} notes={notes} />
       <PrimaryTags target={target} a={a} base={base} />
       {!settled && !a.changes.length && a.carried?.length ? (
         <p className='text-sm text-muted-foreground'>

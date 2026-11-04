@@ -635,17 +635,21 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
 }
 // What one delivered version changes, as its owner reviewed it: a page change's visible changes, or an article's fields
-// against the version it was written from. The activity's View and the live card's View changes both show it.
-function VersionChange({data,artifact,notes}:{data:Data;artifact:Artifact;notes:boolean}){
+// against the version it was written from. The activity's View and the live card's View changes both show it; the live
+// card leads with the publish record instead of the Agent's summary for the reviewer (2026-11-04, T-33: it ended with
+// "awaiting human review").
+function VersionChange({data,artifact,notes,record}:{data:Data;artifact:Artifact;notes:boolean;record?:string}){
  if(artifact.pr)return <PageChange pr={artifact.pr} content={artifact.content}/>;
- if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} settled/>;
+ if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} summary={record} settled/>;
  return null;
 }
 // Once live, the card names what changed in one line; the change itself opens on demand.
 function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  const [open,setOpen]=useState(false);
  if(!artifact||(!artifact.pr&&!artifact.article))return null;
- const a=artifact.article,visible=artifact.pr?.visibleChanges||[];
+ const a=artifact.article,visible=artifact.pr?.visibleChanges||[],note=data.work.release?.note||'';
+ // The record falls back to the task title, which says nothing about the change.
+ const record=a?(note===data.task.title?'':note):undefined;
  const paths=a?(a.changes.length?a.changes:a.carried||[]):[];
  const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
  // A new article went live as a whole: it is named as one, not as fields it "changed" (2026-10-24 user report).
@@ -653,7 +657,7 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  return <div className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}>
   {created?<span>{$t('articleTask.newArticle')}</span>:count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
   <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{created?$t('taskDetail.viewArticle'):$t('taskDetail.viewChanges')}<ChevronRight/></Button>
-  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false} record={record}/></DocReader>
  </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.

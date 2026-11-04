@@ -7116,6 +7116,8 @@
   "articles.draft.format": "El campo {0} del artículo no tiene la forma esperada. Un artículo solo tiene slug, status (draft o published), locales (una entrada por código de idioma, cada una con title, description y body), verifyText (como máximo 200 caracteres) y summary (como máximo 2000 caracteres).",
   "articles.draft.forTarget": "Al publicar en «{0}»: {1}",
   "articles.noChanges": "El borrador no introduce cambios en el artículo.",
+  "articles.releaseUpdated": "Se aplicaron los mismos cambios en {0}.",
+  "articles.releaseTranslated": "Traducido al {0}.",
   "articles.linkBeforeStart": "Elige el artículo antes de que empiece la tarea.",
   "articles.nothingToRetry": "No hay ninguna publicación fallida que reintentar.",
   "articles.nothingToRebase": "No hay ningún conflicto que resolver.",

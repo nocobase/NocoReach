@@ -7150,6 +7150,8 @@
   "articles.draft.format": "The article’s {0} is not in the expected form. An article has only slug, status (draft or published), locales (one entry per language code, each with title, description and body), verifyText (at most 200 characters) and summary (at most 2000 characters).",
   "articles.draft.forTarget": "Publishing to “{0}”: {1}",
   "articles.noChanges": "The draft does not change the article.",
+  "articles.releaseUpdated": "Made the same changes in {0}.",
+  "articles.releaseTranslated": "Translated into {0}.",
   "articles.linkBeforeStart": "Choose the article before the task starts.",
   "articles.nothingToRetry": "There is no failed publish to retry.",
   "articles.nothingToRebase": "There is no conflict to resolve.",
