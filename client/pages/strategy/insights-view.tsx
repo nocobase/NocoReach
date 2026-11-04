@@ -1,4 +1,4 @@
-import { formatDate } from '#lib/format';
+import { formatDate, joinList, labelValue, withDetail } from '#lib/format';
 import {signalDisposition} from '../../../shared/strategy-pending.js';
 import {WAITING_TASKS_URL} from '../task-waiting';
 import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
@@ -174,8 +174,8 @@ function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:numbe
  const navigate=useNavigate(),inMenu=useLinkInMenu(),list=item.rows||[],selection=useSelection(list.map(r=>r.key)),ticked=list.filter(r=>selection.has(r.key)),text=item.key.startsWith('rule-')&&SITUATION_LABEL[item.key]?$t(SITUATION_LABEL[item.key]):sentence(item);
  // A line about the site's own pages hands its ticked pages off with the task (2026-10-29); others (forum topics,
  // posts) are not pages to change.
- const draft=():TaskDraft=>({...(PAGE_PLAYBOOKS.has(item.handOff!.playbookId)?{pages:distinctPages(ticked.flatMap(r=>[r.url,...(r.pages||[])]))}:{}),title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),subject:ticked.map(r=>r.title).join('、').slice(0,160),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
-  brief:[$t('strategy.insightsWhereThingsStand',{0:text,1:$legacyText(item.source),2:item.detail?`，${$legacyText(item.detail)}`:''}),'',...ticked.map(r=>`- ${r.title}${r.meta?`（${$legacyText(r.meta)}）`:''}${r.url?`：${r.url}`:''}`),'',$t('strategy.suggestionCheckDataPagesItems')].join('\n').slice(0,20000)});
+ const draft=():TaskDraft=>({...(PAGE_PLAYBOOKS.has(item.handOff!.playbookId)?{pages:distinctPages(ticked.flatMap(r=>[r.url,...(r.pages||[])]))}:{}),title:item.handOff!.title.replace('{0}',joinList(ticked.map(r=>r.title)).slice(0,120)).slice(0,200),subject:joinList(ticked.map(r=>r.title)).slice(0,160),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
+  brief:[$t('strategy.insightsWhereThingsStand',{0:text,1:$legacyText(item.source),2:item.detail?$t('common.clauseSeparator')+$legacyText(item.detail):''}),'',...ticked.map(r=>`- ${labelValue(withDetail(r.title,$legacyText(r.meta)),r.url)}`),'',$t('strategy.suggestionCheckDataPagesItems')].join('\n').slice(0,20000)});
  return <DetailDrawer open onClose={onClose} title={text} description={[$legacyText(item.source),item.detail?$legacyText(item.detail):''].filter(Boolean).join(' · ')}
   actions={item.handOff&&list.length?<SectionHandOff projectId={projectId} disabled={!ticked.length} playbookId={item.handOff.playbookId} page={ticked.length===1&&ticked[0].url?ticked[0].url:undefined} label={ticked.length?$t('common.handOffAgentValue',{0:ticked.length}):$t('common.handOffAgent')} draft={draft}/>:undefined}
   footer={inMenu(item.to)?<Button variant="outline" onClick={()=>navigate(item.to)}>{$t('strategy.see',{0:$legacyText(item.source)})}<ArrowRightIcon/></Button>:undefined}>
@@ -238,14 +238,14 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
    <div className="space-y-3 text-sm">
     <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
     <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.data')}</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
-    <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t('strategy.aiVerdict')}/>{$t('strategy.aiVerdict')}</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
+    <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t('strategy.aiVerdict')}/>{$t('strategy.aiVerdict')}</h3><p>{st.reason?labelValue(st.label,st.reason):st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
     {st.earlier?<p className="text-xs text-muted-foreground">{$t('strategy.handedOffAgentBefore')}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t('common.tasks')}</button>{$tj('strategy.changeStillThere',{0:st.earlier.state==='done'?$t('strategy.done'):$t('strategy.closed')})}</p>:null}
     {watch&&st.verdict==='watch'&&!st.dismissed?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t('common.watch')}</h3>
      <dl className="grid grid-cols-[5.5rem_1fr] gap-y-1"><dt className="text-muted-foreground">{$t('strategy.decisionCondition')}</dt><dd>{watch.waitingFor||'—'}</dd>
       <dt className="text-muted-foreground">{$t('strategy.watchingSince')}</dt><dd>{$t('strategy.day',{0:formatDate(watch.since),1:daysBetween(watch.since,today||new Date().toISOString())})}</dd>
       <dt className="text-muted-foreground">{$t('strategy.deadline')}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
       <dt className="text-muted-foreground">{$t('strategy.startingValue')}</dt><dd><ul className="list-disc space-y-0.5 pl-4">{watch.startFacts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul></dd></dl></section>:null}
-    {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.verdictDay')}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{getVerdict()[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
+    {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.verdictDay')}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{labelValue(getVerdict()[v.verdict].label,v.reason)}</span></li>)}</ul></section>:null}
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>
   </DetailDrawer>}

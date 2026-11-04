@@ -37,7 +37,7 @@ import "./data-views.css";
 import {InfoTip,WithInfo} from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { AiQuestions } from "./ai-questions";
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, joinEntries, joinList, labelValue } from '#lib/format';
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -179,7 +179,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
         <>
           {shown ? (
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold">{$tj('aiSearch.brandMentionsValue',{0:shown.target})}{shown.competitors.length ? <span className="ml-2 font-normal text-muted-foreground">{$tj('aiSearch.compared',{0:shown.competitors.join("、")})}</span> : null}</h2>
+              <h2 className="truncate text-sm font-semibold">{$tj('aiSearch.brandMentionsValue',{0:shown.target})}{shown.competitors.length ? <span className="ml-2 font-normal text-muted-foreground">{$tj('aiSearch.compared',{0:joinList(shown.competitors)})}</span> : null}</h2>
               {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t('aiSearch.existingResultNoNewCharge')}<InfoTip>{$t('aiSearch.sameBrandCompetitorsCheckedLast')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true, shown)}>{$t('common.queryAgain')}</Button></p> : null}
             </div>
           ) : null}
@@ -229,10 +229,10 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
     setBusy(true); setError(""); setRecent(false);
     const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<GapRun>("gap", { target: spec.target, competitors: [competitor], competitor, platform, locationCode: spec.locationCode, language: spec.language, requestKey: requestKey(), ...(again ? { forceRefresh: true } : {}) })));
     const next: Partial<Record<Platform, GapRun>> = { ...runs }; const errs: Message[] = [];
-    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs.push(() => `${getPlatform()[PLATFORMS[i]]}：${message(r.reason)}`); });
-    onRuns(next); setError(() => (errs.map(renderMessage).join("; "))); setRecent(again && settled.some((r) => r.status === "fulfilled" && r.value.reused && r.value.status === "completed")); setBusy(false);
+    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs.push(() => labelValue(getPlatform()[PLATFORMS[i]], message(r.reason))); });
+    onRuns(next); setError(() => joinEntries(errs.map(renderMessage))); setRecent(again && settled.some((r) => r.status === "fulfilled" && r.value.reused && r.value.status === "completed")); setBusy(false);
   };
-  const failed = PLATFORMS.flatMap((p) => { const r = runs[p]; return r && r.status !== "completed" ? [`${getPlatform()[p]}：${runProblem(r)}`] : []; });
+  const failed = PLATFORMS.flatMap((p) => { const r = runs[p]; return r && r.status !== "completed" ? [labelValue(getPlatform()[p], runProblem(r))] : []; });
   return (
     <section className="flex flex-col gap-2 border-t pt-3 first-of-type:border-0 first-of-type:pt-0" data-gap={competitor}>
       <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +241,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
         <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask(done.length > 0)}>{busy ? $t('common.lookingUp') : done.length ? $t('aiSearch.checkAgainAbout03') : $t('aiSearch.checkAbout03')}</Button>
       </div>
       {recent ? <p className="text-xs text-muted-foreground" data-gap-recent="">{$t('aiSearch.gapCheckedRecently')}</p> : null}
-      {error || failed.length ? <p role="alert" className="nr-error">{error || failed.join("；")}</p> : null}
+      {error || failed.length ? <p role="alert" className="nr-error">{error || joinEntries(failed)}</p> : null}
       {rows.length ? (
         <div className="rounded-md border">
           <div className="hidden border-b px-3 py-2 text-xs text-muted-foreground lg:grid lg:grid-cols-[16px_minmax(0,1fr)_110px_80px] lg:gap-3"><span><AllCheck selection={picked} count={rows.length} /></span><span>{$t('common.question')}</span><span>{$t('common.platform')}</span><span className="text-right">{$t('common.aiSearchVolume')}</span></div>
@@ -250,7 +250,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
               <li key={q.id} className="flex flex-col gap-1 px-3 py-2 text-sm lg:grid lg:grid-cols-[16px_minmax(0,1fr)_110px_80px] lg:gap-3" data-gap-question={q.id}>
                 <span className="pt-0.5"><RowCheck selection={picked} k={q.id} label={$t('common.selectValue', { 0: q.question })} /></span>
                 <span className="min-w-0"><span className="block">{q.question}</span>{q.excerpt ? <span className="block truncate text-xs text-muted-foreground">“{q.excerpt}”</span> : null}
-                  {q.sources.length ? <span className="block truncate text-xs text-muted-foreground">{$t('common.references', { 0: [...new Set(q.sources.map((x) => x.domain))].slice(0, 4).join("、") })}</span> : null}</span>
+                  {q.sources.length ? <span className="block truncate text-xs text-muted-foreground">{$t('common.references', { 0: joinList([...new Set(q.sources.map((x) => x.domain))].slice(0, 4)) })}</span> : null}</span>
                 <span className="text-xs text-muted-foreground">{getPlatform()[q.platform]}</span>
                 <span className="text-right tabular-nums">{metric(q.volume)}</span>
               </li>
@@ -264,7 +264,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
 }
 function gapDraft(brand: string, competitor: string, rows: GapRow[]): TaskDraft {
   const head = rows[0].question;
-  const lines = rows.slice(0, 30).map((q) => $t('aiSearch.questionEvidence', { 0: q.question, 1: getPlatform()[q.platform], 2: metric(q.volume), 3: q.sources.length ? $t('aiSearch.citedValueSuffix', { 0: [...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、") }) : "", 4: q.excerpt ? $t('aiSearch.answerExcerpt', { 0: q.excerpt }) : "" }));
+  const lines = rows.slice(0, 30).map((q) => $t('aiSearch.questionEvidence', { 0: q.question, 1: getPlatform()[q.platform], 2: metric(q.volume), 3: q.sources.length ? $t('aiSearch.citedValueSuffix', { 0: joinList([...new Set(q.sources.map((s) => s.domain))].slice(0, 5)) }) : "", 4: q.excerpt ? $t('aiSearch.answerExcerpt', { 0: q.excerpt }) : "" }));
   return {
     title: (rows.length === 1 ? $t('aiSearch.aiRecommendsNot', { 0: head, 1: competitor, 2: brand }) : $t('aiSearch.aiRecommendsNotQuestions', { 0: head, 1: rows.length, 2: competitor, 3: brand })).slice(0, 200),
     subject: subjectOf(head, rows.length, 'questions').slice(0, 160),
@@ -370,7 +370,7 @@ function PlatformCard({ platform, run, error }: { platform: Platform; run?: Bran
 
 function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   const head = rows[0].question, brand = runs[0]?.spec.target ?? "";
-  const lines = rows.slice(0, 30).map((q) => $t('aiSearch.questionEvidenceWithBrand',{0:q.question,1:getPlatform()[q.platform],2:metric(q.volume),3:q.ownCited ? $t('common.citesSite') : $t('aiSearch.notCiteSite'),4:q.sources.length ? $t('aiSearch.citedValueSuffix',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",5:q.excerpt ? $t('aiSearch.answerExcerpt',{0:q.excerpt}) : ""}));
+  const lines = rows.slice(0, 30).map((q) => $t('aiSearch.questionEvidenceWithBrand',{0:q.question,1:getPlatform()[q.platform],2:metric(q.volume),3:q.ownCited ? $t('common.citesSite') : $t('aiSearch.notCiteSite'),4:q.sources.length ? $t('aiSearch.citedValueSuffix',{0:joinList([...new Set(q.sources.map((s) => s.domain))].slice(0, 5))}) : "",5:q.excerpt ? $t('aiSearch.answerExcerpt',{0:q.excerpt}) : ""}));
   return {
     title: (rows.length === 1 ? $t('aiSearch.singleQuestionGoal',{0:head}) : $t('aiSearch.multipleQuestionsGoal',{0:head,1:rows.length})).slice(0, 200),
     subject: subjectOf(head, rows.length, 'questions').slice(0, 160),
@@ -520,12 +520,12 @@ function AnswerTable({ models, runs, terms, domains, selection }: { models: Mode
 }
 
 function answerDraft(question: string, answers: AnswerRun[]): TaskDraft {
-  const lines = answers.map((r) => { const a = r.result!; const cited = [...new Set(a.citations.filter((c) => !c.own).map((c) => c.domain))].slice(0, 6); return $t('aiSearch.answerBegins',{0:MODEL[a.model],1:a.mentioned ? $t('aiSearch.mentioned') : $t('aiSearch.notMentioned'),2:a.ownCited ? $t('aiSearch.pagesSiteCited',{0:a.ownCited}) : "",3:cited.length ? $t('aiSearch.citedValueSuffix',{0:cited.join("、")}) : "",4:a.text.replace(/\s+/g, " ").slice(0, 300)}); });
+  const lines = answers.map((r) => { const a = r.result!; const cited = [...new Set(a.citations.filter((c) => !c.own).map((c) => c.domain))].slice(0, 6); return $t('aiSearch.answerBegins',{0:MODEL[a.model],1:a.mentioned ? $t('aiSearch.mentioned') : $t('aiSearch.notMentioned'),2:a.ownCited ? $t('aiSearch.pagesSiteCited',{0:a.ownCited}) : "",3:cited.length ? $t('aiSearch.citedValueSuffix',{0:joinList(cited)}) : "",4:a.text.replace(/\s+/g, " ").slice(0, 300)}); });
   const no = answers.filter((r) => !r.result!.mentioned).map((r) => MODEL[r.spec.model]);
   return {
     title: $t('common.getAiMentionUsWhen',{0:question}).slice(0, 200),
     subject: question.slice(0, 160),
-    objective: $t('aiSearch.mentionsUsCitesSiteWhen',{0:no.join("、"),1:question}).slice(0, 1000),
+    objective: $t('aiSearch.mentionsUsCitesSiteWhen',{0:joinList(no),1:question}).slice(0, 1000),
     brief: [$t('aiSearch.questionValue',{0:question}), "", $t('aiSearch.answersModel'), ...lines, "", $t('aiSearch.evidenceModelActuallyAskedThrough'), $t('aiSearch.singleQuestionAdvice')].join("\n").slice(0, 20000),
   };
 }
@@ -538,7 +538,7 @@ function RecentList({ recent, empty, current = null, showing = false, onOpen }: 
       <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{recent[0].kind === "brand" ? $t('aiSearch.brandsChecked') : $t('aiSearch.questionsAsked')}</h2>
       {recent.map((r) => (
         <button key={r.group} type="button" aria-current={r.group === current || undefined} className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-muted/50 aria-[current]:bg-muted" onClick={() => { if (r.group !== current) onOpen(r.group); }}>
-          <span className="min-w-0"><span className="block truncate font-medium">{r.label}{r.group === current ? <span className="ml-2 text-xs font-normal text-muted-foreground">{$t('aiSearch.viewing')}</span> : null}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">{$tj('aiSearch.compared',{0:r.competitors.join("、")})}</span> : null}</span>
+          <span className="min-w-0"><span className="block truncate font-medium">{r.label}{r.group === current ? <span className="ml-2 text-xs font-normal text-muted-foreground">{$t('aiSearch.viewing')}</span> : null}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">{$tj('aiSearch.compared',{0:joinList(r.competitors)})}</span> : null}</span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {Object.entries(r.runs).map(([k, v]) => <span key={k}>{(getPlatform() as Record<string, string>)[k] && r.kind === "brand" ? getPlatform()[k as Platform] : MODEL[k as Model]}{r.kind === "answer" && v.mentioned !== null ? (v.mentioned ? $t('aiSearch.mentionedSuffix') : $t('aiSearch.notMentionedSuffix')) : v.status === "completed" ? "" : $t('aiSearch.noResults')}</span>)}
             <span>{when(r.createdAt)}</span>

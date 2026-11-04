@@ -87,7 +87,7 @@ const RICH: Record<string, () => string> = {
 };
 const richName = (t: string) => (RICH[t] ?? (() => t))();
 // A type with only the counts that are not zero: "常见问题 1 个错误".
-const richProblem = (type: string, errors: number, warnings: number) => $t('searchIndex.richProblem', { 0: richName(type), 1: [errors ? $t('searchIndex.errorCount', { 0: errors }) : "", warnings ? $t('searchIndex.warningCount', { 0: warnings }) : ""].filter(Boolean).join($t('searchIndex.listSeparator')) });
+const richProblem = (type: string, errors: number, warnings: number) => $t('searchIndex.richProblem', { 0: richName(type), 1: [errors ? $t('searchIndex.errorCount', { 0: errors }) : "", warnings ? $t('searchIndex.warningCount', { 0: warnings }) : ""].filter(Boolean).join($t('common.listSeparator')) });
 const STATUS: Record<Status, { tone: Tone; label: () => string }> = {
   indexed: { tone: "green", label: () => $t('searchIndex.statusIndexed') }, notIndexed: { tone: "amber", label: () => $t('searchIndex.statusNotIndexed') },
   unchecked: { tone: "grey", label: () => $t('searchIndex.statusUnchecked') }, error: { tone: "red", label: () => $t('searchIndex.statusError') },

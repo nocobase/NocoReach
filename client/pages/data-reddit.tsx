@@ -24,7 +24,7 @@ import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
 import { RedditTiming, type RedditTimingState } from './reddit-timing';
-import { formatDate } from '#lib/format';
+import { formatDate, joinList } from '#lib/format';
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
 type View = RedditTimingState & { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };
@@ -55,7 +55,7 @@ export default function DataReddit() {
       {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t('dataReddit.onceRedditDiscussionsConnectedPosts')} description={$t('dataReddit.searchedGoogleOnceWeekThrough')} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t('dataReddit.connectRedditDiscussions')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <RedditTiming state={view} lead={$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:""})}/>
+          <RedditTiming state={view} lead={$tj('dataReddit.searchTerm',{0:joinList(view.terms!),1:""})}/>
           {!view.diagnostics?.length && view.lastRun?.errors?.length ? <div className="nr-error" role="alert">{view.lastRun.errors.map((message) => <p key={message}>{$tj('reddit.searchIncomplete',{0:$legacyText(message)})}</p>)}</div> : null}
           <div className={metricGrid(view.kpis!.length + (visits ? 1 : 0))}>
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}

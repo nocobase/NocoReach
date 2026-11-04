@@ -396,7 +396,9 @@ function ProfileList() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {$t('proxyProfiles.deleteProxyProfile')}「{remove?.name}」？
+              {$t('proxyProfiles.deleteProxyProfile', {
+                0: remove?.name ?? '',
+              })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {$t('proxyProfiles.deletionCannotUndoneRemoveReferences')}

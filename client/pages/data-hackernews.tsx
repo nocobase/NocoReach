@@ -19,7 +19,7 @@ import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-sl
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
-import { formatDate } from '#lib/format';
+import { formatDate, joinList } from '#lib/format';
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
 type Comment = { title: string; hnUrl: string; excerpt: string; date: string; term: string };
@@ -43,7 +43,7 @@ export default function DataHackerNews() {
       {view && !view.connected ? <EmptyState icon={<Newspaper />} title={$t('dataHackernews.onceHackerNewsConnectedDaily')} description={$t('dataHackernews.searchesPublicHackerNewsPosts')} action={<Button onClick={() => navigate("/connections?source=mentions")}>{$t('dataHackernews.connectHackerNews')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj('common.searchTermValue',{0:view.terms!.join("、")})}</p>
+          <p className="nr-footnote">{$tj('common.searchTermValue',{0:joinList(view.terms!)})}</p>
           <div className={metricGrid(view.kpis!.length)}>{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.length ? (
