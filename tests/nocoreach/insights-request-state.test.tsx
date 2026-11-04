@@ -273,9 +273,15 @@ for (const block of blocks) {
     let section = (
       await screen.findAllByRole('region', { name: english[block.title] })
     )[0];
-    expect(within(section).getByRole('status')).toHaveTextContent(
-      english['common.loadingLoading'],
-    );
+    // The first read shows skeletons, not a line of text.
+    expect(
+      within(section)
+        .getByRole('status', { name: english['common.loading'] })
+        .querySelector('[data-slot="skeleton"]'),
+    ).not.toBeNull();
+    expect(
+      within(section).queryByText(english['common.loadingLoading']),
+    ).toBeNull();
     if (block.empty)
       expect(within(section).queryByText(english[block.empty])).toBeNull();
     await act(async () => pending.resolve(values[block.kind]));

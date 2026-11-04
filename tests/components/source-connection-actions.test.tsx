@@ -11,6 +11,7 @@ import { RedditConnect } from '../../client/pages/reddit-connect';
 import { TrendsConnect } from '../../client/pages/trends-connect';
 import { XConnect } from '../../client/pages/x-connect';
 import { ChatConnect } from '../../client/pages/chat-connect';
+import { GitHubConnect } from '../../client/pages/github-connect';
 import {
   CompetitorsConnect,
   CompetitorWatchTab,
@@ -268,6 +269,49 @@ test.each([
     expect(state.action.mock.calls.map(([, operation]) => operation)).toEqual([
       'status',
     ]);
+  },
+);
+
+test.each([
+  ['GitHub', <GitHubConnect key='github' projectId={7} onChange={onChange} />],
+  [
+    'Community',
+    <CommunityConnect key='community' projectId={7} onChange={onChange} />,
+  ],
+  [
+    'Packages',
+    <PackagesConnect key='packages' projectId={7} onChange={onChange} />,
+  ],
+  [
+    'Hacker News',
+    <HackerNewsConnect key='hackernews' projectId={7} onChange={onChange} />,
+  ],
+  ['Reddit', <RedditConnect key='reddit' projectId={7} onChange={onChange} />],
+  ['Trends', <TrendsConnect key='trends' projectId={7} onChange={onChange} />],
+  ['X', <XConnect key='x' projectId={7} onChange={onChange} />],
+  [
+    'Chat',
+    <ChatConnect
+      key='chat'
+      projectId={7}
+      platform='discord'
+      onChange={onChange}
+    />,
+  ],
+  [
+    'Competitors',
+    <CompetitorsConnect key='competitors' projectId={7} onChange={onChange} />,
+  ],
+])(
+  '%s shows the shared skeleton while its status loads',
+  async (_name, element) => {
+    state.action.mockImplementation(() => new Promise(() => {}));
+    render(element);
+    const loading = screen.getByRole('status', {
+      name: english['common.loading'],
+    });
+    expect(loading.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(2);
+    expect(screen.queryByText(english['common.loadingLoading'])).toBeNull();
   },
 );
 

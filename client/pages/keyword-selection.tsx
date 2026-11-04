@@ -7,6 +7,7 @@ import { cn } from '#lib/utils';
 import { formatCompact, formatDate, joinList } from '#lib/format';
 import { chipClass } from '#components/reach/chip';
 import { Segmented } from '#components/reach/segmented';
+import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import {
   Popover,
@@ -390,13 +391,7 @@ export function NotPickedDialog({
             {error}
           </p>
         ) : !items ? (
-          <p
-            role='status'
-            className='flex items-center gap-2 py-6 text-sm text-muted-foreground'
-          >
-            <LoaderCircle className='size-4 animate-spin' />
-            {$t('common.loading')}
-          </p>
+          <ListSkeleton rows={6} />
         ) : (
           <>
             <Segmented

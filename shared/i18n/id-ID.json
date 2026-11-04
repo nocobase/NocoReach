@@ -2580,6 +2580,7 @@
   "effect.notEnoughData": "Data belum cukup",
   "messages.notEnoughDataKeepTracking": "Data belum cukup; lanjutkan pelacakan",
   "dataHealth.dataHealth": "Kesehatan data",
+  "dataHealth.loadingDataHealth": "Memuat kesehatan data…",
   "sourceConnections.sourcesTab": "Sumber",
   "dataHealth.attentionCount": "Perlu perhatian: {0}",
   "dataHealth.attentionNotice": "Sumber yang perlu perhatian ({0}): {1}",

@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 import { $t } from '#i18n';
+import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
+import { Skeleton } from '#components/ui/skeleton';
 import { cn } from '#lib/utils';
 
 export type RequestState = {
@@ -59,11 +61,21 @@ export function RequestBlock({
               : $t('strategy.blockFailed')}
     </p>
   );
-  const loading = request.loading && (
-    <p role='status' className='text-sm text-muted-foreground'>
-      {$t('common.loadingLoading')}
-    </p>
-  );
+  // The first read shows skeletons where the content goes (a bar in a compact row); a refresh keeps the content and
+  // says it is loading.
+  const loading =
+    request.loading &&
+    (hasData ? (
+      <p role='status' className='text-sm text-muted-foreground'>
+        {$t('common.loadingLoading')}
+      </p>
+    ) : compact ? (
+      <div role='status' aria-label={$t('common.loading')}>
+        <Skeleton className='h-4 w-48' />
+      </div>
+    ) : (
+      <ListSkeleton rows={3} />
+    ));
   const body =
     hasData &&
     (empty

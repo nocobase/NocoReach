@@ -2525,6 +2525,7 @@
   "effect.notEnoughData": "데이터가 충분하지 않습니다.",
   "messages.notEnoughDataKeepTracking": "데이터가 부족합니다. 계속 추적합니다.",
   "dataHealth.dataHealth": "데이터 상태",
+  "dataHealth.loadingDataHealth": "데이터 상태 로드 중…",
   "sourceConnections.sourcesTab": "출처",
   "dataHealth.attentionCount": "주의가 필요함: {0}",
   "dataHealth.attentionNotice": "주의가 필요한 소스({0}): {1}",

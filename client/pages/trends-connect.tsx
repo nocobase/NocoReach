@@ -1,6 +1,7 @@
 import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError} from '#components/connection-error';
+import {ListSkeleton} from '#components/reach/states';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -20,7 +21,7 @@ export function TrendsConnect({projectId,suggested,onChange}:{projectId:number;s
  useEffect(()=>{void load().catch(()=>setError(() => ($t('trends.notLoadTrendsStatus'))));},[projectId]);
  useEffect(()=>{if(!status?.checking&&!(status?.connected&&!status.lastRun))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.checking,status?.lastRun,status?.connected]);
  async function run(fn:()=>Promise<TrendsStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);setEditing(false);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<ListSkeleton rows={2}/>;
  const rivals=(status.competitors||[]).filter(c=>c.included).map(c=>c.name);
  const form=<><label className="nr-field"><WithInfo help={$tj('trends.competitorScheduleHelp',{0:rivals.length?joinList(rivals):$t('trends.noneYet')})}>{$t('common.productName')}</WithInfo><input aria-label={$t('common.productName')} value={product} disabled={busy} placeholder="NocoBase" onChange={e=>setProduct(e.target.value)}/></label>
   <label className="nr-field">{$t('trends.region')}<select aria-label={$t('trends.region')} value={place} disabled={busy} onChange={e=>setPlace(Number(e.target.value))}>{status.locations.map(l=><option key={l.code} value={l.code}>{$legacyText(l.name)}</option>)}</select></label></>;

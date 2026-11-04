@@ -2525,6 +2525,7 @@
   "effect.notEnoughData": "数据不足",
   "messages.notEnoughDataKeepTracking": "数据不足，继续观察",
   "dataHealth.dataHealth": "数据健康",
+  "dataHealth.loadingDataHealth": "正在读取数据健康…",
   "sourceConnections.sourcesTab": "数据源",
   "dataHealth.attentionCount": "{0} 个需要留意",
   "dataHealth.attentionNotice": "{0} 个数据源需要留意：{1}",
