@@ -12,6 +12,7 @@ import { joinNames, type ArticleFound } from './article-model';
 import { Card, Clamped, Field } from './layout';
 import { TaskMedia } from './media';
 import { PlaybookDrawer } from './playbook-drawer';
+import { startedPlace } from './step-place';
 import { startBrief, startedDelivery, startedPlaybook } from './started-model';
 import { text } from './styles';
 
@@ -148,6 +149,7 @@ export function StartedCard({
           </p>
           <PlaybookDrawer
             playbook={playbook}
+            place={startedPlace(data)}
             open={viewing}
             onClose={() => setViewing(false)}
           />

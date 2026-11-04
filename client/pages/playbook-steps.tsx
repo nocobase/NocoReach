@@ -1,37 +1,81 @@
 import {
+  FilePenLineIcon,
   FileSearchIcon,
   GitPullRequestIcon,
   SettingsIcon,
   UserCheckIcon,
 } from 'lucide-react';
-import { $t, $tj } from '#i18n';
+import { $t, $tj, getCurrentLocale } from '#i18n';
 import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { getStepKinds, type Step, type StepKind } from './playbook-model';
 import { skillFor, type Skill } from './skill-model';
 
 // A playbook's steps as Playbooks shows them; the task page's View steps drawer shows the same list.
-export function StepIcon({ kind }: { kind: StepKind }) {
+
+/**
+ * Where a task's change goes, for the words of its change steps and Publish (2026-11-04: an article task's View steps
+ * said it opens a PR): the site's repository by pull request, or an article in its publishing targets (their names,
+ * the primary first; `created` for a new article). Left out where it is not known (Playbooks, the start card before
+ * the article is settled), and the words cover both.
+ */
+export type StepPlace =
+  { kind: 'repo' } | { kind: 'article'; targets: string[]; created?: boolean };
+
+export function StepIcon({
+  kind,
+  place,
+}: {
+  kind: StepKind;
+  place?: StepPlace;
+}) {
   const Icon =
     kind === 'analyze'
       ? FileSearchIcon
       : kind === 'change'
-        ? GitPullRequestIcon
+        ? place?.kind === 'article'
+          ? FilePenLineIcon
+          : GitPullRequestIcon
         : UserCheckIcon;
   return <Icon className='size-3.5' />;
 }
 
-/** The steps in order, then Publish and Track impact when a step changes the repository. */
+const stepHint = (kind: Exclude<StepKind, 'review'>, place?: StepPlace) =>
+  kind === 'change' && place
+    ? place.kind === 'repo'
+      ? $t('playbook.changesRepositoryOpensPr')
+      : $t(
+          place.created
+            ? 'playbook.writesNewArticleFor'
+            : 'playbook.editsArticleIn',
+          { 0: place.targets[0] },
+        )
+    : getStepKinds()[kind].hint;
+
+const publishHint = (place?: StepPlace) =>
+  !place
+    ? $t('playbooks.publishSiteOrCms')
+    : place.kind === 'repo'
+      ? $t('playbooks.mergePrConfirmChangeLive')
+      : $t('playbooks.publishToConfirmLive', {
+          0: new Intl.ListFormat(getCurrentLocale(), {
+            type: 'conjunction',
+          }).format(place.targets),
+        });
+
+/** The steps in order, then Publish and Track impact when a step changes something. */
 export function PlaybookSteps({
   steps,
   skills = [],
+  place,
 }: {
   steps: Step[];
   skills?: Skill[];
+  place?: StepPlace;
 }) {
   const system = steps.some((s) => s.kind === 'change')
     ? [
-        [$t('playbook.publishStage'), $t('playbooks.mergePrConfirmChangeLive')],
+        [$t('playbook.publishStage'), publishHint(place)],
         [
           $t('playbooks.trackImpact'),
           $t('playbooks.compareDataBeforeGoingLive'),
@@ -52,7 +96,7 @@ export function PlaybookSteps({
                 : 'bg-nr-tint-blue text-nr-ink-blue',
             )}
           >
-            <StepIcon kind={s.kind} />
+            <StepIcon kind={s.kind} place={place} />
           </span>
           <div className='min-w-0 flex-1'>
             <p className='flex flex-wrap items-center gap-2 text-sm font-medium'>
@@ -62,7 +106,7 @@ export function PlaybookSteps({
                 : `Agent ${s.name}`}
               {s.kind !== 'review' && (
                 <Tag tone={s.kind === 'change' ? 'blue' : 'grey'}>
-                  {getStepKinds()[s.kind].hint}
+                  {stepHint(s.kind, place)}
                 </Tag>
               )}
             </p>

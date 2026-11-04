@@ -17,6 +17,7 @@ import { PagePicker, RestNotice } from './task-detail/start-pages.js';
 import { request } from './strategy/service';
 import type { StrategyState } from './strategy/model';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
+import { choicePlace } from './task-detail/step-place.js';
 import { StartedCard } from './task-detail/started-card.js';
 import { startBrief } from './task-detail/started-model.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
@@ -357,7 +358,7 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
    </Select>
    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
    {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
-   <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
+   <PlaybookDrawer playbook={p} place={changes?choicePlace(data,current,translate):undefined} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
   {changes&&(picking?<PagePicker data={data} projectId={projectId} taskId={taskId} allowed={allowed} busy={busy} onPage={url=>void update('linkPage',{url})} onArticle={(targetId,articleId)=>void link(targetId,articleId)} onChange={()=>setChoosing(true)}/>
    :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} hidePlace={showWhere} onChange={()=>setChoosing(true)}>
