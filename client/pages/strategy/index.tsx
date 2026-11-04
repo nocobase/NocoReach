@@ -64,6 +64,7 @@ import {
 import { OpportunityHandOffDialog } from './places';
 import { placesOf } from './places-model';
 import { localizeWorkSnapshots } from '../playbook-snapshot';
+import { stepOf } from '../task-list-model';
 import {
   playbookRequest,
   localizePlaybookList,
@@ -381,6 +382,10 @@ function Insights({
   const waitingFor = (w?: Work) => {
     if (!w?.flow) return $t('strategy.waitingStart');
     const st = localizeWorkSnapshots(w).flow!.stages[w.stageIndex || 0];
+    // An Agent step or a release waits for you only when something went wrong (a failed run or merge, a step to start
+    // again, a change not seen online): say that, as the task list's Current step does, not the step's name.
+    if (st?.kind === 'agent' || st?.kind === 'release')
+      return stepOf(w)?.text ?? stageName(st);
     return st
       ? st.kind === 'publish'
         ? $t('common.confirmPublish')

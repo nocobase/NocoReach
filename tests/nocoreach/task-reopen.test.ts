@@ -128,7 +128,8 @@ test('a change withdrawn by closing goes back to the Agent step that made it, wh
   assert.equal(reopened(d).note, 'withdrawn');
   assert.equal(reopened(d).stageKey, 'build');
   assert.equal(d.work.results[0].id, delivered.id, 'the earlier version stays in the record');
-  assert.equal(d.task.status, '进行中');
+  // It waits for Start this step again: Needs you, not the Agent at work (2026-11-04).
+  assert.equal(d.task.status, '待确认');
   // Closing again before a new PR exists does not close the closed one again.
   d = await f.command('cancelTask');
   assert.equal(d.runs.filter(r => r.mode === 'close').length, 1);

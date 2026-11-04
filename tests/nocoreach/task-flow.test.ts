@@ -489,6 +489,26 @@ test('notifications: when the Agent finishes and the task waits for its owner, t
  const d=await f.view();assert.equal(d.work.flow.stages[d.work.stageIndex].kind,'review');assert.deepEqual(told,[['waiting',d.work.flow.stages[d.work.stageIndex].name]]);
 });
 
+test('a failed Agent run waits for its owner as Needs you, without a message; Try again puts it back in progress',async()=>{
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin',roles:[{name:'nr.member'}]});
+ const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>e.kind));}};
+ await selectAgent(f);await f.command('setOwner',{userId:'2'});await f.command('startTask',{playbookId:'change-research'});told.length=0;
+ const stored=()=>f.state.nrTasks[0];
+ let {run}=await claim(f);await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',run.id)),undefined,'agent_failed');
+ // The raw record the task list and the Tasks badge read keeps the failed run, and the status text says Needs you.
+ assert.equal(stored().evidence.work.latestRun.status,'failed');assert.equal(__model.boardState(stored().evidence.work),'review');
+ assert.equal(stored().status,systemMessageText('common.needsConfirmation'));
+ assert.deepEqual(told,[],'the waiting message names a step to do; a failed run sends none yet');
+ // Moved to In progress by hand, then tried again and failed again: the failure is back in Needs you.
+ await f.command('moveWork',{state:'doing'});assert.equal(__model.boardState(stored().evidence.work),'doing');
+ await f.command('retryStage',{stageKey:(await f.stage()).key});assert.equal(__model.boardState(stored().evidence.work),'doing');
+ ({run}=await claim(f));assert.equal(__model.boardState(stored().evidence.work),'doing');
+ await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',run.id)),undefined,'agent_failed');
+ assert.equal(stored().evidence.work.boardState,undefined);assert.equal(__model.boardState(stored().evidence.work),'review');
+ await f.command('retryStage',{stageKey:(await f.stage()).key});assert.equal(__model.boardState(stored().evidence.work),'doing');
+ assert.equal(stored().status,systemMessageText('common.inProgress'));
+});
+
 test('a new task belongs to whoever created it; older tasks keep no owner',async()=>{
  const f=fixture(undefined,{reason:'original',createdBy:{id:'2',name:'Lin'}});
  assert.equal((await f.view()).work.humanOwnerName,'Lin');

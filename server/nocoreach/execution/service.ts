@@ -137,7 +137,10 @@ export class TaskService {
     const events: any[] = [];
     if (owner && owner !== by) {
       const stage = w.flow?.stages[w.stageIndex || 0];
-      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
+      // An Agent step that failed or waits to be started again needs you too, but sends no message yet: the message
+      // names a step to do, and a run a restart interrupted is tried again right after it fails.
+      const agentWaits = stage?.kind === 'agent' && !w.boardState;
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
       if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
       for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
     }
@@ -1062,7 +1065,8 @@ export class TaskService {
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
       } else {
-        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt;
+        // A failed run waits for a person (Needs you) even if the card was moved by hand before.
+        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt; if (!stale) w.boardState = undefined;
         if (failure.failureReason) fresh.failureReason = failure.failureReason;
         if (failure.partial) { fresh.partialAt = now(); await this.put(this.key('partial', run.projectId, run.taskId, run.id), { ...failure.partial, savedAt: fresh.partialAt }, tx); }
       }
