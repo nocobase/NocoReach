@@ -35,6 +35,7 @@ import {
   YAxis,
 } from 'recharts';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
+import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
 import { Input } from '#components/ui/input';
 import { TabsTrigger } from '#components/ui/tabs';
@@ -323,12 +324,20 @@ const pct = (v: number | null) => formatPercent(v);
 
 export function ReportCard({
   report,
+  rest,
+  restError,
+  onRetryRest,
   range,
   projectId,
   propertyId,
   toUrl,
 }: {
   report: Report;
+  /** The other tables (`websiteTables`), asked for once the page shows. */
+  rest?: Report;
+  restError?: unknown;
+  /** Reads the other tables again at once, past the wait a failed read otherwise keeps. */
+  onRetryRest?: () => void;
   range: Range;
   projectId?: number;
   propertyId?: string;
@@ -355,7 +364,27 @@ export function ReportCard({
     setParams(p, { replace: true });
     setQuery('');
   };
-  const all = report.tables?.[view.table];
+  // The page's first tables come with its report; the others with `rest`, which may hold another window for a moment, so
+  // the table, its dates and its rows' details follow whichever holds it, and its shares need the totals of its own days.
+  const sameDays =
+    rest?.window?.start === report.window?.start &&
+    rest?.window?.end === report.window?.end;
+  const holder =
+    report.tables?.[view.table] !== undefined ||
+    report.missing?.includes(view.table)
+      ? report
+      : rest
+        ? {
+            ...report,
+            tables: rest.tables,
+            window: rest.window ?? report.window,
+            cutoff: rest.cutoff ?? report.cutoff,
+            settledThrough: rest.settledThrough ?? report.settledThrough,
+            queriesWindow: rest.queriesWindow ?? report.queriesWindow,
+            totals: sameDays ? report.totals : undefined,
+          }
+        : undefined;
+  const all = holder?.tables?.[view.table];
   const rows = useMemo(
     () =>
       (all ?? [])
@@ -365,7 +394,7 @@ export function ReportCard({
         ),
     [all, view, query],
   );
-  const w = report.window!;
+  const w = (holder ?? report).window!;
   const period = $t('common.range', {
     0: formatDate(w.start),
     1: formatDate(w.end),
@@ -407,20 +436,23 @@ export function ReportCard({
                 </SelectContent>
               </Select>
             ) : null}
-            <label className='relative flex items-center'>
-              <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
-              <Input
-                aria-label={$t('dataWebsite.searchDimension', {
-                  0: $t(view.label),
-                })}
-                className='h-8 w-64 pl-8'
-                placeholder={$t('dataWebsite.searchDimension', {
-                  0: $t(view.label),
-                })}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
+            {/* Nothing to search while the table is still being read or failed to arrive. */}
+            {holder ? (
+              <label className='relative flex items-center'>
+                <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
+                <Input
+                  aria-label={$t('dataWebsite.searchDimension', {
+                    0: $t(view.label),
+                  })}
+                  className='h-8 w-64 pl-8'
+                  placeholder={$t('dataWebsite.searchDimension', {
+                    0: $t(view.label),
+                  })}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+            ) : null}
           </>
         }
       >
@@ -430,7 +462,33 @@ export function ReportCard({
           </TabsTrigger>
         ))}
       </DataTableTabs>
-      {all === undefined ? (
+      {/* A table of `rest` says when it is a saved copy, here rather than above the figures, which may be newer. */}
+      {holder && holder !== report ? (
+        <div className='px-4 pt-3 empty:hidden'>
+          <SavedReportNote {...savedCopyNote(rest)} />
+        </div>
+      ) : null}
+      {!holder ? (
+        <div className='px-4 py-6' data-tables-loading=''>
+          {restError ? (
+            <InlineError
+              action={
+                onRetryRest ? (
+                  <Button variant='outline' size='sm' onClick={onRetryRest}>
+                    {$t('common.retry')}
+                  </Button>
+                ) : null
+              }
+            >
+              {restError instanceof Error
+                ? restError.message
+                : $t('common.tryAgainLater')}
+            </InlineError>
+          ) : (
+            <ListSkeleton rows={6} />
+          )}
+        </div>
+      ) : all === undefined ? (
         <div className='px-4 py-6'>
           <InlineError>{$t('dataWebsite.tableNotReturned')}</InlineError>
         </div>
@@ -440,7 +498,7 @@ export function ReportCard({
           tab={tab}
           view={view}
           rows={rows}
-          report={report}
+          report={holder}
           filtered={Boolean(query)}
           onClear={() => setQuery('')}
           onOpen={setOpen}
@@ -449,12 +507,12 @@ export function ReportCard({
           toUrl={toUrl}
         />
       )}
-      {open ? (
+      {open && holder ? (
         <RowDrawer
           row={open}
           view={view}
           columns={tab.columns}
-          report={report}
+          report={holder}
           range={range}
           projectId={projectId}
           propertyId={propertyId}

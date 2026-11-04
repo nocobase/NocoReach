@@ -4,7 +4,11 @@ import { toolInput } from '../../online-agent/errors.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { waitForFresh } from '../google-report-cache.js';
-import { withGa4RetryDeadline } from '../website-report.js';
+import {
+  FIRST_TABLES,
+  TABLES,
+  withGa4RetryDeadline,
+} from '../website-report.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
 
 // The reply stops after 90 seconds without output and a tool call gives none, so GA4's 429 retries stop within this.
@@ -188,6 +192,11 @@ interface Source {
   read(s: QuerySources, q: Query): Promise<Read>;
 }
 const NOT_CONNECTED: Read = { connected: false, tables: {} };
+// Traffic's report tables (website-report.ts), Pages first: the first table is the one answered when none is named.
+const TRAFFIC_TABLES = [
+  'page',
+  ...Object.keys(TABLES).filter((name) => name !== 'page'),
+];
 const noData = (dataThrough: unknown): Read => ({
   dataThrough: dataThrough ?? null,
   tables: {},
@@ -432,31 +441,70 @@ const SOURCES: Record<string, Source> = {
     access: ['nrDataViews', 'website'],
     ranges: WEB_RANGES,
     async read(s, q) {
+      // The rest of the page's tables are read on their own (`websiteTables`), as the page reads them, and only when one
+      // is asked for: at once, beside the summary, when the table asked for (Pages by default) is one of them.
+      let rest: Promise<Obj> | undefined;
+      const more = () =>
+        (rest ??= (async () => {
+          if (!(await q.allowed('nrDataViews', 'websiteTables')))
+            throw new QueryError('accessDenied');
+          return obj(
+            await call(s, 'dataViews', 'websiteTables', q.id, rangeOf(q)),
+          );
+        })());
+      const asked = q.table ?? TRAFFIC_TABLES[0],
+        // The whole period has no period before it, so no changes to read the second part for.
+        whole = !q.from && q.range === 'all';
+      if (
+        (TRAFFIC_TABLES.includes(asked) && !FIRST_TABLES.includes(asked)) ||
+        (!whole && (asked === 'page_changes' || asked === 'landing_changes'))
+      )
+        void more().catch(() => {});
       const v = obj(await call(s, 'dataViews', 'website', q.id, rangeOf(q)));
       if (v.connected === false) return NOT_CONNECTED;
       if (!v.cutoff) return noData(null);
       const tables: Record<string, TableSource> = {},
         reports = obj(v.tables),
-        changes = obj(v.changes);
-      for (const name of [
-        'page',
-        'landing',
-        'channel',
-        'sourceMedium',
-        'campaign',
-        'event',
-        'country',
-        'city',
-        'language',
-        'device',
-        'newVsReturning',
-        'browser',
-        'os',
-      ])
-        tables[name] = list(reports[name]).map(flatten);
+        changes = obj(v.changes),
+        // A table GA4 left out says so, rather than reading as no traffic. `missing` names tables; a change report GA4
+        // refused is only absent from `changes`, whatever became of the table of the same name.
+        later = async (part: 'tables' | 'changes', name: string) => {
+          const r = await more(),
+            held = obj(r[part]);
+          if (
+            part === 'tables'
+              ? Array.isArray(r.missing) && r.missing.includes(name)
+              : r.changes !== undefined && !(name in held)
+          )
+            throw new QueryError('notReturned');
+          return list(held[name]);
+        },
+        // The first part's own refusals say so too. Channel's table and the channels behind a change are one report
+        // (website-report.ts, `PAIRED`), so `missing` naming Channel covers both.
+        leftOut = (name: string) =>
+          Array.isArray(v.missing) && v.missing.includes(name),
+        notReturned = (): Promise<Obj[]> =>
+          Promise.reject(new QueryError('notReturned'));
+      for (const name of TRAFFIC_TABLES)
+        tables[name] =
+          name in reports
+            ? list(reports[name]).map(flatten)
+            : !FIRST_TABLES.includes(name)
+              ? async () => (await later('tables', name)).map(flatten)
+              : leftOut(name)
+                ? notReturned
+                : [];
       tables.daily = list(v.daily);
+      // The whole period has no period before it, so no changes.
       for (const name of ['page', 'landing', 'channel'])
-        tables[`${name}_changes`] = list(changes[name]).map(changeRow);
+        tables[`${name}_changes`] =
+          name in changes || obj(v.window).all === true
+            ? list(changes[name]).map(changeRow)
+            : name !== 'channel'
+              ? async () => (await later('changes', name)).map(changeRow)
+              : leftOut(name)
+                ? notReturned
+                : [];
       const settled = text(v.settledThrough),
         through = text(obj(v.window).end),
         searched = obj(v.queriesWindow),
@@ -1529,7 +1577,7 @@ trends: Google Trends (terms, rising, top, weekly, keywords). competitors: compe
 ai_search: saved AI search lookups (brands, answers, lookups).
 forum (topics, unanswered, categories, daily), hackernews (stories, comments, daily), reddit (posts, subreddits), x (posts, daily), discord and slack (messages, open, busiest, channels, daily), youtube and bilibili (videos, groups, daily), xiaohongshu (notes, groups, daily).
 web_sources: public pages connected as sources (sources, items).
-A source the user may not open answers accessDenied; one not connected answers connected: false.`;
+A source the user may not open answers accessDenied; one not connected answers connected: false. A traffic table GA4 left out this time answers error: notReturned, which does not mean it has no rows.`;
 
 /**
  * `query_data`: every data page's source for the online agent, read through the service method that page calls, after

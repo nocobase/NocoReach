@@ -2,9 +2,12 @@
 // 访问 (GA4), rebuilt 2026-10-14 after GA4's own reports (user request: everything GA4 shows, not just views, sources
 // and pages). Read live from the GA4 Data API instead of the synced days: users counted over a period are deduplicated
 // by GA4, while adding up synced days counts a person once per day. Three parts, each cached:
-// - period: the totals, the daily line and the report tables (流量获取, 着陆页, 页面, 事件, 地区, 技术) for a window that
-//   ends yesterday in the property's time zone; kept until midnight there, when yesterday moves on, except that a report
-//   read in the night is read again in the morning, once GA4 has most of yesterday (MORNING_READ_HOUR).
+// - period: the totals, the daily line and the tables the page shows before a tab is opened (FIRST_TABLES), for a window
+//   that ends yesterday in the property's time zone; kept until midnight there, when yesterday moves on, except that a
+//   report read in the night is read again in the morning, once GA4 has most of yesterday (MORNING_READ_HOUR). The sync
+//   tick reads it ahead. `periodTables`, the other report tables (Landing pages, Pages, Geography, Tech…), follows the same rules but is
+//   read when the page is opened, and by the tick only once a day for a project opened in the last day: they are most
+//   of the rows, and most visits never open their tabs.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -67,20 +70,42 @@ const TABLES={
 // Which dimensions identify a row for its detail (a page row is a path; its titles are merged).
 const ROW_KEYS={page:['pagePath']};
 const KEEP={sourceMedium:300,landing:300,page:300,city:200};
-// 变化来自哪里: channels, pages and landing pages read for both periods, so the page can say where a figure's change came
-// from (views and key events by page; sessions and new users by landing page, where a session starts). Kept apart from
-// TABLES, which read the current period only.
+// The change sentence: channels, pages and landing pages read for both periods, so the page can say where a figure's
+// change came from (views and key events by page; sessions and new users by landing page, where a session starts). TABLES
+// read the current period only, but a table of a change's own dimension is read with it (PAIRED).
 const CHANGES={
  channel:{dim:'sessionDefaultChannelGroup',metrics:['screenPageViews','sessions','keyEvents','newUsers','activeUsers'],order:'sessions',limit:200},
  page:{dim:'pagePath',metrics:['screenPageViews','keyEvents'],order:'screenPageViews',limit:2000},
  landing:{dim:'landingPagePlusQueryString',metrics:['sessions','newUsers'],order:'sessions',limit:2000},
 };
 const CHANGE_KEEP=500;
+// The page's figures, Channels, New / returning, Devices, the change sentence's channels and the quality notes (events,
+// source / medium) come from these; the other tables and the pages behind a change are read with `periodTables`.
+const FIRST_TABLES=['channel','newVsReturning','device','event','sourceMedium'];
+const REST_TABLES=Object.keys(TABLES).filter(n=>!FIRST_TABLES.includes(n));
+// Tables read as one report over both periods with the change of the same dimension: Channel in the first part, and
+// Landing pages in the other, which makes that part nine reports, one round of the nine reads at once (Ga4Requests).
+// Pages are not paired: their table is by path and title. The changes left are read on their own (LONE_CHANGES). A
+// paired report takes its change's order and limit, so a paired table must be sorted as its change: that order decides
+// which rows the shared limit keeps. Do not unpair Channel instead, as the first part reads no change on its own. The
+// whole period (`all`) has no period before it, so no changes: its paired tables are read for it alone, as the others.
+const PAIRED=Object.keys(CHANGES).filter(n=>TABLES[n]?.dims.join()===CHANGES[n].dim);
+const LONE_CHANGES=Object.keys(CHANGES).filter(n=>!PAIRED.includes(n));
+const pairedIn=(w,n)=>PAIRED.includes(n)&&!w.all;
+// A paired report keeps the current period's rows for its table. GA4 answers each period for every value seen in either,
+// at zero where it had none, so a value seen only in the period before is dropped, as a report of the current period alone
+// leaves it out. The rows are sorted again by the report's order once picked, so the table does not depend on how GA4
+// orders rows over two periods. Its row limit is the change's and covers both periods; the table keeps the current
+// period's first rows (KEEP), which only a period before with far more values ahead of them would push past it.
+type Ga4Report={dimensionHeaders?:{name:string}[];metricHeaders?:{name:string}[];rows?:{dimensionValues?:{value?:string}[];metricValues?:{value?:string}[]}[]};
+const currentOf=(report:Ga4Report|null|undefined,order:string)=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');if(i<0)return report;
+ const m=(report.metricHeaders||[]).findIndex(h=>h.name===order),rows=(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current'&&(r.metricValues||[]).some(v=>Number(v?.value)));
+ if(m>=0)rows.sort((a,b)=>num(b.metricValues?.[m]?.value)-num(a.metricValues?.[m]?.value));return {...report,rows};};
 // One row per value with its current and previous figures; the largest in either period first. A page is its path:
 // GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
 const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};
 function changeRows(name,report){const c=CHANGES[name],by=new Map();
- for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
+ for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(Object.fromEntries(c.metrics.filter(m=>m in r).map(m=>[m,r[m]])))))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
 // A day (YYYY-MM-DD) within a range.
@@ -174,30 +199,48 @@ class WebsiteReport{
  // is unconfirmed: it then asks again and moves to the property's own yesterday once the lookup succeeds. A new day's
  // window is answered from the view's previous one while it is read, so the report keeps the window it holds, and the
  // `settledThrough` of the day it was read: its days after that were still being processed when GA4 gave them.
- period(id:string|number,property:string,w:unknown,{cutoff,settledThrough,view}:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
-  return this.history.load(String(id),['period',...this.scope(id,property),w],async()=>({...await this.readPeriod(id,property,w),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):since<(MORNING_READ_HOUR-1)*HOUR?MORNING_READ_HOUR*HOUR-since:left;},
-   (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
- async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
-  const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
+ // Whether a period report read at `now` is a night read, which lives only until MORNING_READ_HOUR: one read before the
+ // hour before it. The sync tick reads `periodTables` ahead only when it is not, so once a day, with yesterday whole.
+ nightRead(property:string,now:number){return 24*HOUR-untilMidnight(this.endZone(property),now)<(MORNING_READ_HOUR-1)*HOUR;}
+ // Whether a period report read now lasts until midnight. With no zone held yet it is looked up first, as `yesterday` does,
+ // so the hour is the property's rather than UTC's; one held past its time is used while it is refreshed. A project with
+ // no GA4 property has nothing to read ahead, and no zone to look up.
+ async dayRead(id:string|number,property:string){if(!property)return false;if(!this.zones.has(property))await this.timeZone(id,property);return !this.nightRead(property,businessNow(this.p,id,'google'));}
+ period(id:string|number,property:string,w:unknown,options:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){return this.periodPart('period',id,property,w,options,()=>this.readPeriod(id,property,w));}
+ // The other report tables of the same window, with the same lifetime; their own family, so neither part's copy retires
+ // the other's.
+ periodTables(id:string|number,property:string,w:unknown,options:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){return this.periodPart('period-tables',id,property,w,options,()=>this.readTables(id,property,w));}
+ periodPart(part:string,id:string|number,property:string,w:unknown,{cutoff,settledThrough,view}:{cutoff?:string;settledThrough?:string;view?:unknown[]},read:()=>Promise<unknown>){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
+  return this.history.load(String(id),[part,...this.scope(id,property),w],async()=>({...await read(),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):this.nightRead(property,now)?MORNING_READ_HOUR*HOUR-since:left;},
+   (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:[part,...this.scope(id,property),...view]}:{});}
+ async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')];
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
-   request(['date'],SESSION,[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
-   ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
-   ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
+   request(['date'],SESSION,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
+   ...this.tableRequests(w,FIRST_TABLES,[]),
   ]);
-  const [totalsReport,dailyReport,...rest]=reports,tables=rest.slice(0,names.length),changeReports=rest.slice(names.length);if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
+  const [totalsReport,dailyReport,...rest]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
   // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
   const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start,w.end)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
-   previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
-  names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
-  // A change report GA4 refuses only leaves that part out of the explanation.
-  out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
-  // AI 助手: sources whose name says so (ChatGPT, Perplexity…); GA4 counts them under Referral and other channels.
-  
-  if(w.all){out.totals.previous=null;out.previousDaily=[];out.changes={};}
+   previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
+   ...this.tablesOf(w,FIRST_TABLES,[],rest),complete:reports.every(Boolean)};
+  if(w.all){out.totals.previous=null;out.previousDaily=[];}
+  return out;}
+ // The whole period has no changes, so it reads none: eight reports.
+ async readTables(id,property,w){const changes=w.all?[]:LONE_CHANGES,reports=await this.batch(id,property,this.tableRequests(w,REST_TABLES,changes));
+  return {...this.tablesOf(w,REST_TABLES,changes,reports),complete:reports.every(Boolean)};}
+ // A table's report, over both periods with the order and limit of its change when paired, then the changes read alone.
+ tableRequests(w,names,changeNames){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
+  return [...names.map(n=>{const t=TABLES[n],c=CHANGES[n];return pairedIn(w,n)?request(t.dims,t.metrics||SESSION,both,c.order,c.limit):request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
+   ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);})];}
+ // `missing` names the tables GA4 refused, a paired one with its change; a change report read alone that it refuses only
+ // leaves that part out of the explanation.
+ tablesOf(w,names,changeNames,reports){const out={tables:{},missing:[],changes:{}};
+  names.forEach((n,i)=>{const r=reports[i];if(!r){out.missing.push(n);return;}const paired=pairedIn(w,n);out.tables[n]=tableRows(n,paired?currentOf(r,CHANGES[n].order):r);if(paired)out.changes[n]=changeRows(n,r);});
+  if(!w.all)changeNames.forEach((n,i)=>{const r=reports[names.length+i];if(r)out.changes[n]=changeRows(n,r);});
   return out;}
 
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
@@ -270,4 +313,4 @@ class WebsiteReport{
    devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
   value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;this.liveCache.set(key,value);return value;}
 }
-export { WebsiteReport, TABLES, CHANGES, tableRows, changeRows, rowsOf, values, RETRY_429_MS, withGa4RetryDeadline };
+export { WebsiteReport, TABLES, CHANGES, FIRST_TABLES, REST_TABLES, tableRows, changeRows, rowsOf, values, RETRY_429_MS, withGa4RetryDeadline };

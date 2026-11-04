@@ -424,12 +424,16 @@ describe('Google fixtures', () => {
             e.dims.eventName === 'sign_up',
         ).keyEvents,
       ).toBeGreaterThan(0);
+      // The other tables come apart, as the page asks for them once its figures show.
+      const others = await report.periodTables(ctx.projectId, property, w);
+      expect(others.missing).toEqual([]);
+      expect(Object.keys(others.changes).sort()).toEqual(['landing', 'page']);
       expect(
-        period.tables.country
+        others.tables.country
           .map((r: { dims: { countryId: string } }) => r.dims.countryId)
           .sort(),
       ).toEqual(['CA', 'US']);
-      const pricing = period.tables.page.find(
+      const pricing = others.tables.page.find(
         (r: { key: string }) => r.key === '/pricing',
       );
       const row = await report.row(ctx.projectId, property, w, {
