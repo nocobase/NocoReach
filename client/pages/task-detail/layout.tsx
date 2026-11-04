@@ -4,6 +4,7 @@ import { $t } from '#i18n';
 import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
 import { text } from './styles';
+import { useStickyHead } from './sticky-head.js';
 
 // The task page's one layout system (styles.ts): every card the same, holding a single level of boxes.
 const INNER_GAP = 'gap-4';
@@ -30,6 +31,7 @@ export function Card({
   as?: 'section' | 'aside';
 }) {
   const head = Boolean(title || actions);
+  const headRef = useStickyHead<HTMLElement>();
   return (
     <Root
       className={cn(
@@ -40,6 +42,7 @@ export function Card({
     >
       {head && (
         <header
+          ref={sticky ? headRef : undefined}
           className={cn(
             'flex flex-wrap items-start justify-between gap-x-4 gap-y-3 p-4',
             sticky && 'sticky top-0 z-10 rounded-lg bg-card',
