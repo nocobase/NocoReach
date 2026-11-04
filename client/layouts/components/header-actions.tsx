@@ -8,9 +8,9 @@ import { InboxHeaderButton } from '#components/inbox-header-button';
 export function HeaderActions(): ReactElement {
   return (
     <TooltipProvider>
-      <div className='flex shrink-0 items-center gap-1 sm:gap-2'>
+      <div className='flex shrink-0 items-center gap-1 xl:gap-2'>
         <InboxHeaderButton />
-        <ThemeSettings className='size-8 sm:size-10' />
+        <ThemeSettings className='size-8 xl:size-10' />
         <UserMenu />
       </div>
     </TooltipProvider>

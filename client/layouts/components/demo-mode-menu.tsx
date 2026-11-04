@@ -20,7 +20,7 @@ import {
 
 /** Keep the desktop entry; narrow screens use the public account hook with a short, text-based status. */
 export function HeaderDemoModeMenu() {
-  const compact = useMediaQuery('(max-width: 1023px)');
+  const compact = useMediaQuery('(max-width: 1279px)');
   const enabled = useDemoMode();
   return compact && enabled ? <CompactDemoModeMenu /> : <DemoModeMenu />;
 }

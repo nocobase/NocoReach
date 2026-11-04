@@ -87,8 +87,8 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                   />
                 </AppSidebar>
                 <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
-                  <LayoutHeader className='sticky top-0 z-40 gap-1 px-2 sm:gap-2 sm:px-3 md:px-4'>
-                    <div className='flex min-w-0 flex-1 items-center gap-1 sm:flex-initial sm:shrink-0 sm:gap-3 md:shrink'>
+                  <LayoutHeader className='sticky top-0 z-40 gap-1 px-2 xl:gap-2 sm:px-3 md:px-4'>
+                    <div className='flex min-w-0 flex-1 items-center gap-1 sm:flex-initial sm:shrink-0 xl:gap-3 md:shrink'>
                       <AppSidebarToggle />
                       {/* NocoReach: below md the header has no room for the trail, so a page below another one puts its
                     way back where the compact brand would be; its page has no BackButton of its own (L6). */}
@@ -103,7 +103,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                       <Breadcrumbs denied={denied} scroller={contentRef} />
                     </div>
                     {/* NocoReach: one compact phone row keeps the status and every shortcut directly reachable. */}
-                    <div className='ml-auto flex shrink-0 items-center gap-1 sm:min-w-0 sm:shrink sm:gap-2'>
+                    <div className='ml-auto flex shrink-0 items-center gap-1 sm:min-w-0 sm:shrink xl:gap-2'>
                       <HeaderDemoModeMenu />
                       <div className='flex min-w-0 items-center max-sm:[&_[data-project-switcher]]:p-0.5'>
                         <ProjectSwitcher />
