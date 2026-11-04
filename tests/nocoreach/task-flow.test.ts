@@ -446,6 +446,24 @@ test('people and page: owner changes between runs, collaborators and linked page
  d=await f.command('linkPage',{url:''});assert.equal(d.work.page,undefined);
 });
 
+test('pages are found by their link, and a link on the site Website content has not read can be the task\'s page (Use this link)',async()=>{
+ const f=fixture(),install='https://www.example.com/docs/install/',blog='https://www.example.com/blog/x';
+ f.s.p.project=async()=>({name:'Synthetic',domains:['example.com']});
+ f.state.nrSnapshots.push({id:9003,key:'site-content:1',payload:{sites:[{origin:'https://www.example.com'}],pages:[{url:install,title:'Install guide',type:'docs',canonical:install},{url:blog,title:'X',type:'blog',canonical:blog}],outsidePages:[{url:'https://www.example.com/en/blog/x',canonical:blog}]}});
+ const found=async q=>(await f.s.pages('1',q)).map(p=>p.link?`link:${p.url}`:p.url);
+ for(const q of ['https://example.com/docs/install','http://www.example.com/docs/install?utm_source=x','example.com/docs/install/','/docs/install'])assert.deepEqual(await found(q),[install],q);
+ assert.deepEqual(await found('https://www.example.com/en/blog/x'),[blog],'without the language prefix the site drops');
+ assert.deepEqual(await found('install guide'),[install],'titles are searched as before');
+ assert.deepEqual(await found('https://www.example.com/en/blog/new-post?utm_source=x'),['link:https://www.example.com/en/blog/new-post'],'a link on the site no page has');
+ assert.deepEqual(await found('/new-post'),['link:https://www.example.com/new-post'],'a path, on the site Website content reads');
+ assert.deepEqual(await found('https://other.example/blog/new-post'),[],'never another site');
+ let d=await f.command('linkPage',{url:'https://example.com/docs/install'});assert.deepEqual(d.work.page,{url:install,title:'Install guide'},'another address of a page links the page');
+ d=await f.command('linkPage',{url:'https://www.example.com/en/blog/new-post'});assert.deepEqual(d.work.page,{url:'https://www.example.com/en/blog/new-post',title:''});
+ d=await f.command('linkPage',{url:'https://docs.example.com/guide?x=1#y'});assert.deepEqual(d.work.page,{url:'https://docs.example.com/guide',title:''},'a host below the site\'s, without the query');
+ await assert.rejects(f.command('linkPage',{url:'https://other.example/blog/new-post'}),e=>e.status===404);
+ assert.equal((await f.view()).work.page.url,'https://docs.example.com/guide');
+});
+
 test('the start records the pages it was started with: relinking the task\'s page afterwards leaves them',async()=>{
  const f=fixture(),install='https://example.com/docs/install',blog='https://example.com/blog/x';
  f.state.nrSnapshots.push({id:9002,key:'site-content:1',payload:{pages:[{url:install,title:'Install',type:'docs'},{url:blog,title:'X',type:'blog'}]}});
@@ -487,6 +505,26 @@ test('notifications: when the Agent finishes and the task waits for its owner, t
  const me=await connectAgent(f);await f.command('startTask',{playbookId:'change-research'});assert.deepEqual(told,[]);
  const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
  const d=await f.view();assert.equal(d.work.flow.stages[d.work.stageIndex].kind,'review');assert.deepEqual(told,[['waiting',d.work.flow.stages[d.work.stageIndex].name]]);
+});
+
+test('a failed Agent run waits for its owner as Needs you, without a message; Try again puts it back in progress',async()=>{
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin',roles:[{name:'nr.member'}]});
+ const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>e.kind));}};
+ await selectAgent(f);await f.command('setOwner',{userId:'2'});await f.command('startTask',{playbookId:'change-research'});told.length=0;
+ const stored=()=>f.state.nrTasks[0];
+ let {run}=await claim(f);await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',run.id)),undefined,'agent_failed');
+ // The raw record the task list and the Tasks badge read keeps the failed run, and the status text says Needs you.
+ assert.equal(stored().evidence.work.latestRun.status,'failed');assert.equal(__model.boardState(stored().evidence.work),'review');
+ assert.equal(stored().status,systemMessageText('common.needsConfirmation'));
+ assert.deepEqual(told,[],'the waiting message names a step to do; a failed run sends none yet');
+ // Moved to In progress by hand, then tried again and failed again: the failure is back in Needs you.
+ await f.command('moveWork',{state:'doing'});assert.equal(__model.boardState(stored().evidence.work),'doing');
+ await f.command('retryStage',{stageKey:(await f.stage()).key});assert.equal(__model.boardState(stored().evidence.work),'doing');
+ ({run}=await claim(f));assert.equal(__model.boardState(stored().evidence.work),'doing');
+ await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',run.id)),undefined,'agent_failed');
+ assert.equal(stored().evidence.work.boardState,undefined);assert.equal(__model.boardState(stored().evidence.work),'review');
+ await f.command('retryStage',{stageKey:(await f.stage()).key});assert.equal(__model.boardState(stored().evidence.work),'doing');
+ assert.equal(stored().status,systemMessageText('common.inProgress'));
 });
 
 test('a new task belongs to whoever created it; older tasks keep no owner',async()=>{

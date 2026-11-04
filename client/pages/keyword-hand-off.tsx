@@ -37,7 +37,7 @@ export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,
 export type TaskDraft={title:string;objective:string;brief:string;signalKey?:string;why?:string;subject?:string;pages?:string[]};
 // Creates a task from a draft (not from an opportunity), not started (2026-10-08 user decision: the person starts it on
 // the task page with 确定开始执行 after reading it); the suggested 做法 is preselected there, and the page is linked when
-// it is in 网站内容. Shared by every 交给 Agent on the data pages.
+// it is in Website content or on the site's own hosts. Shared by every 交给 Agent on the data pages.
 export async function createDraftTask(projectId:number,draft:TaskDraft,playbookId:string,page?:string,requestId:string=crypto.randomUUID()):Promise<{taskId?:number;started:boolean;title?:string}>{
  const state=await request<StrategyState>(projectId,'state');
  // `entry`: the page it is handed off from, shown on the task as where it was found (2026-10-22).
@@ -45,7 +45,7 @@ export async function createDraftTask(projectId:number,draft:TaskDraft,playbookI
  const created=next.proposals.find(p=>!p.insight&&p.taskId&&!state.proposals.some(o=>o.id===p.id)),taskId=created?.taskId;
  if(!taskId)return {started:false};
  refreshNavBadges();
- if(page){try{const d=await work<{work:{revision:number}}>(projectId,taskId,'get');await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'linkPage',url:page});}catch{/* not in 网站内容: the task still names it */}}
+ if(page){try{const d=await work<{work:{revision:number}}>(projectId,taskId,'get');await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'linkPage',url:page});}catch{/* not on the site: the task still names it */}}
  // The title the task got, which the server builds from the playbook and the subject.
  return {taskId,started:false,title:created?.title||draft.title};
 }
