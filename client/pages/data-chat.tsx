@@ -23,7 +23,7 @@ import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/r
 import { discussionsDraft, replyDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, labelValue } from '#lib/format';
 
 type Message = { platform: "discord" | "slack"; channel: string; text: string; createdAt: string; replies: number; url: string };
 type Side = { connected: boolean; name?: string };
@@ -45,7 +45,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('dataChat.notFullyRead'))); }
     finally { setBusy(false); }
   };
-  const w = view?.window, where = view?.side?.name ? `${platform === "discord" ? $t('common.server') : $t('dataChat.workspace')}：${view.side.name}` : "";
+  const w = view?.window, where = view?.side?.name ? labelValue(platform === "discord" ? $t('common.server') : $t('dataChat.workspace'), view.side.name) : "";
   const asItem = (m: Message) => ({ title: m.text.replace(/\s+/g, " ").slice(0, 120), url: m.url, meta: `#${m.channel} · ${formatDate(m.createdAt)}` });
   const open = useTickedList(`${platform}-open`, view?.connected ? view.open : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-reply", description: $t('dataChat.questionsBecomeOneTaskAgent'), draft: () => replyDraft(name, $t('dataChat.unansweredQuestions'), ticked.map(asItem)) }));
   const busiest = useTickedList(`${platform}-busiest`, view?.connected ? view.busiest : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-summary", description: $t('dataChat.messagesBecomeOneTaskAgent'), draft: () => discussionsDraft(name, $t('dataChat.messages'), ticked.map(asItem)) }));

@@ -1,4 +1,4 @@
-import { formatDate } from '#lib/format';
+import { formatDate, joinList, joinSentences, withDetail } from '#lib/format';
 import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
 import {Link} from 'react-router';
@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 // hover); sentences (the delete confirmations) name them as text.
 type Use={playbookId:string;playbook:string;n:number;step:string};
 type Usage=Record<string,Use[]>;
-const usesText=(uses:Use[])=>uses.map(u=>`${u.playbook} · ${u.step}`).join('、');
+const usesText=(uses:Use[])=>joinList(uses.map(u=>`${u.playbook} · ${u.step}`));
 const playbooksOf=(uses:Use[])=>[...new Map(uses.map(u=>[u.playbookId,u.playbook])).entries()];
 const day=(iso:string)=>formatDate(iso);
 export default function SkillsPage(){
@@ -49,7 +49,7 @@ export default function SkillsPage(){
  // Rows ticked to delete together (only those still listed and shown count).
  const ticked=visible.filter(s=>picked.includes(s.id)),allTicked=visible.length>0&&ticked.length===visible.length;
  async function removeTicked(){if(!project||!canRemove||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
-  if(!(await confirmAction({title:() => ($t('skills.deleteSkills',{0:ticked.length})),description:() => (used.length?$t('skills.themSetPlaybooksStepsCannot',{0:used.join('、')}):undefined),action:'common.delete'})))return;setBusy(true);setError('');
+  if(!(await confirmAction({title:() => ($t('skills.deleteSkills',{0:ticked.length})),description:() => (used.length?$t('skills.themSetPlaybooksStepsCannot',{0:joinList(used)}):undefined),action:'common.delete'})))return;setBusy(true);setError('');
   try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice(() => ($t('skills.skillsDeleted',{0:r.removed.length})));setPicked([]);load();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.notDeletedTryAgain')));}finally{setBusy(false);}}
  return <PageContainer className="nr-page"><PageHeader title="Skills" description={$t('skills.instructionsHowKindWorkSkills')} actions={canAdd&&<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>{$t('skills.newSkill')}</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
@@ -69,7 +69,7 @@ export default function SkillsPage(){
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?$t('skills.noMatchingSkillsMessage'):$t('skills.noSkillsYetClickNew')}</p>}
   </section>
   {project&&creating&&canAdd&&<NewSkill projectId={project.id} canCreate={canCreate} canImport={canImport} canImportLink={canImportLink} canReadLink={canReadLink} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(() => ($t('skills.createdTasksUseOnceEnabled',{0:s.name})));load();setOpen(s.id);}}
-   onImported={r=>{setCreating(false);setNotice(() => ([r.imported.length?$t('skills.skillsImportedTasksUseThem',{0:r.imported.length,1:r.imported.join('、')}):$t('skills.noSkillsImported'),r.skipped.length?$t('skills.skippedValueMessage',{0:r.skipped.length,1:r.skipped.map(x=>`${x.name}（${$legacyText(x.reason)}）`).join('、')}):''].join('')));load();}}/>}
+   onImported={r=>{setCreating(false);setNotice(() => joinSentences([r.imported.length?$t('skills.skillsImportedTasksUseThem',{0:r.imported.length,1:joinList(r.imported)}):$t('skills.noSkillsImported'),r.skipped.length?$t('skills.skippedValueMessage',{0:r.skipped.length,1:joinList(r.skipped.map(x=>withDetail(x.name,$legacyText(x.reason))))}):'']));load();}}/>}
   {project&&<SkillDrawer projectId={project.id} canEnable={canEnable} canRemove={canRemove} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
  </PageContainer>;
 }
@@ -118,11 +118,11 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
       <span className="flex min-w-0 flex-col gap-0.5"><span className="flex items-center gap-2 font-mono text-sm font-medium">{c.name}{c.exists&&<Tag tone="grey">{$t('skills.exists')}</Tag>}</span><span className="line-clamp-2 text-xs text-muted-foreground">{c.description}</span></span></label></li>)}
       {!shown.length&&<li className="px-3 py-4 text-center text-xs text-muted-foreground">{$t('skills.noMatchingSkills')}</li>}</ul></fieldset>}
     {busy&&link?.choices&&<p role="status" className="text-sm text-muted-foreground">{$tj('skills.readingImportingSkillsTakeMoment',{0:ticked.length})}</p>}
-    {link?.files&&<div role="status" className="flex flex-col gap-0.5 rounded-lg border p-3 text-sm"><p><span className="font-mono font-medium">{link.name}</span><span className="text-muted-foreground"> · {link.files.length-1?$t('skills.attachedFileCount',{0:link.files.length-1}):$t('skills.noAttachedFiles')}{link.skipped?.length?$t('skills.skippedFilesSuffix',{0:link.skipped.length,1:link.skipped.slice(0,3).join('、'),2:link.skipped.length>3?'…':''}):''}</span></p><p className="line-clamp-3 text-xs text-muted-foreground">{link.description}</p></div>}
+    {link?.files&&<div role="status" className="flex flex-col gap-0.5 rounded-lg border p-3 text-sm"><p><span className="font-mono font-medium">{link.name}</span><span className="text-muted-foreground"> · {link.files.length-1?$t('skills.attachedFileCount',{0:link.files.length-1}):$t('skills.noAttachedFiles')}{link.skipped?.length?$t('skills.skippedFilesSuffix',{0:link.skipped.length,1:joinList(link.skipped.slice(0,3)),2:link.skipped.length>3?'…':''}):''}</span></p><p className="line-clamp-3 text-xs text-muted-foreground">{link.description}</p></div>}
    </>:<>
     <label className="nr-field"><WithInfo help={$t('skills.nameWhenUseReadTop')}>{$t('skills.skillFolderContainingSkillMd')}</WithInfo><input type="file" multiple disabled={busy} {...{webkitdirectory:''}} onChange={e=>void pick(e.target.files,true)}/></label>
     <label className="nr-field">{$t('skills.pickSingleSkillMdFile')}<input type="file" accept=".md,.markdown" disabled={busy} onChange={e=>void pick(e.target.files,false)}/></label>
-    {picked&&<p role="status" className="text-sm">{$tj('skills.readSkillMd',{0:others?$t('skills.additionalFiles',{0:others}):'',1:picked.skipped.length?$t('skills.skippedFilesSummary',{0:picked.skipped.length,1:picked.skipped.slice(0,3).join('、'),2:picked.skipped.length>3?'…':''}):''})}</p>}
+    {picked&&<p role="status" className="text-sm">{$tj('skills.readSkillMd',{0:others?$t('skills.additionalFiles',{0:others}):'',1:picked.skipped.length?$t('skills.skippedFilesSummary',{0:picked.skipped.length,1:joinList(picked.skipped.slice(0,3)),2:picked.skipped.length>3?'…':''}):''})}</p>}
    </>}
    {/* A link GitHub cannot be read from: the folder can be downloaded elsewhere and uploaded here instead. */}
    <ConnectionError message={error} hint={mode==='link'&&canImport?$t('skills.uploadFolderInstead'):undefined} alternative={mode==='link'&&canImport?<Button type="button" size="sm" variant="outline" onClick={()=>{setMode('folder');setError('');}}>{$t('skills.useUploadFolder')}</Button>:undefined}/>

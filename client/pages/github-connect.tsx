@@ -1,4 +1,4 @@
-import { formatDateTime, formatDate } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {ConnectionError,NetworkSettingsLink} from "#components/connection-error";
 import {useEffect,useState} from 'react';
@@ -54,7 +54,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
  const trafficSection=!status.token&&!canSetToken?null:<section className="nr-guide-step" data-focus={focus==='traffic'||undefined}><h3>{$tj('github.connectTrafficViewsClonesReferring',{0:status.connected?$t('github.step2'):''})}</h3>
   {!status.connected?<p className="nr-footnote">{$t('github.connectRepositoryFirst')}</p>
   :status.token&&(!replacing||!canSetToken)?<div className="nr-guide-connected">{status.token.error?<p role="alert" className="nr-error">{$tj('github.replaceTokenValueMessage',{0:$legacyText(status.token.error)})}</p>:<p>{$tj('github.verifiedArchivingSinceViewsLast',{0:date(status.token.verifiedAt),1:date(status.token.since),2:status.views14?.toLocaleString(getCurrentLocale())??'—'})}<InfoTip className='ml-1'>{$t('github.githubKeepsLast14Days')}</InfoTip></p>}
-   {!!status.topReferrers?.length&&<p className="nr-footnote">{$tj('github.mainSources',{0:status.topReferrers.map(r=>`${r.referrer} ${r.count}`).join('、')})}</p>}
+   {!!status.topReferrers?.length&&<p className="nr-footnote">{$tj('github.mainSources',{0:joinList(status.topReferrers.map(r=>`${r.referrer} ${r.count}`))})}</p>}
    <div className="nr-step-actions">{canSetToken&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>setReplacing(true)}>{$t('github.replaceToken')}</Button>}{canRemoveToken&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.removeGithubToken')),description:() => ($t('github.trafficCannotArchivedAnymoreArchived')),action:'common.remove'}))void run(()=>call<GitHubStatus>(projectId,'removeToken'));}}>{$t('github.removeToken')}</Button>}</div></div>
   :canSetToken?tokenForm:null}</section>;
  return <>{error&&<ConnectionError message={error}/>}{focus==='traffic'&&status.connected?<>{trafficSection}{repoSection}</>:<>{repoSection}{trafficSection}</>}{historySection}</>;

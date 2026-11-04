@@ -26,7 +26,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { safeLink } from "./analytics";
 import { help } from "./glossary";
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, joinClauses, labelValue, withDetail } from '#lib/format';
 import { distinctPages } from '../../shared/task-start.js';
 import { Segmented } from '#components/reach/segmented';
 
@@ -67,7 +67,7 @@ function draft(r: Result): TaskDraft {
     pages: distinctPages([r.finalUrl]),
     title: $t('lighthouseCard.improvePagePerformance',{0:pathOf(r.finalUrl),1:device}).slice(0, 200),
     objective: $t('lighthouseCard.getLighthousePerformanceScore90',{0:r.finalUrl}).slice(0, 1000),
-    brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`).join("，")}), $t('lighthouseCard.metrics',{0:r.metrics.map((m) => `${metricName(m)} ${metricValue(m)}`).join("，")}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${zh(i)}${getZh()[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
+    brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:joinClauses(Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`))}), $t('lighthouseCard.metrics',{0:joinClauses(r.metrics.map((m) => `${metricName(m)} ${metricValue(m)}`))}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${labelValue(withDetail(zh(i), getZh()[i.key] && zh(i) !== i.title ? i.title : ""), i.value)}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
   };
 }
 
@@ -87,8 +87,8 @@ const linkClass = "block max-w-md truncate text-left text-primary underline-offs
 // The ticked results as one 技术修复 task: each page's scores and LCP, then its worst failing checks.
 function draftMany(rows: Record_[]): TaskDraft {
   const lines = rows.slice(0, 20).flatMap((r) => [
-    `- ${r.finalUrl || r.url}（${deviceName(r.strategy)}，${when(r.createdAt)}）：${CATEGORIES.map((k) => `${getCategory()[k]} ${r.scores?.[k] ?? "—"}`).join("，")}${lcpOf(r) ? `，LCP ${lcpOf(r)!.value}` : ""}`,
-    ...r.issues.slice(0, 6).map((i) => `  - [${getCategory()[i.category]}] ${getZh()[i.key] || i.title}${i.value ? `：${i.value}` : ""}`),
+    `- ${labelValue(withDetail(r.finalUrl || r.url, joinClauses([deviceName(r.strategy), when(r.createdAt)])), joinClauses([...CATEGORIES.map((k) => `${getCategory()[k]} ${r.scores?.[k] ?? "—"}`), ...(lcpOf(r) ? [`LCP ${lcpOf(r)!.value}`] : [])]))}`,
+    ...r.issues.slice(0, 6).map((i) => `  - [${getCategory()[i.category]}] ${labelValue(getZh()[i.key] || i.title, i.value)}`),
   ]);
   const page = pathOf(rows[0].finalUrl || rows[0].url);
   return {
@@ -133,7 +133,7 @@ export function PerformanceTab({ projectId, initialUrl }: { projectId: number; i
     <>
       <Card className="gap-3 px-4" data-lighthouse-form="">
         {status && !status.connected ? (
-          <p className="text-sm text-muted-foreground">{$t('lighthouseCard.lighthouseRunsThroughDataforseoFirst')}<Button variant="link" className="h-auto p-0" onClick={() => navigate("/connections?source=keywords")}>{$t('common.connectDataforseo')}</Button>。</p>
+          <p className="text-sm text-muted-foreground">{$tj('lighthouseCard.lighthouseRunsThroughDataforseoFirst', { 0: <Button variant="link" className="h-auto p-0" onClick={() => navigate("/connections?source=keywords")}>{$t('common.connectDataforseo')}</Button> })}</p>
         ) : (
           <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void check(); }}>
             <Input className="lg:max-w-xl" aria-label={$t('lighthouseCard.urlCheck')} value={url} placeholder="https://www.example.com/pricing" onChange={(e) => { setUrl(e.target.value); setEarlier(undefined); }} />

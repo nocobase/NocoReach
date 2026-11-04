@@ -4,7 +4,7 @@ import { $t, $tj, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
-import { formatCompact, formatDate } from '#lib/format';
+import { formatCompact, formatDate, joinList } from '#lib/format';
 import { chipClass } from '#components/reach/chip';
 import { Segmented } from '#components/reach/segmented';
 import { Button } from '#components/ui/button';
@@ -200,7 +200,6 @@ function SelectionRules({
   onViewNotPicked: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const join = getCurrentLocale().startsWith('zh') ? '、' : ', ';
   const b = (key: string) => (
     <span className='font-medium text-foreground'>{$t(key)}</span>
   );
@@ -273,7 +272,7 @@ function SelectionRules({
                   <span className='truncate text-muted-foreground'>
                     {r.examples.length
                       ? $t('keywordSuggestions.examples', {
-                          0: r.examples.join(join),
+                          0: joinList(r.examples),
                         })
                       : ''}
                   </span>

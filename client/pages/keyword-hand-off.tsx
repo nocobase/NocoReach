@@ -10,6 +10,7 @@ import {marketLabel,metric,type SiteRank} from './keyword-api';
 import {getIntentLabels,toIntent} from '#components/seo/intent-badge';
 import {subjectOf} from './task-subject';
 import {distinctPages} from '../../shared/task-start.js';
+import {joinList} from '#lib/format';
 // 交给 Agent from 关键词 (SPEC "OpenSEO 数据页面"): the chosen keywords become one task, with 优化现有页面 suggested when
 // the site already ranks (that page linked), otherwise 内容选题与大纲.
 export type HandOffKeyword={keyword:string;market:{locationCode:number;language:string}|null;volume:number|null;difficulty:number|null;intent:string|null;rank?:SiteRank};
@@ -24,7 +25,7 @@ export function keywordDraft(rows:HandOffKeyword[]){
  );
  const lines=rows.map(r=>$t('keywordHandOff.monthlyVolumeDifficultyIntent',{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t('keywordHandOff.averagePositionOverLast28',{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t('keywordHandOff.siteNotRankYet')}));
  const brief=[$t('keywordHandOff.keywords'),...lines,'',$t('keywordHandOff.evidenceSearchVolumeDifficultyIntent'),$t('keywordHandOff.suggestionCoverKeywordsOnePiece')].join('\n');
- return {pages:distinctPages([rankedPage(rows),...ranked.map(r=>r.rank!.page)]),title:title.slice(0,200),subject:subjectOf(head,rows.length,'keywords').slice(0,160),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
+ return {pages:distinctPages([rankedPage(rows),...ranked.map(r=>r.rank!.page)]),title:title.slice(0,200),subject:subjectOf(head,rows.length,'keywords').slice(0,160),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:joinList(rows.map(r=>r.keyword))}).slice(0,1000),brief:brief.slice(0,20000)};
 }
 // The best ranking page among the keywords, if any (it is linked to the task when it is in 网站内容).
 export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,b)=>b.rank!.clicks-a.rank!.clicks||a.rank!.position-b.rank!.position)[0]?.rank?.page;
