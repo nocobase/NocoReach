@@ -16,7 +16,8 @@ export const RUN_PREFIX = 'nr-task-run:';
 /**
  * How often runs written without `TaskService.put` are looked for. The writers that do so write settled runs only
  * (demo data, demo upgrades) or ask for a scan (a classic import), so this only bounds the delay for a writer nobody
- * knows of yet; with 5,000 runs a scan reads ids for about 40 ms in pages of `IDS_PAGE`.
+ * knows of yet. With 5,000 settled runs a scan takes about 80 ms, in reads of 10 to 20 ms (`IDS_PAGE` ids each) with
+ * other requests served between them.
  */
 export const RESCAN_MS = 10 * 60_000;
 const IDS_PAGE = 1000;
