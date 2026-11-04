@@ -28,6 +28,7 @@ import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
 import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
+import { TASK_IMAGES_PER_MESSAGE, type MessageImage } from '../../../shared/task-images.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -283,6 +284,27 @@ export class TaskService {
   flowStageOf(w: Work, key: unknown, kinds: StageKind[]) { return this.flowStage(w, key, kinds); }
   flowArtifactOf(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any) { return this.flowArtifact(project, taskId, stageKey, content, actor, at, tx); }
   enterStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) { return this.enterFlowStage(project, taskId, task, w, index, tx, actor, at); }
+  /**
+   * The images sent with a message or a change request (2026-11-03): the person's own uploads (`imageIds`, in the order
+   * they were added, which is how the text numbers them), linked to the task in this command's transaction. Kept on
+   * `w.images` as well, which lets the task's readers open them.
+   */
+  async linkImages(project: string, taskId: string, w: Work, v: any, actor: string, tx: any, max = TASK_IMAGES_PER_MESSAGE): Promise<MessageImage[]> {
+    const ids = v.imageIds;
+    if (ids === undefined) return [];
+    if (!Array.isArray(ids) || ids.length > max || new Set(ids).size !== ids.length || ids.some((id: unknown) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) return fail(systemMessageText('taskExecution.imagesInvalid'), 400);
+    if (!ids.length) return [];
+    if (!this.p.taskAttachments) return fail(systemMessageText('taskExecution.imageUnavailable'), 409);
+    let images: MessageImage[];
+    try {
+      images = await this.p.taskAttachments.linkImages(tx.connection, actor, project, taskId, ids);
+    } catch (error) {
+      if ((error as { reason?: string })?.reason === 'TASK_IMAGE_UNAVAILABLE') return fail(systemMessageText('taskExecution.imageUnavailable'), 409);
+      throw error;
+    }
+    w.images = [...new Set([...(w.images || []), ...images.map((i) => i.id)])];
+    return images;
+  }
   /** The repository the task changes (shared/repo-routing.ts): the one kept at its start. */
   private async repoOf(project: string, task: any, w: Work, tx: any) {
     return startedRepo((await this.agents.doc(project, tx)).repos, w, await this.taskPages(project, task, w, tx));
@@ -769,6 +791,8 @@ export class TaskService {
         // A message for the executor; the next run reads the latest ones.
         if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
         event.comment = text(v.comment, 3000);
+        const images = await this.linkImages(project, taskId, w, v, actor, tx);
+        if (images.length) event.images = images;
       } else if (v.command === 'approveStage' || v.command === 'requestStageChanges' || v.command === 'changePrimary') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeReviewing'), 409);
@@ -836,9 +860,12 @@ export class TaskService {
         } else {
           const comment = feedback || text(v.comment, 3000);
           if (!feedback) event.comment = comment;
+          // Images sent with the request (2026-11-03) go to the Agent with it, numbered as the person numbered them.
+          const images = feedback ? [] : await this.linkImages(project, taskId, w, v, actor, tx);
+          if (images.length) event.images = images;
           w.results[index - 1] = { ...output, rejectedAt: at };
           // Feedback is filed under the stage that redoes the work, so its next run reads it.
-          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, reviewerId: actor, at }, tx);
+          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, ...(images.length ? { images } : {}), reviewerId: actor, at }, tx);
           await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
         }
       } else if (v.command === 'editStageOutput') {

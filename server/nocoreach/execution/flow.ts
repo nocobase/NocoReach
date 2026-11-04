@@ -7,6 +7,7 @@ import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
 import { taskSignals } from '../../../shared/opportunity-parts.js';
+import type { MessageImage } from '../../../shared/task-images.js';
 
 // Flows (SPEC §6.0): Runner stages produce output for human review.
 // Review stages are human decisions; publish and observe are fixed system stages at the end of repository flows.
@@ -67,8 +68,17 @@ export function validateFlow(v: any): { name: string; description: string; stage
 // the start's own instructions (the start card's optional note until 2026-10-24) and stay, the first five of them,
 // with the latest five, oldest first and within 6,000 characters (over it, the older of the latest are left out).
 const NOTES_BUDGET = 6000;
-type Note = { action: 'comment'; comment: string; at?: string };
-export function runNotes(history: readonly { action?: unknown; comment?: unknown; at?: string }[]): string[] {
+type Note = { action: 'comment'; comment: string; at?: string; images?: MessageImage[] };
+/**
+ * A message as the Agent reads it: its text, or with images (2026-11-03) the text and the images numbered in the order
+ * they were added, as the text calls them ("Image 1"). `ref` is the address an article uses to show one; the image
+ * itself is in the materials (images.json).
+ */
+export type RunMessage = string | { text: string; images: { number: number; name: string; ref: string }[] };
+export function runMessage(text: string, images?: MessageImage[]): RunMessage {
+  return images?.length ? { text, images: images.map((image, i) => ({ number: i + 1, name: image.name, ref: image.ref })) } : text;
+}
+export function runNotes(history: readonly { action?: unknown; comment?: unknown; at?: string; images?: MessageImage[] }[]): RunMessage[] {
   const comments = history.filter((e): e is Note => e?.action === 'comment' && typeof e.comment === 'string' && Boolean(e.comment));
   const startedAt = history.find(e => e?.action === 'startTask')?.at;
   const before = comments.filter(e => !startedAt || (e.at || '') <= startedAt).slice(0, 5);
@@ -79,7 +89,7 @@ export function runNotes(history: readonly { action?: unknown; comment?: unknown
     if (used + e.comment.length > NOTES_BUDGET && kept.size) continue;
     kept.add(e); used += e.comment.length;
   }
-  return comments.filter(e => kept.has(e)).map(e => e.comment);
+  return comments.filter(e => kept.has(e)).map(e => runMessage(e.comment, e.images));
 }
 export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[]; pages?: string[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
@@ -106,6 +116,6 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
     stage: { name: stage.name, instruction: stage.instruction || '', ...(stage.skills?.length ? { skills: stage.skills } : {}) },
     previousStages: stages.slice(0, index).map((s, i) => ({ stage: s.name, output: w.results[i]?.content || null })).filter(x => x.output),
     rejectedDraft: w.results[index]?.rejectedAt ? w.results[index]!.content : null,
-    feedback: reviews.filter(r => r?.kind === 'stage' && r.stageKey === stage.key && r.decision === 'requestChanges').slice(-3).map(r => r.comment),
+    feedback: reviews.filter(r => r?.kind === 'stage' && r.stageKey === stage.key && r.decision === 'requestChanges').slice(-3).map(r => runMessage(r.comment, r.images)),
   };
 }

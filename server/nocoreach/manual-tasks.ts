@@ -34,6 +34,11 @@ import {
   documentProblem,
   type DocumentSource,
 } from './task-documents.js';
+import {
+  isTaskImageType,
+  taskImageRef,
+  type MessageImage,
+} from '../../shared/task-images.js';
 
 export interface TaskCreator {
   readonly id: string;
@@ -216,6 +221,24 @@ export class ManualTasks {
     await this.authorizeProject(actor, projectId, 'create');
   }
 
+  /**
+   * Who may upload: anyone who may create tasks, for a new task's draft; anyone who may read a started task, for an
+   * image to send with a message or paste into Edit directly (2026-11-03). Sending or saving links it, under that
+   * command's own permission.
+   */
+  async authorizeUpload(
+    actor: TaskCreator,
+    projectId: string,
+    taskId?: string,
+  ): Promise<void> {
+    if (!taskId) return this.authorize(actor, projectId);
+    await this.authorizeProject(actor, projectId, 'read');
+    const row = await this.runtime.legacy.db
+      .getRepository('nrTasks')
+      .findOne({ filter: { id: taskId, projectId } });
+    if (!row) denied('TASK_NOT_FOUND', 'Task not found.', 'NOT_FOUND');
+  }
+
   private async authorizeProject(
     actor: TaskCreator,
     projectId: string,
@@ -250,9 +273,17 @@ export class ManualTasks {
     projectId: string,
     draftId: string,
     file: File,
+    taskId?: string,
   ): Promise<TaskMediaView> {
-    await this.authorize(actor, projectId);
+    await this.authorizeUpload(actor, projectId, taskId);
     const stored = await validateTaskMedia(file);
+    // A started task takes images only: a message's images and an article's are PNG, JPEG, WebP or GIF.
+    if (taskId && !isTaskImageType(stored.type))
+      denied(
+        'TASK_MEDIA_INVALID',
+        'Unsupported media type or size.',
+        'INVALID_ARGUMENT',
+      );
     return this.serial(`upload:${actor.id}`, async () => {
       const pending = await this.media.count({
         filter: { ownerId: actor.id, taskId: null },
@@ -509,10 +540,70 @@ export class ManualTasks {
           name: file.filename,
           type: file.mimeType,
           size: Number(file.size),
+          ext: file.ext,
           read: () => this.bytes(file),
         });
     }
     return out;
+  }
+
+  /**
+   * Link images to a started task, in the transaction of the command that sends them (a message, a change request, an
+   * edit saved): each must be the actor's own image of this project, not yet linked or already linked to this task,
+   * and not expired or being removed. Compare-and-set keeps cleanup and another task from claiming it at the same time.
+   */
+  async linkImages(
+    connection: DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<MessageImage[]> {
+    const media = connection.repository<TaskMediaRecord>('nrTaskMedia');
+    const out: MessageImage[] = [];
+    for (const id of ids) {
+      const file = await media.findOne({ filter: { id } });
+      const mine =
+        file &&
+        !file.deleting &&
+        file.projectId === projectId &&
+        isTaskImageType(file.mimeType);
+      if (mine && file.taskId === taskId) {
+        out.push(this.messageImage(file));
+        continue;
+      }
+      if (
+        !mine ||
+        file.taskId ||
+        file.ownerId !== actorId ||
+        new Date(file.expiresAt).getTime() <= Date.now()
+      )
+        denied(
+          'TASK_IMAGE_UNAVAILABLE',
+          'An image is no longer available. Add it again.',
+          'NOT_FOUND',
+        );
+      const linked = await media.updateMany({
+        filter: { id, taskId: null, deleting: false },
+        values: { taskId },
+      });
+      if (linked.updatedCount !== 1)
+        denied(
+          'TASK_IMAGE_UNAVAILABLE',
+          'An image is no longer available. Add it again.',
+          'NOT_FOUND',
+        );
+      out.push(this.messageImage(file));
+    }
+    return out;
+  }
+
+  private messageImage(file: TaskMediaRecord): MessageImage {
+    return {
+      id: file.id,
+      name: file.filename,
+      ref: taskImageRef(file.id, file.ext),
+    };
   }
 
   /** A stored file's bytes, at most the upload limit. */
@@ -564,8 +655,14 @@ export class ManualTasks {
       const row = await this.runtime.legacy.db
         .getRepository('nrTasks')
         .findOne({ filter: { id: file.taskId, projectId: file.projectId } });
-      const ids = row && evidenceOf(row).attachmentIds;
-      if (!Array.isArray(ids) || !ids.includes(id))
+      const evidence = row ? evidenceOf(row) : {};
+      // New task's attachments, or images linked once the task started (messages and Edit directly).
+      const ids = evidence.attachmentIds,
+        images = (evidence.work as { images?: unknown } | undefined)?.images;
+      if (
+        !(Array.isArray(ids) && ids.includes(id)) &&
+        !(Array.isArray(images) && images.includes(id))
+      )
         denied('TASK_MEDIA_LINK_DENIED', 'File access denied.');
     } else if (
       file.ownerId !== actor.id ||

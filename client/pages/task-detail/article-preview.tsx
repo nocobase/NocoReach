@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ImageOff } from 'lucide-react';
 import { $t } from '#i18n';
 import { cn } from '#lib/utils';
 import { siteUrl } from './article-text';
+import { taskImageOf, taskImageRef } from '../../../shared/task-images.js';
+import { ArticleImageNotesContext, taskImageSrc } from './task-images-model.js';
 import './article-preview.css';
 
 // An article as its readers will see it (2026-10-23 user request, as Medium and dev.to show a draft): the title, the
@@ -29,7 +31,12 @@ function ArticleImage({
   title?: string;
   pageUrl?: string;
 }) {
-  const url = siteUrl(src, pageUrl);
+  // A task image (one added with a message or pasted into Edit directly) is the application's own file until publishing.
+  const task = taskImageOf(src),
+    url = task
+      ? taskImageSrc(taskImageRef(task.id, task.ext))
+      : siteUrl(src, pageUrl);
+  const note = useContext(ArticleImageNotesContext)?.get(task?.id || '');
   // Per address, so a changed image starts again: loading (a grey frame holds its place), loaded or failed.
   const [state, setState] = useState<{
     url: string;
@@ -51,7 +58,7 @@ function ArticleImage({
         <span>{$t('articleTask.imageFailed')}</span>
       </span>
     );
-  return (
+  const image = (
     <img
       src={url}
       alt={alt || ''}
@@ -63,6 +70,16 @@ function ArticleImage({
       onLoad={() => setState({ url, loaded: true })}
       onError={() => setState({ url, failed: true })}
     />
+  );
+  return note ? (
+    <span className='nr-article-figure'>
+      {image}
+      <span className='nr-article-image-note' data-review-only=''>
+        {note}
+      </span>
+    </span>
+  ) : (
+    image
   );
 }
 

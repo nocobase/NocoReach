@@ -25,6 +25,8 @@ import { TaskAgentUnavailableError } from './agent-error.js';
 import {
   TASK_MATERIALS_MOUNT,
   attachmentIdsOf,
+  imagePlan,
+  messageImageIdsOf,
   attachmentPlan,
   taskMaterials,
   type TaskAttachmentReader,
@@ -324,6 +326,9 @@ export class TaskAgentsRuntime {
                 '社区回复必须阅读原帖和已有回复，资料不完整则不要声称完整核实；不得用搜索摘要替代正文，不得实际发帖。',
                 `可通过 ${commandRef(claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。暂存草稿不等于提交成果。`,
                 '开始前读取 materials 指向的知识、Skills 和 sources 文件；它们是当前步骤的输入快照，无需通过 curl 获取已提供的资料。',
+                // Images sent with messages and change requests (2026-11-03): one way to add them, no purpose to pick;
+                // the text says what each is for.
+                'notes（留言）和 feedback（审核意见）里带 images 的条目附有图片：number 就是文字里说的“图 1”“Image 1”，图片在 materials.images 指向的 images.json 里按 ref 找到，先把 base64 解码成图片再查看。图片做什么用看文字：只用来指出问题的截图（例如圈出要改的地方）是参考，不放进成果；文字要求放进文章或页面的图片才放进去。',
                 'data.unfinished 存在时，是这一步上一次没做完时已经拿到的内容：先核对，再在此基础上补齐，不必从头再做。',
                 ...resultRules(run.mode, input.resultKind),
                 `完成后优先通过 ${commandRef(claim.cli, 'task result')} --content-file result.json 提交完整成果 JSON。校验失败时保留正文，只按错误修正格式，最多重试两次；成功后不要修改成果，最终回答仍返回同一份 JSON。命令不可用时使用最终 JSON 回答。运行说明不要写入成果。`,
@@ -368,27 +373,33 @@ export class TaskAgentsRuntime {
     const run = (await this.tasks.snapshot(key, tx)) as Run | null;
     if (!run) return null;
     const input = JSON.parse(run.input) as TaskInput;
-    const ids = attachmentIdsOf(input);
+    const ids = attachmentIdsOf(input),
+      imageIds = messageImageIdsOf(input),
+      reader = this.tasks.p.taskAttachments;
     const attachments =
-      ids.length && this.tasks.p.taskAttachments
-        ? await this.tasks.p.taskAttachments.forAgent(
-            conn,
-            run.projectId,
-            run.taskId,
-            ids,
-          )
+      ids.length && reader
+        ? await reader.forAgent(conn, run.projectId, run.taskId, ids)
+        : [];
+    // The images sent with the messages this run reads (2026-11-03), only those linked to this task.
+    const images =
+      imageIds.length && reader
+        ? await reader.forAgent(conn, run.projectId, run.taskId, imageIds)
         : [];
     let contents: Map<string, string> | undefined;
     if (withContent) {
       contents = new Map();
-      for (const { file, entry } of attachmentPlan(attachments))
-        if ('base64' in entry && file.read)
+      for (const { file, entry } of [
+        ...attachmentPlan(attachments),
+        ...imagePlan(images),
+      ])
+        if ('base64' in entry && file.read && !contents.has(file.id))
           contents.set(file.id, (await file.read()).toString('base64'));
     }
     return taskMaterials(
       { ...input, sources: await this.tasks.business.sources(run, tx) },
       attachments,
       contents,
+      images,
     );
   }
   private transaction(tx: LegacyTransaction): Tx {
