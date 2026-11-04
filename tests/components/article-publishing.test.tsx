@@ -446,6 +446,46 @@ it('uploads an image pasted into the body and writes it where the cursor was', a
   }
 });
 
+// 2026-11-04 user report (T-62): "Page check phrase" in the edit form read as something to fill in. The page check now
+// picks its own phrase from the approved text (verifyPhrase), so the form neither shows nor sends one.
+it('edits an article without a page check phrase, and saves none', async () => {
+  const onSave = vi.fn(async () => true);
+  const user = userEvent.setup();
+  render(
+    <TaskDraftProvider>
+      <TaskDraftScope scope='1:1'>
+        <ArticleEditor
+          data={data}
+          article={{
+            ...proposal,
+            draft: { ...proposal.draft, verifyText: '新的中文正文' },
+          }}
+          draftKey='a-phrase'
+          tab='zh'
+          busy={false}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </TaskDraftScope>
+    </TaskDraftProvider>,
+  );
+  expect(screen.queryByText('Page check phrase')).toBeNull();
+  expect(
+    screen.queryByText(
+      'After publishing, the page is checked for this phrase.',
+    ),
+  ).toBeNull();
+  const body = screen
+    .getAllByRole('textbox', { name: /^Body/ })
+    .find((b) => (b as HTMLTextAreaElement).value === '新的中文正文')!;
+  await user.clear(body);
+  await user.type(body, '人工改写的中文正文');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith({
+    locales: { zh: { body: '人工改写的中文正文' } },
+  });
+});
+
 it('edits a new article with validation on save and sends only what it fills in', async () => {
   const onSave = vi.fn(async () => true);
   const user = userEvent.setup();

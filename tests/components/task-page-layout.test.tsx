@@ -8,10 +8,19 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
-import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
+import {
+  TaskDraftNavigationGuard,
+  TaskDraftProvider,
+} from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
 import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
@@ -1331,6 +1340,79 @@ test('Edit directly opens on the language the review shows, with only the writte
   expect(within(card).getByRole('textbox', { name: /^标题/ })).toHaveValue(
     '最受欢迎的开源无代码 AI 工具',
   );
+});
+
+// 2026-11-04 user report (T-62): once editing there was no full screen. The article page opens still editing, with the
+// draft, and Back to task keeps both; going back and forth never asks about leaving the drafts behind.
+test('Edit full screen opens the editor on the article page with the draft, and Back to task keeps editing', async () => {
+  const user = userEvent.setup();
+  function Elsewhere() {
+    const navigate = useNavigate();
+    return (
+      <button type='button' onClick={() => void navigate('/actions')}>
+        elsewhere
+      </button>
+    );
+  }
+  render(
+    <MemoryRouter initialEntries={['/actions/1']}>
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <TaskDraftNavigationGuard />
+          <Routes>
+            <Route
+              path='/actions/:taskId'
+              element={
+                <TaskDetail
+                  projectId={1}
+                  taskId='1'
+                  initial={reviewArticle()}
+                />
+              }
+            >
+              <Route path='article' element={<ArticleReaderPage />} />
+            </Route>
+          </Routes>
+          <Where />
+          <Elsewhere />
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
+    </MemoryRouter>,
+  );
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await user.click(within(card).getByRole('button', { name: '直接编辑' }));
+  await user.type(
+    within(card).getByRole('textbox', { name: /^正文/ }),
+    ' and more',
+  );
+  await user.click(within(card).getByLabelText('全屏编辑'));
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    /^\/actions\/1\/article\?lang=en$/,
+  );
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  const reader = readerPage();
+  expect(within(reader).getByRole('textbox', { name: /^正文/ })).toHaveValue(
+    'Body and more',
+  );
+  // Already full screen: no second way there, and no review actions while editing.
+  expect(within(reader).queryByLabelText('全屏编辑')).toBeNull();
+  expect(
+    within(reader).queryByRole('button', { name: '通过并发布' }),
+  ).toBeNull();
+  await user.type(within(reader).getByRole('textbox', { name: /^正文/ }), '!');
+  await user.click(within(reader).getByRole('button', { name: '返回任务' }));
+  expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(within(card).getByRole('textbox', { name: /^正文/ })).toHaveValue(
+    'Body and more!',
+  );
+  expect(within(card).getByRole('button', { name: '保存' })).toBeVisible();
+  // Leaving the task still asks.
+  await user.click(screen.getByRole('button', { name: 'elsewhere' }));
+  expect(await screen.findByRole('alertdialog')).toHaveTextContent(
+    '离开此页面？',
+  );
+  expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
 });
 
 test('an article in two languages approves the primary to translate, and the card names the translation', () => {

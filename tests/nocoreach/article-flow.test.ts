@@ -416,7 +416,11 @@ test('a CMS edit to the same field during review blocks publishing; rebasing kee
   });
   await f.settle();
   d = await f.view();
-  expect(d.work.release.state).toBe('not_seen');
+  // The page check looks for what the merge added, not the CMS edit the page already showed (2026-11-04).
+  expect(d.work.release).toMatchObject({
+    state: 'verifying',
+    verifyText: '加上 AI 的内链。',
+  });
   expect(f.cms.state.rows[0].content_cn).toBe(
     '编辑在 CMS 里同时修改了中文正文\n\n加上 AI 的内链。',
   );
@@ -2331,6 +2335,141 @@ test('Edit directly: an image pasted into the body is linked when the edit is sa
   await f.settle();
   expect((await f.view()).work.release.state).toBe('verifying');
   expect(f.cms.state.uploads.map((u) => u.name)).toEqual(['pasted.png']);
+});
+
+// 2026-11-04 (T-62): Edit directly no longer has a page check phrase. A hand edit that drops the Agent's phrase from
+// the text still releases with a check, on a sentence the edit wrote.
+test('a hand edit that removes the Agent phrase is released with a sentence from the edit to look for', async () => {
+  const f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: {
+      locales: {
+        zh: { body: '# 你好\n\nAgent 写的第一版正文，后来被改掉了。' },
+      },
+      verifyText: 'Agent 写的第一版正文',
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: review(d).id,
+    article: {
+      locales: {
+        zh: {
+          body: '# 你好\n\n中文正文\n\n负责人自己写的这一段，换掉了 Agent 的版本。',
+        },
+      },
+    },
+  });
+  // The Agent's phrase is carried on the version, which no longer shows it.
+  expect(review(d).article.draft.verifyText).toBe('Agent 写的第一版正文');
+  await f.command('approveStage', {
+    stageKey,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'verifying',
+    verifyText: '负责人自己写的这一段，换掉了 Agent 的版本。',
+    pages: ['https://www.example.com/cn/blog/hello'],
+  });
+});
+
+// The same task: asked only to add screenshots to a version the owner had edited by hand, the Agent rewrote the
+// article from its source, since the run never had that version. The next run now gets it whole, saying who wrote it.
+test('a change request gives the next run the version it is about, whole, and whether a person edited it', async () => {
+  const f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  let { run } = await claim(f);
+  expect(run.input.article.previous).toBeUndefined();
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: { locales: { zh: { body: '# 你好\n\nAgent 写的正文。' } } },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: review(d).id,
+    article: {
+      locales: {
+        zh: { title: '你好，世界', body: '# 你好\n\n负责人改过的正文。' },
+      },
+    },
+  });
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: '加两张截图，其他不要改。',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.feedback).toEqual(['加两张截图，其他不要改。']);
+  expect(run.input.article.previous).toEqual({
+    version: 2,
+    editedByHand: true,
+    article: {
+      slug: 'hello',
+      status: 'published',
+      locales: expect.objectContaining({
+        en: expect.objectContaining({
+          title: 'Hello',
+          body: '# Hello\n\nEnglish body',
+        }),
+        zh: {
+          title: '你好，世界',
+          description: '旧摘要',
+          body: '# 你好\n\n负责人改过的正文。',
+        },
+      }),
+    },
+  });
+  // The source stays the article as the target has it.
+  expect(run.input.article.source.locales.zh.body).toBe('# 你好\n\n中文正文');
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '加了截图。',
+    article: {
+      locales: {
+        zh: { body: '# 你好\n\n负责人改过的正文。\n\n第三版加的一段。' },
+      },
+    },
+  });
+  d = await f.view();
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: '还原第二版吧',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.feedback).toEqual([
+    '加两张截图，其他不要改。',
+    '还原第二版吧',
+  ]);
+  expect(run.input.article.previous).toMatchObject({
+    version: 3,
+    editedByHand: false,
+    article: {
+      locales: {
+        zh: { body: '# 你好\n\n负责人改过的正文。\n\n第三版加的一段。' },
+      },
+    },
+  });
 });
 
 // 2026-11-04 (T-62): the owner wanted back a version they had edited by hand; the Agent asked to restore it first failed
