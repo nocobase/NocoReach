@@ -21,6 +21,7 @@ export const MOCK_AI_OPERATIONS = [
   'memory-check',
   'competitor-suggest',
   'task-draft',
+  'article-rewrite',
 ] as const;
 export type MockAiOperation = (typeof MOCK_AI_OPERATIONS)[number];
 export const MOCK_AI_MODEL = {
@@ -238,6 +239,28 @@ function fixture(
               },
             ],
       };
+    // Review card › Rewrite with AI: the first sentence of the selection, or of the last attempt when this one revises
+    // it, with what was asked, in the selection's language. Nothing else of the article is read.
+    case 'article-rewrite': {
+      if (empty) return { text: '' };
+      const last = list(input.attempts).at(-1);
+      const source = (
+        str(last?.result, 4000) || str(input.selection, 4000)
+      ).trim();
+      const asked = str(input.instruction, 200).replace(/\s+/g, ' ').trim();
+      const han = /[\u4e00-\u9fff]/.test(source);
+      const first =
+        (han ? /^[\s\S]*?[。！？]/ : /^[\s\S]*?[.!?](?=\s|$)/).exec(
+          source,
+        )?.[0] ?? source;
+      const short =
+        first.length > 200 ? `${first.slice(0, 199).trimEnd()}…` : first;
+      return {
+        text: han
+          ? `${short}（已按“${asked.slice(0, 30)}”改写）`
+          : `${short} (rewritten: ${asked.slice(0, 60)})`,
+      };
+    }
     // New task › Organize with AI: the idea restated, citing only the figures of the first page it was given.
     case 'task-draft': {
       if (empty) return {};

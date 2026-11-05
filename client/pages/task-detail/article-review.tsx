@@ -1,25 +1,9 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { $t, getCurrentLocale } from '#i18n';
 import { Button } from '#components/ui/button';
-import { Input } from '#components/ui/input';
-import { Textarea } from '#components/ui/textarea';
-import { Spinner } from '#components/ui/spinner';
-import { Label } from '#components/ui/label';
-import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from '#components/ui/field';
 import {
   ARTICLE_FIELDS,
-  ARTICLE_LIMITS,
-  SLUG,
   type ArticleContent,
-  type ArticleDraft,
-  type ArticleField,
-  type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import { Reveal } from '#components/reach/reveal';
 import { Tag } from '#components/reach/tag';
@@ -35,19 +19,16 @@ import type {
   ArticleTargetRef,
   TaskData,
 } from '../task-execution-types';
-import { useStayWithDrafts, useTaskDraft } from './draft-store.js';
+import { useStayWithDrafts } from './draft-store.js';
 import { AgentNotes } from './agent-notes.js';
 import { ArticlePreview } from './article-preview.js';
-import { ImageProblem } from './task-images.js';
 import {
   ArticleImageNotesContext,
   imageNote,
   imageSources,
-  usePastedImages,
 } from './task-images-model.js';
 import { imageChanges, taskImageOf } from '../../../shared/task-images.js';
 import { localePageUrl } from './article-page.js';
-import { MarkdownEditor } from './markdown-editor.js';
 import { Notice } from './layout.js';
 import { text } from './styles.js';
 import {
@@ -58,14 +39,13 @@ import {
   type ArticleView,
   fieldChange,
   fieldLabel,
-  focusSoon,
   joinNames,
   nameOf,
   valueAt,
 } from './article-model';
 
 // The article an article step proposes, read as its readers will see it or field by field against the version it was
-// written from, and edited in place (a save is a new immutable version). Conflicts from a rebase are listed first, with
+// written from; under review it is edited instead (article-edit.tsx). Conflicts from a rebase are listed first, with
 // both versions.
 
 // Where the article goes and what it becomes, as tags rather than a sentence (2026-10-24 user request, as the task
@@ -518,6 +498,7 @@ export function ArticleReview({
   readerTo,
   tab: asked,
   onTab,
+  body,
 }: {
   data: TaskData;
   article: ArticleProposal;
@@ -530,9 +511,11 @@ export function ArticleReview({
   against?: ArticleContent;
   /** Where Read full screen opens the language and view being shown; left out where there is no reading page. */
   readerTo?: (tab: string, view: ArticleView) => string;
-  /** The language last chosen, kept by the card so Edit directly opens on it. */
+  /** The language last chosen, kept by the card. */
   tab?: string;
   onTab?: (tab: string) => void;
+  /** In place of the languages to read: the article's form, where reviewing is editing (article-edit.tsx). */
+  body?: ReactNode;
 }) {
   const languages = articleLanguages(data, a, against);
   const { target, base, locales } = languages;
@@ -573,385 +556,42 @@ export function ArticleReview({
           />
         ) : null,
       )}
-      <div className='flex flex-wrap items-end justify-between gap-x-4 gap-y-2'>
-        <LanguageTabs locales={locales} tab={tab} onTab={setTab} />
-        <div className='mb-1.5 flex items-center gap-1'>
-          {versions && (
-            <ViewSwitch
-              value={view}
-              onChange={(v) => setViews({ ...views, [tab]: v })}
-            />
-          )}
-          {readerTo && (
-            // The article on a page of its own, at reading width with nothing beside it (2026-10-24 user request).
-            <Button
-              variant='ghost'
-              size='icon'
-              aria-label={$t('articleTask.readFullScreen')}
-              title={$t('articleTask.readFullScreen')}
-              nativeButton={false}
-              render={<Link to={readerTo(tab, view)} onClick={stay} />}
-            >
-              <Maximize2 />
-            </Button>
-          )}
-        </div>
-      </div>
-      <MissingLanguages languages={languages} unchanged={!settled} />
-      <ArticleLanguage
-        data={data}
-        article={a}
-        base={base}
-        tab={tab}
-        view={view}
-      />
-    </div>
-  );
-}
-
-// The editor's labels in the page's grey secondary style rather than the form default.
-const LABEL = `${text.muted} font-normal`;
-
-type EditForm = {
-  slug: string;
-  status: ArticleStatus;
-  locales: Record<string, Record<ArticleField, string>>;
-};
-
-/** The draft as a form: the base's values with the draft's changes over them. */
-function initialForm(
-  a: ArticleProposal,
-  base: ArticleContent | null,
-  locales: string[],
-): EditForm {
-  return {
-    slug: a.draft.slug || base?.slug || '',
-    status: a.draft.status ?? base?.status ?? 'draft',
-    locales: Object.fromEntries(
-      locales.map((l) => [
-        l,
-        Object.fromEntries(
-          ARTICLE_FIELDS.map((f) => [
-            f,
-            a.draft.locales[l]?.[f] ?? base?.locales[l]?.[f] ?? '',
-          ]),
-        ) as Record<ArticleField, string>,
-      ]),
-    ),
-  };
-}
-
-export function ArticleEditor({
-  data,
-  article: a,
-  draftKey,
-  tab: asked,
-  busy,
-  onSave,
-  onCancel,
-  onTab,
-  fullScreenTo,
-}: {
-  data: TaskData;
-  article: ArticleProposal;
-  /** The artifact version being edited. */
-  draftKey: string;
-  /** The language the review was showing, to open on. */
-  tab?: string;
-  busy: boolean;
-  onSave: (article: ArticleDraft) => Promise<boolean>;
-  onCancel: () => void;
-  /** The language chosen in the editor. */
-  onTab?: (tab: string) => void;
-  /** Where Edit full screen opens the editor on a language; left out on the article page itself. */
-  fullScreenTo?: (tab: string) => string;
-}) {
-  const id = useId();
-  const languages = articleLanguages(data, a);
-  const { target, base } = languages;
-  // Every language the article can have: the form keeps them all, so what is saved does not depend on what is shown.
-  const locales = [
-    ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
-  ];
-  // A new article needs a title and body in the task's primary language, as the server checks (cleanDraft).
-  const chosen = data.work?.delivery?.locales?.[0],
-    primary = chosen && target?.locales.includes(chosen) ? chosen : locales[0];
-  const create = !a.articleId;
-  // The languages edited are the ones the review shows, one at a time (2026-10-27 user report: the editor opened on
-  // empty fields for languages not written yet). While the primary waits for approval it is the only one, since the
-  // translation writes the others from it; a new article always has its primary.
-  const editable = languages.pending.length
-    ? [primary]
-    : locales.filter(
-        (l) => languages.locales.includes(l) || (create && l === primary),
-      );
-  // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page. One
-  // draft per version, so an edit left on an older version never replaces a newer one. The language being edited is
-  // kept with it, so the task page and the article page (Edit full screen, 2026-11-04 user request) edit the same one.
-  const [raw, setRaw, clearForm] = useTaskDraft(
-    `article:${draftKey}`,
-    JSON.stringify(initialForm(a, base, locales)),
-  );
-  const [shownTab, setShownTab, clearTab] = useTaskDraft(
-    `article:${draftKey}:tab`,
-    '',
-    false,
-  );
-  const tab = editable.includes(shownTab)
-    ? shownTab
-    : asked && editable.includes(asked)
-      ? asked
-      : editable.find(languages.changed) || editable[0];
-  const setTab = (l: string) => {
-    setShownTab(l);
-    onTab?.(l);
-  };
-  const clear = () => {
-    clearForm();
-    clearTab();
-  };
-  const stay = useStayWithDrafts();
-  // Draft or published, where the target stores a status; a new article starts as a draft.
-  const withStatus = Boolean(target?.status);
-  const initial = initialForm(a, base, locales);
-  // A draft saved before status was part of the form has none: fall back to the version being edited.
-  const form = {
-    ...initial,
-    ...(JSON.parse(raw) as Partial<EditForm>),
-  };
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitted, setSubmitted] = useState(false);
-  // Images paste into the body where every target the article goes to takes them (2026-11-03 user request).
-  const pasted = usePastedImages(),
-    targets = articleTargetsOf(data, a),
-    takesImages =
-      targets.length > 0 && targets.every((t) => t.capabilities.images);
-  function check(f: EditForm) {
-    const e: Record<string, string> = {};
-    if (create && !SLUG.test(f.slug)) e.slug = $t('articleTask.slugInvalid');
-    if (create && !f.locales[primary]?.title.trim())
-      e[`${primary}.title`] = $t('articleTask.titleRequired');
-    if (create && !f.locales[primary]?.body.trim())
-      e[`${primary}.body`] = $t('articleTask.bodyRequired');
-    for (const l of locales) {
-      if (f.locales[l].title.length > ARTICLE_LIMITS.title)
-        e[`${l}.title`] = $t('articleTask.tooLong', {
-          0: ARTICLE_LIMITS.title,
-        });
-      if (f.locales[l].description.length > ARTICLE_LIMITS.description)
-        e[`${l}.description`] = $t('articleTask.tooLong', {
-          0: ARTICLE_LIMITS.description,
-        });
-    }
-    return e;
-  }
-  const set = (next: EditForm) => {
-    setRaw(JSON.stringify(next));
-    if (submitted) setErrors(check(next));
-  };
-  async function save() {
-    setSubmitted(true);
-    const e = check(form);
-    setErrors(e);
-    const first = Object.keys(e)[0];
-    if (first) {
-      // A field of another language opens that language first.
-      const l = first.split('.')[0];
-      if (editable.includes(l) && l !== tab) setTab(l);
-      return focusSoon(`${id}-${first}`);
-    }
-    // Only what differs from the base is sent: unchanged fields stay the article's own.
-    const draftLocales: ArticleDraft['locales'] = {};
-    for (const l of locales)
-      for (const f of ARTICLE_FIELDS) {
-        const v = form.locales[l][f];
-        if (v !== (base?.locales[l]?.[f] ?? '') || (create && v))
-          (draftLocales[l] ||= {})[f] = v;
-      }
-    if (
-      await onSave({
-        // The chosen status, or the draft's own where the target view does not say; an unchanged one is dropped
-        // against the base on the server.
-        ...(withStatus
-          ? { status: form.status }
-          : a.draft.status
-            ? { status: a.draft.status }
-            : {}),
-        ...(create ? { slug: form.slug } : {}),
-        locales: draftLocales,
-      })
-    )
-      clear();
-  }
-  const err = (key: string) =>
-    errors[key] ? (
-      <FieldError id={`${id}-${key}-error`}>{errors[key]}</FieldError>
-    ) : null;
-  const aria = (key: string) => ({
-    id: `${id}-${key}`,
-    'aria-invalid': Boolean(errors[key]),
-    'aria-describedby': errors[key] ? `${id}-${key}-error` : undefined,
-  });
-  return (
-    <form
-      className='flex min-w-0 flex-col gap-4'
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-    >
-      <fieldset disabled={busy} className='flex min-w-0 flex-col gap-4'>
-        {create && (
-          <Field data-invalid={Boolean(errors.slug)}>
-            <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
-              {$t('articleTask.field.slug')} *
-            </FieldLabel>
-            <Input
-              value={form.slug}
-              onChange={(e) => set({ ...form, slug: e.target.value })}
-              {...aria('slug')}
-            />
-            <FieldDescription>{$t('articleTask.slugHelp')}</FieldDescription>
-            {err('slug')}
-          </Field>
-        )}
-        {withStatus && (
-          <Field>
-            <FieldLabel id={`${id}-status`} className={LABEL}>
-              {$t('articleTask.field.status')}
-            </FieldLabel>
-            <RadioGroup
-              aria-labelledby={`${id}-status`}
-              className='flex flex-wrap gap-4'
-              value={form.status}
-              onValueChange={(v) =>
-                set({ ...form, status: v as ArticleStatus })
-              }
-            >
-              {(['draft', 'published'] as const).map((v) => (
-                <div key={v} className='flex items-center gap-2'>
-                  <RadioGroupItem id={`${id}-status-${v}`} value={v} />
-                  <Label htmlFor={`${id}-status-${v}`} className='font-normal'>
-                    {$t(
-                      v === 'draft'
-                        ? 'articleTask.statusDraft'
-                        : 'articleTask.statusPublished',
-                    )}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-            <FieldDescription>{$t('articleTask.statusHelp')}</FieldDescription>
-          </Field>
-        )}
-        <div className='flex min-w-0 flex-col gap-3'>
+      {body ?? (
+        <>
           <div className='flex flex-wrap items-end justify-between gap-x-4 gap-y-2'>
-            <LanguageTabs locales={editable} tab={tab} onTab={setTab} />
-            {fullScreenTo && (
-              // The editor on the article's own page, with the same draft (2026-11-04 user request: there was no full
-              // screen once editing).
-              <Button
-                variant='ghost'
-                size='icon'
-                className='mb-1.5'
-                aria-label={$t('articleTask.editFullScreen')}
-                title={$t('articleTask.editFullScreen')}
-                nativeButton={false}
-                render={<Link to={fullScreenTo(tab)} onClick={stay} />}
-              >
-                <Maximize2 />
-              </Button>
-            )}
+            <LanguageTabs locales={locales} tab={tab} onTab={setTab} />
+            <div className='mb-1.5 flex items-center gap-1'>
+              {versions && (
+                <ViewSwitch
+                  value={view}
+                  onChange={(v) => setViews({ ...views, [tab]: v })}
+                />
+              )}
+              {readerTo && (
+                // The article on a page of its own, at reading width with nothing beside it (2026-10-24 user request).
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  aria-label={$t('articleTask.readFullScreen')}
+                  title={$t('articleTask.readFullScreen')}
+                  nativeButton={false}
+                  render={<Link to={readerTo(tab, view)} onClick={stay} />}
+                >
+                  <Maximize2 />
+                </Button>
+              )}
+            </div>
           </div>
-          <MissingLanguages languages={languages} />
-        </div>
-        {editable.map((l) => (
-          // Every language stays in the form, so a field with an error in another one can be opened and focused.
-          <fieldset
-            key={l}
-            hidden={l !== tab}
-            className='flex min-w-0 flex-col gap-3'
-          >
-            <legend className='sr-only'>
-              {localeName(l, getCurrentLocale())}
-            </legend>
-            {ARTICLE_FIELDS.map((f) => {
-              const key = `${l}.${f}`,
-                required = create && l === primary && f !== 'description';
-              const props = {
-                value: form.locales[l][f],
-                onChange: (e: { target: { value: string } }) =>
-                  set({
-                    ...form,
-                    locales: {
-                      ...form.locales,
-                      [l]: { ...form.locales[l], [f]: e.target.value },
-                    },
-                  }),
-                ...aria(key),
-              };
-              return (
-                <Field key={key} data-invalid={Boolean(errors[key])}>
-                  <FieldLabel htmlFor={`${id}-${key}`} className={LABEL}>
-                    {$t(`articleTask.field.${f}`)}
-                    {required ? ' *' : ''}
-                  </FieldLabel>
-                  {f === 'title' ? (
-                    <Input {...props} />
-                  ) : f === 'body' ? (
-                    // The body is written beside the article it makes (2026-10-23 user request, as dev.to does).
-                    <MarkdownEditor
-                      {...props}
-                      {...(takesImages
-                        ? pasted.bind(key, props.value, (value) =>
-                            props.onChange({ target: { value } }),
-                          )
-                        : {})}
-                      preview={(body) => (
-                        <ArticlePreview
-                          text={{ ...form.locales[l], body }}
-                          pageUrl={localePageUrl(
-                            data,
-                            a.targetId,
-                            form.slug || base?.slug || '',
-                            l,
-                          )}
-                        />
-                      )}
-                    />
-                  ) : (
-                    <Textarea
-                      {...props}
-                      rows={3}
-                      className='field-sizing-fixed'
-                    />
-                  )}
-                  {err(key)}
-                </Field>
-              );
-            })}
-          </fieldset>
-        ))}
-      </fieldset>
-      <ImageProblem>{pasted.problem}</ImageProblem>
-      <div className='flex flex-wrap items-center justify-end gap-2'>
-        <Button
-          type='button'
-          variant='ghost'
-          disabled={busy}
-          onClick={() => {
-            clear();
-            onCancel();
-          }}
-        >
-          {$t('common.cancel')}
-        </Button>
-        <Button type='submit' disabled={busy || pasted.uploading}>
-          {(busy || pasted.uploading) && <Spinner data-icon='inline-start' />}
-          {$t('common.save')}
-        </Button>
-      </div>
-    </form>
+          <MissingLanguages languages={languages} unchanged={!settled} />
+          <ArticleLanguage
+            data={data}
+            article={a}
+            base={base}
+            tab={tab}
+            view={view}
+          />
+        </>
+      )}
+    </div>
   );
 }

@@ -370,7 +370,9 @@ test('the review card shows no Agent notes above a version edited by hand', () =
   expect(card()).not.toHaveTextContent('第 7 版的摘要');
   expect(card()).not.toHaveTextContent('第 7 版的修改说明');
   expect(within(card()).queryByRole('button', { name: '完整说明' })).toBeNull();
-  expect(within(card()).getByRole('heading', { name: TITLE })).toBeVisible();
+  expect(within(card()).getByRole('textbox', { name: /^标题/ })).toHaveValue(
+    TITLE,
+  );
 });
 
 test('a version restored from the Agent’s shows that version’s notes; one restored from a hand edit shows none', async () => {

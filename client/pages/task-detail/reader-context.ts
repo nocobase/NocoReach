@@ -16,6 +16,4 @@ export type TaskPageContext = {
   /** The task's short name for the trail: T-39, else its title. */
   crumb: string;
   heading: string;
-  /** Focus the task page's message box, where changes are asked for, once this page has gone back to it. */
-  requestChanges: () => void;
 };

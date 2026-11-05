@@ -1,0 +1,74 @@
+/* The article body as it is edited (article-body-editor.tsx): the reading typography of article-preview.css, and the
+   marks of a rewrite with AI (inline-rewrite.tsx), the old text struck through on red and the new text on green. */
+.nr-article-editor {
+  max-width: none;
+  min-height: 20rem;
+}
+.nr-article-editor:focus {
+  outline: none;
+}
+.nr-article-editor .ProseMirror-selectednode img,
+.nr-article-editor img.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.nr-article-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.nr-rewrite-picked {
+  background: var(--nr-tint-violet);
+  border-radius: 2px;
+}
+.nr-rewrite-old {
+  background: var(--nr-tint-red);
+  color: var(--nr-ink-red);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(
+    in oklab,
+    var(--nr-ink-red) 45%,
+    transparent
+  );
+}
+.nr-article-editor .nr-rewrite-old-block {
+  background: var(--nr-tint-red);
+  border-radius: 6px;
+  padding: 0.375rem 0.625rem;
+  margin: 0 -0.625rem 0.5rem;
+}
+.nr-rewrite-old-block .nr-rewrite-old {
+  background: none;
+}
+.nr-rewrite-new {
+  background: var(--nr-tint-green);
+  color: var(--nr-ink-green);
+  border-radius: 2px;
+}
+.nr-article-editor .nr-rewrite-new-block {
+  display: block;
+  margin: 0 -0.625rem 1.25rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 6px;
+  background: var(--nr-tint-green);
+  color: var(--nr-ink-green);
+}
+.nr-rewrite-new-block > :last-child {
+  margin-bottom: 0;
+}
+.nr-rewrite-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: nr-rewrite-blink 1s steps(2) infinite;
+}
+@keyframes nr-rewrite-blink {
+  to {
+    visibility: hidden;
+  }
+}
