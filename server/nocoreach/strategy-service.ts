@@ -20,6 +20,7 @@ import { distinctPages, pageUrlsOf } from '../../shared/task-start.js';
 import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
 import { strategyPageState, wantsPageView } from './page-views.js';
 import { ARCHIVE_KEEP_MS, archiveKey, isSlim, slimBatch, taskContext, withoutCatalog } from './analysis-evidence.js';
+import { pagesById } from './execution/task-scan.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -62,6 +63,9 @@ function evidenceFrom(snapshots,candidates,now,requestedDays=28){
 // 记忆 (项目知识): the shared reader gives section titles with their text; older projects are read from their fields.
 const memoryFields=[systemMessageText('aiQuestions.project'),...MEMORY_SECTIONS.map(s=>s[1])];
 const projectMemory=project=>memoryForAI(project);
+// How old the latest analysis may be for a hand-off of one of its changes to stand on it instead of a new one: the
+// daily analysis runs once a day.
+const HAND_OFF_ANALYSIS_MS=36*60*60*1000;
 class StrategyService{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -155,10 +159,12 @@ class StrategyService{
   return planOf({card,signals,site,proposals:state.proposals,tasks,targets,playbooks,locale:ctx?.getCurrentLocale?.()||'zh-CN'});
  }
  // What a hand-off without an opportunity stands on (keyword, search and data-page hand-offs, a change on Insights): the
- // latest analysis when it holds the change, else the analysis computed now. An opportunity's hand-off takes its batch's
- // evidence inside the transaction, so nothing is computed for it (that computation can call the model for custom rules).
- async handOffContext(id,v,fields){if(v.insightId)return null;const latest=await this.state(id).then(s=>s?.insights,()=>null);
-  if(latest?.evidence&&(!fields.signalKey||(latest.evidence.signals?.items||[]).some(s=>s.key===fields.signalKey)))return {evidence:latest.evidence};
+ // latest analysis when it holds the change, else the analysis computed now. A task keeps only the change it cites, so a
+ // hand-off that cites none needs nothing, and an opportunity's hand-off takes its batch's evidence inside the transaction
+ // (computing an analysis can call the model for custom rules).
+ async handOffContext(id,v,fields){if(v.insightId||!fields.signalKey)return null;const latest=await this.state(id).then(s=>s?.insights,()=>null);
+  const recent=Date.now()-Date.parse(latest?.generatedAt||'')<HAND_OFF_ANALYSIS_MS;
+  if(recent&&(latest.evidence?.signals?.items||[]).some(s=>s.key===fields.signalKey))return {evidence:latest.evidence};
   return this.context(id);}
  // An analysis leaving the state keeps its whole evidence here, once; older archives than ARCHIVE_KEEP_MS go.
  async archive(id,batch,transaction){if(!batch?.generatedAt||!batch.evidence||isSlim(batch.evidence))return;
@@ -170,20 +176,25 @@ class StrategyService{
  async archived(id,generatedAt){return (await this.repo().findOne({filter:{key:archiveKey(id,generatedAt)}}))?.get('payload')||null;}
  // One-time slimming after an upgrade, idempotent, runs at start (analysis-evidence.ts): each earlier analysis archived
  // and cut down, the current one without its rule catalog, plans without evidence, tasks with their cited signals only.
- async slimAll(){for(const id of await this.p.projectIds())await this.slimProject(String(id));}
+ async slimAll(){for(const id of await this.p.projectIds()){try{await this.slimProject(String(id));}catch(e){this.p.app?.logger?.warn('NocoReach analysis evidence not slimmed',{projectId:String(id),message:e.message});}}}
  async slimProject(id){
   await this.p.db.sequelize.transaction(async transaction=>{
    await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-strategy:${id}`},transaction});
    const row=await this.row(id,transaction),state=row?.get('payload');
-   if(state){let changed=false;const cutoff=new Date(Date.now()-ARCHIVE_KEEP_MS).toISOString();
-    const history=[];for(const b of state.insightHistory||[]){if(b?.evidence&&!isSlim(b.evidence)){if(String(b.generatedAt||'')>=cutoff)await this.archive(id,b,transaction);history.push(slimBatch(b));changed=true;}else history.push(b);}
-    if(changed)state.insightHistory=history;
-    if(state.insights?.evidence){const e=withoutCatalog(state.insights.evidence);if(e!==state.insights.evidence){state.insights.evidence=e;changed=true;}}
-    for(const p of state.proposals||[])if(p&&'evidence' in p){delete p.evidence;changed=true;}
-    if(changed)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});}
-   const tasks=this.p.db.getRepository('nrTasks');
-   for(const t of await tasks.find({filter:{projectId:id},limit:5000,transaction})){const e=t.get?t.get('evidence'):t.evidence;if(!e?.context||isSlim(e.context))continue;const context=taskContext(e.context,e);if(context!==e.context)await tasks.update({filterByTk:t.get?t.get('id'):t.id,values:{evidence:{...e,context}},transaction});}
-  });}
+   if(!state)return;let changed=false;const cutoff=new Date(Date.now()-ARCHIVE_KEEP_MS).toISOString();
+   // Analyses older than the archive keeps are cut down without an archive, as they would have been pruned.
+   const history=[];for(const b of state.insightHistory||[]){if(b?.evidence&&!isSlim(b.evidence)){if(String(b.generatedAt||'')>=cutoff)await this.archive(id,b,transaction);history.push(slimBatch(b));changed=true;}else history.push(b);}
+   if(changed)state.insightHistory=history;
+   if(state.insights?.evidence){const e=withoutCatalog(state.insights.evidence);if(e!==state.insights.evidence){state.insights.evidence=e;changed=true;}}
+   for(const p of state.proposals||[])if(p&&'evidence' in p){delete p.evidence;changed=true;}
+   if(changed)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});
+  });
+  // Each task in a short transaction of its own under its task lock, read again inside it, so a step a runner or timer
+  // saves meanwhile is never written back over; `silent` keeps updatedAt, which orders Agent queues and Done.
+  const tasks=this.p.db.getRepository('nrTasks'),due=[];
+  for await(const page of pagesById(tasks,{filter:{projectId:id},fields:['id','evidence']}))for(const t of page){const e=t.get?t.get('evidence'):t.evidence;if(e?.context&&!isSlim(e.context)&&e.context.signals)due.push(String(t.get?t.get('id'):t.id));}
+  for(const taskId of due)await this.p.taskExecution.lock(String(id),taskId,async tx=>{const t=await tasks.findOne({filter:{id:taskId,projectId:id},transaction:tx});const e=t?.get?t.get('evidence'):t?.evidence;if(!e?.context||isSlim(e.context))return;const context=taskContext(e.context,e);if(context!==e.context)await tasks.update({filterByTk:taskId,values:{evidence:{...e,context}},silent:true,transaction:tx});});
+ }
  // Hand off to agent on an opportunity with several places: what the confirmation dialog lists.
  async handOffPlan(id,v,ctx){const state=await this.state(id);const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));const card=batch?.items.find(i=>i.id===v.insightId);if(!card)fail(systemMessageText('strategy.opportunityNotFound'),404);return {parts:await this.planFor(id,state,card,batch,ctx)};}
  async confirmDirection(id,v,ctx){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.handOffContext(id,v,fields);return this.mutate(id,v,async(state,transaction)=>{
@@ -275,6 +286,8 @@ class StrategyService{
   const state=await this.state(id) as import('../../shared/strategy-model.js').StrategyState;
   return {tasks,opportunities:rowsFor(state).filter(r=>opportunityState(r,state).state==='pending').length,insights:insightPending(state,rows)};
  }
+ // A plan keeps no evidence (analysis-evidence.ts), so the task of an approved plan has none either: no task reader needs
+ // one without an opportunity or a change it cites.
  async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail(systemMessageText('strategy.planNotFound'),404);
   if(proposal.goalVersion!==state.goal?.version)fail(systemMessageText('strategy.goalUpdatedReviewAgainSave'),409);

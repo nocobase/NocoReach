@@ -295,7 +295,8 @@ export class LegacyDatabase {
         this.assertWritable();
         const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped update of ${name}`);
-        const values: Values = { ...(options.values as Values), updatedAt: new Date() };
+        // `silent` keeps the record's updatedAt, as the classic option did: a rewrite of stored data that is not an edit.
+        const values: Values = { ...(options.values as Values), ...(options.silent ? {} : { updatedAt: new Date() }) };
         if (values.createdAt !== undefined) values.createdAt = timestamp(values.createdAt);
         delete values.id;
         validateStringLengths(await collectionFor(options), values);

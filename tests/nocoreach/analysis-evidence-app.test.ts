@@ -116,11 +116,53 @@ test('slims stored evidence once, archives recent analyses and reads a past day 
       taskKey: 'change',
       title: 'Change',
       status: '待处理',
+      updatedAt: '2026-10-01T00:00:00.000Z',
       evidence: { signalKey: 'b', context: evidence(['a', 'b']) },
     },
   });
 
+  // An archive past its lifetime, of this project and of a project whose id starts the same.
+  await snapshots.createOne({
+    values: { id: 920002, key: archiveKey(id, old), payload: { stale: true } },
+  });
+  await snapshots.createOne({
+    values: {
+      id: 920003,
+      key: archiveKey(`${id}2`, old),
+      payload: { other: true },
+    },
+  });
+  const updatedAt = async (task: number) =>
+    String(
+      (
+        (await tasks.findOne({ filter: { id: task } })) as unknown as {
+          updatedAt: unknown;
+        }
+      ).updatedAt,
+    );
+  const changeUpdated = await updatedAt(910002);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // A runner saves the task's step while the slimming waits for its lock: the step is kept.
+  const lock = plugin.taskExecution.lock.bind(plugin.taskExecution);
+  vi.spyOn(plugin.taskExecution, 'lock').mockImplementation(
+    async (project: string, task: string, fn: (tx: unknown) => unknown) => {
+      if (task === '910001') {
+        const row = (await tasks.findOne({
+          filter: { id: 910001 },
+        })) as unknown as { evidence: Record<string, unknown> };
+        await tasks.updateOne({
+          filter: { id: 910001 },
+          values: {
+            evidence: { ...row.evidence, work: { stage: 'work', revision: 2 } },
+          },
+        });
+      }
+      return lock(project, task, fn as never);
+    },
+  );
+
   await plugin.strategy.slimProject(id);
+  vi.mocked(plugin.taskExecution.lock).mockRestore();
 
   const state = await plugin.strategy.state(id);
   expect(state.insights.evidence.signals.analysisSnapshot).toEqual({
@@ -154,12 +196,22 @@ test('slims stored evidence once, archives recent analyses and reads a past day 
   expect(withPart.context.signals.items[0]).toEqual(signal('c'));
   expect(withPart.context.capturedAt).toBe('2026-11-01T00:00:00.000Z');
   expect(withPart.insight).toEqual({ id: 'recent', signalIds: ['c'] });
+  expect(withPart.work).toEqual({ stage: 'work', revision: 2 });
   const change = (
     (await tasks.findOne({ filter: { id: 910002 } })) as unknown as {
       evidence: any;
     }
   ).evidence;
   expect(change.context.signals.items.map((s) => s.key)).toEqual(['b']);
+
+  // Slimming is not an edit: the order of queues and Done stays.
+  expect(changeUpdated).not.toBe('null');
+  expect(await updatedAt(910002)).toBe(changeUpdated);
+  // Only this project's archives past their lifetime were removed.
+  expect(await plugin.strategy.archived(id, old)).toBeNull();
+  expect(await plugin.strategy.archived(`${id}2`, old)).toEqual({
+    other: true,
+  });
 
   // Running again changes nothing.
   const before = JSON.stringify(await plugin.strategy.state(id));
