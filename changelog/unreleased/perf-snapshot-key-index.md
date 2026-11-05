@@ -1,3 +1,0 @@
-## Server: checking whether Google data changed no longer reads every stored day
-
-- On every data view request and sync tick, NocoReach checks whether a project's synced Google reports changed since its snapshots were built, up to about 17 times a minute for an active project even while nobody uses the app. To find the latest write, SQLite read through every stored daily report's data while every other request waited: measured locally, about 17 ms with 510 reports of 68 KB, 92 ms with 2,430 and 175 ms with 4,860. A new index answers it in 2 to 4 ms, however large the reports are. The check's result is unchanged, so snapshots kept before the upgrade are still restored instead of rebuilt.
