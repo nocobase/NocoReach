@@ -324,3 +324,90 @@ test('a tick that reads a run before its write commits keeps it for the next tic
   expect(active.tracked()).toEqual([key(r.id)]);
   expect(await due()).toEqual([r.id]);
 });
+
+test('a tick that dropped a run before its write committed reads it once the commit lands', async () => {
+  const r = run('queued', { pluginRunId: randomUUID() });
+  const row = { id: '1', key: key(r.id), updatedAt: 'now', get: () => r };
+  let visible = false;
+  const active = new ActiveRuns(() => ({
+    find: async () => (visible ? [row] : []),
+  }));
+  const due = async () => {
+    const out: string[] = [];
+    for await (const x of active.due()) out.push(x.id);
+    return out;
+  };
+  await due();
+  const afterCommit: (() => unknown)[] = [];
+  active.wrote(key(r.id), r, { afterCommit: (fn) => afterCommit.push(fn) });
+  // The tick reads before the commit and drops the key; the commit lands after it.
+  expect(await due()).toEqual([]);
+  expect(active.tracked()).toEqual([]);
+  visible = true;
+  for (const fn of afterCommit.splice(0)) fn();
+  expect(await due()).toEqual([r.id]);
+});
+
+test('a transaction that cannot run code after its commit still writes the run, which stays tracked', () => {
+  const r = run('queued', { pluginRunId: randomUUID() });
+  const active = new ActiveRuns(() => ({ find: async () => [] }));
+  expect(() =>
+    active.wrote(key(r.id), r, {
+      afterCommit: () => {
+        throw new Error('Outer transaction does not expose afterCommit');
+      },
+    }),
+  ).not.toThrow();
+  expect(active.tracked()).toEqual([key(r.id)]);
+});
+
+test('a rescan asked for during a scan is not lost when that scan ends', async () => {
+  type Row = { id: string; key: string; updatedAt: string; payload: unknown };
+  const done = run('succeeded', {
+    pluginRunId: randomUUID(),
+    pluginSettled: true,
+  });
+  const rows: Row[] = Array.from({ length: 1500 }, (_, i) => ({
+    id: String(100 + i),
+    key: key(`settled-${i}`),
+    updatedAt: 't0',
+    payload: done,
+  }));
+  const imported = run('running', { pluginRunId: randomUUID() });
+  let idPages = 0;
+  const active: ActiveRuns = new ActiveRuns(() => ({
+    find: async (o: Record<string, unknown>) => {
+      const f = (o.filter ?? {}) as {
+        key?: { $startsWith?: string; $in?: string[] };
+        id?: { $gt?: string; $in?: string[] };
+      };
+      let out = rows.filter(
+        (r) =>
+          (!f.key?.$startsWith || r.key.startsWith(f.key.$startsWith)) &&
+          (!f.key?.$in || f.key.$in.includes(r.key)) &&
+          (!f.id?.$gt || BigInt(r.id) > BigInt(f.id.$gt)) &&
+          (!f.id?.$in || f.id.$in.includes(r.id)),
+      );
+      out.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+      if (typeof o.limit === 'number') out = out.slice(0, o.limit);
+      if (f.key?.$startsWith && ++idPages === 2) {
+        // An import commits a run in flight with its classic id, below the scan's cursor, and asks for a scan.
+        rows.push({
+          id: '5',
+          key: key(imported.id),
+          updatedAt: 't1',
+          payload: imported,
+        });
+        active.rescan();
+      }
+      return out.map((r) => ({ ...r, get: () => r.payload }));
+    },
+  }));
+  const due = async () => {
+    const out: string[] = [];
+    for await (const x of active.due()) out.push(x.id);
+    return out;
+  };
+  expect(await due()).toEqual([]);
+  expect(await due()).toEqual([imported.id]);
+});

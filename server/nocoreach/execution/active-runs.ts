@@ -51,6 +51,8 @@ export class ActiveRuns {
   private settled = new Map<string, string>();
   private writes = 0;
   private scannedAt = 0;
+  /** Counts `rescan()` calls: a scan that was running when one came does not count as that scan. */
+  private rescans = 0;
 
   constructor(private readonly rows: () => SnapshotRows) {}
 
@@ -68,11 +70,18 @@ export class ActiveRuns {
     add();
     // A tick reading on another connection before the commit does not see the row yet and drops the key.
     const outer = tx as { afterCommit?(fn: () => unknown): void } | null;
-    if (typeof outer?.afterCommit === 'function') outer.afterCommit(add);
+    if (typeof outer?.afterCommit === 'function')
+      try {
+        outer.afterCommit(add);
+      } catch {
+        // A joined plugin transaction may not run code after its commit (legacy/database.ts). The row is already
+        // written, so its key stays added above; a tick reading before the commit could drop it until the next scan.
+      }
   }
 
   /** Reads every run again on the next tick, after a writer that bypasses `TaskService.put` (classic import). */
   rescan() {
+    this.rescans += 1;
     this.scannedAt = 0;
     this.settled.clear();
   }
@@ -102,7 +111,8 @@ export class ActiveRuns {
   }
 
   private async scan(stopped: () => boolean) {
-    const settled = new Map<string, string>(),
+    const rescans = this.rescans,
+      settled = new Map<string, string>(),
       unread: string[] = [];
     for (let last: string | undefined; ;) {
       const page = await this.rows().find({
@@ -137,7 +147,8 @@ export class ActiveRuns {
         else settled.set(String(row.id), String(row.updatedAt));
       }
     }
-    if (stopped()) return;
+    // A scan asked for meanwhile may have rows this one passed (an import keeps classic ids): the next tick scans again.
+    if (stopped() || rescans !== this.rescans) return;
     this.settled = settled;
     this.scannedAt = Date.now();
   }
