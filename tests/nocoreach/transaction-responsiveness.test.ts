@@ -220,9 +220,11 @@ test('a shutdown during a Google wait leaves the job running with its attempts, 
   expect(job?.get('status')).toBe('running');
   expect(job?.get('attempts')).toBe(0);
   expect(job?.get('errorCode')).toBeFalsy();
-  // A stopped service starts nothing new.
+  // A stopped service starts nothing new: its tick does not even try a step.
   expect(await f.sync.step()).toBe(false);
+  const stepped = vi.spyOn(f.sync, 'step');
   await f.sync.tick();
+  expect(stepped).not.toHaveBeenCalled();
   // The next start picks the job up where it was.
   f.plugin.googleJson.mockResolvedValue({ timeZone: 'UTC' });
   expect(await new SyncService(f.plugin).step()).toBe(true);

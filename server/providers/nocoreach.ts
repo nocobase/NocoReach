@@ -200,6 +200,8 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
       const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined, startedAt });
+      // A firing abandoned at shutdown neither writes (above) nor sends: it could not record what it got back.
+      plugin.network.refuseWhen(() => legacy.abandoned());
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');

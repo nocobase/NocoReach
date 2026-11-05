@@ -2,8 +2,8 @@
 // NocoReach's timers share one schedule executor that runs one firing at a time (the built-in memory jobs
 // configuration). A firing that does not end used to stop every other timer, and kept the executor from shutting down:
 // LegacyApp.tick now lets the executor go on after a deadline, or at shutdown, while the firing finishes on its own.
-// A firing still running when shutdown gives up on it writes nothing more, so the closing network is not recorded as
-// its failure. GitHub trends' requests keep their own deadline, a read the server stops saves nothing, and a demo or
+// A firing still running when shutdown gives up on it writes and sends nothing more, so the closing network is not
+// recorded as its failure. GitHub trends' requests keep their own deadline, a read the server stops saves nothing, and a demo or
 // simulated project's searches no longer wait for GitHub's pacing. The sync's stop is in
 // transaction-responsiveness.test.ts.
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -20,6 +20,8 @@ import {
 } from '../../server/nocoreach/legacy/app.js';
 import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
 import type { LegacyVariables } from '../../server/nocoreach/legacy/variables.js';
+import { OutboundNetwork } from '../../server/nocoreach/outbound-network.js';
+import type { ProxyProfiles } from '../../server/nocoreach/proxy-profiles.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -279,7 +281,7 @@ for (const finish of ['resolves', 'rejects'] as const) {
   });
 }
 
-test('a firing still running when shutdown gives up on it writes nothing more; other work still writes', async () => {
+test('a firing still running when shutdown gives up on it writes and sends nothing more; other work still does', async () => {
   const written: unknown[] = [];
   const repository = {
     createOne: async ({ values }: { values: unknown }) => {
@@ -307,21 +309,37 @@ test('a firing still running when shutdown gives up on it writes nothing more; o
     all: () => ({}),
   } as unknown as LegacyVariables);
   db.refuseWritesWhen(() => legacy.abandoned());
+  const network = new OutboundNetwork({} as ProxyProfiles);
+  network.refuseWhen(() => legacy.abandoned());
   const closed = Promise.withResolvers<void>();
-  const failure = Promise.withResolvers<unknown>();
+  const refused: Record<string, unknown> = {};
+  const outcome = (name: string) => ({
+    then: () => {
+      refused[name] = 'allowed';
+    },
+    error: (error: unknown) => {
+      refused[name] = error;
+    },
+  });
   const job = legacy.cronJobManager.addJob({
-    name: 'githubCron',
+    name: 'articleCron',
     cronTime: '* * * * * *',
-    // As a source does: its request fails when the network closes, and it records the failure.
+    // As a source does once the network is about to close: it sends the next request, then records the outcome.
     onTick: async () => {
       await closed.promise;
+      const sent = outcome('fetch');
+      await network
+        .fetch('site', 'https://cms.example.com/api/upload', {}, '1')
+        .then(sent.then, sent.error);
+      const created = outcome('create');
       await db
         .getRepository('nrSnapshots')
         .create({ values: { key: 'github:1', payload: { failedAt: 'now' } } })
-        .catch((error: unknown) => failure.resolve(error));
+        .then(created.then, created.error);
+      const opened = outcome('transaction');
       await db.sequelize
         .transaction(async () => undefined)
-        .catch((error: unknown) => failure.resolve(error));
+        .then(opened.then, opened.error);
     },
   });
   const shutdown = new AbortController();
@@ -330,12 +348,19 @@ test('a firing still running when shutdown gives up on it writes nothing more; o
   expect(await legacy.settle(20)).toBe(false);
   expect(legacy.abandon()).toBe(1);
   closed.resolve();
-  expect(await failure.promise).toMatchObject({ code: 'NR_SHUTTING_DOWN' });
+  await expect.poll(() => Object.keys(refused).length).toBe(3);
+  expect(refused).toMatchObject({
+    fetch: { code: 'NR_SHUTTING_DOWN' },
+    create: { code: 'NR_SHUTTING_DOWN' },
+    transaction: { code: 'NR_SHUTTING_DOWN' },
+  });
   expect(written).toEqual([]);
-  // Writes outside the firing go on.
+  // Work outside the firing goes on.
+  expect(() => network.admit()).not.toThrow();
   await db
     .getRepository('nrSnapshots')
     .create({ values: { key: 'other', payload: {} } });
+  await db.sequelize.transaction(async () => undefined);
   expect(written).toHaveLength(1);
 });
 
