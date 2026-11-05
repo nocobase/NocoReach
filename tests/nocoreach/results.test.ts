@@ -19,6 +19,14 @@ import {
   safeConclusion,
 } from '../../shared/result-comparison.js';
 const url = 'https://example.com/page';
+// A page of the project's tasks as the repository reads it (execution/task-scan.ts): after the last id read, in id order.
+type Page = { filter?: { id?: { $gt: string } }; limit: number };
+const byId = <T extends { id: number }>(tasks: T[], { filter, limit }: Page) =>
+  tasks
+    .filter((t) => !filter?.id || t.id > Number(filter.id.$gt))
+    .sort((a, b) => a.id - b.id)
+    .slice(0, limit)
+    .map((t) => ({ toJSON: () => t }));
 const partition = (date: string, clicks: number): Partition => ({
   source: 'gsc',
   grain: 'query_page',
@@ -296,11 +304,10 @@ describe('results availability gate', () => {
     const saved = structuredClone(tasks);
     const service = {
       repo: () => ({
-        find: async ({ filter, offset, limit }: any) => {
-          expect(filter).toEqual({ projectId: '1' });
-          return tasks
-            .slice(offset, offset + limit)
-            .map((t) => ({ toJSON: () => t }));
+        find: async (options: Page & { filter: { projectId?: string } }) => {
+          const { id: _after, ...scope } = options.filter;
+          expect(scope).toEqual({ projectId: '1' });
+          return byId(tasks, options);
         },
       }),
       effectPages: () => [url],
@@ -420,8 +427,7 @@ describe('results dashboard', () => {
   });
   const service = (tasks: object[]) => ({
     repo: () => ({
-      find: async ({ offset, limit }: { offset: number; limit: number }) =>
-        tasks.slice(offset, offset + limit).map((t) => ({ toJSON: () => t })),
+      find: async (options: Page) => byId(tasks as { id: number }[], options),
     }),
     effectPages: (w: { page?: { url: string } }) =>
       w.page?.url ? [w.page.url] : [],

@@ -1,5 +1,0 @@
-## Opportunities: one task per page, whatever address a change cites
-
-- An article reached at two addresses is one place to change. O-59 cited `/blog/{slug}/` and `/en/blog/{slug}`, one article whose `/en/` address names the first as its canonical, and was handed off as T-55 and T-56; it is now one task citing both changes, and a task already open for either address covers the article.
-- Website content also reads the canonical of addresses outside the sitemap that searches and visits reach, kept 60 days, and lists their numbers under the page they name. Where an address is not read yet, a language prefix the site's canonicals drop (`/en/` on www.nocobase.com) is the page without it; other languages (`/cn/`, `/ja/`) stay their own pages.
-- The same rule decides a task's pages, its numbers on the task page and its day 7 and day 28 results, the tasks listed for a page in Website content, the changes a task already covers in the daily analysis, and changes grouped by page, so both addresses' searches and visits count toward one page.

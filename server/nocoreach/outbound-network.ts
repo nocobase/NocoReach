@@ -129,12 +129,32 @@ export class OutboundNetwork {
   private transports = new Set<Transport>();
   private closed = false;
   private demo?: DemoUpstream;
+  private refused?: () => boolean;
   private readonly demoChecked = new AsyncLocalStorage<ReadonlySet<string>>();
   constructor(
     readonly profiles: ProxyProfiles,
     readonly simulation?: SimulatedUpstream,
   ) {
     profiles.enableMockProfiles?.(simulation?.enabled === true);
+  }
+  /**
+   * Refuses requests while `refused()` holds: from the timer firings abandoned at shutdown (`LegacyApp.abandon`), which
+   * could not record what they get back, so a publish or upload would only be repeated after the restart.
+   */
+  refuseWhen(refused: () => boolean) {
+    this.refused = refused;
+  }
+  /** Throws `NR_SHUTTING_DOWN` for a request `refuseWhen` refuses; public downloads call it too. */
+  admit() {
+    const refusal = this.refusal();
+    if (refusal) throw refusal;
+  }
+  private refusal(): Error | undefined {
+    if (!this.refused?.()) return undefined;
+    return Object.assign(
+      new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')),
+      { code: 'NR_SHUTTING_DOWN' },
+    );
   }
   /** Answers the demo projects' requests from now on; see `DemoUpstream`. */
   useDemoUpstream(demo: DemoUpstream) {
@@ -476,6 +496,8 @@ export class OutboundNetwork {
     init: RequestInit = {},
     project?: string,
   ): Promise<Response> {
+    const refusal = this.refusal();
+    if (refusal) return Promise.reject(refusal);
     // Preserve the existing API: missing project selection throws synchronously, while a closed transport rejects.
     if (this.closed)
       return Promise.reject(
@@ -534,6 +556,7 @@ export class OutboundNetwork {
     connection?: 'bilibili' | 'xiaohongshu',
   ): Promise<Response> {
     this.assertOpen();
+    this.admit();
     if (this.demo && !this.demoChecked.getStore()?.has(projectId))
       return this.runProject(projectId, () =>
         this.fetchCollector(projectId, url, init, connection),
@@ -596,6 +619,7 @@ export class OutboundNetwork {
     allowLoopback = false,
   ): Promise<Response> {
     this.assertOpen();
+    this.admit();
     const project = this.projects.getStore();
     if (project && this.demo && !this.demoChecked.getStore()?.has(project))
       return this.runProject(project, () =>

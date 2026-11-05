@@ -40,7 +40,7 @@ import {
 import { ScheduleManagement, ANALYSIS_SCHEDULE } from '../nocoreach/schedule-management.js';
 import { DEFAULT_CRON, NODE_TYPE, WORKFLOW_TITLE } from '../nocoreach/daily-analysis.js';
 import { registerClassicImport } from '../nocoreach/classic-import.js';
-import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
+import { LegacyApp, legacyLogger, SHUTDOWN_GRACE_MS, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
 import { ConnectionStatusCache } from '../nocoreach/connection-status-cache.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
@@ -176,6 +176,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       db.define('users', users);
       const variables = new LegacyVariables(db, this.app.container.resolve(secretsServiceToken));
       const legacy = new LegacyApp(db, logger, variables);
+      db.refuseWritesWhen(() => legacy.abandoned());
       // The daily analysis workflow: its instruction is captured here and run when the Scheduler fires (boot()).
       const workflows = new LegacyWorkflows(database, { [WORKFLOW_TITLE]: ANALYSIS_SCHEDULE });
       if (this.app.container.has(schedulerServiceToken)) {
@@ -199,6 +200,8 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
       const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined, startedAt });
+      // A firing abandoned at shutdown neither writes (above) nor sends: it could not record what it got back.
+      plugin.network.refuseWhen(() => legacy.abandoned());
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
@@ -426,24 +429,22 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     // Classic timers ran in the server's local time; so do these.
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.executor = this.app.container.resolve(jobExecutorServiceToken).getScheduleExecutor('nocoreach');
-    for (const job of runtime.legacy.jobs)
-      await this.executor.addJob({
-        name: job.name,
-        options: { cron: job.cronTime, tz },
-        payload: {},
-        execute: async () => {
-          await runtime.legacy.tick(job);
-        },
-      });
+    for (const job of runtime.legacy.jobs) await this.executor.addJob(runtime.legacy.scheduleJob(job, tz));
     await this.executor.setup();
   }
 
   public override async shutdown(): Promise<void> {
     await this.executor?.shutdown();
+    const runtime = this.app.container.resolveIfCreated?.(nocoReachToken);
+    // A timer firing the executor no longer waits for gets a moment to finish before the sources and the network close;
+    // one still running then writes nothing more, so the closing network is not recorded as its failure.
+    if (runtime && !(await runtime.legacy.settle(SHUTDOWN_GRACE_MS)))
+      runtime.logger.warn('NocoReach timers still running at shutdown write nothing more', {
+        firings: runtime.legacy.abandon(),
+      });
     const analysis = await this.analysisExecutor?.catch(() => undefined);
     this.analysisExecutor = undefined;
     await analysis?.shutdown();
-    const runtime = this.app.container.resolveIfCreated?.(nocoReachToken);
     try {
       await runtime?.plugin.afterDisable?.();
     } finally {

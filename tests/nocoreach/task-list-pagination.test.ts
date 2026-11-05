@@ -1,28 +1,36 @@
 // @vitest-environment node
 import { expect, it, vi } from 'vitest';
 import { TaskService } from '../../server/nocoreach/execution/service';
-it('reads past the old task-list cap and keeps the same project filter for every page', async () => {
+type Find = {
+  filter: { projectId?: string; id?: { $in: string[] } };
+  fields?: string[];
+  sort?: string[];
+  limit?: number;
+  offset?: number;
+};
+it('reads past the old task-list cap: the project ids once in order, then the rows by key', async () => {
   const service = Object.create(TaskService.prototype) as TaskService;
-  const find = vi.fn(
-    ({
-      filter,
-      offset,
-      limit,
-    }: {
-      filter: { projectId: string };
-      offset: number;
-      limit: number;
-    }) => {
-      expect(filter).toEqual({ projectId: 'project-a' });
-      return Promise.resolve(
-        Array.from(
-          { length: Math.min(limit, Math.max(0, 5201 - offset)) },
-          (_, i) => ({ id: offset + i }),
-        ),
-      );
-    },
-  );
+  // Newest first, as the database orders them; the key reads also return a row of another project.
+  const ids = Array.from({ length: 5201 }, (_, i) => String(9000 - i));
+  const find = vi.fn((options: Find) => {
+    expect(options.offset).toBeUndefined();
+    if (options.filter.projectId)
+      return Promise.resolve(ids.map((id) => ({ id })));
+    const keys = options.filter.id!.$in;
+    expect(keys.length).toBeLessThanOrEqual(200);
+    return Promise.resolve([
+      ...[...keys].reverse().map((id) => ({ id, projectId: 'project-a' })),
+      { id: keys[0], projectId: 'project-b' },
+    ]);
+  });
   vi.spyOn(service, 'repo').mockReturnValue({ find });
-  expect((await service.tasks('project-a')).length).toBe(5201);
-  expect(find).toHaveBeenCalledTimes(27);
+  const tasks = await service.tasks('project-a');
+  expect(tasks.map((t) => t.id)).toEqual(ids);
+  expect(tasks.every((t) => t.projectId === 'project-a')).toBe(true);
+  expect(find).toHaveBeenCalledTimes(1 + Math.ceil(5201 / 200));
+  expect(find.mock.calls[0]![0]).toEqual({
+    filter: { projectId: 'project-a' },
+    fields: ['id'],
+    sort: ['-createdAt', '-id'],
+  });
 });
