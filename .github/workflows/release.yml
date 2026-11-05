@@ -73,7 +73,18 @@ jobs:
             args+=(--prerelease --latest=false)
           fi
           gh release create "$RELEASE_TAG" "${args[@]}"
-          echo "已创建 $RELEASE_TAG；两个 Solutions 环境的部署结果请查看本次运行的 deploy 作业。" >> "$GITHUB_STEP_SUMMARY"
+          echo "Created $RELEASE_TAG; see the image and deploy jobs for internal image publication and Solutions deployments." >> "$GITHUB_STEP_SUMMARY"
+
+  image:
+    needs: release
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      release_tag: ${{ needs.release.outputs.tag }}
+      release_sha: ${{ needs.release.outputs.sha }}
+      archive_name: solutions-release-archive
+    secrets:
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
 
   # GITHUB_TOKEN tag pushes do not trigger another workflow; call deployment explicitly.
   deploy:
