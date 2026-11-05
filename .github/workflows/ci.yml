@@ -7,34 +7,204 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A pull request keeps only its latest push. Every main commit gets a group of its own and runs to completion: a
+  # shared group would also drop a queued main run when the next commit arrives, cancel-in-progress or not.
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  tests:
+  # Pull requests that touch only documentation skip the test, build and database jobs. That is decided here rather
+  # than with `paths` filters on the trigger, because a workflow that never starts leaves a required check pending and
+  # the pull request cannot merge; `CI result` below always reports. main always runs everything.
+  changes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo code=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api "repos/$REPO/pulls/$NUMBER/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/files.txt"
+          cat "$RUNNER_TEMP/files.txt"
+          # The API lists at most 3000 files, so a pull request that large counts as code. Documentation is what
+          # neither the application nor its build reads; the docs job still checks it.
+          if [ "$(wc -l < "$RUNNER_TEMP/files.txt")" -ge 3000 ] ||
+            grep -qvE '^(docs/.+|changelog/.+|[^/]+\.md|LICENSE)$' "$RUNNER_TEMP/files.txt"; then
+            echo code=true >> "$GITHUB_OUTPUT"
+          else
+            echo 'Documentation only: running the documentation checks instead of the full suite.'
+            echo code=false >> "$GITHUB_OUTPUT"
+          fi
+
+  # The tests that read documentation: AGENTS.md size and links, changelog notes, and the docs the source package
+  # ships. With code changes they run as part of the full suite instead.
+  docs:
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: ./.github/actions/setup-pnpm
+      - run: >-
+          pnpm exec vitest run tests/logic/agents-md.test.ts tests/logic/changelog.test.ts
+          tests/logic/nocoreach-source-package.test.ts --passWithNoTests=false
+
+  tests:
+    name: tests (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          node-version: '24'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+          persist-credentials: false
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --maxWorkers=3 --passWithNoTests=false
+
+  # The release build, packed as Solutions deploys it, then started, signed in to and restarted on SQLite. The other
+  # dialects build their own artifact in the database job, with their driver promoted to dependencies.
   build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+      - name: Verify the production artifact and restart
+        run: pnpm exec vitest run tests/nocoreach/deployment-artifact.test.ts --maxWorkers=1
+        env:
+          NOCOREACH_TEST_DIST: '1'
+
+  # SQLite is what the tests job runs on, so only PostgreSQL and MySQL run here. Each suite is a job of its own so the
+  # three run side by side, and each job starts only the database it tests.
+  database:
+    name: database (${{ matrix.dialect }}, ${{ matrix.suite }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        dialect: [postgres, mysql]
+        suite: [app, demo, artifact]
+    services:
+      # An empty image skips the service.
+      postgres:
+        image: ${{ matrix.dialect == 'postgres' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_PASSWORD: nocoreach-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: ${{ matrix.dialect == 'mysql' && 'mysql:8.4' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: nocoreach-test
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      NOCOBASE_TEST_DB_DIALECT: ${{ matrix.dialect }}
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: nocoreach-test
+      PGDATABASE: postgres
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_ADMIN_USER: root
+      MYSQL_ADMIN_PASSWORD: nocoreach-test
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          node-version: '24'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build --target linux-x64 --node-version 24
+          persist-credentials: false
+      - uses: ./.github/actions/setup-pnpm
+      # Each test gets a database of its own, so two workers share the server without sharing data.
+      - name: Verify migrations and business behavior
+        if: matrix.suite == 'app'
+        run: >-
+          pnpm exec vitest run tests/logic
+          tests/nocoreach/database-dialects.test.ts
+          tests/nocoreach/database-queries.test.ts
+          tests/nocoreach/legacy-date-filters.test.ts
+          tests/nocoreach/schedule-timezone-app.test.ts
+          tests/nocoreach/manual-tasks-app.test.ts
+          tests/nocoreach/project-access-app.test.ts
+          --maxWorkers=2 --testTimeout=120000 --hookTimeout=120000
+      - name: Verify PostgreSQL timestamp upgrades
+        if: matrix.suite == 'app' && matrix.dialect == 'postgres'
+        run: pnpm exec vitest run tests/nocoreach/postgres-timestamps.test.ts --maxWorkers=1 --testTimeout=120000
+        env:
+          PM375_POSTGRES_HOST: 127.0.0.1
+          PM375_POSTGRES_PORT: 5432
+          PM375_POSTGRES_USER: postgres
+      - name: Verify demo import and business APIs
+        if: matrix.suite == 'demo'
+        run: >-
+          pnpm exec vitest run tests/nocoreach/demo-data-app.test.ts
+          -t 'imports the demo through the API'
+          --maxWorkers=1
+      - name: Include the selected production driver
+        if: matrix.suite == 'artifact'
+        run: pnpm add --save-prod "@nocobase/db-${NOCOBASE_TEST_DB_DIALECT}@0.1.0-beta.5"
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+        if: matrix.suite == 'artifact'
+      - name: Verify the production artifact and restart
+        if: matrix.suite == 'artifact'
+        run: pnpm exec vitest run tests/nocoreach/deployment-artifact.test.ts --maxWorkers=1
+        env:
+          NOCOREACH_TEST_DIST: '1'
+
+  # The one check to require in branch protection: it reports on every run, including documentation-only pull
+  # requests whose other jobs were skipped.
+  result:
+    name: CI result
+    needs: [changes, docs, tests, build, database]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          DOCS: ${{ needs.docs.result }}
+          TESTS: ${{ needs.tests.result }}
+          BUILD: ${{ needs.build.result }}
+          DATABASE: ${{ needs.database.result }}
+        run: |
+          echo "changes=$CHANGES code=$CODE docs=$DOCS tests=$TESTS build=$BUILD database=$DATABASE"
+          test "$CHANGES" = success
+          if [ "$CODE" = true ]; then
+            test "$TESTS" = success && test "$BUILD" = success && test "$DATABASE" = success
+          else
+            test "$DOCS" = success
+          fi

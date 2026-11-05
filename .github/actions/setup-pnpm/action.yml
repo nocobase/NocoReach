@@ -1,0 +1,13 @@
+name: Set up Node and dependencies
+description: Installs the pnpm version in packageManager and Node 24, restores the pnpm store cache and runs a frozen install.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
+    # setup-node keys the store cache on pnpm-lock.yaml, so every job and branch shares one entry per lockfile.
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: '24'
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash
