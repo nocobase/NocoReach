@@ -65,6 +65,8 @@ export const PROJECT_SNAPSHOTS = new Set([
   'nr-task',
   'nr-task-agent',
   'nr-task-article',
+  'nr-task-article-edit',
+  'nr-task-article-lease',
   'nr-task-artifact',
   'nr-task-board',
   'nr-task-content',

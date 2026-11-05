@@ -677,6 +677,33 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           'Requires saved source URLs and timestamps.',
         ),
       };
+    // Review card › Rewrite with AI: asked for a shorter text, the first half of its sentences; otherwise the text
+    // as it was, with a note in its language that the demo model wrote it. The last attempt is revised when there is
+    // one.
+    case 'article-rewrite': {
+      const last = list(input.attempts).at(-1);
+      const source = (
+        str(last?.result, 8000) || str(input.selection, 8000)
+      ).trim();
+      const han = /\p{Script=Han}/u.test(source);
+      const sentences = source.match(
+        han ? /[^。！？]+[。！？]?/gu : /[^.!?]+(?:[.!?]+|$)\s*/gu,
+      ) ?? [source];
+      if (
+        /短|精简|简洁|压缩|shorter|shorten|concise|brief|trim/iu.test(
+          str(input.instruction, 300),
+        )
+      )
+        return {
+          text: sentences
+            .slice(0, Math.max(1, Math.ceil(sentences.length / 2)))
+            .join('')
+            .trim(),
+        };
+      return {
+        text: `${source}${han ? '（演示模型改写）' : ' (Rewritten by the demo model.)'}`,
+      };
+    }
     case 'analysis-rule-evaluate':
       return {
         results: list(input.rules).map((rule) => ({

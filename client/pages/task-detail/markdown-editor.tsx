@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the article editor shares the toolbar's labels and keys */
 import {
   useDeferredValue,
   useRef,
@@ -65,7 +66,7 @@ const TOOLS: { style: MarkdownStyle; icon: LucideIcon; key?: string }[] = [
   { style: 'quote', icon: Quote },
   { style: 'code', icon: Code },
 ];
-const TOOL_LABELS: Record<MarkdownStyle, string> = {
+export const TOOL_LABELS: Record<MarkdownStyle, string> = {
   bold: 'markdownEditor.bold',
   italic: 'markdownEditor.italic',
   link: 'markdownEditor.link',
@@ -76,7 +77,7 @@ const TOOL_LABELS: Record<MarkdownStyle, string> = {
   code: 'markdownEditor.code',
 };
 
-const apple = () => /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+export const apple = () => /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 /** ⌘ on Apple devices, where Ctrl+B and Ctrl+K move the cursor and delete a line; Ctrl elsewhere. */
 function command(event: KeyboardEvent) {
   return apple()
@@ -105,17 +106,22 @@ function apply(box: HTMLTextAreaElement, edit: MarkdownEdit) {
   box.setSelectionRange(...edit.select);
 }
 
-/** A toolbar button, named in its tooltip; a click leaves the cursor in the text instead of taking focus from it. */
-function ToolButton({
+/**
+ * A toolbar button, named in its tooltip; a click leaves the cursor in the text instead of taking focus from it.
+ * `pressed` shows a style already applied where the cursor is (the article editor, which shows formatting).
+ */
+export function ToolButton({
   label,
   tip,
   disabled,
+  pressed,
   onClick,
   children,
 }: {
   label: string;
   tip: ReactNode;
   disabled: boolean;
+  pressed?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -126,6 +132,8 @@ function ToolButton({
           <InputGroupButton
             size='icon-sm'
             aria-label={label}
+            aria-pressed={pressed}
+            className='aria-pressed:bg-muted'
             disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
             onClick={onClick}

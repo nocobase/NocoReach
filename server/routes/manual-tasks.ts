@@ -26,6 +26,9 @@ import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
 import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
 import type { TaskCreator } from '../nocoreach/manual-tasks.js';
+import { ArticleRewrites, type RewriteHost } from '../nocoreach/article-rewrite.js';
+import { articleRewriteInput } from '../../shared/article-edit.js';
+import { getRequestLocale } from '@nocobase/i18n/server';
 import {
   ManualTaskDraftInput,
   ManualTaskDraftView,
@@ -169,6 +172,55 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
           context.req.valid('json'),
         ),
       }),
+  );
+  const rewrites = new ArticleRewrites(() => {
+    const runtime = app.container.resolve(nocoReachToken);
+    const plugin = runtime.plugin as unknown as Omit<RewriteHost, 'db'>;
+    return {
+      db: runtime.legacy.db,
+      project: (id) => plugin.project(id),
+      taskExecution: plugin.taskExecution,
+      network: plugin.network,
+    };
+  });
+  routes.post(
+    '/nocoreachTasks/rewrite',
+    describeRoute({
+      tags: ['NocoReach Tasks'],
+      summary: 'Rewrite a selection of an article under review with AI',
+      operationId: 'rewriteArticleSelection',
+      description:
+        'Rewrites only the selected part of the article version under review, with the chat model in Model services, and streams the replacement as newline-delimited JSON: {"text"} pieces, then {"done":true}, or {"error","status"} when it stopped. Saves nothing. Refusals before streaming are JSON errors: 409 without a chat model or when another version is under review, 403 for anyone but the owner or an administrator, 429 while the same person has another rewrite running.',
+      responses: {
+        200: {
+          description: 'The replacement, as newline-delimited JSON events.',
+          content: { 'application/x-ndjson': {} },
+        },
+        ...apiErrorResponses,
+        409: apiErrorResponse(409),
+        429: apiErrorResponse(429),
+        502: { description: 'The model did not give a usable rewrite.' },
+        504: apiErrorResponse(504),
+      },
+      // New task commands stay browser-only until classified (docs/DEVELOPMENT.md, Task execution).
+      ...cliRoute(false),
+    }),
+    apiValidator('json', articleRewriteInput),
+    async (context) => {
+      const stream = await rewrites.start(
+        creator(context).id,
+        context.req.valid('json'),
+        {
+          signal: context.req.raw.signal,
+          locale: getRequestLocale(context) ?? 'en-US',
+        },
+      );
+      return context.body(stream, 200, {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+    },
   );
   routes.post(
     '/nocoreachTasks/media',
