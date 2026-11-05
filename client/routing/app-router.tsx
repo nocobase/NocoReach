@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router';
 
 import { EMPTY_ARRAY } from '#lib/constants';
+import { useCountNavigations } from '#lib/navigation-count';
 
 import { PermissionGenerationProvider } from '#hooks/use-permission-generation';
 import { MeProvider } from '../pages/me.js';
@@ -36,6 +37,8 @@ export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
     [clientRoutes],
   );
   usePreloadOpenedPage(routeGroups.required);
+  // Ends hand-overs a navigation must end, such as Insights' reuse of the reads an access re-check interrupted.
+  useCountNavigations();
 
   return (
     <Routes>

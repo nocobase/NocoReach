@@ -200,7 +200,7 @@ class DailyAnalysis{
    const flight=this.judging.get(id);if(flight&&flight.key!==key){await flight.operation.catch(()=>undefined);continue;}
    if(!flight&&cooldown){const held=this.judgeHolds.get(id);
     if(held&&(held.key!==key||Date.now()>=held.until))this.judgeHolds.delete(id);
-    else if(held&&!held.failure)return {judged:0};
+    else if(held&&!held.failure)return {judged:0,held:true};
     // A failure is held while the model setup is the one it failed with: fixing it lets the next visit ask at once.
     else if(held){if(await this.modelFingerprint(id)===held.fingerprint)throw this.judgeRefusal(held,locale);this.judgeHolds.delete(id);continue;}}
    if(flight)return flight.operation;

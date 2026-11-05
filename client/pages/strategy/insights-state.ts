@@ -5,6 +5,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 import { usePermissionGeneration } from '#hooks/use-permission-generation';
+import { navigations } from '#lib/navigation-count';
 
 import type { useWorkspaceCache } from '../workspace-cache';
 import type { EarlyRequests } from './early-requests';
@@ -30,8 +31,11 @@ export const RECHECK_REUSE_MS = 10_000;
  * after an earlier mount was unmounted.
  */
 export class InsightsState {
-  /** When an access re-check last unmounted the page, and in which permission generation, until its next mount. */
-  private recheck?: { at: number; generation: number };
+  /**
+   * When an access re-check last unmounted the page, in which permission generation and after how many navigations,
+   * until its next mount.
+   */
+  private recheck?: { at: number; generation: number; navigation: number };
   private readonly listeners = new Set<(state: StrategyState) => void>();
   private kept?: EarlyRequests;
   private judgedKey = '';
@@ -98,19 +102,21 @@ export class InsightsState {
     this.judgedKey = key;
   }
 
-  rechecked(generation: number): void {
-    this.recheck = { at: Date.now(), generation };
+  rechecked(generation: number, navigation: number): void {
+    this.recheck = { at: Date.now(), generation, navigation };
   }
 
   /**
    * Whether a mount now follows a re-check's unmount closely enough to take over its reads. The generation is
    * compared too: should the page mount again in this cache after the generation moved, before the cache is replaced,
-   * it reads afresh.
+   * it reads afresh. So is the navigation count: a person who left during the check and came back, by a link or by
+   * Back, opens the page again and reads it afresh.
    */
-  handedOver(generation: number): boolean {
+  handedOver(generation: number, navigation: number): boolean {
     return (
       this.recheck !== undefined &&
       this.recheck.generation === generation &&
+      this.recheck.navigation === navigation &&
       Date.now() - this.recheck.at < RECHECK_REUSE_MS
     );
   }
@@ -132,16 +138,17 @@ export function insightsState(cache: Cache, projectId: number): InsightsState {
 }
 
 /**
- * Whether this mount follows an access re-check that unmounted the page in the same cache. ClientRoute unmounts the
- * page, without rendering it again, when an authorization invalidation makes its check pending: the revision has
- * then moved past the one the page last rendered with. Leaving the page does not move it, so a navigation never
- * counts. Session and generation changes bring a new cache, whose store no re-check has touched.
+ * Whether this mount follows an access re-check that unmounted the page in the same cache, with no navigation in
+ * between. ClientRoute unmounts the page, without rendering it again, when an authorization invalidation makes its
+ * check pending: the revision has then moved past the one the page last rendered with. Leaving the page does not move
+ * it, and a navigation after the re-check (`navigations()`) ends the hand-over. Session and generation changes bring a
+ * new cache, whose store no re-check has touched.
  */
 export function useRecheckHandover(store: InsightsState): boolean {
   const authz = useAuthorizationClient();
   const revision = useAuthorizationRevision();
   const generation = usePermissionGeneration();
-  const [handed] = useState(() => store.handedOver(generation));
+  const [handed] = useState(() => store.handedOver(generation, navigations()));
   const renderedRef = useRef({ revision, generation });
   useEffect(() => {
     renderedRef.current = { revision, generation };
@@ -151,7 +158,7 @@ export function useRecheckHandover(store: InsightsState): boolean {
     return () => {
       const rendered = renderedRef.current;
       if (authz.revision() !== rendered.revision)
-        store.rechecked(rendered.generation);
+        store.rechecked(rendered.generation, navigations());
     };
   }, [store, authz]);
   return handed;

@@ -22,7 +22,7 @@ import {
   within,
 } from '@testing-library/react';
 import { useEffect } from 'react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PermissionGenerationProvider } from '../../client/hooks/use-permission-generation';
@@ -35,6 +35,7 @@ import locales from '../../client/locales';
 import StrategyPage from '../../client/pages/strategy/index';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import { ClientRoute } from '../../client/routing/client-route';
+import { useCountNavigations } from '../../client/lib/navigation-count';
 import type {
   InsightBatch,
   Opportunity,
@@ -202,6 +203,16 @@ function fakeRealtime() {
 }
 
 let disconnect: (() => void) | undefined;
+// What AppRouter mounts above every page: it counts navigations. It also lends the test the router's navigate.
+let navigateTo: ReturnType<typeof useNavigate> | undefined;
+function Navigations() {
+  useCountNavigations();
+  const navigate = useNavigate();
+  useEffect(() => {
+    navigateTo = navigate;
+  }, [navigate]);
+  return null;
+}
 async function setup() {
   const runtime = new I18nRuntime({
     defaultLocale: 'en-US',
@@ -226,6 +237,7 @@ async function setup() {
     <I18nProvider runtime={runtime}>
       <ClientApplicationContext.Provider value={app}>
         <MemoryRouter>
+          <Navigations />
           <AuthorizationProvider>
             <PermissionGenerationProvider>
               <WorkspaceCacheProvider>
@@ -244,6 +256,21 @@ async function setup() {
     snapshot,
     permissions,
     rerender: () => view.rerender(tree()),
+    // Another page of the app, then back to Insights, by a link or by Back.
+    async leave() {
+      await act(async () => {
+        await navigateTo!('/opportunities');
+      });
+      visible = false;
+      view.rerender(tree());
+    },
+    async comeBack(how: 'link' | 'back') {
+      await act(async () => {
+        await (how === 'back' ? navigateTo!(-1) : navigateTo!('/'));
+      });
+      visible = true;
+      view.rerender(tree());
+    },
     // Leaving the page and opening it again, in the same session cache.
     show(next: boolean) {
       visible = next;
@@ -456,6 +483,53 @@ describe('Insights behind an access re-check', () => {
     await settle();
     expect(stateCalls()).toBe(3);
   });
+
+  it.each(['link', 'back'] as const)(
+    'reads the state again when the person left during a re-check and came back by %s within the reuse window',
+    async (how) => {
+      const view = await setup();
+      await pageShown();
+      const release = view.holdPermissions();
+      await reconnect(view);
+      expectNoPage();
+      await view.leave();
+      release();
+      await settle();
+      // Opportunity B is ignored on another page meanwhile.
+      server = stateWith(['Opportunity B', 'Opportunity C'], {
+        revision: 2,
+        ignored: ['o0'],
+      });
+      await view.comeBack(how);
+      await pageShown();
+      await settle();
+      expect(stateCalls()).toBe(2);
+      expect(screen.getByText('Dismissed 1')).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    [{ judged: 0, held: true }, 1],
+    [{ judged: 0 }, 2],
+  ] as const)(
+    'after judging answers %j, reads the state %i time(s) in all',
+    async (answer, reads) => {
+      server = stateWith(['Opportunity B', 'Opportunity C'], { judge: true });
+      const answerAll = action.getMockImplementation()!;
+      action.mockImplementation(
+        async (resource: string, operation: string, options: never) =>
+          resource === 'nrAnalysis' && operation === 'judgeMissing'
+            ? answer
+            : answerAll(resource, operation, options),
+      );
+      await setup();
+      await pageShown();
+      await waitFor(() => expect(calls('nrAnalysis', 'judgeMissing')).toBe(1));
+      await settle();
+      // Held: the server kept the same unjudged changes. Otherwise another call may have judged them meanwhile.
+      expect(stateCalls()).toBe(reads);
+    },
+  );
 
   it('reads the state again when the re-check answers after the reuse window', async () => {
     const view = await setup();

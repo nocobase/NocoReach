@@ -475,8 +475,8 @@ function Insights({
     // With the side panel open the day's conversation is there; the page gives it the room.
     docked = useChatPanel().open && !!chat;
   // A change no analysis judged yet (an analysis from before every change got a verdict) is judged once in the
-  // background, as the server does after each analysis; the state is read again only when something was judged (the
-  // server answers 0 while it holds the same unjudged set, and a refusal while it holds a failure). A mount after an
+  // background, as the server does after each analysis; the state is read again afterwards, except when the server
+  // held the same unjudged set (`held`, nothing changed) or refused while it holds a failure. A mount after an
   // access re-check does not ask again: the earlier mount's request still ends in the store's state.
   const unjudged = (state.insights?.evidence.signals?.items || []).filter(
       (s) => signalDisposition(s, state, tasks).next === 'judge',
@@ -490,7 +490,7 @@ function Insights({
     judgedRef.current = key;
     store.markJudged(key);
     void judgeMissing(projectId)
-      .then((result) => (result.judged ? store.read() : undefined))
+      .then((result) => (result.held ? undefined : store.read()))
       .then((next) => {
         // New verdicts change the Insights count.
         if (next) refreshNavBadges();

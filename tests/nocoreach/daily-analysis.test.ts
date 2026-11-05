@@ -178,11 +178,11 @@ test('a set the model leaves unjudged is held for 30 minutes; a new change, a ne
  vi.useFakeTimers({toFake:['Date']});
  try{at('2026-11-04T02:00:00Z');const h=judging({judge:signals=>signals.filter(s=>s.key!=='b').map(s=>s.key)});
   assert.deepEqual(await h.page(),{judged:1});assert.deepEqual(h.asked,[['a','b']]);
-  at('2026-11-04T02:29:00Z');assert.deepEqual(await h.page(),{judged:0},'b was asked about and skipped');assert.equal(h.asked.length,1);
+  at('2026-11-04T02:29:00Z');assert.deepEqual(await h.page(),{judged:0,held:true},'b was asked about and skipped');assert.equal(h.asked.length,1);
   assert.deepEqual(await h.a.judgeMissing('1'),{judged:0});assert.deepEqual(h.asked.at(-1),['b'],'the call after an analysis is never held');
   h.st.insights.evidence.signals.items.push(signalOf('c'));
   assert.deepEqual(await h.page(),{judged:1});assert.deepEqual(h.asked.at(-1),['b','c'],'a new change is asked about at once');
-  assert.deepEqual(await h.page(),{judged:0});assert.equal(h.asked.length,3);
+  assert.deepEqual(await h.page(),{judged:0,held:true});assert.equal(h.asked.length,3);
   h.st={...h.st,insights:{...h.st.insights,generatedAt:'2026-11-04T02:30:00.000Z'}};
   assert.deepEqual(await h.page(),{judged:0});assert.equal(h.asked.length,4,'a new analysis is asked about at once');
   at('2026-11-04T02:58:59Z');await h.page();assert.equal(h.asked.length,4);

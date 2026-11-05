@@ -36,6 +36,7 @@ import { KeywordQueryBar, type SeedNote, type SeedStat } from "./keyword-query-b
 import { NotPickedDialog, SelectionSummary, summaryWhen, type Selection } from "./keyword-selection";
 import { useBusinessAccess } from "#hooks/use-business-access";
 import { usePageChange } from "../online-agent/page-changes";
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Market = { locationCode: number; language: string };
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };
@@ -164,7 +165,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const save = async () => {
     if (!projectId || !selected.length) return;
     setBusy("save");
-    try { const r = await call<{ saved: number; skipped: number }>(projectId, "save", { ids: selected.map((s) => s.id) }); toast.success(() => ($t('keywordSuggestions.saved',{0:r.saved,1:r.skipped ? $t('keywordSuggestions.alreadyThere',{0:r.skipped}) : ""}))); setRowSelection({}); onSaved(); }
+    try { const r = await call<{ saved: number; skipped: number }>(projectId, "save", { ids: selected.map((s) => s.id) }); refreshNavSources(); toast.success(() => ($t('keywordSuggestions.saved',{0:r.saved,1:r.skipped ? $t('keywordSuggestions.alreadyThere',{0:r.skipped}) : ""}))); setRowSelection({}); onSaved(); }
     catch (e) { toast.error(() => failure(e, $t('common.notSaved'))); }
     finally { setBusy(""); }
   };
