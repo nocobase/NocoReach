@@ -1631,6 +1631,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "Die Online-KI hat diesmal nicht geantwortet. Versuchen Sie es später erneut oder fügen Sie die Einträge manuell hinzu",
   "aiQuestions.generationManualFallback": "Die Online-KI hat diesmal nicht geantwortet. Versuchen Sie es später erneut oder geben Sie selbst Themen ein",
   "dailyAnalysis.onlineAiGaveNoVerdict": "Die Online-KI hat diesmal keine Entscheidung geliefert. Versuchen Sie es erneut",
+  "dailyAnalysis.judgeRetryIn": "Die übrigen Änderungen konnten diesmal nicht bewertet werden. Versuchen Sie es in {0} Min. erneut.",
   "messages.onlineAiConnectedMessage": "Online-KI ist verbunden.",
   "messages.modelChosenOnlineAiNot": "Das für die Online-KI ausgewählte Modell ist derzeit nicht aktiviert",
   "taskDetail.sawChangeLive": "Änderung auf der Live-Website bestätigt",

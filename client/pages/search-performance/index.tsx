@@ -59,6 +59,7 @@ import { BreakdownCards, METRIC_LABEL, MoversTable, RowDrawer, Segmented, SliceT
 import "../reach-workspace.css";
 import "../data-views.css";
 import { formatCount, formatDate, formatPercent } from '#lib/format';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Totals = { clicks: number; impressions: number; ctr: number; position: number };
 type Filter = { operator: "contains" | "equals"; expression: string };
@@ -495,6 +496,7 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters, on
     try {
       const r = await keywordRequest<{ saved: number; skipped: number }>("saveQueries", { keywords: selected });
       toast.success(() => ($t('common.keywordsSaved',{0:r.saved,1:r.skipped ? $t('common.alreadySaved',{0:r.skipped}) : ""})));
+      refreshNavSources();
       setRowSelection({});
     } catch (e) {
       toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed')));

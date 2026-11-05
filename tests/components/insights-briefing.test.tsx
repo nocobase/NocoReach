@@ -106,10 +106,14 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
     isPending: false,
   }),
 }));
-vi.mock('@nocobase/app-plugin-authorization/client', () => ({
-  useAuthorizationRevision: () => 0,
-  useCan: () => ({ can: true, isPending: false, error: null }),
-}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => {
+  const client = { revision: () => 0 };
+  return {
+    useAuthorizationClient: () => client,
+    useAuthorizationRevision: () => 0,
+    useCan: () => ({ can: true, isPending: false, error: null }),
+  };
+});
 vi.mock('../../client/pages/data-health', () => ({
   loadHealth: () => Promise.resolve({ items: [] }),
   healthText: (name: string) => name,

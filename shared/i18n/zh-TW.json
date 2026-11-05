@@ -1631,6 +1631,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "線上 AI 這次沒有回答，請稍後再試或手動新增",
   "aiQuestions.generationManualFallback": "線上 AI 這次沒有回答，請稍後再試或自己填主題",
   "dailyAnalysis.onlineAiGaveNoVerdict": "線上 AI 這次沒有給出判斷，請再試一次",
+  "dailyAnalysis.judgeRetryIn": "剩下的變化這次沒能判斷，{0} 分鐘後可以再試。",
   "messages.onlineAiConnectedMessage": "線上 AI 連線正常。",
   "messages.modelChosenOnlineAiNot": "線上 AI 選的模型現在沒有啟用",
   "taskDetail.sawChangeLive": "已確認改動上線",

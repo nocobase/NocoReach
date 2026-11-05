@@ -86,6 +86,7 @@ import {
   type SiteRank,
 } from './keyword-api';
 import { formatChange, formatDate } from '#lib/format';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Market = { locationCode: number; language: string };
 type Item = {
@@ -371,6 +372,7 @@ function Detail({
           ? $t('keywordDetail.savedKeyword', { 0: keyword })
           : $t('keywordDetail.alreadySaved'),
       );
+      refreshNavSources();
       site.reload();
     } catch (e) {
       toast.error(() =>

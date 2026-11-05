@@ -40,6 +40,7 @@ import "./data-views.css";
 import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { formatCount, formatDateTime } from '#lib/format';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };
 type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
@@ -212,7 +213,7 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
   useHandOffSource("domain-keywords", project ? { count: selected.length, open: handOff, noun: $t('common.keywordsSelected'), actions: <> <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t('common.saveKeywords')}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t('common.export')}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const csv = (list: (Row)[]) => downloadCsv($t('domainOverview.competitorKeywords',{0:run.spec.target}), [$t('common.keywords'), $t('common.position'), $t('common.monthlyVolume'), $t('domainOverview.estimatedTraffic'), $t('common.rankingPage'), $t('common.difficulty'), $t('common.intent'), ...(own ? [$t('domainOverview.clicks')] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, getIntentLabels()[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error(() => ($t('common.noKeywordsExport')));
   const save = async () => {
-    try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success(() => ($t('common.keywordsSaved',{0:r.saved,1:r.skipped ? $t('common.alreadySaved',{0:r.skipped}) : ""}))); setRowSelection({}); }
+    try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success(() => ($t('common.keywordsSaved',{0:r.saved,1:r.skipped ? $t('common.alreadySaved',{0:r.skipped}) : ""}))); refreshNavSources(); setRowSelection({}); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'))); }
   };
   return (

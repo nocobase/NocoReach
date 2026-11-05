@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { DailyAnalysis, parseOutput, validInsight, buildInput, styleIssues, width, NODE_TYPE, WORKFLOW_TITLE } from '../../server/nocoreach/daily-analysis.js';
 import { scheduledToday, retryable } from '../../server/nocoreach/daily-analysis.js';
 import * as __daily_analysis from '../../server/nocoreach/daily-analysis.js';
+import { ModelPreparationError } from '../../server/nocoreach/execution/provider.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 const test=__vitest_test;
 // Stand-in for the host's workflow plugin package, only for the instruction registration test.
 const good={title:'改写快速开始标题',reason:'曝光 5,848，点击率只有 0.4%',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',signalIds:['k']};
@@ -132,6 +134,111 @@ test('changes left without a verdict are judged in one extra call; nothing to do
  h.plugin.strategy.reviewSignals=async(id,v)=>{got=v.reviews;};
  assert.deepEqual(await h.a.judgeMissing('1'),{judged:1});assert.deepEqual(JSON.parse(h.calls[0].user).signals.map(s=>s.key),['b'],'only the change nobody judged');assert.deepEqual(got,[{key:'b',verdict:'skip',reason:'影响很小'}]);
  h.plugin.strategy.state=async()=>({revision:1,insights:{items:[],signalReviews:{b:{verdict:'do',reason:''}},evidence:{signals:{items:[{key:'b'}]}}}});const before=h.calls.length;assert.deepEqual(await h.a.judgeMissing('1'),{judged:0});assert.equal(h.calls.length,before,'no call when nothing is missing');
+});
+
+// Insights' judging of the changes left without a verdict: one model call per project at a time, and a hold on the
+// exact set (project, analysis, missing keys) so a set the model will not judge is not paid for on every visit.
+const signalOf=key=>({key,source:'github',title:key,facts:[],actionable:true});
+function judging({keys=['a','b'],judge=signals=>signals.map(s=>s.key)}={}){
+ const h=harness({reply:''}),warned=[];h.plugin.app.logger={warn:(message,fields)=>warned.push({message,fields})};h.warned=warned;
+ h.st={revision:1,proposals:[],insights:{generatedAt:'2026-11-04T01:00:00.000Z',items:[],signalReviews:{},evidence:{signals:{items:keys.map(signalOf)}}}};
+ h.reads=0;h.plugin.strategy.state=async()=>{h.reads++;return h.st;};
+ h.plugin.strategy.reviewSignals=async(id,v)=>{const got=Object.fromEntries(v.reviews.map(r=>[r.key,{verdict:r.verdict,reason:r.reason}]));h.st={...h.st,insights:{...h.st.insights,signalReviews:{...got,...h.st.insights.signalReviews}}};};
+ // The system's default chat model and its service's connection, which an administrator changes to fix a failure.
+ h.setup={chat:{modelService:'svc',model:'m1'},apiKey:'k1'};
+ h.plugin.agents={models:{services:{defaults:async()=>({effectiveChat:h.setup.chat}),connectionFor:async()=>({provider:'openai',baseUrl:null,apiKey:h.setup.apiKey})}}};
+ h.asked=[];h.fail=null;h.gate=null;
+ h.a.model=async(system,user,operation)=>{if(operation!=='daily-judge-many')return {text:'{"observations":["a"],"insights":[]}',model:'m'};
+  const signals=JSON.parse(user).signals;h.asked.push(signals.map(s=>s.key));if(h.gate)await h.gate;if(h.fail)throw h.fail;
+  return {text:JSON.stringify({reviews:judge(signals).map(key=>({key,verdict:'skip',reason:'r'}))}),model:'m'};};
+ let actions;h.plugin.app.resourceManager={define:d=>{actions=d.actions;}};h.plugin.app.acl={allow:()=>{}};h.plugin.app.pm={get:()=>undefined};h.plugin.project=async()=>({id:1});h.a.register();
+ // nrAnalysis:judgeMissing as the route calls it, for a NocoBase root user unless another caller is given.
+ h.page=async({user={id:'root'},locale='en-US',projectId='1'}={})=>{const ctx={auth:user?{user}:{},state:{currentRoles:['root']},action:{resourceName:'nrAnalysis',actionName:'judgeMissing',params:{values:{projectId}}},db:h.plugin.db,getCurrentLocale:()=>locale,throw:(status,message)=>{throw Object.assign(new Error(message),{status});}};await actions.judgeMissing(ctx,async()=>{});return ctx.body;};
+ return h;}
+const at=iso=>vi.setSystemTime(new Date(iso));
+const refused=(status,text)=>e=>e.status===status&&text.test(e.message);
+// The error the call that failed answers with, as before holds: its own message and status, or the generic 502 text.
+const original=(status,message)=>e=>e.status===status&&e.message===message;
+const configurationText=new ModelPreparationError('model_configuration').message,generic=systemMessageText('dailyAnalysis.analysisNotCompleteTryAgain');
+
+test('judging calls for the same changes share one model call; one for another set waits for it',async()=>{
+ const h=judging();let open;h.gate=new Promise(r=>{open=r;});
+ const calls=[h.page(),h.page({locale:'zh-CN'}),h.a.judgeMissing('1')];
+ await vi.waitFor(()=>{assert.equal(h.reads,3);assert.equal(h.asked.length,1);});await new Promise(r=>setTimeout(r,0));
+ open();assert.deepEqual(await Promise.all(calls),[{judged:2},{judged:2},{judged:2}]);assert.deepEqual(h.asked,[['a','b']],'one model call for all three');
+ assert.deepEqual(await h.page(),{judged:0});assert.equal(h.asked.length,1,'nothing left to judge');
+ // A new analysis while the page's call for the old one is out: the call after the analysis waits, then asks about its own set.
+ const g=judging();g.gate=new Promise(r=>{open=r;});const page=g.page();await vi.waitFor(()=>assert.equal(g.asked.length,1));
+ g.st={...g.st,insights:{...g.st.insights,generatedAt:'2026-11-04T02:00:00.000Z',evidence:{signals:{items:['c','d'].map(signalOf)}}}};
+ const afterRun=g.a.judgeMissing('1');await new Promise(r=>setTimeout(r,0));assert.equal(g.asked.length,1,'waits for the call in flight');
+ open();assert.deepEqual(await page,{judged:2});assert.deepEqual(await afterRun,{judged:2});assert.deepEqual(g.asked,[['a','b'],['c','d']]);
+});
+
+test('a set the model leaves unjudged is held for 30 minutes; a new change, a new analysis or the call after an analysis asks at once',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{at('2026-11-04T02:00:00Z');const h=judging({judge:signals=>signals.filter(s=>s.key!=='b').map(s=>s.key)});
+  assert.deepEqual(await h.page(),{judged:1});assert.deepEqual(h.asked,[['a','b']]);
+  at('2026-11-04T02:29:00Z');assert.deepEqual(await h.page(),{judged:0,held:true},'b was asked about and skipped');assert.equal(h.asked.length,1);
+  assert.deepEqual(await h.a.judgeMissing('1'),{judged:0});assert.deepEqual(h.asked.at(-1),['b'],'the call after an analysis is never held');
+  h.st.insights.evidence.signals.items.push(signalOf('c'));
+  assert.deepEqual(await h.page(),{judged:1});assert.deepEqual(h.asked.at(-1),['b','c'],'a new change is asked about at once');
+  assert.deepEqual(await h.page(),{judged:0,held:true});assert.equal(h.asked.length,3);
+  h.st={...h.st,insights:{...h.st.insights,generatedAt:'2026-11-04T02:30:00.000Z'}};
+  assert.deepEqual(await h.page(),{judged:0});assert.equal(h.asked.length,4,'a new analysis is asked about at once');
+  at('2026-11-04T02:58:59Z');await h.page();assert.equal(h.asked.length,4);
+  at('2026-11-04T02:59:00Z');await h.page();assert.equal(h.asked.length,5,'asked again 30 minutes after the last call');
+  assert.equal(h.warned.length,0,'skipping is not a failure');
+ }finally{vi.useRealTimers();}
+});
+
+test('a transient failure is answered with its status and held for 2 minutes, then asked again',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{at('2026-11-04T02:00:00Z');const h=judging();h.fail=Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'});
+  await assert.rejects(h.page(),original(502,generic),'the call that failed answers as before');assert.equal(h.asked.length,1);
+  assert.equal(h.warned.length,1);assert.equal(h.warned[0].message,'NocoReach judging changes failed');assert.equal(h.warned[0].fields.retryable,true);assert.equal(h.warned[0].fields.retryInMinutes,2);
+  assert.ok(!JSON.stringify(h.warned).includes('signals'),'the prompt is not logged');
+  await assert.rejects(h.page(),refused(503,/Try again in 2 min\./),'a later call is refused with the hold');
+  at('2026-11-04T02:01:01Z');await assert.rejects(h.page({locale:'zh-CN'}),refused(503,/1 分钟后可以再试/));
+  assert.equal(h.asked.length,1);assert.equal(h.warned.length,1,'a held failure is not logged again');
+  h.fail=null;at('2026-11-04T02:02:00Z');assert.deepEqual(await h.page(),{judged:2});assert.equal(h.asked.length,2);
+ }finally{vi.useRealTimers();}
+});
+
+test('a failure that trying again soon would not cure is held for 30 minutes, until the model setup changes',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{at('2026-11-04T02:00:00Z');const h=judging();h.fail=new ModelPreparationError('model_configuration');let open;h.gate=new Promise(r=>{open=r;});
+  // Polled by hand: vi.waitFor would move the faked clock.
+  const first=[h.page(),h.page()];while(h.reads<2||!h.asked.length)await new Promise(r=>setTimeout(r,1));await new Promise(r=>setTimeout(r,0));open();h.gate=null;
+  for(const call of first)await assert.rejects(call,original(409,configurationText),'the failed call and the one sharing it answer with the cause');
+  assert.equal(h.asked.length,1);assert.equal(h.warned.length,1);assert.equal(h.warned[0].fields.retryable,false);
+  await assert.rejects(h.page(),refused(409,/Try again in 30 min\./));
+  at('2026-11-04T02:10:00Z');await assert.rejects(h.page(),refused(409,/Try again in 20 min\./));assert.equal(h.asked.length,1);assert.equal(h.warned.length,1);
+  h.fail=null;h.setup.chat={modelService:'svc',model:'m2'};assert.deepEqual(await h.page(),{judged:2});assert.equal(h.asked.length,2,'a new default model is asked at once');
+  // A call the model rejected (it may have been billed): held until its service's connection changes, or for 30 minutes.
+  const g=judging();g.fail=Object.assign(new Error('rejected'),{name:'ModelError',code:'provider'});
+  await assert.rejects(g.page(),original(502,generic));at('2026-11-04T02:20:00Z');await assert.rejects(g.page(),refused(502,/20 min/));assert.equal(g.asked.length,1);
+  g.setup.apiKey='k2';await assert.rejects(g.page(),original(502,generic));assert.equal(g.asked.length,2,'a new key is tried at once');
+  at('2026-11-04T02:50:00Z');await g.page().catch(()=>undefined);assert.equal(g.asked.length,3,'and again after 30 minutes');
+  assert.equal(g.warned.length,3,'each real failure is logged once');
+ }finally{vi.useRealTimers();}
+});
+
+test('the caller and the project are checked before a hold or a call in flight is looked at',async()=>{
+ const h=judging();h.fail=new ModelPreparationError('model_configuration');
+ await assert.rejects(h.page(),original(409,configurationText));await assert.rejects(h.page(),refused(409,/30 min/));const reads=h.reads;
+ await assert.rejects(h.page({user:null}),e=>e.status===401);
+ await assert.rejects(h.page({projectId:'x'}),e=>e.status===400);
+ h.plugin.project=async()=>{throw Object.assign(new Error('no such project'),{status:404});};
+ await assert.rejects(h.page(),e=>e.status===404);
+ assert.equal(h.reads,reads,'refused before the state is read or a hold consulted');assert.equal(h.asked.length,1);
+});
+
+test('the analysis still judges what it left, whatever is held for Insights',async()=>{
+ const h=judging();h.fail=new ModelPreparationError('model_configuration');await assert.rejects(h.page(),original(409,configurationText));
+ h.fail=null;await assert.rejects(h.page(),refused(409,/30 min/),'held for Insights');
+ const entry=await h.a.run('1','manual');assert.equal(entry.ok,true);assert.deepEqual(h.asked,[['a','b'],['a','b']],'the call after the analysis asks');
+ assert.deepEqual(await h.page(),{judged:0});assert.equal(h.asked.length,2);
+ for(let i=0;i<250;i++)h.a.holdJudgement(String(i+2),{key:'k',until:0});assert.equal(h.a.judgeHolds.size,200,'holds stay bounded');
 });
 
 // 每日分析的失败处理 (2026-10-08, ROADMAP ④).
