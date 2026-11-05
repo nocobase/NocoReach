@@ -138,7 +138,7 @@ class WebsiteReport{
  zonePending=new Map<string,Promise<string>>();
  tokens=new Map<string|number,{at:number;token:string}>();
  history:Ga4ReportCache;
- constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
+ constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();this.liveSummaryCache=new Map();}
  // The project's Google connection (proxy profile or simulated upstream), the same one the sync uses.
  json(id,url,init){return googleJson(url,init,this.p.googleFetch?.(id));}
  // Access tokens last an hour; keep one for 45 minutes so the per-minute realtime view does not refresh it every time.
@@ -298,7 +298,7 @@ class WebsiteReport{
  // `summary` is what Traffic's Today card shows with its details closed (the users, the minutes and the figures): two of
  // the seven requests. A full read still fresh answers it too.
  realtime(id:string|number,property:string,summary=false){return this.requests.share<unknown>(['realtime',summary?'summary':'full',...this.scope(id,property)],()=>this.readRealtime(id,property,summary));}
- async readRealtime(id,property,summary=false){const scope=JSON.stringify(this.scope(id,property)),key=summary?`summary:${scope}`:scope,full=this.liveCache.get(scope),hit=summary&&full&&Date.now()<full.cacheExpiresAt?full:this.liveCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
+ async readRealtime(id,property,summary=false){const key=JSON.stringify(this.scope(id,property)),cache=summary?this.liveSummaryCache:this.liveCache,full=this.liveCache.get(key),hit=summary&&full&&Date.now()<full.cacheExpiresAt?full:cache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
   const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
    ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount'],'eventCount',20]];
@@ -314,6 +314,6 @@ class WebsiteReport{
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
    devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{}),...(summary?{summary:true}:{})};
-  value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;this.liveCache.set(key,value);return value;}
+  value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;cache.set(key,value);return value;}
 }
 export { WebsiteReport, TABLES, CHANGES, FIRST_TABLES, REST_TABLES, tableRows, changeRows, rowsOf, values, RETRY_429_MS, withGa4RetryDeadline };
