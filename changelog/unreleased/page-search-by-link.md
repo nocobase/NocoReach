@@ -1,5 +1,0 @@
-## Tasks: find a page or blog post by its link
-
-- Which page to change? on the task page finds a page by its link, not only by its title. A whole address (`https://www.nocobase.com/en/blog/sungrow`), a domain with a path (`nocobase.com/en/blog/sungrow`) or a path (`/en/blog/sungrow`) finds the site page it is, whatever its scheme, `www.`, trailing slash, query or the language prefix the site's canonicals drop, and the CMS article it is, through the publishing target's page addresses, as the start card finds a task's article. The article is listed once, as the Blog post. Searching by title works as before.
-- A link on the project's own site that neither Website content nor a publishing target knows is offered as Use this link, which makes it the task's page like a site page. Links to other sites are not offered, and the server only links pages on the project's domains or the sites Website content reads.
-- The same search applies to Related page, the article picker in Choose where to make the change, and the search box of Site & product › Pages.
