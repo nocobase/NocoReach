@@ -2,6 +2,10 @@ name: Publish internal Docker image
 
 on:
   workflow_call:
+    outputs:
+      digest:
+        description: Verified published image digest
+        value: ${{ jobs.image.outputs.digest }}
     inputs:
       release_tag:
         required: true
@@ -36,6 +40,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
       RELEASE_SHA: ${{ inputs.release_sha }}
@@ -95,6 +101,7 @@ jobs:
           docker run --rm --network none --workdir /app/dist "$IMAGE" \
             node --input-type=module -e "await import('@nocobase/db-postgres'); await import('@nocobase/db-sqlite');"
       - name: Authenticate and push the versioned image
+        id: push
         env:
           IMAGE: ${{ steps.release.outputs.image }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
@@ -105,6 +112,7 @@ jobs:
           docker pull "$IMAGE"
           digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           test -n "$digest"
+          printf 'digest=%s\n' "${digest##*@}" >> "$GITHUB_OUTPUT"
           printf 'Image: `%s`\n\nDigest: `%s`\n\nPlatform: `linux/amd64`\n' "$IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
       - name: Check whether this release should update latest
         id: latest
