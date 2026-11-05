@@ -148,6 +148,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-pnpm
+      # Each test gets a database of its own, so two workers share the server without sharing data.
       - name: Verify migrations and business behavior
         if: matrix.suite == 'app'
         run: >-
@@ -158,7 +159,7 @@ jobs:
           tests/nocoreach/schedule-timezone-app.test.ts
           tests/nocoreach/manual-tasks-app.test.ts
           tests/nocoreach/project-access-app.test.ts
-          --maxWorkers=1 --testTimeout=120000 --hookTimeout=120000
+          --maxWorkers=2 --testTimeout=120000 --hookTimeout=120000
       - name: Verify PostgreSQL timestamp upgrades
         if: matrix.suite == 'app' && matrix.dialect == 'postgres'
         run: pnpm exec vitest run tests/nocoreach/postgres-timestamps.test.ts --maxWorkers=1 --testTimeout=120000
