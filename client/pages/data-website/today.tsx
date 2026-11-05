@@ -35,6 +35,7 @@ import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { DetailDrawer } from '../detail-drawer';
 import { usePolled } from './use-polled';
+import { useWorkspaceCache } from '../workspace-cache';
 import {
   change,
   count,
@@ -106,8 +107,9 @@ export function TodayCard({
     // A failed read is tried again after a minute, as the details cannot be opened without a figure.
     GA4_REALTIME_CACHE_MS,
   );
+  const detailsKey = projectId ? `live:${projectId}:${propertyId}` : null;
   const details = usePolled<Realtime>(
-    projectId && open ? `live:${projectId}:${propertyId}` : null,
+    open ? detailsKey : null,
     () =>
       api.action<Realtime>('nrDataViews', 'websiteRealtime', {
         method: 'POST',
@@ -119,7 +121,11 @@ export function TodayCard({
   );
   const t = today.data?.connected ? today.data : null;
   const card = live.data?.connected ? live.data : null;
-  const full = details.data?.connected ? details.data : null;
+  // Closing the details stops their reads, not their last answer: the card keeps showing it while it is the newer one.
+  const cache = useWorkspaceCache();
+  const lastDetails =
+    details.data ?? (detailsKey ? cache.peek<Realtime>(detailsKey) : undefined);
+  const full = lastDetails?.connected ? lastDetails : null;
   // Whichever was read last: the details read every minute while open, the card every half hour.
   const r =
     full && (!card || Date.parse(full.fetchedAt) >= Date.parse(card.fetchedAt))

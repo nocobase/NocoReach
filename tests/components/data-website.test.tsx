@@ -422,6 +422,33 @@ describe('访问', () => {
     }
   });
 
+  it('keeps the newer figures the details read after they are closed', async () => {
+    action.mockImplementation(
+      async (_resource: string, name: string, options?: unknown) => {
+        if (name === 'website') return firstOf(report);
+        if (name === 'websiteTables') return restOf(report);
+        if (name === 'websiteToday') return today;
+        if (name === 'websiteRealtime')
+          return (options as { body: { summary?: boolean } }).body.summary
+            ? { ...live, summary: true, pages: [] }
+            : { ...live, fetchedAt: '2026-10-14T06:25:00Z', users: 52 };
+        throw new Error(`unexpected ${name}`);
+      },
+    );
+    renderPage();
+    const users = () =>
+      document.querySelector('[data-realtime-users]')?.textContent;
+    await waitFor(() => expect(users()).toBe('37'));
+    await userEvent.click(screen.getByRole('button', { name: '实时详情' }));
+    const drawer = await screen.findByRole('dialog');
+    await within(drawer).findByText('Docs');
+    await userEvent.click(
+      within(drawer).getByRole('button', { name: '关闭详情' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(users()).toBe('52');
+  });
+
   it('tries realtime again after a minute when it failed, though the card otherwise reads it every half hour', async () => {
     const original = action.getMockImplementation()!;
     let failures = 1;
