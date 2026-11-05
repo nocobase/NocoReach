@@ -77,6 +77,8 @@ const enUS = {
   'nocoreach.nav.trends': 'Trends',
   'nocoreach.nav.competitors': 'Competitors',
   'nocoreach.nav.aiSearch': 'AI search',
+  'nocoreach.nav.seoTag': 'SEO',
+  'nocoreach.nav.geoTag': 'GEO',
   'nocoreach.nav.community': 'Community',
   'nocoreach.nav.forum': 'Forum',
   'nocoreach.nav.hackerNews': 'Hacker News',

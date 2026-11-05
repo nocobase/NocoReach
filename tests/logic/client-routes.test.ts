@@ -213,7 +213,7 @@ describe('app client routes', () => {
     );
   });
 
-  it('lists Keywords and AI search first in Search & market, featured, and moves nothing else', () => {
+  it('lists Keywords and AI search first in Search & market, tagged SEO and GEO, and moves nothing else', () => {
     const findGroup = (name: string) =>
       resolveRoutes().routes.find((route) => route.name === name);
     const search = findGroup('nav-search');
@@ -228,30 +228,30 @@ describe('app client routes', () => {
         .map((route) => ({
           name: route.name,
           path: route.path,
-          featured: route.navigation?.featured ?? false,
+          tag: route.navigation?.tag,
           authz: route.authz,
         })),
     ).toEqual(
       [
-        ['saved-keywords', '/keywords', true],
-        ['ai-search', '/ai-search', true],
-        ['search-growth', '/seo-opportunities', false],
-        ['data-trends', '/trends', false],
-        ['domain-overview', '/research/domain', false],
-      ].map(([name, path, featured]) => ({
+        ['saved-keywords', '/keywords', 'nocoreach.nav.seoTag'],
+        ['ai-search', '/ai-search', 'nocoreach.nav.geoTag'],
+        ['search-growth', '/seo-opportunities', undefined],
+        ['data-trends', '/trends', undefined],
+        ['domain-overview', '/research/domain', undefined],
+      ].map(([name, path, tag]) => ({
         name,
         path,
-        featured,
+        tag,
         authz: { resource: { type: 'page', id: name }, action: 'access' },
       })),
     );
-    // The option marks these two entries only.
-    const featured = (routes: readonly AppClientRegisteredRoute[]): string[] =>
+    // The option tags these two entries only.
+    const tagged = (routes: readonly AppClientRegisteredRoute[]): string[] =>
       routes.flatMap((route) => [
-        ...(route.navigation?.featured ? [route.name] : []),
-        ...featured(route.children ?? []),
+        ...(route.navigation?.tag ? [route.name] : []),
+        ...tagged(route.children ?? []),
       ]);
-    expect(featured(resolveRoutes().routes)).toEqual([
+    expect(tagged(resolveRoutes().routes)).toEqual([
       'saved-keywords',
       'ai-search',
     ]);

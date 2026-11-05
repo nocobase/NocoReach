@@ -45,43 +45,41 @@ import {
 const SELECTED =
   'data-active:bg-sidebar-primary data-active:text-sidebar-primary-foreground data-active:hover:bg-sidebar-primary data-active:hover:text-sidebar-primary-foreground';
 
-// NocoReach: `navigation.featured` marks a hands-on tool among the pages that show data (Search & market › Keywords and
-// AI search). Its icon keeps the AI violet (`--agent`, lighter in the dark theme) in every state, the selected one
-// included, and its label is medium weight. The template's navigation declares no such option, so it is added here
-// rather than matched by path in CSS.
+// NocoReach: `navigation.tag` is a short word after an entry's label, a key translated like its title. Search & market
+// tags Keywords "SEO" and AI search "GEO", the hands-on tools among the pages that show data. The tag sits on a pale
+// violet ground, apart from the orange counts, and takes the selected colors with its entry. Where only the icon shows
+// (the collapsed sidebar) it is hidden, and the tooltip and the entry's name carry it ("Keywords · SEO"). The
+// template's navigation declares no such option, so it is added here rather than drawn for particular paths.
 declare module '@nocobase/app-client/plugins' {
   interface AppClientRouteNavigation {
-    readonly featured?: boolean;
+    readonly tag?: string;
   }
 }
 
-function EntryIcon({
-  item,
-}: {
-  readonly item: RouteNavigationItem;
-}): ReactElement | null {
-  const navigation = item.route.navigation;
-  const Icon = navigation?.icon;
-  if (!Icon) return null;
-  return <Icon className={navigation.featured ? 'text-agent' : undefined} />;
-}
+// The tag's 10.5px type is below the theme's text scale on purpose: it reads as a label, not as a count.
+const TAG =
+  'ml-auto shrink-0 rounded-sm bg-nr-tint-violet px-1.5 text-[10.5px] leading-4 font-semibold tracking-wide text-nr-ink-violet group-data-[collapsible=icon]:hidden in-data-active:bg-sidebar-primary-foreground/10 in-data-active:text-sidebar-primary-foreground';
 
-/** An entry's icon and label, as every form of entry draws them. */
+/** An entry's icon, label and tag, as every form of entry draws them. The tag's words are in the entry's name. */
 function EntryContent({
   item,
   label,
+  tag,
 }: {
   readonly item: RouteNavigationItem;
   readonly label: string;
+  readonly tag?: string;
 }): ReactElement {
+  const Icon = item.route.navigation?.icon;
   return (
     <>
-      <EntryIcon item={item} />
-      <span
-        className={item.route.navigation?.featured ? 'font-medium' : undefined}
-      >
-        {label}
-      </span>
+      {Icon ? <Icon /> : null}
+      <span className={tag ? 'min-w-0 truncate' : undefined}>{label}</span>
+      {tag ? (
+        <span aria-hidden className={TAG}>
+          {tag}
+        </span>
+      ) : null}
     </>
   );
 }
@@ -254,6 +252,12 @@ function useItemLabel(item: RouteNavigationItem): string {
   return t(title, { defaultValue: title });
 }
 
+function useItemTag(item: RouteNavigationItem): string | undefined {
+  const { t } = useTranslation(item.route.packageName);
+  const tag = item.route.navigation?.tag;
+  return tag ? t(tag, { defaultValue: tag }) : undefined;
+}
+
 /** Closes the phone's sheet once an entry is chosen; the desktop sidebar stays as it is. */
 function useCloseOnNavigate(): () => void {
   const { isMobile, setOpenMobile } = useSidebar();
@@ -281,11 +285,14 @@ function NavigationItem({
   const closeSheet = useCloseOnNavigate();
   const navigate = onNavigate ?? closeSheet;
   const label = useItemLabel(item);
+  const tag = useItemTag(item);
   const isSelected = routeKey(item.route) === selectedKey;
   const children = item.children;
   const disclosure = useDisclosure(item, selectedKey);
   const badge = useNavigationBadge(item);
-  const counted = badge.count > 0 ? `${label} · ${badge.text}` : null;
+  const named = [label, tag, badge.count > 0 ? badge.text : undefined]
+    .filter(Boolean)
+    .join(' · ');
   const tooltip = inPopover
     ? undefined
     : { children: label, role: 'tooltip', sideOffset: 8 };
@@ -327,14 +334,12 @@ function NavigationItem({
         <SidebarMenuButton
           render={link}
           isActive={isSelected}
-          // A counted entry is named with its count, as its tooltip shows it.
-          aria-label={counted ?? undefined}
-          tooltip={
-            tooltip && counted ? { ...tooltip, children: counted } : tooltip
-          }
+          // A tagged or counted entry is named with its tag and count, as its tooltip shows them.
+          aria-label={named === label ? undefined : named}
+          tooltip={tooltip ? { ...tooltip, children: named } : tooltip}
           className={SELECTED}
         >
-          <EntryContent item={item} label={label} />
+          <EntryContent item={item} label={label} tag={tag} />
         </SidebarMenuButton>
         {badge.count > 0 && (
           <EntryBadge
@@ -442,6 +447,7 @@ function NavigationSubItem({
   onNavigate,
 }: ItemProps): ReactElement | null {
   const label = useItemLabel(item);
+  const tag = useItemTag(item);
   const isSelected = routeKey(item.route) === selectedKey;
   const disclosure = useDisclosure(item, selectedKey);
   const children = item.children;
@@ -470,9 +476,10 @@ function NavigationSubItem({
         <SidebarMenuSubButton
           render={link}
           isActive={isSelected}
+          aria-label={tag ? `${label} · ${tag}` : undefined}
           className={SELECTED}
         >
-          {content}
+          <EntryContent item={item} label={label} tag={tag} />
         </SidebarMenuSubButton>
       </SidebarMenuSubItem>
     );
@@ -572,6 +579,7 @@ function NavigationPopover({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const restoringFocusRef = useRef(false);
+  const Icon = item.route.navigation?.icon;
   const page = Boolean(item.route.componentLoader);
   const close = () => setOpen(false);
   return (
@@ -617,11 +625,7 @@ function NavigationPopover({
         }
         aria-label={label}
       >
-        {item.route.navigation?.icon ? (
-          <EntryIcon item={item} />
-        ) : (
-          <span>{label}</span>
-        )}
+        {Icon ? <Icon /> : <span>{label}</span>}
       </SidebarMenuButton>
       <PopoverContent
         side='right'
