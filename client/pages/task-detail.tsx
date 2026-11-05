@@ -22,7 +22,10 @@ import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { choicePlace } from './task-detail/step-place.js';
 import { StartedCard } from './task-detail/started-card.js';
 import { startBrief } from './task-detail/started-model.js';
-import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
+import { ArticleReview } from './task-detail/article-review.js';
+import { ArticleEditActions, ArticleEditFields, RequestChangesBox } from './task-detail/article-edit.js';
+import { editedLine, editsLine } from './task-detail/article-edit-model.js';
+import { ArticleEditContext, useArticleEdit, useArticleEditSession, useArticleSubmit, type ArticleEditSession } from './task-detail/article-edit-session.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
 import { againstPrevious, canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
 import { localeName } from './article-targets-api';
@@ -42,7 +45,7 @@ import { SnoozeDialog, SnoozedCard } from './task-detail/task-snooze.js';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import {Outlet,useLocation,useNavigate,useSearchParams} from 'react-router';
+import {Outlet,useNavigate,useSearchParams} from 'react-router';
 import {createUuid,useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
@@ -85,7 +88,7 @@ type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 // the Agent above"): open the Agent picker in Properties, focus the message to the Agent, choose the related page, and
 // complete the current step by hand (asked from the task menu, carried out by the card that holds the form), and go to
 // the task an accepted document was handed over to.
-const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number;handedOver:(taskId:string)=>void;snooze:()=>void}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0,handedOver:()=>undefined,snooze:()=>undefined});
+const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number;handedOver:(taskId:string)=>void;snooze:()=>void;showVersions:()=>void;versionsAsk:number}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0,handedOver:()=>undefined,snooze:()=>undefined,showVersions:()=>undefined,versionsAsk:0});
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 // Why a run failed and what to do (task-detail/failure-model.ts). Trying again cannot help these until someone signs in,
@@ -126,18 +129,16 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const releasePolling=w.release?.state==='publishing'||w.release?.state==='exporting';
  // The playbook chosen in the start card; the header's steps follow it before the task starts.
  const [pick,setPick]=useState(w.playbookId||data.playbookDefault||'optimize-page');
- const [evidenceOpen,setEvidenceOpen]=useState(false),[snoozeOpen,setSnoozeOpen]=useState(false),[pageOpen,setPageOpen]=useState(false),[agentPicker,setAgentPicker]=useState(false),[manualAsk,setManualAsk]=useState(0),[handedTo,setHandedTo]=useState<string>();
+ const [evidenceOpen,setEvidenceOpen]=useState(false),[snoozeOpen,setSnoozeOpen]=useState(false),[pageOpen,setPageOpen]=useState(false),[agentPicker,setAgentPicker]=useState(false),[manualAsk,setManualAsk]=useState(0),[versionsAsk,setVersionsAsk]=useState(0),[handedTo,setHandedTo]=useState<string>();
  const actions=useMemo(()=>({manualAsk,askManual:()=>setManualAsk(n=>n+1),choosePage:()=>setPageOpen(true),
   pickAgent:()=>{document.getElementById('task-agent-menu')?.scrollIntoView?.({block:'center'});setAgentPicker(true);},
-  messageAgent:()=>{const box=document.getElementById('nr-composer');box?.scrollIntoView?.({block:'center'});box?.focus();},handedOver:setHandedTo,snooze:()=>setSnoozeOpen(true)}),[manualAsk]);
+  messageAgent:()=>{const box=document.getElementById('nr-composer');box?.scrollIntoView?.({block:'center'});box?.focus();},handedOver:setHandedTo,snooze:()=>setSnoozeOpen(true),
+  // The article's versions are Activity's lines (2026-11-04): all of them shown, and Activity brought into view.
+  versionsAsk,showVersions:()=>setVersionsAsk(n=>n+1)}),[manualAsk,versionsAsk]);
  // Accept and start lands on the new task (2026-10-24 user report: the person stayed on the old one and could not tell
  // whether the next one had started), once the request has settled so the page's leave guard lets it go.
  const navigate=useNavigate();
  useEffect(()=>{if(handedTo&&!busy)void navigate(`/actions/${handedTo}`);},[handedTo,busy,navigate]);
- // Request changes on the article's reading page returns here to the message box, once the reading page no longer
- // covers this one (its layer makes the page inert while open).
- const feedbackAskRef=useRef(false),{pathname}=useLocation();
- useEffect(()=>{if(!feedbackAskRef.current)return;const box=document.getElementById('nr-composer');if(box?.closest('[inert]'))return;feedbackAskRef.current=false;if(box)actions.messageAgent();},[pathname,actions]);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined).finally(()=>setMembersLoaded(true));},[projectId]);
  useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
  // A message the box at the bottom of Activity failed to send says why beside the box, where the person is writing.
@@ -152,6 +153,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
  const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t('common.owner')};
+ // The edits to an article under review, shared by its card, its full-screen page and Activity's message box.
+ const articleEdit=useArticleEditSession({projectId,taskId,data,allowed:access.allowed,update});
  const title=shownTitle(data,started?undefined:list?.playbooks.find(x=>x.id===pick));
  const no=(data.task.evidence as {no?:number}|undefined)?.no,heading=no?`T-${no} ${title}`:title;
  // The trail leads back the way the user came: from Results with its filters, otherwise to the task board.
@@ -160,7 +163,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  // the activity on the left, and on the right why the task exists, its properties and its performance, always in that
  // order. Below 1280px the two columns become one: why, properties, now (with what the task was started with under it
 // once it has started), performance, activity.
- return <TaskAccess.Provider value={access}><TaskActions.Provider value={actions}><PageContainer className="nr-task-page">
+ return <TaskAccess.Provider value={access}><TaskActions.Provider value={actions}><ArticleEditContext.Provider value={articleEdit}><PageContainer className="nr-task-page">
   <TaskHeading data={data} title={title} list={list} pick={pick} busy={busy} members={members} update={update} onPage={()=>setPageOpen(true)}/>
   <div className={cn('flex flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start',GAP)}>
    <div className={cn('contents xl:flex xl:min-w-0 xl:flex-col',GAP)}>
@@ -188,9 +191,9 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
   <SnoozeDialog projectId={projectId} open={snoozeOpen} onClose={()=>setSnoozeOpen(false)} data={data} busy={busy} update={update}/>
   {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
-  <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading,requestChanges:()=>{feedbackAskRef.current=true;}} satisfies TaskPageContext}/>
+  <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading} satisfies TaskPageContext}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
- </PageContainer></TaskActions.Provider></TaskAccess.Provider>;
+ </PageContainer></ArticleEditContext.Provider></TaskActions.Provider></TaskAccess.Provider>;
 }
 // The header, two lines (2026-10-22 user decision): the title with its number in grey, the status and the task's menu;
 // then the playbook's steps, the current one highlighted.
@@ -426,14 +429,51 @@ const versionLine=(out:{version:number;manual?:boolean;createdBy?:string;restore
 function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string)=>void;busy:boolean;open:boolean}){
  return <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={open}><Field label={$t('taskDetail.releaseNotesGoPublishRecord')}><Textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={value} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>onChange(e.target.value)}/></Field></Reveal>;
 }
+// An article under review is edited in its card (2026-11-04 user request, task-detail/article-edit.tsx): the form
+// is the review, saved as the person goes; Approve and Request changes make a version of the edits first. Request
+// changes opens a box at the foot of the card for changes across the whole article, which the Agent makes from that
+// version. In several languages the card says which round it is (reviewRound): the primary to approve, the other
+// languages translated or updated in place, or a version that changed none of them, which offers Update again first
+// (T-53).
+function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,setChecked}:{data:Data;stage:Stage;out:Artifact;article:NonNullable<Artifact['article']>;session:ArticleEditSession;act:(command:string,body:object)=>Promise<Data|undefined>;busy:boolean;checked:string[];setChecked:(c:string[])=>void}){
+ const w=data.work,{allowed}=useContext(TaskAccess),{showVersions}=useContext(TaskActions);
+ const [tab,setTab]=useState(''),[asking,setAsking]=useState(false);
+ const submit=useArticleSubmit({data,article:a,session,onTab:setTab});
+ const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
+ // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
+ const targetGone=!(data.articleTargets||[]).some(t=>t.id===a.targetId);
+ const simulated=mockSettingsAvailable()||Boolean(data.task.evidence?.simulated),round=reviewRound(data,a,simulated);
+ const versions=[...(data.artifacts||[]),...w.results.filter(Boolean) as Artifact[]];
+ // Another primary before it is approved (2026-10-30): the Agent writes a new version in it; asked first.
+ const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=joinList((w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)));
+  if(await confirmAction({title:()=>$t('articleTask.changePrimaryTitle',{0:lang}),description:()=>$t('articleTask.changePrimaryDescription',{0:lang,1:others}),action:()=>$t('articleTask.changePrimaryAction',{0:lang}),destructive:false}))
+   await act('changePrimary',{artifactId:out.id,locale:l,comment:$t('articleTask.primaryChangedComment',{0:lang})});};
+ // The edits made a version first; the command then acts on that version.
+ const versioned=async(command:string,body:object)=>{const v=await submit.prepare();return v?act(command,{...body,artifactId:v.artifactId,revision:v.revision}):undefined;};
+ const fullScreen=(lang:string)=>`article?lang=${encodeURIComponent(lang)}`;
+ return <StageCard title={round.title} sub={session.changed?editedLine(session,out.version):versionLine(out)} at={session.changed?undefined:out.createdAt}
+  actions={allowed?<ArticleEditActions session={session} version={out.version} busy={busy} request={()=>setAsking(true)} fullScreenTo={fullScreen(tab||(w.delivery?.locales||[])[0]||'')} onVersions={showVersions}
+   lead={round.nothing?<Button disabled={busy||session.readOnly} onClick={()=>void versioned('requestStageChanges',{comment:round.againComment})}><RotateCcw/>{round.again}</Button>:undefined}
+   approve={targetGone?undefined:{label:round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish'),primary:!round.nothing,disabled:missingChecks||session.readOnly,run:()=>void versioned('approveStage',{checked})}}/>:undefined}>
+  {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
+  {round.nothing&&<p className={text.muted}>{round.hint}</p>}
+  <PrimaryLanguage data={data} busy={busy} allowed={allowed} onChange={l=>void changePrimary(l)}/>
+  <LastFeedback w={w} stage={stage} out={out}/>
+  {/* Whoever may not review reads it as before, its preview and its changes. */}
+  <ArticleReview key={out.id} data={data} article={a} {...agentNotes(out)} tab={tab} onTab={setTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}
+   body={allowed?<ArticleEditFields data={data} article={a} session={session} tab={tab} onTab={setTab} id={submit.id} errors={submit.errors} fullScreenTo={fullScreen}/>:undefined}/>
+  <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
+  {asking&&<RequestChangesBox session={session} nextVersion={nextVersion(versions,out.stepId)} busy={busy} onCancel={()=>setAsking(false)}
+   onSend={async(comment,imageIds)=>{const d=await versioned('requestStageChanges',{comment,...(imageIds.length?{imageIds}:{})});if(d)setAsking(false);return Boolean(d);}}/>}
+ </StageCard>;
+}
 function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boolean;list?:PlaybookList}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
- const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent,handedOver}=useContext(TaskActions);const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
+ const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent,handedOver}=useContext(TaskActions),articleEdit=useArticleEdit();const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
  // Complete this step manually, asked from the task menu: opens the form here once per request, not again on remount.
  const handledAsk=useRef(manualAsk);
  useEffect(()=>{if(manualAsk!==handledAsk.current){handledAsk.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
  const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
- const editButtonRef=useRef<HTMLButtonElement>(null);
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  // What can follow the accepted document: the playbook's next steps as they are now, as the server checks them
  // (2026-10-28), or the start's copy when the playbook is gone; the first is preselected until another is chosen.
@@ -443,7 +483,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  // The primary language of the article a handed-over playbook writes (2026-10-30): the project's AI content language
  // when its target has it, else the target's first; the others are translated after it is approved.
  nextPlaybook=list?.playbooks.find(p=>p.id===next),handTarget=next?handoffTarget(data,nextPlaybook,translatesArticle(nextPlaybook)):null,handAll=handTarget?.locales||[],
- [handPrimary,setHandPrimary]=useState<string>(),handLang=handPrimary&&handAll.includes(handPrimary)?handPrimary:defaultLocales(handAll,data.language)[0]||'',nextLocales=handAll.length>1?[handLang,...handAll.filter(l=>l!==handLang)]:undefined,[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
+ [handPrimary,setHandPrimary]=useState<string>(),handLang=handPrimary&&handAll.includes(handPrimary)?handPrimary:defaultLocales(handAll,data.language)[0]||'',nextLocales=handAll.length>1?[handLang,...handAll.filter(l=>l!==handLang)]:undefined,[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
  const {clear}=useTaskDraftStatus();
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage','requestStageChanges'].includes(command))clear();return result;};
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
@@ -457,32 +497,10 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const pr=out?.pr;
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
   const by=versionLine(out);
-  // An article to publish to a target (article-review.tsx): read field by field, or edited as a new version. It has no
-  // release note to write: no target receives one, and the task's record keeps the Agent's summary (2026-10-24).
-  if(out.article){
-   const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
-   // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
-   const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
-   // In several languages the card says which round it is (reviewRound): the primary to approve, the other languages
-   // translated or updated in place, or a version that changed none of them, which offers Update again first (T-53).
-   const simulated=mockSettingsAvailable()||Boolean(data.task.evidence?.simulated),round=reviewRound(data,out.article,simulated);
-   // Another primary before it is approved (2026-10-30): the Agent writes a new version in it; asked first.
-   const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=joinList((w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)));
-    if(await confirmAction({title:()=>$t('articleTask.changePrimaryTitle',{0:lang}),description:()=>$t('articleTask.changePrimaryDescription',{0:lang,1:others}),action:()=>$t('articleTask.changePrimaryAction',{0:lang}),destructive:false}))
-     await act('changePrimary',{artifactId:out.id,locale:l,comment:$t('articleTask.primaryChangedComment',{0:lang})});};
-   const approve=!targetGone&&<Button variant={round.nothing?'outline':'default'} disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}>{!round.nothing&&<Rocket/>}{round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish')}</Button>;
-   return <StageCard title={round.title} sub={by} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{round.nothing?<><Button disabled={busy} onClick={()=>void act('requestStageChanges',{artifactId:out.id,comment:round.againComment})}><RotateCcw/>{round.again}</Button>{requestButton}{approve}</>:<>{approve}{requestButton}</>}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
-    {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
-    {round.nothing&&<p className={text.muted}>{round.hint}</p>}
-    {!editing&&<PrimaryLanguage data={data} busy={busy} allowed={allowed} onChange={l=>void changePrimary(l)}/>}
-    <LastFeedback w={w} stage={stage} out={out}/>
-    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} onTab={setArticleTab} fullScreenTo={lang=>`article?lang=${encodeURIComponent(lang)}`} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
-     <ArticleReview key={out.id} data={data} article={out.article} {...agentNotes(out)} tab={articleTab} onTab={setArticleTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
-     <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
-    </>}
-   </StageCard>;
-  }
+  // An article to publish to a target, reviewed by editing it (task-detail/article-edit.tsx). It has no release note to
+  // write: no target receives one, and the task's record keeps the Agent's summary (2026-10-24).
+  if(out.article&&articleEdit)return <ArticleReviewCard data={data} stage={stage} out={out} article={out.article} session={articleEdit} act={act} busy={busy} checked={checked} setChecked={setChecked}/>;
+  if(out.article)return <StageCard title={displayStageName(stage)} sub={by} at={out.createdAt}><ArticleReview key={out.id} data={data} article={out.article} {...agentNotes(out)} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/></StageCard>;
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard title={(pr||data.task.evidence?.simulated)?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} sub={by} at={out.createdAt}
    actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{(mockSettingsAvailable() || data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
@@ -707,7 +725,9 @@ const getPlainEvents=():Record<string,string>=>({merged:$t('taskDetail.eventPubl
 // are asked for too.
 function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{data:Data;update:Update;busy:boolean;members:Member[];membersLoaded:boolean;error:string;onFailed:()=>void}){
  const [message,setMessage,clearMessage]=useTaskDraft('comment',''),w=data.work,stages=w.flow?.stages||[],done=w.stage==='done',closed=Boolean(w.cancelledAt||w.archivedAt);
- const [all,setAll]=useState(false),[view,setView]=useState<Artifact>();
+ const [all,setAll]=useState(false),[view,setView]=useState<Artifact>(),{versionsAsk}=useContext(TaskActions),articleEdit=useArticleEdit(),cardRef=useRef<HTMLElement>(null);
+ // View all versions, from the article card's menu: every line shown, and the card brought into view.
+ useEffect(()=>{if(!versionsAsk)return;setAll(true);cardRef.current?.scrollIntoView?.({block:'start',behavior:'smooth'});},[versionsAsk]);
  const executor=getStageExecutor().agent;
  const nameOf=(key?:string)=>stages.find(s=>s.key===key)?.name||$t('taskDetail.step');
  const people=useMemo(()=>new Map(members.map(m=>[m.id,m.name])),[members]);
@@ -717,7 +737,7 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  // to the Agent with it at once and it is recorded as that request, not as a note. Whoever cannot review leaves a note
  // (the server checks as well). The step's own drafts, such as an edit not saved yet, stay with the version they were
  // written for and appear under Earlier task drafts once the step moves on.
- const review=!done&&!closed&&allowed&&stage?.kind==='review'&&out&&!out.rejectedAt?{stageKey:stage.key,artifactId:out.id}:undefined;
+ const review:{stageKey:string;artifactId:string;revision?:number}|undefined=!done&&!closed&&allowed&&stage?.kind==='review'&&out&&!out.rejectedAt?{stageKey:stage.key,artifactId:out.id}:undefined;
  // Who reads a note: the run that starts the task, the step's next run, or, with only publishing left, no run (it is recorded).
  const hint=review?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor}):!w.flow?$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')}):stage?.kind==='release'||stage?.kind==='publish'?$t('taskDetail.leaveNoteRecorded'):$t('taskDetail.leaveNoteNextRunReads',{0:executor});
  const rows=(w.history||[]).map((e,i)=>({e,i,t:shownInActivity(e)?eventText(e,nameOf,executor,w.snooze,w.observation?.results):null})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
@@ -726,16 +746,18 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  // in the order they were added so the text can say "Image 1"; they stay with the draft until it is sent.
  const [storedImages,setStoredImages,clearImages]=useTaskDraft('commentImages','');
  const images=useComposerImages({stored:readImages(storedImages),store:list=>{if(list.length)setStoredImages(JSON.stringify(list));else clearImages();},max:TASK_IMAGES_PER_MESSAGE});
- async function send(){const extra=images.ids.length?{imageIds:images.ids}:{};const d=review?await update('requestStageChanges',{...review,comment:message,...extra}):await update('comment',{comment:message,...extra});if(d){clearMessage();images.sent();}else onFailed();}
+ // An article's edits not made a version yet become one first, which the Agent then works from (2026-11-04).
+ async function send(){const extra=images.ids.length?{imageIds:images.ids}:{};let target=review;if(review&&articleEdit?.artifactId===review.artifactId){const v=await articleEdit.version();if(!v){onFailed();return;}target={...review,artifactId:v.artifactId,revision:v.revision};}
+  const d=target?await update('requestStageChanges',{...target,comment:message,...extra}):await update('comment',{comment:message,...extra});if(d){clearMessage();images.sent();}else onFailed();}
  const composer=(!done&&!closed)||Boolean(message),writing=!done&&!closed;
- return <Card className="order-5" aria-label={$t('common.activity')} title={$t('common.activity')}>
+ return <Card ref={cardRef} className="order-5 scroll-mt-4" aria-label={$t('common.activity')} title={$t('common.activity')}>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
   <ol className="flex flex-col gap-3">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    // Until the members load, a person's name is a placeholder bar, not "Member" that turns into the name (UI review 2026-10-22).
    const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p>{e.images&&<MessageImages images={e.images}/>}</div></li>;
    const artifact=VERSION_EVENTS.includes(e.action)&&e.artifactId?artifacts.get(e.artifactId):undefined;
-   const line=!artifact?plain[e.action]||t!.text:e.action==='editArticleDraft'?$t('taskDetail.editedArticleVersion',{0:artifact.version}):e.action==='restoreArticleVersion'?(artifact.restoredFrom?$t('taskDetail.restoredArticleVersion',{0:artifact.restoredFrom.version,1:artifact.version}):t!.text):$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)});
+   const line=!artifact?plain[e.action]||t!.text:e.action==='editArticleDraft'?editsLine($t('taskDetail.editedArticleVersion',{0:artifact.version}),artifact.edits):e.action==='restoreArticleVersion'?(artifact.restoredFrom?$t('taskDetail.restoredArticleVersion',{0:artifact.restoredFrom.version,1:artifact.version}):t!.text):$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)});
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span>{getCurrentLocale()==='ru-RU'?' — ':' '}{line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<VersionReader data={data} artifact={view} versions={[...artifacts.values()]} who={people.get(view.createdBy)||$t('common.member')} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} update={update} busy={busy} onClose={()=>setView(undefined)}/>}

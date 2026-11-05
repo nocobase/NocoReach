@@ -1,12 +1,15 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { ARTICLE_CAPABILITIES, ARTICLE_FIELDS, articleLocales, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
 import type { MaterialAttachment } from './task-materials.js';
 import type { ArticleTargets } from '../articles/targets.js';
 import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
 import { primaryChanges } from '../articles/edits.js';
+import { articleText, editPlaces } from '../articles/edit-places.js';
 import { restorable, writtenByHand } from '../../../shared/article-versions.js';
+import type { ArticleEdits } from '../../../shared/article-edit.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { languageOf } from './language';
 import { fail, projectWork, type Artifact, type Work } from './model';
@@ -27,6 +30,8 @@ export const ARTICLE_COMMANDS = ['linkArticle', 'editArticleDraft', 'restoreArti
 const MAX_ALSO = 4;
 // Images one save of Edit directly may add; the person's unlinked uploads are capped lower still (manual-tasks.ts).
 const PASTED_PER_EDIT = 40;
+// What the page says of a version saved from the review card: the AI rewrites accepted in it (shared/article-edit.ts).
+const articleEditsInput = z.object({ ai: z.number().int().min(0).max(10_000) }).strict();
 
 // A release publishes to one target or several: the primary (`release.article`) and the others (`release.also`), each
 // with its own record and state; `release.state` is the aggregate (settle). Leg 0 is the primary.
@@ -488,6 +493,7 @@ export class ArticleFlow {
       return true;
     }
     if (v.command === 'editArticleDraft') {
+      if (v.edits !== undefined && !articleEditsInput.safeParse(v.edits).success) return fail(systemMessageText('taskExecution.articleEditInvalid'), 400);
       const { index } = s.flowStageOf(w, v.stageKey, ['review']);
       const producer = w.flow.stages[index - 1],
         output = w.results[index - 1];
@@ -509,9 +515,14 @@ export class ArticleFlow {
       const pasted = draftImageIds(next.draft).filter((id) => !linked.has(id));
       if (pasted.length) await s.linkImages(project, taskId, w, { imageIds: pasted }, actor, tx, PASTED_PER_EDIT);
       const content = typeof v.content === 'string' && v.content.trim() ? v.content.trim().slice(0, 30000) : output.content;
-      const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) } };
+      // How many places AI rewrote (as the page counted them) and the person changed by hand, for its Activity line.
+      const places = editPlaces(articleText(a.draft, base), articleText(next.draft, base));
+      const edits: ArticleEdits = { ai: v.edits?.ai ?? 0, hand: Math.max(0, places - (v.edits?.ai ?? 0)) };
+      const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) }, edits };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 1] = artifact;
+      // The changes kept while reviewing (article-edit.ts) are this version now.
+      await s.articleEditing.clear(project, taskId, tx);
       event.artifactId = artifact.id;
       return true;
     }
@@ -532,6 +543,7 @@ export class ArticleFlow {
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, chosen.content, actor, at, tx)), article, restoredFrom: { artifactId: chosen.id, version: chosen.version, byHand: writtenByHand(chosen) } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 1] = artifact;
+      await s.articleEditing.clear(project, taskId, tx);
       event.artifactId = artifact.id;
       event.restoredFrom = chosen.id;
       return true;

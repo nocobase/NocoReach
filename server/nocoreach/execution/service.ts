@@ -21,6 +21,7 @@ import { pageIdentity, type PageIdentity } from '../../../shared/page-identity.j
 import { findPages, ownLink } from '../../../shared/page-search.js';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
+import { ArticleEditing } from './article-edit.js';
 import { playbookTitle, retitle } from './task-title.js';
 import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
@@ -95,13 +96,14 @@ export class TaskService {
   readonly runtime: TaskAgentsRuntime;
   readonly business: TaskBusiness;
   readonly articleFlow: ArticleFlow;
+  readonly articleEditing: ArticleEditing;
   private lastArticles = 0;
   /** The runs the tick has work for (active-runs.ts). */
   readonly activeRuns = new ActiveRuns(() => this.repo('nrSnapshots') as SnapshotRows);
   /** When this application instance started (the provider's registration, else now); see restarts.ts. */
   startedAt: string;
   private startRecorded = false;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.startedAt = p.startedAt || now(); this.articleFlow = new ArticleFlow(this); this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
+  constructor(readonly p: any, provider?: OnlineProvider) { this.startedAt = p.startedAt || now(); this.articleFlow = new ArticleFlow(this); this.articleEditing = new ArticleEditing(this); this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -1341,7 +1343,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), repos: wrap(p => this.repoView(p)), saveRepo: wrap(async (p, v) => (await this.agents.saveRepo(p, v), this.repoView(p))), removeRepo: wrap(async (p, v) => (await this.agents.removeRepo(p, v), this.repoView(p))), checkRepo: wrap(async (p, v, c) => (await this.agents.checkRepo(p, v, String(c.auth.user.id)), this.repoView(p))) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'repos', 'saveRepo', 'removeRepo', 'checkRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId), v.match !== false)) } });
-    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId), v.match !== false)), articleEdit: wrap((p, v, c) => this.articleEditing.handle(p, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id))) } });
+    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces', 'articleEdit'], 'loggedIn');
   }
 }
