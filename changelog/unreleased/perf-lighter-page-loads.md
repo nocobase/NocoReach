@@ -5,3 +5,4 @@
 - The shell no longer remounts when the signed-in member is known, which sent every page's reads twice.
 - The task list is shared by Insights, Opportunities, Tasks and Pages: a page opened after another shows the list that one read while it reads it again. Opportunities shows the Insights state the same way.
 - Traffic's Today card reads only its realtime figures and minutes (two GA4 requests instead of seven); the details read the whole view while they are open.
+- Search Console reports keep their Google access token for 45 minutes, as GA4 reports already did, instead of refreshing it on every report the cache misses.

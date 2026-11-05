@@ -129,11 +129,12 @@ function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.stat
 interface SearchRequest { range?: string; from?: string; to?: string; country?: string; key?: string; dimension?: string; details?: boolean; compare?: boolean; queryFilter?: unknown; pageFilter?: unknown; }
 interface SearchWindow { start: string; end: string; previousStart: string; previousEnd: string; days: number; all?: boolean; }
 interface SearchFilters { queryFilter?: {operator: string;expression: string} | null; pageFilter?: {operator: string;expression: string} | null; }
+const GOOGLE_TOKEN_KEEP_MS=45*60*1000;
 class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.readAt=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
  // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
@@ -144,8 +145,10 @@ class DataViews{
  // `family` names the view whatever its dates, so a new window answers from the previous one while it is read; the report
  // then carries the `window` it holds.
  report(id,identity,read,w,family){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),family?{family}:{});}
- // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
- token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
+ // An access token lasts an hour; keep it for 45 minutes, as WebsiteReport does, so each Search Console report a cache
+ // misses does not first refresh it with Google (2026-11-05). Kept per project, site, authorization and mock scope, so a
+ // new authorization or another upstream reads a new one; never inside a transaction.
+ token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]),hit=this.tokens.get(key);if(hit&&Date.now()-hit.at<GOOGLE_TOKEN_KEEP_MS)return Promise.resolve(hit.token);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).then(token=>{this.tokens.set(key,{at:Date.now(),token});return token;}).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));
