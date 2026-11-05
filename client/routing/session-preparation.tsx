@@ -1,65 +1,19 @@
-import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { useTranslation } from '@nocobase/i18n/client';
-import { useState, type PropsWithChildren, type ReactElement } from 'react';
+import type { PropsWithChildren, ReactElement } from 'react';
 
-import { Loading } from '#components/loading';
-import { Button } from '#components/ui/button';
-
-/** The first identity handshake must invalidate permissions before pages mount. */
+/**
+ * NocoReach departs from the template here (docs/DEVELOPMENT.md, Routes, identity, and shell): a signed-in session's
+ * pages mount at once instead of waiting for the realtime connection, whose new TCP and TLS handshake took 1.2 to
+ * 1.8 s from Hong Kong (2026-11-05) before the first business request could start. That wait existed because the
+ * authorization plugin invalidated its snapshot when the connection opened and when each permission topic became
+ * ready, so pages mounted earlier would be checked and mounted again. The patched plugin
+ * (patches/@nocobase__app-plugin-authorization@1.0.0-beta.33.patch) reads the snapshot again then and invalidates only
+ * when it changed. A changed snapshot, a permission event and a reconnection after a drop still hide protected content
+ * while it is checked again; the previous session's snapshot is cleared by the authorization provider before any page
+ * mounts, and the server checks every request. A connection that cannot be made no longer locks the application: the
+ * realtime client keeps retrying, and only live updates wait for it.
+ */
 export function SessionPreparation({
   children,
 }: PropsWithChildren): ReactElement {
-  const { preparation, retryPreparation, client, refresh } =
-    useAuthentication();
-  const { t } = useTranslation();
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutFailed, setSignOutFailed] = useState(false);
-
-  if (preparation === 'ready') return <>{children}</>;
-  if (preparation === 'preparing') {
-    return <Loading className='min-h-svh' label={t('auth.preparingSession')} />;
-  }
-
-  return (
-    <section className='grid min-h-svh place-items-center px-6'>
-      <div className='w-full max-w-lg space-y-4 text-center'>
-        <h1 className='text-xl font-semibold'>{t('auth.connectionFailed')}</h1>
-        <p className='text-sm text-muted-foreground'>
-          {t('auth.connectionFailedDescription')}
-        </p>
-        {signOutFailed ? (
-          <p role='alert'>{t('account.signOutFailed')}</p>
-        ) : null}
-        <div className='flex justify-center gap-3'>
-          <Button disabled={signingOut} onClick={retryPreparation}>
-            {t('auth.retry')}
-          </Button>
-          <Button
-            variant='outline'
-            disabled={signingOut}
-            onClick={() => {
-              void (async () => {
-                setSigningOut(true);
-                setSignOutFailed(false);
-                try {
-                  const result = await client.signOut();
-                  if (result.error) {
-                    setSignOutFailed(true);
-                    return;
-                  }
-                  await refresh();
-                } catch {
-                  setSignOutFailed(true);
-                } finally {
-                  setSigningOut(false);
-                }
-              })();
-            }}
-          >
-            {t(signingOut ? 'account.signingOut' : 'account.signOut')}
-          </Button>
-        </div>
-      </div>
-    </section>
-  );
+  return <>{children}</>;
 }

@@ -129,11 +129,12 @@ function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.stat
 interface SearchRequest { range?: string; from?: string; to?: string; country?: string; key?: string; dimension?: string; details?: boolean; compare?: boolean; queryFilter?: unknown; pageFilter?: unknown; }
 interface SearchWindow { start: string; end: string; previousStart: string; previousEnd: string; days: number; all?: boolean; }
 interface SearchFilters { queryFilter?: {operator: string;expression: string} | null; pageFilter?: {operator: string;expression: string} | null; }
+const GOOGLE_TOKEN_KEEP_MS=45*60*1000;
 class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.readAt=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
  // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
@@ -144,8 +145,10 @@ class DataViews{
  // `family` names the view whatever its dates, so a new window answers from the previous one while it is read; the report
  // then carries the `window` it holds.
  report(id,identity,read,w,family){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),family?{family}:{});}
- // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
- token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
+ // An access token lasts an hour; keep it for 45 minutes, as WebsiteReport does, so each Search Console report a cache
+ // misses does not first refresh it with Google (2026-11-05). Kept per project, site, authorization and mock scope, so a
+ // new authorization or another upstream reads a new one; never inside a transaction.
+ token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]),hit=this.tokens.get(key);if(hit&&Date.now()-hit.at<GOOGLE_TOKEN_KEEP_MS)return Promise.resolve(hit.token);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).then(token=>{this.tokens.set(key,{at:Date.now(),token});return token;}).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));
@@ -288,7 +291,7 @@ class DataViews{
   const settledThrough=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):null,settled=Boolean(settledThrough)&&w.end<=settledThrough;
   return {connected:true,cutoff,window:w,settledThrough,...await this.ga4.row(id,property,w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled,...(settledThrough?{settledThrough}:{}),view:[range,String(v.from||''),String(v.to||'')]})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
- async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
+ async websiteRealtime(id,v={}){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'),v.summary===true)};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
  // and saved per window.
  async searchCountries(id,v){if(!calendarDate(v.start)||!calendarDate(v.end)||v.start>v.end)fail(systemMessageText('dataViews.invalidDate'));let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
@@ -387,6 +390,6 @@ class DataViews{
   // Only a page that says it shows a saved copy (`acceptSaved`) gets one while a new report is read. API keys, scripts and
   // the command line wait for the new report and see its failure, as they did before saved copies.
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const read=()=>fn(id,v,ctx);ctx.body=v.acceptSaved===true?await read():await waitForFresh(read);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteTables:wrap((id,v)=>this.websiteTables(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteTables','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteTables:wrap((id,v)=>this.websiteTables(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap((id,v)=>this.websiteRealtime(id,v)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteTables','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 export { websiteView, withFresh, redditCard, DataViews, packagesCard, hackernewsCard, windowFor, metric, series, netChange, starRows, githubCard, communityCard, contentCard, gscCard };

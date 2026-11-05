@@ -12,7 +12,8 @@ export const request = <T>(
 ) =>
   api.action<T>('nrStrategy', action, {
     method: 'POST',
-    body: { ...body, projectId: String(projectId) },
+    // The state, and the mutations' answers that are one, without what only the server reads (server/nocoreach/page-views.ts).
+    body: { ...body, projectId: String(projectId), view: 'page' },
     unwrap: 'data',
   });
 export type AnalysisStatus = {

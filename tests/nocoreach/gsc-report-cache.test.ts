@@ -548,6 +548,23 @@ it('does not reuse an old authorization token refresh for a newly authorized rep
   expect(upstream).toHaveBeenCalledTimes(4);
 });
 
+it('keeps an access token for 45 minutes across reports the cache misses', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const { plugin, views, upstream } = await fixture();
+    plugin.token.mockResolvedValue('token');
+    await views.searchRow('1', { ...window, dimension: 'query', key: 'crm' });
+    await views.searchRow('1', { ...window, dimension: 'query', key: 'erp' });
+    expect(upstream.mock.calls.length).toBeGreaterThan(1);
+    expect(plugin.token).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + 46 * 60 * 1000);
+    await views.searchRow('1', { ...window, dimension: 'query', key: 'oa' });
+    expect(plugin.token).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('persists bounded live aggregates instead of the original query-page matrix', async () => {
   const { db, views } = await fixture();
   views.gscQuery = async (_id: string, _site: string, body: Body) =>

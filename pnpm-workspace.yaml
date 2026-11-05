@@ -313,6 +313,9 @@ minimumReleaseAgeExclude:
   - '@nocobase/mailer@0.1.0-beta.1'
   - '@nocobase/app-plugin-notification-providers@1.0.0-beta.16'
   - '@nocobase/lifecycle@0.1.0-beta.4'
-# NocoReach-owned Scheduler extension. Upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
+# NocoReach-owned patches of published packages; docs/DEVELOPMENT.md, Template and dependencies, says why each exists.
+# Scheduler: upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
+# Authorization: its client is bundled into the page; a new version needs the patch re-applied and reviewed.
 patchedDependencies:
+  '@nocobase/app-plugin-authorization@1.0.0-beta.33': patches/@nocobase__app-plugin-authorization@1.0.0-beta.33.patch
   '@nocobase/app-plugin-scheduler@1.0.0-beta.21': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.21.patch
