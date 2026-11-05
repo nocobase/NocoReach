@@ -26,6 +26,7 @@ import { playbookTitle, retitle } from './task-title.js';
 import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ActiveRuns, type SnapshotRows } from './active-runs.js';
+import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
@@ -196,13 +197,10 @@ export class TaskService {
     const repos = agent.repos.map(r => ({ id: r.id, repo: r.repo, baseBranch: r.baseBranch, allowedPaths: r.allowedPaths, urls: r.urls }));
     return { ...data, language, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
   }
-  // Every task of a project, read in pages outside any business transaction, for what Data sources shows of them.
+  // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
-    for (let offset = 0; ; offset += 200) {
-      const rows = await this.repo('nrTasks').find({ filter: { projectId: project }, fields: ['id', 'title', 'evidence'], sort: ['id'], limit: 200, offset });
+    for await (const rows of pagesById(this.repo('nrTasks'), { filter: { projectId: project }, fields: ['id', 'title', 'evidence'], size: 200 }))
       for (const row of rows) fn(row.toJSON ? row.toJSON() : row);
-      if (rows.length < 200) break;
-    }
   }
   /**
    * Website source repositories as Data sources › Website source shows them: each with the pull request the Agent last
@@ -417,8 +415,7 @@ export class TaskService {
   // Every few minutes: open the live pages of merged tasks and look for the sentence the Agent said would appear.
   async verifyReleases(read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
     if (this.simulated) return;
-    for (let offset = 0; ; offset += 100) {
-      const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+    for await (const rows of pagesById(this.repo('nrTasks'))) {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, rel = projectWork(t).release;
         if (!rel || rel.state !== 'verifying' || Date.parse(rel.nextCheckAt || '') > Date.now()) continue;
@@ -441,7 +438,6 @@ export class TaskService {
           await this.save(task, w, tx);
         });
       }
-      if (rows.length < 100) break;
     }
   }
   // The pages a finished task changed: what was released, the published page and the linked page.
@@ -499,7 +495,7 @@ export class TaskService {
   // Hourly: day 7 and day 28 comparisons for tasks that went live, once the data covers those days.
   async observeEffects() {
     const tasks: any[] = [];
-    for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
+    for await (const rows of pagesById(this.repo('nrTasks'))) tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r));
     const ends = new Map<string, string>(), identities = new Map<string, PageIdentity>();
     for (const t of tasks) {
       const w = projectWork(t);
@@ -592,8 +588,7 @@ export class TaskService {
     const flag = 'nr-migrations:archive-legacy-1';
     if (await this.snapshot(flag)) return 0;
     let n = 0;
-    for (let offset = 0; ; offset += 100) {
-      const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+    for await (const rows of pagesById(this.repo('nrTasks'))) {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, w = projectWork(t);
         const legacy = (w.plan && !w.flow) || w.simple || Boolean(w.flow?.stages.some(s => s.kind === 'publish'));
@@ -605,7 +600,6 @@ export class TaskService {
           await this.save(task, fresh, tx); n++;
         });
       }
-      if (rows.length < 100) break;
     }
     await this.p.db.sequelize.transaction(async (tx: any) => this.put(flag, { at: now(), archived: n }, tx));
     return n;
@@ -1277,13 +1271,9 @@ export class TaskService {
     }
     return woke;
   }
-  async tasks(project: string) {
-    const rows: any[] = [];
-    for (let offset = 0; ; offset += 200) {
-      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt', '-id'], limit: 200, offset });
-      rows.push(...page.map((r: any) => r.toJSON ? r.toJSON() : r)); if (page.length < 200) break;
-    }
-    return rows;
+  // Newest first: the ids in this order, then the rows by key (task-scan.ts).
+  async tasks(project: string): Promise<any[]> {
+    return tasksInOrder(this.repo('nrTasks'), project, { sort: ['-createdAt', '-id'] });
   }
   // Pages of Website content matching a search, for linking a task to the page it changes: the page a link names first
   // (shared/page-search.ts), then the ones whose title or address holds the text. A link on the site's own hosts that
