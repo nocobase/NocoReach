@@ -161,7 +161,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
   };
   // The edits made a version first; the command then acts on that version.
   const versioned = async (command: string, body: object) => {
-    const v = await submit.prepare();
+    const v = await submit.prepare(command === 'approveStage');
     return v
       ? act(command, {
           ...body,

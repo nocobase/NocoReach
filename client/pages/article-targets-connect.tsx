@@ -64,6 +64,7 @@ import {
 import {
   ARTICLE_TARGET_KINDS,
   ARTICLE_TARGET_PRESETS,
+  coverKeys,
   fill,
   pagePattern,
   type ArticleTargetKind,
@@ -79,6 +80,7 @@ import {
   type TargetList,
   type TestResult,
 } from './article-targets-api';
+import { CoverEditPanel, CoverRowValue } from './article-target-cover';
 
 // Data sources › Blog CMS (docs/ARTICLE-PUBLISHING.md). One card per target, edited in place and saved on
 // its own; one card edits at a time. Languages, field mapping, page templates and the Git export are edited as JSON:
@@ -104,6 +106,8 @@ const BASIC = [
   'hasSecret',
   'capabilities',
   'check',
+  // Set by detection and Cover › Edit (article-target-cover.tsx), not in the JSON.
+  'cover',
 ];
 const advancedOf = (t: object) =>
   JSON.stringify(
@@ -218,6 +222,12 @@ function TargetsPanel({
     'nrArticles.savePlaybookTargets',
     projectId,
   );
+  const { can: canSaveCover } = useBusinessAccess(
+    'nrArticles.saveCover',
+    projectId,
+  );
+  // The target whose Cover › Edit is open under its card.
+  const [coverEditing, setCoverEditing] = useState('');
   const [list, setList] = useState<TargetList>();
   // A write answers with the settings only: what was published stays as the last read found it.
   const keepList = (next: TargetList) =>
@@ -413,12 +423,18 @@ function TargetsPanel({
           { targetId: t.id },
           sessionId,
         );
+        // A check reads the covers again (2026-11-05): new findings come with the settings' new revision.
         setList((now) =>
           now
             ? {
                 ...now,
+                ...(r.revision !== undefined ? { revision: r.revision } : {}),
                 targets: now.targets.map((x) =>
-                  x.id === t.id ? { ...x, check: r.check } : x,
+                  x.id !== t.id
+                    ? x
+                    : r.revision !== undefined
+                      ? { ...x, check: r.check, cover: r.cover ?? undefined }
+                      : { ...x, check: r.check },
                 ),
               }
             : now,
@@ -522,7 +538,7 @@ function TargetsPanel({
     ) : (
       child
     );
-  const disabled = Boolean(busy) || editing;
+  const disabled = Boolean(busy) || editing || Boolean(coverEditing);
   const editor = form && (
     <EditCard
       id={id}
@@ -593,93 +609,120 @@ function TargetsPanel({
         form && !form.isNew && form.id === t.id ? (
           <div key={t.id}>{editor}</div>
         ) : (
-          <TargetCard
-            key={t.id}
-            target={t}
-            isDefault={t.id === list.defaultTargetId}
-            published={list.published?.[t.id]}
-            actions={
-              <>
-                {canTest &&
-                  locked(
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={disabled}
-                      onClick={() => void test(t)}
-                    >
-                      {busy === `test-${t.id}` && (
-                        <Spinner data-icon='inline-start' />
-                      )}
-                      {$t(t.check ? 'repos.recheck' : 'repos.checkNow')}
-                    </Button>,
-                  )}
-                {canSave &&
-                  locked(
-                    <Button
-                      id={`${id}-edit-${t.id}`}
-                      variant='outline'
-                      size='sm'
-                      disabled={disabled}
-                      onClick={() => void startEdit(t)}
-                    >
-                      {busy === `edit-${t.id}` && (
-                        <Spinner data-icon='inline-start' />
-                      )}
-                      {$t('articlePublishing.edit')}
-                    </Button>,
-                  )}
-                {(canRemove ||
-                  (canSetDefault && t.id !== list.defaultTargetId)) &&
-                  locked(
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant='ghost'
-                            size='icon-sm'
-                            aria-label={$t('articlePublishing.actions', {
-                              0: t.name,
-                            })}
-                            disabled={disabled}
-                          />
-                        }
+          <div key={t.id} className='flex flex-col gap-2'>
+            <TargetCard
+              target={t}
+              isDefault={t.id === list.defaultTargetId}
+              published={list.published?.[t.id]}
+              onEditCover={
+                canSaveCover && !editing && !busy
+                  ? () => setCoverEditing(t.id)
+                  : undefined
+              }
+              coverDisabled={Boolean(coverEditing)}
+              actions={
+                <>
+                  {canTest &&
+                    locked(
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        disabled={disabled}
+                        onClick={() => void test(t)}
                       >
-                        {busy === `remove-${t.id}` ||
-                        busy === `default-${t.id}` ? (
-                          <Spinner />
-                        ) : (
-                          <MoreHorizontal />
+                        {busy === `test-${t.id}` && (
+                          <Spinner data-icon='inline-start' />
                         )}
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align='end'
-                        className='w-auto min-w-40'
+                        {$t(t.check ? 'repos.recheck' : 'repos.checkNow')}
+                      </Button>,
+                    )}
+                  {canSave &&
+                    locked(
+                      <Button
+                        id={`${id}-edit-${t.id}`}
+                        variant='outline'
+                        size='sm'
+                        disabled={disabled}
+                        onClick={() => void startEdit(t)}
                       >
-                        {canSetDefault && t.id !== list.defaultTargetId && (
-                          <DropdownMenuItem onClick={() => void makeDefault(t)}>
-                            {$t('articlePublishing.setDefault')}
-                          </DropdownMenuItem>
+                        {busy === `edit-${t.id}` && (
+                          <Spinner data-icon='inline-start' />
                         )}
-                        {canRemove &&
-                          canSetDefault &&
-                          t.id !== list.defaultTargetId && (
-                            <DropdownMenuSeparator />
+                        {$t('articlePublishing.edit')}
+                      </Button>,
+                    )}
+                  {(canRemove ||
+                    (canSetDefault && t.id !== list.defaultTargetId)) &&
+                    locked(
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant='ghost'
+                              size='icon-sm'
+                              aria-label={$t('articlePublishing.actions', {
+                                0: t.name,
+                              })}
+                              disabled={disabled}
+                            />
+                          }
+                        >
+                          {busy === `remove-${t.id}` ||
+                          busy === `default-${t.id}` ? (
+                            <Spinner />
+                          ) : (
+                            <MoreHorizontal />
                           )}
-                        {canRemove && (
-                          <DropdownMenuItem
-                            variant='destructive'
-                            onClick={() => void remove(t)}
-                          >
-                            {$t('articlePublishing.delete')}
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>,
-                  )}
-              </>
-            }
-          />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align='end'
+                          className='w-auto min-w-40'
+                        >
+                          {canSetDefault && t.id !== list.defaultTargetId && (
+                            <DropdownMenuItem
+                              onClick={() => void makeDefault(t)}
+                            >
+                              {$t('articlePublishing.setDefault')}
+                            </DropdownMenuItem>
+                          )}
+                          {canRemove &&
+                            canSetDefault &&
+                            t.id !== list.defaultTargetId && (
+                              <DropdownMenuSeparator />
+                            )}
+                          {canRemove && (
+                            <DropdownMenuItem
+                              variant='destructive'
+                              onClick={() => void remove(t)}
+                            >
+                              {$t('articlePublishing.delete')}
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>,
+                    )}
+                </>
+              }
+            />
+            {coverEditing === t.id && t.cover && (
+              <CoverEditPanel
+                target={{ ...t, cover: t.cover }}
+                projectId={projectId}
+                sessionId={sessionId}
+                revision={list.revision}
+                onSaved={(next) => {
+                  keepList(next);
+                  setCoverEditing('');
+                  onChange();
+                }}
+                onStale={() => {
+                  setCoverEditing('');
+                  void load();
+                }}
+                onCancel={() => setCoverEditing('')}
+              />
+            )}
+          </div>
         ),
       )}
       {list.targets.length > 0 && canSetPlaybooks && (
@@ -733,11 +776,15 @@ function TargetCard({
   isDefault,
   published,
   actions,
+  onEditCover,
+  coverDisabled,
 }: {
   target: ArticleTargetView;
   isDefault: boolean;
   published?: PublishedArticle;
   actions: React.ReactNode;
+  onEditCover?: () => void;
+  coverDisabled?: boolean;
 }) {
   const ui = getCurrentLocale(),
     c = t.check;
@@ -808,6 +855,16 @@ function TargetCard({
             })
           : localeName(t.locales[0], ui)}
       </StatusRow>
+      {/* Covers (2026-11-05): a target without a cover field has no row, and its review card none either. */}
+      {coverKeys(t).length > 0 && (
+        <StatusRow label={$t('articlePublishing.cover.row')}>
+          <CoverRowValue
+            target={t}
+            onEdit={onEditCover}
+            disabled={coverDisabled}
+          />
+        </StatusRow>
+      )}
       {t.kind !== 'git-files' && t.downstream && (
         <StatusRow label={$t('articlePublishing.exportsRow')}>
           <span className='break-all'>

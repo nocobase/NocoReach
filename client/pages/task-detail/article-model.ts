@@ -2,6 +2,7 @@ import { $t, getCurrentLocale } from '#i18n';
 import { joinList } from '#lib/format';
 import {
   ARTICLE_FIELDS,
+  coverPath,
   inPlaceLocales,
   type ArticleContent,
   type ArticleField,
@@ -54,7 +55,7 @@ export function valueAt(
 
 /** `zh.body` as the owner reads it: 中文 · 正文. */
 export function fieldLabel(path: string) {
-  if (path === 'slug' || path === 'status')
+  if (path === 'slug' || path === 'status' || path === 'cover')
     return $t(`articleTask.field.${path}`);
   const [l, f] = path.split('.');
   return $t('articleTask.fieldLabel', {
@@ -98,6 +99,7 @@ export const draftContent = (
   slug: a.draft.slug,
   status: a.draft.status,
   locales: a.draft.locales,
+  ...(a.draft.cover ? { cover: a.draft.cover } : {}),
 });
 
 /** How a changed language is read: as it will be, or its changes field by field against the version it was written from. */
@@ -116,13 +118,28 @@ export function wholeArticle(
     ]),
   ];
   const status = a.draft.status ?? base?.status;
+  const cover =
+    base?.cover || a.draft.cover
+      ? { ...base?.cover, ...a.draft.cover }
+      : undefined;
   return {
     slug: a.draft.slug || base?.slug || '',
     ...(status ? { status } : {}),
     locales: Object.fromEntries(
       locales.map((l) => [l, revisedText(a, base, l)]),
     ),
+    ...(cover ? { cover } : {}),
   };
+}
+
+/** The covers that differ, as change paths (`cover`, `zh.cover`). */
+export function coverChanges(
+  before: Record<string, string> = {},
+  after: Record<string, string> = {},
+) {
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((k) => (before[k] || '') !== (after[k] || ''))
+    .map(coverPath);
 }
 
 /**
@@ -148,6 +165,7 @@ export function againstPrevious(
         (p) => valueAt(before, p) !== valueAt(after, p),
       ),
     ),
+    ...coverChanges(before.cover, after.cover),
   ];
   return {
     article: {
@@ -157,6 +175,7 @@ export function againstPrevious(
         slug: after.slug || undefined,
         status: after.status,
         locales: after.locales,
+        ...(after.cover ? { cover: after.cover } : {}),
       },
       changes,
     },

@@ -2,10 +2,10 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { ARTICLE_CAPABILITIES, ARTICLE_FIELDS, articleLocales, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import { ARTICLE_CAPABILITIES, ARTICLE_FIELDS, articleLocales, coverKeys, coverMissing, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
 import type { MaterialAttachment } from './task-materials.js';
 import type { ArticleTargets } from '../articles/targets.js';
-import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
+import { articlePages, draftCoverIds, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withCoverUrls, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
 import { primaryChanges } from '../articles/edits.js';
 import { articleText, editPlaces } from '../articles/edit-places.js';
 import { restorable, writtenByHand } from '../../../shared/article-versions.js';
@@ -56,7 +56,19 @@ function publishedSnapshot(base: ArticleSnapshot | null, p: ArticleProposal, pub
   const locales: any = {};
   for (const l of new Set([...Object.keys(base?.locales || {}), ...Object.keys(p.draft.locales)])) locales[l] = { ...base?.locales[l], ...p.draft.locales[l] };
   const status = p.draft.status ?? base?.status;
-  return { id: published.articleId, slug: published.slug, version: published.version, readAt: published.at, ...(status ? { status } : {}), locales };
+  const cover = base?.cover || p.draft.cover ? { ...base?.cover, ...p.draft.cover } : undefined;
+  return { id: published.articleId, slug: published.slug, version: published.version, readAt: published.at, ...(status ? { status } : {}), locales, ...(cover ? { cover } : {}) };
+}
+/** A leg's proposal as its target holds it: task images and covers at the addresses they were uploaded to there. */
+const asPublished = (p: ArticleProposal, w: Work, targetId: string) => withCoverUrls(withImageUrls(p, w.imageUrls?.[targetId]), w.coverUrls?.[targetId]);
+/** What a version did to the covers, for its Activity line: added, replaced or removed one (the first that changed). */
+function coverEdit(before: Record<string, string> = {}, after: Record<string, string> = {}): 'added' | 'replaced' | 'removed' | undefined {
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const was = before[key] || '', now = after[key] || '';
+    if (was === now) continue;
+    return !was ? 'added' : !now ? 'removed' : 'replaced';
+  }
+  return undefined;
 }
 
 export class ArticleFlow {
@@ -74,7 +86,8 @@ export class ArticleFlow {
   targets(project: string) {
     try {
       const list = (this.s.p.articleTargets as ArticleTargets | undefined)?.list(project);
-      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId, ...(t.pages ? { pages: t.pages } : {}) }));
+      // Its covers (2026-11-05) as the review card needs them: where they go, the ratio, the narrowest width, required.
+      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId, ...(t.pages ? { pages: t.pages } : {}), ...(coverKeys(t).length ? { cover: { ...(t.cover.field ? { field: t.cover.field } : {}), ...(t.cover.locales ? { locales: t.cover.locales } : {}), ...(t.cover.ratio ? { ratio: t.cover.ratio } : {}), ...(t.cover.minWidth ? { minWidth: t.cover.minWidth } : {}), ...(t.cover.required ? { required: true } : {}) } } : {}) }));
     } catch {
       return [];
     }
@@ -238,6 +251,21 @@ export class ArticleFlow {
     const fields = ARTICLE_FIELDS.filter((f) => text[f].trim());
     w.delivery = { ...d, locales: [from, ...to], translateFrom: { artifactId: null, at, by, draft: { locales: {} }, text, fields, published: true } };
   }
+  /**
+   * Whether the version cannot be approved for want of a cover (2026-11-05): its target requires one for a new article
+   * published at once, and the primary language has none. A draft may go without.
+   */
+  coverMissing(project: string, w: Work, output: Artifact) {
+    const a: ArticleProposal | undefined = output.article;
+    if (!a) return false;
+    let target;
+    try {
+      target = this.need().target(project, a.targetId);
+    } catch {
+      return false;
+    }
+    return coverMissing(target, a.draft, !a.articleId, this.primaryOn(project, w.delivery, a.targetId) || target.locales[0]);
+  }
   /** Whether an approval of this version is of the primary language only, with other languages still to translate. */
   needsTranslation(w: Work, output: Artifact) {
     const d = w.delivery;
@@ -300,7 +328,8 @@ export class ArticleFlow {
     const locales = {};
     for (const l of new Set([...Object.keys(base?.locales || {}), ...Object.keys(a.draft.locales)])) locales[l] = { ...base?.locales[l], ...a.draft.locales[l] };
     const slug = a.draft.slug || base?.slug, status = a.draft.status ?? base?.status;
-    return { previous: { version: out.version, editedByHand: writtenByHand(out), article: { ...(slug ? { slug } : {}), ...(status ? { status } : {}), locales } } };
+    // The covers the person set on it (2026-11-05) stay on the version the Agent writes, which never sets any.
+    return { previous: { version: out.version, editedByHand: writtenByHand(out), article: { ...(slug ? { slug } : {}), ...(status ? { status } : {}), locales }, ...(a.draft.cover ? { cover: a.draft.cover } : {}) } };
   }
   /**
    * A Runner's article for the phase it was asked for: the primary language alone (other languages it wrote anyway are
@@ -324,9 +353,14 @@ export class ArticleFlow {
     // version again (T-53).
     const L = input?.article?.languages, wrong = L?.phase === 'primary' ? primaryOnly(L.primary, article) : L?.phase === 'translate' || L?.phase === 'update' ? writesNone(L.write || [], L.primary, article) : undefined;
     if (wrong) return fail(draftRejection(wrong), 422);
+    // Covers are a person's (2026-11-05): the Agent's are dropped, and the ones set on the version it revises are kept.
+    const own = article && typeof article === 'object' ? (({ cover: _, ...rest }: any) => rest)(article) : article;
+    let draft: any = this.byPhase(input, own);
+    const keep = input?.article?.previous?.cover;
+    if (keep && draft && typeof draft === 'object' && !draft.cover) draft = { ...draft, cover: keep };
     let p: ArticleProposal;
     try {
-      p = this.need().proposal(project, { targetId: d.targetId, articleId: d.articleId, base, baseKey: d.sourceKey, draft: this.byPhase(input, article), primary: this.primaryOn(project, d, d.targetId) });
+      p = this.need().proposal(project, { targetId: d.targetId, articleId: d.articleId, base, baseKey: d.sourceKey, draft, primary: this.primaryOn(project, d, d.targetId) });
     } catch (error) {
       if (error instanceof ArticleError) return fail(draftRejection(error), 422);
       throw error;
@@ -379,6 +413,8 @@ export class ArticleFlow {
     // images, and only images of this task.
     const linked = new Set([...(projectWork(task).images || []), ...(task.evidence?.attachmentIds || [])]);
     for (const l of legs) {
+      // A cover is a task image too (2026-11-05), uploaded as the target keeps covers.
+      if (draftCoverIds(l.draft).some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
       const ids = draftImageIds(l.draft);
       if (!ids.length) continue;
       const target = this.need().target(project, l.targetId);
@@ -512,12 +548,14 @@ export class ArticleFlow {
       if (![next, ...(next.also || [])].some((l) => l.changes.length || l.carried?.length)) return fail(systemMessageText('articles.noChanges'), 409);
       // Images pasted into Edit directly (2026-11-03) are the person's own uploads until the edit is saved: linked now.
       const linked = new Set([...(w.images || []), ...(task.evidence?.attachmentIds || [])]);
-      const pasted = draftImageIds(next.draft).filter((id) => !linked.has(id));
+      // A cover chosen or cropped on the card (2026-11-05) is linked the same way.
+      const pasted = [...new Set([...draftImageIds(next.draft), ...draftCoverIds(next.draft)])].filter((id) => !linked.has(id));
       if (pasted.length) await s.linkImages(project, taskId, w, { imageIds: pasted }, actor, tx, PASTED_PER_EDIT);
       const content = typeof v.content === 'string' && v.content.trim() ? v.content.trim().slice(0, 30000) : output.content;
       // How many places AI rewrote (as the page counted them) and the person changed by hand, for its Activity line.
       const places = editPlaces(articleText(a.draft, base), articleText(next.draft, base));
-      const edits: ArticleEdits = { ai: v.edits?.ai ?? 0, hand: Math.max(0, places - (v.edits?.ai ?? 0)) };
+      const cover = coverEdit({ ...base?.cover, ...a.draft.cover }, { ...base?.cover, ...next.draft.cover });
+      const edits: ArticleEdits = { ai: v.edits?.ai ?? 0, hand: Math.max(0, places - (v.edits?.ai ?? 0)), ...(cover ? { cover } : {}) };
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) }, edits };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 1] = artifact;
@@ -538,7 +576,7 @@ export class ArticleFlow {
       if (!restorable(w.history || [], output, chosen)) return fail(systemMessageText('articles.cannotRestore'), 409);
       // Its images were linked to the task when that version was saved; checked again, as approval will.
       const linked = new Set([...(w.images || []), ...(task.evidence?.attachmentIds || [])]);
-      if (draftImageIds(chosen.article.draft).some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
+      if ([...draftImageIds(chosen.article.draft), ...draftCoverIds(chosen.article.draft)].some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
       const { rebasedFrom: _rebased, ...article } = structuredClone(chosen.article);
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, chosen.content, actor, at, tx)), article, restoredFrom: { artifactId: chosen.id, version: chosen.version, byHand: writtenByHand(chosen) } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
@@ -598,7 +636,7 @@ export class ArticleFlow {
           return { articleId: p.articleId, base: was, baseKey: p.baseKey, conflicts };
         }
         if (rec.published) {
-          const snap = publishedSnapshot(was, withImageUrls(p, w.imageUrls?.[rec.targetId]), rec.published);
+          const snap = publishedSnapshot(was, asPublished(p, w, rec.targetId), rec.published);
           return { articleId: rec.published.articleId, base: snap, baseKey: await keep(snap), carried: [...new Set([...(p.carried || []), ...rec.published.written])] };
         }
         return { articleId: p.articleId, base: was, baseKey: p.baseKey, ...(p.carried ? { carried: p.carried } : {}) };
@@ -607,7 +645,7 @@ export class ArticleFlow {
       let next: ArticleProposal;
       try {
         // Images already uploaded to the target are written at their address there, which the base now holds too.
-        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: withImageUrls(old, w.imageUrls?.[old.targetId]).draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
+        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: asPublished(old, w, old.targetId).draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
       } catch (error) {
         if (error instanceof ArticleError) return fail(draftRejection(error), 409);
         throw error;
@@ -646,17 +684,19 @@ export class ArticleFlow {
           if (stateOf(r, rec) === 'publishing' && p) legs.push({ i, p, key: rec.key, base: p.baseKey ? await this.s.snapshot(p.baseKey, tx) : null });
         }
         // The task images the legs show that their target has not taken yet, read here on the task's connection.
-        const urls = w.imageUrls || {};
-        const wanted = [...new Set(legs.flatMap((l) => draftImageIds(l.p.draft).filter((id) => !urls[l.p.targetId]?.[id])))];
+        const urls = w.imageUrls || {}, covers = w.coverUrls || {};
+        const wanted = [...new Set(legs.flatMap((l) => [...draftImageIds(l.p.draft).filter((id) => !urls[l.p.targetId]?.[id]), ...draftCoverIds(l.p.draft).filter((id) => !covers[l.p.targetId]?.[id])]))];
         const files: MaterialAttachment[] = wanted.length && this.s.p.taskAttachments ? await this.s.p.taskAttachments.forAgent(tx.connection, project, taskId, wanted) : [];
-        return { r, artifact, legs, urls, files };
+        return { r, artifact, legs, urls, covers, files };
       });
       if (!claim) return;
       const outcomes = [];
       for (const l of claim.legs) {
         // The images first: the article is written with their addresses in the target.
         const images = await this.uploadImages(project, taskId, l.p, claim.urls[l.p.targetId] || {}, claim.files);
-        const outcome = 'urls' in images ? await this.delivery.publish(project, withImageUrls(l.p, images.urls), l.base, l.key) : images;
+        // Then the covers (2026-11-05), only those the article changes to a task image.
+        const covers = 'urls' in images ? await this.uploadCovers(project, taskId, l, claim.covers[l.p.targetId] || {}, claim.files) : images;
+        const outcome = 'urls' in covers && 'urls' in images ? await this.delivery.publish(project, withCoverUrls(withImageUrls(l.p, images.urls), covers.urls), l.base, l.key) : 'urls' in images ? covers : images;
         // Every failed leg leaves a line in the application log (`nb-studio app logs`), whether or not it is recorded.
         if (outcome.kind === 'failed') this.s.p.app?.logger?.warn?.('NocoReach article publish failed', { projectId: project, taskId, targetId: l.p.targetId, step: outcome.step, code: outcome.code, detail: outcome.detail });
         outcomes.push(outcome);
@@ -702,12 +742,37 @@ export class ArticleFlow {
     await this.keepUrls(project, taskId, p.targetId, uploaded);
     return { urls: { ...known, ...uploaded } };
   }
-  private async keepUrls(project: string, taskId: string, targetId: string, uploaded: Record<string, string>) {
+  /**
+   * Upload the covers a leg's draft sets that its target has not taken yet (2026-11-05): into the cover field's storage,
+   * the repository's cover folder or the site's image endpoint. Each value is kept on the task at once (`coverUrls`, per
+   * target), so a retry, a rebase or the overwrite watch uses the same one.
+   */
+  private async uploadCovers(project: string, taskId: string, l: { p: ArticleProposal; key: string; base: ArticleSnapshot | null }, known: Record<string, string>, files: MaterialAttachment[]): Promise<{ urls: Record<string, string> } | PublishFailure> {
+    const uploaded: Record<string, string> = {};
+    const slug = l.p.draft.slug || l.base?.slug || '';
+    for (const id of draftCoverIds(l.p.draft).filter((x) => !known[x])) {
+      const file = files.find((f) => f.id === id);
+      if (!file?.read) {
+        await this.keepUrls(project, taskId, l.p.targetId, uploaded, 'coverUrls');
+        return { kind: 'failed', code: 'image_missing', step: 'images', detail: id };
+      }
+      try {
+        uploaded[id] = await this.delivery.uploadCover(project, l.p.targetId, { name: file.name, type: file.type, bytes: await file.read() }, { slug, key: `${l.key}:${id}` });
+      } catch (error) {
+        await this.keepUrls(project, taskId, l.p.targetId, uploaded, 'coverUrls');
+        const f = failed('images', error);
+        return { ...f, code: f.code === 'unauthorized' ? 'image_upload_denied' : f.code };
+      }
+    }
+    await this.keepUrls(project, taskId, l.p.targetId, uploaded, 'coverUrls');
+    return { urls: { ...known, ...uploaded } };
+  }
+  private async keepUrls(project: string, taskId: string, targetId: string, uploaded: Record<string, string>, kind: 'imageUrls' | 'coverUrls' = 'imageUrls') {
     if (!Object.keys(uploaded).length) return;
     await this.s.lock(project, taskId, async (tx) => {
       const task = await this.s.task(project, taskId, tx),
         w = projectWork(task);
-      w.imageUrls = { ...w.imageUrls, [targetId]: { ...w.imageUrls?.[targetId], ...uploaded } };
+      w[kind] = { ...w[kind], [targetId]: { ...w[kind]?.[targetId], ...uploaded } };
       await this.s.save(task, w, tx);
     });
   }
@@ -789,7 +854,7 @@ export class ArticleFlow {
   }
   /** The published content of one leg: its approved draft with the slug it was published under. */
   private publishedContent(p: ArticleProposal, slug: string) {
-    return { slug, status: p.draft.status, locales: p.draft.locales };
+    return { slug, status: p.draft.status, locales: p.draft.locales, ...(p.draft.cover ? { cover: p.draft.cover } : {}) };
   }
   /** Background work: interrupted publishes, export tracking and the post-publish overwrite watch. */
   async tick() {
@@ -824,7 +889,7 @@ export class ArticleFlow {
       if (stateOf(r, rec) !== 'exporting' || !rec.published) continue;
       const p = proposalOf(artifact, i);
       try {
-        results.set(i, p ? await this.delivery.exported(project, rec.targetId, this.publishedContent(withImageUrls(p, work.imageUrls?.[rec.targetId]), rec.published.slug), rec.published.written) : null);
+        results.set(i, p ? await this.delivery.exported(project, rec.targetId, this.publishedContent(asPublished(p, work, rec.targetId), rec.published.slug), rec.published.written) : null);
       } catch {
         results.set(i, { done: false });
       }
@@ -866,7 +931,7 @@ export class ArticleFlow {
       if (!rec.published || !p || Date.now() - Date.parse(rec.published.at) >= DRIFT_DAYS * 24 * HOUR) continue;
       let fields: any[];
       try {
-        ({ fields } = await this.delivery.drift(project, rec.targetId, rec.published.articleId, this.publishedContent(withImageUrls(p, work.imageUrls?.[rec.targetId]), rec.published.slug), rec.published.written));
+        ({ fields } = await this.delivery.drift(project, rec.targetId, rec.published.articleId, this.publishedContent(asPublished(p, work, rec.targetId), rec.published.slug), rec.published.written));
       } catch {
         continue;
       }

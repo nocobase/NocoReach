@@ -449,7 +449,7 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,se
   if(await confirmAction({title:()=>$t('articleTask.changePrimaryTitle',{0:lang}),description:()=>$t('articleTask.changePrimaryDescription',{0:lang,1:others}),action:()=>$t('articleTask.changePrimaryAction',{0:lang}),destructive:false}))
    await act('changePrimary',{artifactId:out.id,locale:l,comment:$t('articleTask.primaryChangedComment',{0:lang})});};
  // The edits made a version first; the command then acts on that version.
- const versioned=async(command:string,body:object)=>{const v=await submit.prepare();return v?act(command,{...body,artifactId:v.artifactId,revision:v.revision}):undefined;};
+ const versioned=async(command:string,body:object)=>{const v=await submit.prepare(command==='approveStage');return v?act(command,{...body,artifactId:v.artifactId,revision:v.revision}):undefined;};
  const fullScreen=(lang:string)=>`article?lang=${encodeURIComponent(lang)}`;
  return <StageCard title={round.title} sub={session.changed?editedLine(session,out.version):versionLine(out)} at={session.changed?undefined:out.createdAt}
   actions={allowed?<ArticleEditActions session={session} version={out.version} busy={busy} request={()=>setAsking(true)} fullScreenTo={fullScreen(tab||(w.delivery?.locales||[])[0]||'')} onVersions={showVersions}
