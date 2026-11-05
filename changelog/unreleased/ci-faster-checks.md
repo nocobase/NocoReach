@@ -1,8 +1,0 @@
-## CI: the same checks in a fraction of the time
-
-- `pnpm test` runs on four machines with `--shard`, three workers each, instead of two workers on one. The slowest file, `tests/nocoreach/demo-data-app.test.ts`, ran its eight tests one after another for almost seven minutes; its lifecycle and conversation tests now live in `demo-data-lifecycle-app.test.ts` and `demo-data-conversations-app.test.ts`, which run beside it. `tests/setup/shard-sequencer.ts` splits the shards by the time their slow files take instead of by path hash, which had put the three slowest files on one shard.
-- The Database compatibility workflow is part of CI. Its SQLite leg repeated what `pnpm test` already runs on SQLite, so the `build` job now packs the release archive and runs `deployment-artifact.test.ts` on it instead. PostgreSQL and MySQL run their application, demo import and production artifact suites as six parallel jobs, each starting only its own database.
-- A newer push to a pull request cancels its running checks; `main` no longer does, so every commit on `main` is checked to completion.
-- Pull requests that change only documentation run the tests that read documentation instead of the full suite. `CI result` reports on every run and is the one check to require in branch protection.
-- The Release workflow tests its version commit on the same four shards, builds it alongside, and publishes only after both pass.
-- `tsconfig.json` and `tsconfig.node.json` set `incremental`: they named a `tsBuildInfoFile` that was never written, so the client typecheck in `pnpm build` and `pnpm typecheck` took a minute every time. A repeated local build now typechecks the client in about ten seconds.
