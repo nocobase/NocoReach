@@ -18,10 +18,12 @@ export interface PermissionRealtime {
 }
 
 /**
- * Which permissions the session's page state was built on. The authorization plugin invalidates its snapshot whenever
- * the realtime connection opens and whenever its permission topics become ready, not only when permissions change;
- * keying the shell on that revision rebuilt it, and sent every one of its requests again, two or three times on each
- * full page load. This value moves only when permissions may have changed:
+ * Which permissions the session's page state was built on. The published authorization plugin invalidates its snapshot
+ * whenever the realtime connection opens and whenever its permission topics become ready, not only when permissions
+ * change; keying the shell on that revision rebuilt it, and sent every one of its requests again, two or three times on
+ * each full page load. NocoReach's patch of the plugin now reads the snapshot again then and invalidates only when it
+ * changed, but this value still guards the shell against any other invalidation. It moves only when permissions may
+ * have changed:
  *
  * - a permission-changed event arrives;
  * - the connection is ready again after it dropped, as events sent while it was down are lost;

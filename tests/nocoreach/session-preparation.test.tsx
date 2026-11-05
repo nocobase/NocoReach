@@ -19,7 +19,7 @@ import {
   TestI18nProvider,
   createTestI18nRuntime,
 } from '@nocobase/i18n/testing';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { MemoryRouter, Outlet } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -167,8 +167,6 @@ async function setup({ active = true, authenticated = true } = {}) {
     </TestI18nProvider>,
   );
   await act(async () => {});
-  // Register after preparation to prove ordering does not depend on effects.
-  listeners.add(() => authz.invalidate());
   return {
     allowed,
     memberRequest,
@@ -181,10 +179,16 @@ async function setup({ active = true, authenticated = true } = {}) {
     cleaned,
     accepted,
     old,
+    // The connection opening: what the patched authorization plugin asks for then.
     open: async () => {
       await act(async () => {
         for (const listener of listeners) listener();
+        await authz.revalidate();
       });
+    },
+    // A permission event.
+    changed: async () => {
+      await act(async () => authz.invalidate());
     },
     login: async (id = 'session') => {
       session = { user: { id: 'user' }, session: { id } };
@@ -197,19 +201,39 @@ async function setup({ active = true, authenticated = true } = {}) {
   };
 }
 
-it('mounts only after the initial handshake and preserves runtime fail-closed portal cleanup', async () => {
+it('mounts before the realtime connection opens and keeps the page when the snapshot read then is unchanged', async () => {
   const probe = await setup();
-  expect(probe.mounted).not.toHaveBeenCalled();
-  expect(probe.request).not.toHaveBeenCalled();
-  expect(probe.memberRequest).not.toHaveBeenCalled();
-  await probe.open();
-  await screen.findByText('Protected dialog');
+  expect(await screen.findByText('Protected dialog')).toBeVisible();
   expect(probe.mounted).toHaveBeenCalledOnce();
   expect(probe.request).toHaveBeenCalledOnce();
   expect(probe.memberRequest).toHaveBeenCalledOnce();
+  const revision = probe.authz.revision();
+  await probe.open();
+  expect(probe.request).toHaveBeenCalledTimes(2);
+  expect(probe.authz.revision()).toBe(revision);
+  expect(screen.getByText('Protected dialog')).toBeVisible();
+  expect(probe.mounted).toHaveBeenCalledOnce();
+  expect(probe.cleaned).not.toHaveBeenCalled();
+});
+
+it('closes protected content when the snapshot read on opening changed, and checks it again', async () => {
+  const probe = await setup();
+  await screen.findByText('Protected dialog');
+  probe.request.mockResolvedValueOnce({
+    data: { unrestricted: false, permissions: [] },
+  });
+  await probe.open();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(probe.cleaned).toHaveBeenCalledOnce();
+  expect(await screen.findByText('Access denied')).toBeVisible();
+});
+
+it('preserves fail-closed portal cleanup on a permission event', async () => {
+  const probe = await setup();
+  await screen.findByText('Protected dialog');
   const next = Promise.withResolvers<typeof probe.allowed>();
   probe.request.mockReturnValueOnce(next.promise);
-  await probe.open();
+  await probe.changed();
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(probe.cleaned).toHaveBeenCalledOnce();
   await act(async () => probe.old.resolve());
@@ -221,50 +245,29 @@ it('mounts only after the initial handshake and preserves runtime fail-closed po
   expect(await screen.findByText('Access denied')).toBeVisible();
 });
 
-it('keeps a timed-out session closed, supports retry, and reports sign-out failure', async () => {
-  vi.useFakeTimers();
+it('stays usable when the realtime connection cannot be made', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   const probe = await setup();
   await act(async () => vi.advanceTimersByTime(10_000));
-  expect(screen.getByText('Unable to connect')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-  await act(async () => {});
-  expect(screen.getByRole('alert')).toHaveTextContent('Unable to sign out');
-  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-  expect(probe.realtime.reconnect).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('Protected dialog')).toBeVisible();
   expect(screen.queryByText('Unable to connect')).toBeNull();
-  await probe.open();
   expect(probe.mounted).toHaveBeenCalledOnce();
 });
 
-it('can sign out of a failed initialization without a working realtime connection', async () => {
-  vi.useFakeTimers();
-  const probe = await setup();
-  await act(async () => vi.advanceTimersByTime(10_000));
-  probe.signOut.mockResolvedValueOnce({});
-  probe.getSession.mockResolvedValueOnce({ data: null });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-  await act(async () => {});
-  expect(screen.getByText('Login route')).toBeVisible();
-  expect(probe.mounted).not.toHaveBeenCalled();
-});
-
-it('keeps guest login reachable and prepares every newly signed-in session', async () => {
+it('keeps guest login reachable and gives every newly signed-in session its own pages', async () => {
   const probe = await setup({ authenticated: false });
   expect(await screen.findByText('Login route')).toBeVisible();
   expect(probe.realtime.reconnect).not.toHaveBeenCalled();
-  await probe.login();
-  expect(probe.mounted).not.toHaveBeenCalled();
   expect(probe.memberRequest).not.toHaveBeenCalled();
-  await probe.open();
+  await probe.login();
   expect(await screen.findByText('Protected dialog')).toBeVisible();
+  expect(probe.realtime.reconnect).toHaveBeenCalledOnce();
   expect(probe.mounted).toHaveBeenCalledOnce();
   expect(probe.memberRequest).toHaveBeenCalledOnce();
   await probe.logout();
   expect(await screen.findByText('Login route')).toBeVisible();
+  expect(probe.cleaned).toHaveBeenCalledOnce();
   await probe.login('second-session');
-  expect(screen.queryByRole('dialog')).toBeNull();
-  expect(probe.mounted).toHaveBeenCalledOnce();
-  await probe.open();
   expect(await screen.findByText('Protected dialog')).toBeVisible();
   expect(probe.mounted).toHaveBeenCalledTimes(2);
   expect(probe.memberRequest).toHaveBeenCalledTimes(2);
