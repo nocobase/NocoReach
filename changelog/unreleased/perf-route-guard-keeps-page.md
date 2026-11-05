@@ -1,5 +1,0 @@
-## Insights: an access re-check no longer reads the page again
-
-- Each time the realtime connection opens and each of its two permission topics becomes ready, the route checks access to Insights again and unmounts the page meanwhile, as before. When the page comes back from such a re-check within 10 seconds, in the same session and permissions, it now takes the state, the current situation and the waiting tasks it had already read, or the reads still in flight, instead of sending them again, and does not ask a second time for the unjudged changes to be judged. The day's conversations, the analysis status and the playbook list are still read again. The page stays hidden while access is checked; a permission change, a connection ready again after a drop, a failed permission read or another account reads everything again.
-- Opening Insights again, even within those 10 seconds, reads it afresh as before.
-- A state read that started before Ignore, Hand off to agent or a newer read of the state, and answers after it, is no longer shown: it could put an opportunity just ignored back on the list.

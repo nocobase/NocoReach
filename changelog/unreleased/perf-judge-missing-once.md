@@ -1,6 +1,0 @@
-## Insights: changes left without a verdict cost one model call, not one per visit
-
-- Opening Insights asks the model to judge the changes the latest analysis left without a verdict. Visits at the same time (several tabs, a reload, the call after an analysis) now share one model call instead of each making its own.
-- A change the model was asked about and still left without a verdict is not asked about again from Insights for 30 minutes; it is judged by the next analysis, after those 30 minutes, or at once when another change joins it or a new analysis replaces it. The hold exists only to stop paying for the same unjudged changes on every visit; the call after each analysis is never held.
-- When judging fails, the call that failed still answers with the cause and status as before; the visits after it, instead of trying again, answer with that status and the minutes until it is tried again: 2 minutes when the provider could not be reached or turned the call away at once, 30 minutes when trying again soon would not help (no default chat model, a call the model rejected or that may have been billed). Changing the default chat model or its service's connection lets the next visit try at once. Each real failure is logged once.
-- Insights reads the analysis again only when something was judged.
