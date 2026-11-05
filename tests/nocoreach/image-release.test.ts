@@ -7,6 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 
 import {
   imageRelease,
+  shouldPublishLatest,
   validateImageArtifact,
 } from '../../scripts/ci/image-release.mjs';
 
@@ -95,4 +96,33 @@ it('rejects mismatched versions and an artifact missing the production driver', 
   expect(() => validateImageArtifact(root, manifest.version)).toThrow(
     'PostgreSQL',
   );
+});
+
+it.each([
+  ['v1.0.0-beta.75', ['v1.0.0-beta.74'], true],
+  ['v1.0.0-beta.9', ['v1.0.0-beta.10'], false],
+  ['v1.0.0-beta.75', ['v1.0.0'], false],
+  ['v1.0.0', ['v1.0.0-rc.9'], true],
+  ['v1.1.0-beta.1', ['v1.0.0'], true],
+  ['v1.0.0-beta.75', ['v1.0.0-rc.1'], false],
+  ['v1.0.0', ['v2.0.0'], false],
+])('decides latest for %s against %j', (tag, otherTags, expected) => {
+  const releases = [tag, ...otherTags].map((tag_name) => ({
+    tag_name,
+    draft: false,
+  }));
+  expect(shouldPublishLatest(tag, releases)).toBe(expected);
+});
+
+it('ignores drafts and unrelated releases but requires a published candidate', () => {
+  expect(
+    shouldPublishLatest('v1.0.0', [
+      { tag_name: 'v1.0.0', draft: false },
+      { tag_name: 'v2.0.0', draft: true },
+      { tag_name: 'runner-v9.0.0', draft: false },
+    ]),
+  ).toBe(true);
+  expect(() =>
+    shouldPublishLatest('v1.0.0', [{ tag_name: 'v1.0.0', draft: true }]),
+  ).toThrow('not published');
 });

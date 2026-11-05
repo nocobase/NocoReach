@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nocoreach-image-${{ inputs.release_tag }}
+  group: nocoreach-image-publication
   cancel-in-progress: false
 
 jobs:
@@ -106,6 +106,25 @@ jobs:
           digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           test -n "$digest"
           printf 'Image: `%s`\n\nDigest: `%s`\n\nPlatform: `linux/amd64`\n' "$IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Check whether this release should update latest
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/image-release.mjs latest
+      - name: Publish and verify latest
+        if: steps.latest.outputs.publish == 'true'
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: |
+          latest="${IMAGE%:*}:latest"
+          digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          docker buildx imagetools create --prefer-index=false --tag "$latest" "$digest"
+          actual=$(docker buildx imagetools inspect "$latest" --format '{{json .Manifest}}' | jq -r .digest)
+          test "$actual" = "${digest##*@}"
+          printf 'Latest: `%s`\n\nDigest: `%s`\n' "$latest" "$actual" >> "$GITHUB_STEP_SUMMARY"
+      - name: Report skipped latest update
+        if: steps.latest.outputs.publish == 'false'
+        run: echo 'Skipped latest because a newer version is already published.' >> "$GITHUB_STEP_SUMMARY"
       - name: Clear registry credentials
         if: always()
         run: |
