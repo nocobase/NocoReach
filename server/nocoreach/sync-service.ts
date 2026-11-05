@@ -309,6 +309,16 @@ class SyncService{
    if(row)await repo.update({filter:{key:snapshot},values:{payload}});else await repo.create({values:{key:snapshot,payload}});}
    catch(e){this.p.app?.logger?.warn?.('NocoReach snapshots not saved',{projectId:id,message:e?.message});}});
   keeping.set(id,write);try{await write;}finally{if(keeping.get(id)===write)keeping.delete(id);}}
- async build(id,link,project){const rows=[];for(let offset=0;;offset+=200){const page=await this.repo('nrSyncPartitions').find({filter:{projectId:id},sort:['id'],offset,limit:200});rows.push(...page.map(r=>r.toJSON()).filter(r=>r.resource===(r.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'))));if(page.length<200)break;if(rows.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}return buildSnapshots(rows,project);}
+ // Pages of 200 with an offset made the database read every stored day, payloads included, and sort them again for each
+ // page (the id order is a nulls-last `case` no index serves), while the whole process waited. The ids are read once,
+ // then the linked days by key, 200 at a time in id order, giving way to other requests between reads (SQLite answers
+ // synchronously). Project and resource are checked again on the rows read: filtering on the project as well would make
+ // the database search the project's index instead of looking up the keys.
+ async build(id,link,project){const r=this.repo('nrSyncPartitions'),linked=p=>p.resource===(p.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl')),wanted=[],rows=[];
+  const listed=(await r.find({filter:{projectId:id},fields:['id','source','resource'],sort:['id']})).map(p=>p.toJSON());
+  // The same limit, counted page by page as before, now reached before any stored day is read.
+  for(let offset=0;;offset+=200){const page=listed.slice(offset,offset+200);wanted.push(...page.filter(linked).map(p=>p.id));if(page.length<200)break;if(wanted.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}
+  for(let i=0;i<wanted.length;i+=200){await new Promise(resolve=>setImmediate(resolve));for(const p of (await r.find({filter:{id:{$in:wanted.slice(i,i+200)}},sort:['id']})).map(p=>p.toJSON()))if(String(p.projectId)===String(id)&&linked(p))rows.push(p);}
+  return buildSnapshots(rows,project);}
 }
 export { SyncService, StagedSync };
