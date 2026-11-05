@@ -19,6 +19,7 @@ import { pageIdentity } from '../../shared/page-identity.js';
 import { distinctPages, pageUrlsOf } from '../../shared/task-start.js';
 import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
 import { strategyPageState, wantsPageView } from './page-views.js';
+import { ARCHIVE_KEEP_MS, archiveKey, isSlim, slimBatch, taskContext, withoutCatalog } from './analysis-evidence.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -98,10 +99,10 @@ class StrategyService{
   const goal={...fields,version:(state.goal?.version||0)+1,confirmedAt:new Date().toISOString(),confirmedBy:String(ctx.auth.user.id)};
   if(state.goal)state.goalHistory.push(state.goal);state.goal=goal;
  });}
- async saveProposal(id,v){const fields=proposalInput(v),context=await this.context(id);return this.mutate(id,v,async state=>{
+ async saveProposal(id,v){const fields=proposalInput(v);return this.mutate(id,v,async state=>{
   if(!state.goal)fail(systemMessageText('strategy.confirmGoalFirst'),409);
   if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-  state.proposals.unshift({...fields,id:randomUUID(),status:'review',goalVersion:state.goal.version,goal:state.goal,evidence:context.evidence,createdAt:new Date().toISOString()});
+  state.proposals.unshift({...fields,id:randomUUID(),status:'review',goalVersion:state.goal.version,goal:state.goal,createdAt:new Date().toISOString()});
  });}
  async saveInsights(id,v,ctx,trustedContext){
   if(!Array.isArray(v.insights)||v.insights.length>12)fail(systemMessageText('strategy.insightFormatIncompleteGenerateAgain'));
@@ -114,9 +115,9 @@ class StrategyService{
   const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
   const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards),maxDays=context.evidence.signals?.analysisSnapshot?.config?.watchDays??(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;
-  return this.mutate(id,v,async(state,transaction)=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);
+  return this.mutate(id,v,async(state,transaction)=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights){await this.archive(id,state.insights,transaction);state.insightHistory.unshift(slimBatch(state.insights));}
    const signals=context.evidence.signals?.items||[];watch.enforceDeadlines(state,signalReviews,now);
-   state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations,signalReviews};
+   state.insights={generatedAt:now,evidence:withoutCatalog(context.evidence),items,sourceReviews:reviews,observations,signalReviews};
    settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v),await this.pageIdentity(id,transaction));
    watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:state.insights.items,now,maxDays});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
  }
@@ -153,9 +154,39 @@ class StrategyService{
   const playbooks=await this.p.taskExecution?.playbooks.list(String(id),transaction).then(l=>l.playbooks,()=>[])||[];
   return planOf({card,signals,site,proposals:state.proposals,tasks,targets,playbooks,locale:ctx?.getCurrentLocale?.()||'zh-CN'});
  }
+ // What a hand-off without an opportunity stands on (keyword, search and data-page hand-offs, a change on Insights): the
+ // latest analysis when it holds the change, else the analysis computed now. An opportunity's hand-off takes its batch's
+ // evidence inside the transaction, so nothing is computed for it (that computation can call the model for custom rules).
+ async handOffContext(id,v,fields){if(v.insightId)return null;const latest=await this.state(id).then(s=>s?.insights,()=>null);
+  if(latest?.evidence&&(!fields.signalKey||(latest.evidence.signals?.items||[]).some(s=>s.key===fields.signalKey)))return {evidence:latest.evidence};
+  return this.context(id);}
+ // An analysis leaving the state keeps its whole evidence here, once; older archives than ARCHIVE_KEEP_MS go.
+ async archive(id,batch,transaction){if(!batch?.generatedAt||!batch.evidence||isSlim(batch.evidence))return;
+  const key=archiveKey(id,batch.generatedAt),old=await this.repo().findOne({filter:{key},transaction});
+  if(!old)await this.repo().create({values:{key,payload:batch.evidence},transaction});
+  const cutoff=new Date(Date.now()-ARCHIVE_KEEP_MS).toISOString();
+  for(const row of await this.repo().find({filter:{key:{$like:`${archiveKey(id,'')}%`}},fields:['id','key'],transaction}))if(String(row.get('key')).slice(archiveKey(id,'').length)<cutoff)await this.repo().destroy({filterByTk:row.get('id'),transaction});}
+ /** An earlier analysis's whole evidence, while it is kept. */
+ async archived(id,generatedAt){return (await this.repo().findOne({filter:{key:archiveKey(id,generatedAt)}}))?.get('payload')||null;}
+ // One-time slimming after an upgrade, idempotent, runs at start (analysis-evidence.ts): each earlier analysis archived
+ // and cut down, the current one without its rule catalog, plans without evidence, tasks with their cited signals only.
+ async slimAll(){for(const id of await this.p.projectIds())await this.slimProject(String(id));}
+ async slimProject(id){
+  await this.p.db.sequelize.transaction(async transaction=>{
+   await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-strategy:${id}`},transaction});
+   const row=await this.row(id,transaction),state=row?.get('payload');
+   if(state){let changed=false;const cutoff=new Date(Date.now()-ARCHIVE_KEEP_MS).toISOString();
+    const history=[];for(const b of state.insightHistory||[]){if(b?.evidence&&!isSlim(b.evidence)){if(String(b.generatedAt||'')>=cutoff)await this.archive(id,b,transaction);history.push(slimBatch(b));changed=true;}else history.push(b);}
+    if(changed)state.insightHistory=history;
+    if(state.insights?.evidence){const e=withoutCatalog(state.insights.evidence);if(e!==state.insights.evidence){state.insights.evidence=e;changed=true;}}
+    for(const p of state.proposals||[])if(p&&'evidence' in p){delete p.evidence;changed=true;}
+    if(changed)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});}
+   const tasks=this.p.db.getRepository('nrTasks');
+   for(const t of await tasks.find({filter:{projectId:id},limit:5000,transaction})){const e=t.get?t.get('evidence'):t.evidence;if(!e?.context||isSlim(e.context))continue;const context=taskContext(e.context,e);if(context!==e.context)await tasks.update({filterByTk:t.get?t.get('id'):t.id,values:{evidence:{...e,context}},transaction});}
+  });}
  // Hand off to agent on an opportunity with several places: what the confirmation dialog lists.
  async handOffPlan(id,v,ctx){const state=await this.state(id);const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));const card=batch?.items.find(i=>i.id===v.insightId);if(!card)fail(systemMessageText('strategy.opportunityNotFound'),404);return {parts:await this.planFor(id,state,card,batch,ctx)};}
- async confirmDirection(id,v,ctx){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
+ async confirmDirection(id,v,ctx){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.handOffContext(id,v,fields);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));
   const insight=v.insightId?state.resultOpportunities?.find(i=>i.id===v.insightId)||batch?.items.find(i=>i.id===v.insightId):null;
   if(v.insightId&&!insight)fail(systemMessageText('strategy.opportunityNotExistCheckOpportunity'),409);
@@ -176,9 +207,9 @@ class StrategyService{
    return;
   }
   if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-  const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?.resultSource?resultEvidence(insight.resultSource):insight?batch.evidence:context.evidence,...(insight?.resultSource?{resultSource:insight.resultSource}:{}),createdAt:new Date().toISOString()};
+  const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?.resultSource?resultEvidence(insight.resultSource):insight?batch.evidence:context?.evidence,...(insight?.resultSource?{resultSource:insight.resultSource}:{}),createdAt:new Date().toISOString()};
   const task=await this.createDirectionTask(id,proposal,v,ctx,transaction);
-  state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
+  const {evidence:_evidence,...slim}=proposal;state.proposals.unshift({...slim,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
  // Pages in two places (2026-10-29): a task changes where most of its pages are, and its start card's Create separate
  // tasks hands the rest off, one task per group the card names (each article alone, the site's pages together), with
@@ -205,7 +236,7 @@ class StrategyService{
  async createDirectionTask(id,proposal,v,ctx,transaction){const locale=ctx?.getCurrentLocale?.()||undefined,playbookId=typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?v.playbookId:'';
   const playbook=proposal.subject&&playbookId?await this.p.taskExecution?.playbooks.get(String(id),playbookId,transaction).catch(()=>null):null;
   if(playbook)proposal.title=playbookTitle(playbook,proposal.subject,locale);
-  return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.pages?.length?{pages:proposal.pages}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...(proposal.subject?{autoTitle:{subject:proposal.subject,...(locale?{locale}:{})}}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
+  return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:taskContext(proposal.evidence,proposal),proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.pages?.length?{pages:proposal.pages}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...(proposal.subject?{autoTitle:{subject:proposal.subject,...(locale?{locale}:{})}}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
  // of its project when it is created — one hook for every place that creates tasks; kept in evidence.no.
  async numberTask(model,options){
@@ -247,13 +278,13 @@ class StrategyService{
  async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail(systemMessageText('strategy.planNotFound'),404);
   if(proposal.goalVersion!==state.goal?.version)fail(systemMessageText('strategy.goalUpdatedReviewAgainSave'),409);
-  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiCoWrittenPlanConfirmed'),goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id,...creator(ctx)}},transaction});
+  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiCoWrittenPlanConfirmed'),goal:proposal.goal,context:taskContext(proposal.evidence,proposal),proposalId:proposal.id,...creator(ctx)}},transaction});
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const {view,...v}=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const body=await fn(id,v,ctx);ctx.body=wantsPageView({view})?strategyPageState(body):body;await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
   this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),handOffPlan:wrap((id,v,c)=>this.handOffPlan(id,v,c)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),splitTask:wrap((id,v,c)=>this.splitTask(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
-  this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
+  this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})).then(()=>this.slimAll()).catch(e=>this.p.app.logger.warn('NocoReach analysis evidence not slimmed',{message:e.message})));
   this.p.app.acl.allow('nrStrategy',['state','handOffPlan','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','splitTask','decideSignal','saveInsights','badges'],'loggedIn');
  }
 }

@@ -380,7 +380,17 @@ it('an opportunity with one place is handed off as one task, as before', async (
   expect(f.created).toHaveLength(1);
   expect(f.created[0].values.title).toBe(card.title);
   expect(f.created[0].values.evidence.part).toBeUndefined();
-  expect(f.state.proposals[0].evidence).toBeTruthy();
+  // The plan keeps no copy of the evidence; the task keeps the changes its opportunity cites, whole.
+  expect(f.state.proposals[0]).not.toHaveProperty('evidence');
+  const context = f.created[0].values.evidence.context as {
+    signals: { items: { key: string }[] };
+  };
+  expect(context.signals.items.map((s) => s.key).sort()).toEqual(
+    (f.state.insights.evidence.signals.items as { key: string }[])
+      .map((s) => s.key)
+      .filter((k) => ['rank:top11', 'ctr:top11', 'site-clicks'].includes(k))
+      .sort(),
+  );
   expect(
     (
       (await f.s.handOffPlan(1, { insightId: 'o43' }, f.ctx)) as {

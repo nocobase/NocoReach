@@ -158,6 +158,7 @@ export function createNocoReachOnlineHost(
                   String(projectId),
                 )) as AgentTask[])
               : [],
+          (generatedAt) => plugin.strategy.archived(projectId, generatedAt),
         ),
       );
       const page = subject?.kind === 'page' ? subject : undefined;
