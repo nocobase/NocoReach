@@ -15,7 +15,8 @@ function fixture(){
   // Written today by something its Activity does not show: its latest activity is still years ago.
   {id:4,title:'Background write',evidence:{no:4,work:{schemaVersion:2,stage:'done',flow:{stages:[]},history:[{at:'2020-01-01T00:00:00Z',action:'approveStage'},{at:new Date().toISOString(),action:'runStarted'}]}},updatedAt:new Date().toISOString()}];
  const snaps=[{key:'history-search',payload:[{date:'2026-10-05'}]},{key:'queries-28',payload:[{keyword:'nocobase install',page:'https://example.com/docs/install/',clicks:30,impressions:1000,position:6},{keyword:'docker compose nocobase',page:'https://example.com/docs/install',clicks:10,impressions:500,position:9},{keyword:'other',page:'https://example.com/',clicks:99,impressions:999,position:1},{keyword:'docs site install',page:'https://docs.example.com/docs/install',clicks:7,impressions:70,position:3}]},{key:'pages-28',payload:[{page:'/docs/install',host:'example.com',views:3200,conversions:12},{page:'/docs/install',host:'docs.example.com',views:70,conversions:0}]}];
- const p={db:{getRepository:()=>({find:async({offset=0})=>offset?[]:tasks.map(row)})},sync:{snapshots:async()=>snaps},
+ // Read as the ids in order, then the rows by key (execution/task-scan.ts): each row names its project.
+ const p={db:{getRepository:()=>({find:async({filter})=>tasks.map(t=>row({projectId:'1',...t})).filter(t=>!filter?.id||filter.id.$in.includes(String(t.id)))})},sync:{snapshots:async()=>snaps},
   audit:{report:async()=>({issues:[{title:'标题重复',severity:'warning',pages:[{url:'https://example.com/docs/install'}]},{title:'页面打不开',severity:'critical',pages:[{url:'https://example.com/x'}]}]})},
   rankTracking:{status:async()=>({keywords:[{keyword:'nocobase install',latest:{position:5,url:'https://example.com/docs/install'},previous:{position:7}}]})},
   dataViews:{search:async()=>({totals:{clicks:3214,impressions:956147},previous:{clicks:3100,impressions:810000}})}};

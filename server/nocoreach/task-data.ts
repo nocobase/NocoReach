@@ -3,6 +3,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { lastActivityAt } from '../../shared/task-activity.js';
 import { summary } from './execution/effect.js';
 import { canonicalUrl, pageIdentity } from '../../shared/page-identity.js';
+import { tasksInOrder } from './execution/task-scan.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // What the local Agent and the online AI know about each other's side (2026-10-08 user decision, see
@@ -31,7 +32,8 @@ function taskState(task,w){
  return `进行中：${stage?.name||''}`;}
 class TaskData{
  constructor(p){this.p=p;}
- async tasks(project){const rows=[];for(let offset=0;offset<2000;offset+=200){const page=await this.p.db.getRepository('nrTasks').find({filter:{projectId:project},sort:['-createdAt'],limit:200,offset});rows.push(...page.map(r=>r.toJSON?r.toJSON():r));if(page.length<200)break;}return rows;}
+ // The project's latest 2,000 tasks, newest first: the ids in this order, then the rows by key (execution/task-scan.ts).
+ async tasks(project){return tasksInOrder(this.p.db.getRepository('nrTasks'),project,{sort:['-createdAt'],limit:2000});}
  // The Agent's data summary, as text lines; empty when nothing is known.
  async forRun(project,{url,taskId}={}){
   const lines=[];let snaps=[];try{snaps=await this.p.sync.snapshots(project);}catch{snaps=[];}
