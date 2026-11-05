@@ -136,15 +136,17 @@ export default function StrategyPage() {
   return <ProjectInsights key={project.id} projectId={project.id} />;
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
-  const [state, setState] = useState<StrategyState>(),
-    [error, setError] = useMessageState(''),
-    [attempt, setAttempt] = useState(0);
   const cache = useWorkspaceCache(),
     withChat = useOptionalOnlineChat() !== null,
-    store = insightsState(cache, projectId),
-    // A mount right after an access re-check unmounted the page takes over what that mount had started and read,
-    // instead of sending it again; any other mount reads afresh.
-    afterRecheck = useRecheckHandover(store),
+    store = insightsState(cache, projectId);
+  const [state, setState] = useState<StrategyState | undefined>(
+      () => store.shown,
+    ),
+    [error, setError] = useMessageState(''),
+    [attempt, setAttempt] = useState(0);
+  // A mount right after an access re-check unmounted the page takes over what that mount had started and read,
+  // instead of sending it again; any other mount reads afresh.
+  const afterRecheck = useRecheckHandover(store),
     [early] = useState(
       () => (afterRecheck && store.early) || new EarlyRequests(),
     ),
@@ -215,6 +217,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
         store={store}
         afterRecheck={afterRecheck}
         early={early}
+        readError={error}
       />
     </>
   );
@@ -250,6 +253,7 @@ function Insights({
   store,
   afterRecheck,
   early,
+  readError,
 }: {
   projectId: number;
   state: StrategyState;
@@ -257,6 +261,8 @@ function Insights({
   /** This mount follows an access re-check: its first reads may take an answer from the last RECHECK_REUSE_MS. */
   afterRecheck: boolean;
   early: EarlyRequests;
+  /** The state shown is the one last shown, as reading it again failed. */
+  readError?: string;
 }) {
   const cache = useWorkspaceCache(),
     setState = store.write,
@@ -591,9 +597,9 @@ function Insights({
           />
         }
       />
-      {error && (
+      {(error || readError) && (
         <p role='alert' className='nr-error'>
-          {error}
+          {error || readError}
         </p>
       )}
       {notice && (

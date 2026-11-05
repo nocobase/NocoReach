@@ -596,6 +596,58 @@ it('shows tasks that answered before the state once Insights mounts', async () =
   expect(tasks).toHaveBeenCalledTimes(1);
 });
 
+it('shows the state it last showed while a later visit reads it again', async () => {
+  requests.summary.mockResolvedValue(values.summary);
+  tasks.mockResolvedValue(values.tasks);
+  const view = await setup();
+  await screen.findByText(known.summary, { exact: false });
+  const reads = () =>
+    action.mock.calls.filter(
+      ([resource, operation]) =>
+        resource === 'nrStrategy' && operation === 'state',
+    ).length;
+  const before = reads();
+  const state = deferred<unknown>();
+  const answer = action.getMockImplementation()!;
+  action.mockImplementation(
+    (resource: string, operation: string, options: never) =>
+      resource === 'nrStrategy' && operation === 'state'
+        ? state.promise
+        : answer(resource, operation, options),
+  );
+  view.show(false);
+  view.show(true);
+  await waitFor(() => expect(reads()).toBe(before + 1));
+  // Insights is there at once, not its skeleton, while the state is read again.
+  expect(screen.getByText(known.summary, { exact: false })).toBeInTheDocument();
+  await act(async () =>
+    state.resolve({ revision: 2, goal: null, proposals: [] }),
+  );
+  expect(screen.getByText(known.summary, { exact: false })).toBeInTheDocument();
+  // Each dependency is still read once for the visit.
+  expect(tasks).toHaveBeenCalledTimes(2);
+  expect(requests.summary).toHaveBeenCalledTimes(2);
+});
+
+it('keeps the state it last showed, and says so, when reading it again fails', async () => {
+  requests.summary.mockResolvedValue(values.summary);
+  const view = await setup();
+  await screen.findByText(known.summary, { exact: false });
+  const answer = action.getMockImplementation()!;
+  action.mockImplementation(
+    (resource: string, operation: string, options: never) =>
+      resource === 'nrStrategy' && operation === 'state'
+        ? Promise.reject(new Error('state unavailable'))
+        : answer(resource, operation, options),
+  );
+  view.show(false);
+  view.show(true);
+  expect(
+    await screen.findByText("Couldn't load insights. Try again."),
+  ).toBeInTheDocument();
+  expect(screen.getByText(known.summary, { exact: false })).toBeInTheDocument();
+});
+
 it('reads again when the state fails and its retry succeeds', async () => {
   const answer = action.getMockImplementation()!;
   action.mockImplementationOnce(() =>

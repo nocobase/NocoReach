@@ -21,10 +21,6 @@ type Cache = ReturnType<typeof useWorkspaceCache>;
  */
 export const RECHECK_REUSE_MS = 10_000;
 
-/** The workspace cache entry of a project's Insights state; Opportunities shows it while it reads its own. */
-export const insightsStateKey = (projectId: number) =>
-  `insights-state:${projectId}`;
-
 /**
  * One project's Insights state in one workspace cache, so in one user, session and permission generation: a new
  * generation brings a new cache, and with it a new store.
@@ -41,6 +37,8 @@ export class InsightsState {
    */
   private recheck?: { at: number; generation: number; navigation: number };
   private readonly listeners = new Set<(state: StrategyState) => void>();
+  /** The state last shown, which a later mount in the same cache shows while it reads the state again. */
+  private latest?: StrategyState;
   private kept?: EarlyRequests;
   private judgedKey = '';
 
@@ -50,7 +48,7 @@ export class InsightsState {
   ) {}
 
   private get key(): string {
-    return insightsStateKey(this.projectId);
+    return `insights-state:${this.projectId}`;
   }
 
   /**
@@ -85,7 +83,17 @@ export class InsightsState {
   }
 
   private publish(state: StrategyState): void {
+    this.latest = state;
     for (const listener of [...this.listeners]) listener(state);
+  }
+
+  /**
+   * What a mount shows until its own read answers: the state this store last showed, so opening Insights again (or
+   * Opportunities after it) does not wait for the state with an empty page. The read still runs and replaces it, and a
+   * write meanwhile still fences that read; the store belongs to one user, session and permission generation.
+   */
+  get shown(): StrategyState | undefined {
+    return this.latest;
   }
 
   /** The early requests of the latest mount, which a mount after a re-check takes over. */
