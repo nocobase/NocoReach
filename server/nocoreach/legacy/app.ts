@@ -50,6 +50,12 @@ export const FIRING_DEADLINE_MS = 60_000;
 export const SHUTDOWN_GRACE_MS = 15_000;
 
 /**
+ * How often a timer whose firing still runs is reported again while its firings are skipped: a firing that never ends
+ * keeps its timer from firing for the life of the process.
+ */
+export const OVERRUN_REPORT_MS = 10 * 60_000;
+
+/**
  * Keeps NocoReach's background work off the data while `pnpm nocobase app import-classic` writes it
  * (server/nocoreach/classic-import.ts): the timers act on a project as soon as its snapshot lands, and would otherwise
  * work on half a dataset. Each import call renews a lease instead of holding until `finish`, so a CLI that dies midway
@@ -131,8 +137,10 @@ export class LegacyApp {
   readonly importHold = new ImportHold();
   /** How long one firing may keep the schedule executor (see `tick`). */
   firingDeadline = FIRING_DEADLINE_MS;
-  /** Timers whose last firing outlived its deadline and still runs (see `tick`). */
-  private readonly overrunning = new Set<string>();
+  /** How often a timer still running past its deadline is reported again (see `tick`). */
+  overrunReport = OVERRUN_REPORT_MS;
+  /** Timers whose last firing outlived its deadline and still runs: when it started, last reported, firings skipped. */
+  private readonly overrunning = new Map<string, { started: number; reported: number; skipped: number }>();
   /** Firings still running, which `settle` waits for. */
   private readonly firings = new Set<Promise<unknown>>();
   private readonly plugins = new Map<string, unknown>();
@@ -178,12 +186,28 @@ export class LegacyApp {
    * cancels it, so its job keeps its own retries, billing and status, and the import hold still waits for it. The
    * executor goes on to the other timers, and this timer's next firings are skipped until it ends, so it never runs
    * twice at once.
+   *
+   * Overrunning is routine for the longer reads (a Google sync step, a source's first read), so it is logged at info; a
+   * timer still running `overrunReport` later is logged again at warn on each skipped firing past that interval.
    */
   async tick(
     job: LegacyJob,
     { deadline = this.firingDeadline, signal }: { deadline?: number; signal?: AbortSignal } = {},
   ): Promise<boolean> {
-    if (this.importHold.held || this.overrunning.has(job.name)) return false;
+    if (this.importHold.held) return false;
+    const overrun = this.overrunning.get(job.name);
+    if (overrun) {
+      overrun.skipped++;
+      if (Date.now() - overrun.reported >= this.overrunReport) {
+        overrun.reported = Date.now();
+        this.logger.warn('NocoReach timer still running; its firings are skipped until it ends', {
+          job: job.name,
+          ms: Date.now() - overrun.started,
+          skipped: overrun.skipped,
+        });
+      }
+      return false;
+    }
     const started = Date.now();
     const work = this.importHold.track(new Promise((resolve) => resolve(job.onTick())));
     this.firings.add(work);
@@ -200,21 +224,21 @@ export class LegacyApp {
     try {
       const outcome = await Promise.race([work.then(() => undefined), released]);
       if (!outcome) return true;
-      this.overrunning.add(job.name);
-      if (outcome === 'deadline')
-        this.logger.warn('NocoReach timer still running after its deadline; the other timers run meanwhile', {
-          job: job.name,
-          ms: Date.now() - started,
-        });
+      this.overrunning.set(job.name, { started, reported: Date.now(), skipped: 0 });
+      const what =
+        outcome === 'deadline' ? 'NocoReach timer that outlived its deadline' : 'NocoReach timer left running at shutdown';
+      this.logger.info(
+        outcome === 'deadline'
+          ? 'NocoReach timer still running after its deadline; the other timers run meanwhile'
+          : 'NocoReach timer still running at shutdown; shutdown goes on',
+        { job: job.name, ms: Date.now() - started },
+      );
       const ended = (error?: unknown) => {
+        const skipped = this.overrunning.get(job.name)?.skipped ?? 0;
         this.overrunning.delete(job.name);
-        const details = { job: job.name, ms: Date.now() - started };
-        if (error === undefined) this.logger.info('NocoReach timer that outlived its deadline finished', details);
-        else
-          this.logger.warn('NocoReach timer that outlived its deadline failed', {
-            ...details,
-            message: (error as Error)?.message,
-          });
+        const details = { job: job.name, ms: Date.now() - started, skipped };
+        if (error === undefined) this.logger.info(`${what} finished`, details);
+        else this.logger.warn(`${what} failed`, { ...details, message: (error as Error)?.message });
       };
       work.then(
         () => ended(),

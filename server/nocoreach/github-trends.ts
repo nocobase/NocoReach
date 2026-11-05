@@ -20,6 +20,8 @@ const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const KEY=id=>`github-trends:${id}`;
 const TOPIC=/^[a-z0-9][a-z0-9-]{0,49}$/;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+// What a read meets once the server stops (`stop`): it ends without asking GitHub again and without saving the run.
+const stopping=()=>Object.assign(new Error('GitHub trends stopped'),{name:'AbortError',stopped:true});
 // A topic as GitHub writes it, with spellings like lowcode and low-code counted once.
 const norm=t=>String(t||'').trim().toLowerCase().replace(/\s+/g,'-');
 const same=t=>norm(t).replace(/-/g,'');
@@ -46,21 +48,25 @@ class GitHubTrends{
  async state(id){return (await this.repo().findOne({filter:{key:KEY(id)}}))?.get('payload')||null;}
  async mutate(id,fn){const key=KEY(id);return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key},transaction});const row=await this.repo().findOne({filter:{key},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key,payload:state},transaction});return state;});}
  token(id){return this.p.github?.token?.(String(id))||'';}
+ // Shutdown, before the network closes: a read in flight would otherwise save its closed-network failures as the day's
+ // run, and the project would not be read again until tomorrow.
+ stop(){this.stopped=true;}
+ alive(){if(this.stopped)throw stopping();}
  async inProcess(id){const n=this.p.network;return Boolean(n?.simulation?.enabled||await n?.inDemoProject?.(String(id)));}
  headers(token,accept='application/vnd.github+json'){return {Accept:accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})};}
- async json(id,url,token,init={}){const res=await this.request(url,{...init,headers:{...this.headers(token),...(init.headers||{})}},id);if(res.ok)return res.json();let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}
+ async json(id,url,token,init={}){this.alive();const res=await this.request(url,{...init,headers:{...this.headers(token),...(init.headers||{})}},id);if(res.ok)return res.json();let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}
   if(res.status===429||(res.status===403&&/rate limit/i.test(said)))throw Object.assign(new Error(systemMessageText('githubTrends.rateLimited')),{status:429,limited:true});
   fail(systemMessageText('messages.githubStatusDetail',{0:res.status,1:said?`（GitHub：${said}）`:''}),502);}
  // Search, spaced out under GitHub's limit (30 a minute with a token, 10 without). A simulated or demo project is answered
  // in process, so it waits for nothing: spaced out, a first read of two demo projects slept about 15 minutes.
- async search(id,q,token,{sort='',per=10}={}){const gap=token?2100:6500,wait=this.lastSearch+gap-Date.now();if(wait>0&&!await this.inProcess(id))await this.sleep(wait);this.lastSearch=Date.now();
+ async search(id,q,token,{sort='',per=10}={}){const gap=token?2100:6500,wait=this.lastSearch+gap-Date.now();if(wait>0&&!await this.inProcess(id))await this.sleep(wait);this.alive();this.lastSearch=Date.now();
   return this.json(id,`${API}/search/repositories?q=${encodeURIComponent(q)}${sort?`&sort=${sort}&order=desc`:''}&per_page=${per}`,token);}
  // Today's stars for repositories the searches and Trending did not cover, 100 a GraphQL request (only with a token).
  async starCounts(id,repos,token){const out={};if(!token)return out;for(let i=0;i<repos.length;i+=100){const part=repos.slice(i,i+100).filter(r=>/^[\w.-]+\/[\w.-]+$/.test(r));if(!part.length)continue;
   const query=`query{${part.map((r,k)=>{const [o,n]=r.split('/');return `r${k}:repository(owner:"${o}",name:"${n}"){nameWithOwner stargazerCount}`;}).join(' ')}}`;
   const d=await this.json(id,`${API}/graphql`,token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})});for(const v of Object.values(d?.data||{}))if(v?.nameWithOwner)out[v.nameWithOwner]=v.stargazerCount;}
   return out;}
- async trendingPage(id,since){const res=await this.request(`${WEB}/trending?since=${since}`,{headers:{'User-Agent':'Mozilla/5.0 (compatible; NocoReach/0.1)',Accept:'text/html'}},id);if(!res.ok)fail(systemMessageText('messages.githubStatus',{0:res.status}),502);return parseTrending(await res.text());}
+ async trendingPage(id,since){this.alive();const res=await this.request(`${WEB}/trending?since=${since}`,{headers:{'User-Agent':'Mozilla/5.0 (compatible; NocoReach/0.1)',Accept:'text/html'}},id);if(!res.ok)fail(systemMessageText('messages.githubStatus',{0:res.status}),502);return parseTrending(await res.text());}
  // The repository's own topics, the six with the most repositories (spellings of one topic counted once).
  async suggest(id,token){const gh=await this.p.github?.state?.(String(id)).catch(()=>null);let topics=gh?.profile?.topics||[];
   if(!topics.length&&gh?.repo)try{topics=(await this.json(id,`${API}/repos/${gh.repo}`,token))?.topics||[];}catch{topics=[];}
@@ -95,6 +101,7 @@ class GitHubTrends{
   const trimmed=Object.fromEntries(recent.map(r=>[r,Object.fromEntries(Object.entries(stars[r]).sort(([a],[b])=>a.localeCompare(b)).slice(-120))]));
   const keptRepos=Object.fromEntries(Object.entries(repos).filter(([r])=>r in trimmed));
   const trendingDays={...(cur.trending||{})};if(Object.keys(trending).length)trendingDays[today]=trending;
+  if(this.stopped)return null;
   return this.mutate(id,old=>({...(old||{}),topics,topicsAuto:old?.topics?.length?Boolean(old.topicsAuto):!cur.topics?.length,heat:Object.fromEntries(Object.entries(heat).filter(([t])=>topics.includes(t)).map(([t,v])=>[t,Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).slice(-120))])),
    weekly:Object.fromEntries(Object.entries(weekly).filter(([t])=>topics.includes(t))),leaders,topicNew,newHot:{date:today,all:newHot},repos:keptRepos,stars:trimmed,
    trending:Object.fromEntries(Object.entries(trendingDays).sort(([a],[b])=>a.localeCompare(b)).slice(-31)),// A run cut short by the rate limit is not today's: the next tick, three hours on, reads again.
@@ -115,7 +122,7 @@ class GitHubTrends{
    suggestions:(gh?.profile?.topics||[]).map(norm).filter(t=>TOPIC.test(t)&&!topics.some(x=>same(x)===same(t))).slice(0,12),
    gainers,newHot:{date:s.newHot?.date||null,all:(s.newHot?.all||[]).map(mark)},
    trending:latestTrending?{date:latestTrending,...Object.fromEntries(['daily','weekly','monthly'].map(k=>[k,(s.trending[latestTrending][k]||[]).map(x=>({...mark(x.repo),stars:x.stars,forks:x.forks,gained:x.gained,language:x.language,description:x.description}))]))}:null};}
- async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id)),gh=await this.p.github?.state?.(String(id)).catch(()=>null);
+ async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){if(this.stopped)break;try{const s=await this.state(String(id)),gh=await this.p.github?.state?.(String(id)).catch(()=>null);
    if(!s?.topics?.length&&!gh?.repo)continue;if(s?.lastRun?.day===iso(businessNow(this.p,String(id),'github')))continue;
    if(s?.lastRun?.at&&Date.now()-Date.parse(s.lastRun.at)<3*3600000)continue;await this.refresh(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach GitHub trends tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(String(id),v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('githubTrends.notRead'));}};
