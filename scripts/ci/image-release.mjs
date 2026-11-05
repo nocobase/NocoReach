@@ -56,6 +56,38 @@ export function imageRelease(root, env) {
   };
 }
 
+function releaseVersion(tag) {
+  const match = /^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?$/u.exec(tag);
+  if (!match) return null;
+  const stage = { alpha: 0n, beta: 1n, rc: 2n };
+  return [
+    BigInt(match[1]),
+    BigInt(match[2]),
+    BigInt(match[3]),
+    match[4] ? stage[match[4]] : 3n,
+    BigInt(match[5] ?? 0),
+  ];
+}
+
+export function shouldPublishLatest(tag, releases) {
+  const candidate = releaseVersion(tag);
+  assert(candidate, 'Invalid release tag');
+  const published = releases.filter((release) => !release.draft);
+  assert(
+    published.some((release) => release.tag_name === tag),
+    'Release is not published',
+  );
+  return !published.some((release) => {
+    const version = releaseVersion(release.tag_name);
+    if (!version) return false;
+    for (let index = 0; index < candidate.length; index++) {
+      if (version[index] !== candidate[index])
+        return version[index] > candidate[index];
+    }
+    return false;
+  });
+}
+
 export function validateImageArtifact(root, version) {
   const artifact = JSON.parse(
     readFileSync(join(root, 'dist/package.json'), 'utf8'),
@@ -85,11 +117,29 @@ if (
     const result = imageRelease(process.cwd(), process.env);
     if (process.argv[2] === 'artifact')
       validateImageArtifact(process.cwd(), result.version);
-    else {
+    else if (process.argv[2] === 'latest') {
+      const pages = JSON.parse(
+        execFileSync(
+          'gh',
+          [
+            'api',
+            '--paginate',
+            '--slurp',
+            `repos/${process.env.GITHUB_REPOSITORY}/releases?per_page=100`,
+          ],
+          { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+        ),
+      );
+      assert(process.env.GITHUB_OUTPUT, 'Missing workflow output file');
+      appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `publish=${shouldPublishLatest(process.env.RELEASE_TAG, pages.flat())}\n`,
+      );
+    } else {
       assert.equal(
         process.argv[2],
         'metadata',
-        'Expected metadata or artifact',
+        'Expected metadata, artifact or latest',
       );
       assert(process.env.GITHUB_OUTPUT, 'Missing workflow output file');
       for (const [key, value] of Object.entries(result))
