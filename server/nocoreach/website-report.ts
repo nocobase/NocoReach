@@ -295,22 +295,25 @@ class WebsiteReport{
  // queried together").
  // Each query stands alone: one GA4 refuses is left out and named in `missing` with Google's reason. Only a failed totals
  // query or an authorization problem fails the view, and then with Google's reason.
- realtime(id:string|number,property:string){return this.requests.share<unknown>(['realtime',...this.scope(id,property)],()=>this.readRealtime(id,property));}
- async readRealtime(id,property){const key=JSON.stringify(this.scope(id,property)),hit=this.liveCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
+ // `summary` is what Traffic's Today card shows with its details closed (the users, the minutes and the figures): two of
+ // the seven requests. A full read still fresh answers it too.
+ realtime(id:string|number,property:string,summary=false){return this.requests.share<unknown>(['realtime',summary?'summary':'full',...this.scope(id,property)],()=>this.readRealtime(id,property,summary));}
+ async readRealtime(id,property,summary=false){const scope=JSON.stringify(this.scope(id,property)),key=summary?`summary:${scope}`:scope,full=this.liveCache.get(scope),hit=summary&&full&&Date.now()<full.cacheExpiresAt?full:this.liveCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
   const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
    ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount'],'eventCount',20]];
+  if(summary)queries.length=2;
   const settled=await Promise.allSettled(queries.map(([,...q])=>ask(...q))),errors=settled.map(r=>r.status==='rejected'?r.reason:null);
   const denied=errors.find(e=>e&&(e.code==='invalid_grant'||e.code==='invalid_client'||e.status===401||e.status===403));if(denied)this.explain(denied);
   if(errors[0])this.explain(errors[0]);
   const missing=queries.flatMap(([part],i)=>errors[i]?[{part,reason:googleReason(errors[i])||systemMessageText('dataViews.ga4ReadFailed')}]:[]);
   for(const [i,e] of errors.entries())if(e)this.p.app?.logger?.warn('NocoReach GA4 realtime part left out',{part:queries[i][0],message:e.message,code:e.code,status:e.status});
-  const [totals,minutes,pages,countries,cities,devices,events]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
+  const [totals,minutes,pages=[],countries=[],cities=[],devices=[],events=[]]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
   const perMinute=Array(30).fill(0);for(const r of minutes){const m=parseInt(r.minutesAgo,10);if(m>=0&&m<30)perMinute[29-m]=r.activeUsers;}
   const value={fetchedAt:new Date(businessNow(this.p,id,'google')).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
-   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
+   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{}),...(summary?{summary:true}:{})};
   value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;this.liveCache.set(key,value);return value;}
 }
 export { WebsiteReport, TABLES, CHANGES, FIRST_TABLES, REST_TABLES, tableRows, changeRows, rowsOf, values, RETRY_429_MS, withGa4RetryDeadline };

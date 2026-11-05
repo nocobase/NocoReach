@@ -21,6 +21,10 @@ type Cache = ReturnType<typeof useWorkspaceCache>;
  */
 export const RECHECK_REUSE_MS = 10_000;
 
+/** The workspace cache entry of a project's Insights state; Opportunities shows it while it reads its own. */
+export const insightsStateKey = (projectId: number) =>
+  `insights-state:${projectId}`;
+
 /**
  * One project's Insights state in one workspace cache, so in one user, session and permission generation: a new
  * generation brings a new cache, and with it a new store.
@@ -46,7 +50,7 @@ export class InsightsState {
   ) {}
 
   private get key(): string {
-    return `insights-state:${this.projectId}`;
+    return insightsStateKey(this.projectId);
   }
 
   /**

@@ -18,6 +18,7 @@ import { splitOf, pageKey } from '../../shared/opportunity-parts.js';
 import { pageIdentity } from '../../shared/page-identity.js';
 import { distinctPages, pageUrlsOf } from '../../shared/task-start.js';
 import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
+import { strategyPageState, wantsPageView } from './page-views.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -249,7 +250,7 @@ class StrategyService{
   const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiCoWrittenPlanConfirmed'),goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id,...creator(ctx)}},transaction});
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const {view,...v}=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const body=await fn(id,v,ctx);ctx.body=wantsPageView({view})?strategyPageState(body):body;await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
   this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),handOffPlan:wrap((id,v,c)=>this.handOffPlan(id,v,c)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),splitTask:wrap((id,v,c)=>this.splitTask(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));

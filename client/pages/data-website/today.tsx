@@ -91,22 +91,40 @@ export function TodayCard({
     GA4_TODAY_CACHE_MS,
     ga4CacheExpiry,
   );
+  // The card reads the figures and the minutes (two GA4 requests) every half hour; the lists behind its details (all
+  // seven) only while they are open, every minute. The card's figure says when it was read.
   const live = usePolled<Realtime>(
-    projectId ? `live:${projectId}:${propertyId}` : null,
+    projectId ? `live-summary:${projectId}:${propertyId}` : null,
+    () =>
+      api.action<Realtime>('nrDataViews', 'websiteRealtime', {
+        method: 'POST',
+        body: { projectId, summary: true },
+        unwrap: 'data',
+      }),
+    GA4_REALTIME_IDLE_MS,
+    undefined,
+    // A failed read is tried again after a minute, as the details cannot be opened without a figure.
+    GA4_REALTIME_CACHE_MS,
+  );
+  const details = usePolled<Realtime>(
+    projectId && open ? `live:${projectId}:${propertyId}` : null,
     () =>
       api.action<Realtime>('nrDataViews', 'websiteRealtime', {
         method: 'POST',
         body: { projectId },
         unwrap: 'data',
       }),
-    // Every minute only while the details are open; the card's figure says when it was read.
-    open ? GA4_REALTIME_CACHE_MS : GA4_REALTIME_IDLE_MS,
-    open ? ga4CacheExpiry : undefined,
-    // A failed read is tried again after a minute, as the details cannot be opened without a figure.
     GA4_REALTIME_CACHE_MS,
+    ga4CacheExpiry,
   );
   const t = today.data?.connected ? today.data : null;
-  const r = live.data?.connected ? live.data : null;
+  const card = live.data?.connected ? live.data : null;
+  const full = details.data?.connected ? details.data : null;
+  // Whichever was read last: the details read every minute while open, the card every half hour.
+  const r =
+    full && (!card || Date.parse(full.fetchedAt) >= Date.parse(card.fetchedAt))
+      ? full
+      : card;
   if (today.data?.connected === false) return null;
   const weekday = t
     ? new Date(`${t.lastWeekDate}T00:00:00Z`).toLocaleDateString(
@@ -287,7 +305,12 @@ export function TodayCard({
         </div>
       </div>
       {open && r ? (
-        <RealtimeDrawer live={r} onClose={() => setOpen(false)} />
+        <RealtimeDrawer
+          live={full ?? r}
+          loading={!full && !details.error}
+          error={full ? undefined : details.error}
+          onClose={() => setOpen(false)}
+        />
       ) : null}
     </Card>
   );
@@ -391,14 +414,18 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
 function List({
   title,
   rows,
+  loading,
 }: {
   title: string;
   rows: { key: string; name: string; value: number; sub?: string }[];
+  loading?: boolean;
 }) {
   return (
     <section>
       <h3 className='mb-1 text-sm font-semibold'>{title}</h3>
-      {rows.length ? (
+      {loading ? (
+        <Skeleton className='h-16 w-full' />
+      ) : rows.length ? (
         <ul className='flex flex-col text-sm'>
           {rows.map((r) => (
             <li
@@ -426,9 +453,14 @@ function List({
 
 function RealtimeDrawer({
   live,
+  loading,
+  error,
   onClose,
 }: {
   live: Realtime;
+  /** The card's figures are shown while the lists are read. */
+  loading: boolean;
+  error?: unknown;
   onClose: () => void;
 }) {
   const minutes = live.perMinute.map((users, i) => ({
@@ -450,6 +482,11 @@ function RealtimeDrawer({
       title={$t('dataWebsite.realtimeLast30Minutes')}
       description={$t('dataWebsite.realtimeUpdatedAt', { 0: at })}
     >
+      {error ? (
+        <p className='mb-3 text-xs text-nr-ink-red' role='status'>
+          {$t('dataWebsite.realtimeNotLoaded', { 0: message(error) })}
+        </p>
+      ) : null}
       {live.missing?.length ? (
         <p className='mb-3 text-xs text-muted-foreground' role='status'>
           {$t('dataWebsite.realtimePartlyMissing', {
@@ -486,6 +523,7 @@ function RealtimeDrawer({
       <div className='mt-4 flex flex-col gap-5'>
         <List
           title={$t('dataWebsite.pagesBeingViewed')}
+          loading={loading}
           rows={live.pages.map((p) => ({
             key: p.title,
             name: p.title || $t('dataWebsite.noTitle'),
@@ -496,6 +534,7 @@ function RealtimeDrawer({
         <div className='grid gap-5 sm:grid-cols-2'>
           <List
             title={$t('dataWebsite.countryRegion')}
+            loading={loading}
             rows={live.countries.map((c) => ({
               key: c.id || c.name,
               name: regionName(c.id, c.name),
@@ -504,6 +543,7 @@ function RealtimeDrawer({
           />
           <List
             title={$t('dataWebsite.city')}
+            loading={loading}
             rows={live.cities.map((c) => ({
               key: `${c.name}|${c.countryId}`,
               name: c.name,
@@ -513,6 +553,7 @@ function RealtimeDrawer({
           />
           <List
             title={$t('dataWebsite.device')}
+            loading={loading}
             rows={live.devices.map((d) => ({
               key: d.name,
               name: deviceName(d.name),
@@ -521,6 +562,7 @@ function RealtimeDrawer({
           />
           <List
             title={$t('dataWebsite.eventsReport')}
+            loading={loading}
             rows={live.events.map((e) => ({
               key: e.name,
               name: e.name,

@@ -54,6 +54,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
 import { RefreshButton } from '#components/reach/refresh-button';
 import { taskRecords, useProject } from '../reach-data';
+import { taskListKey } from '../task-list-key';
 import { PageSkeleton } from '../workspace-cache';
 import { type Work } from '../task-execution-types';
 import type { StrategyState } from './model';
@@ -97,7 +98,7 @@ type Task = {
 };
 // What Insights reads besides its state. ProjectInsights starts these together with the state rather than after it;
 // Insights reads them with the same keys, requests and freshness.
-const insightTasksKey = (projectId: number) => `insights-tasks:${projectId}`;
+const insightTasksKey = taskListKey;
 const insightTasks = (projectId: number) => taskRecords<Task>(projectId);
 const insightSummaryKey = (projectId: number) =>
   `insights-summary:${projectId}`;

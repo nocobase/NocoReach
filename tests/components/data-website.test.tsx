@@ -403,6 +403,20 @@ describe('访问', () => {
         await vi.advanceTimersByTimeAsync(3 * 60000);
       });
       expect(reads()).toBe(6);
+      // The card asks for its figures only (two GA4 requests); the details for everything.
+      const bodies = action.mock.calls
+        .filter(([, name]) => name === 'websiteRealtime')
+        .map(
+          ([, , options]) => (options as { body: { summary?: boolean } }).body,
+        );
+      expect(bodies.map((b) => b.summary === true)).toEqual([
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+      ]);
     } finally {
       vi.useRealTimers();
     }

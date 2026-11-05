@@ -131,6 +131,17 @@ test('realtime: the last 30 minutes oldest first; pages, places, devices and eve
  assert.deepEqual(r.pages,[{title:'Docs',users:9,views:14}]);assert.deepEqual(r.countries,[{id:'US',name:'United States',users:20}]);
 });
 
+test('realtime summary: the card\'s figures and minutes in two requests; a fresh full read answers it',async()=>{
+ const asked=[];const {g}=fake((method,body)=>{const d=body.dimensions.map(x=>x.name).join(','),m=body.metrics.map(x=>x.name);asked.push(d);
+  if(!d)return report([],m,[[[],[37,120,400,2]]]);if(d==='minutesAgo')return report(['minutesAgo'],m,[[['00'],[5]]]);return report(body.dimensions.map(x=>x.name),m,[]);});
+ const s=await g.realtime('1','123',true);
+ assert.deepEqual(asked,['','minutesAgo']);assert.equal(s.users,37);assert.equal(s.perMinute[29],5);assert.equal(s.summary,true);assert.deepEqual(s.pages,[]);
+ assert.equal((await g.realtime('1','123',true)).users,37);assert.equal(asked.length,2,'kept for a minute');
+ const full=await g.realtime('1','123');assert.equal(asked.length,9);assert.equal(full.summary,undefined);
+ const other=fake((method,body)=>{const d=body.dimensions.map(x=>x.name).join(',');asked.push('other:'+d);return report(body.dimensions.map(x=>x.name),body.metrics.map(x=>x.name),d?[]:[[[],[1,1,1,1]]]);});
+ await other.g.realtime('1','123');const n=asked.length;assert.equal((await other.g.realtime('1','123',true)).summary,undefined,'answered by the full read');assert.equal(asked.length,n);
+});
+
 test('realtime: a query GA4 refuses is left out with its reason; a failed total or lost access fails with Google\'s reason',async()=>{
  const refuse=msg=>{throw Object.assign(new Error(msg),{status:400,code:'google_api_error'});};
  const answer=bad=>(method,body)=>{const d=body.dimensions.map(x=>x.name).join(','),m=body.metrics.map(x=>x.name);if(d===bad)refuse(`Field ${bad} is not valid`);

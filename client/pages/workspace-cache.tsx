@@ -291,6 +291,10 @@ export function useWorkspaceCache() {
   if (!cache) throw new Error('Workspace cache requires authenticated layout');
   return cache;
 }
+/** The cache when there is one: a page that only shows what another page read uses this, and reads alone without it. */
+export function useOptionalWorkspaceCache(): WorkspaceCache | null {
+  return useContext(Context);
+}
 export function useWorkspaceCacheRevision(key: string | null) {
   const cache = useWorkspaceCache();
   const subscribe = useCallback(
