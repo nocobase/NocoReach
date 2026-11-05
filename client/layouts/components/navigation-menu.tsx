@@ -45,6 +45,47 @@ import {
 const SELECTED =
   'data-active:bg-sidebar-primary data-active:text-sidebar-primary-foreground data-active:hover:bg-sidebar-primary data-active:hover:text-sidebar-primary-foreground';
 
+// NocoReach: `navigation.featured` marks a hands-on tool among the pages that show data (Search & market › Keywords and
+// AI search). Its icon keeps the AI violet (`--agent`, lighter in the dark theme) in every state, the selected one
+// included, and its label is medium weight. The template's navigation declares no such option, so it is added here
+// rather than matched by path in CSS.
+declare module '@nocobase/app-client/plugins' {
+  interface AppClientRouteNavigation {
+    readonly featured?: boolean;
+  }
+}
+
+function EntryIcon({
+  item,
+}: {
+  readonly item: RouteNavigationItem;
+}): ReactElement | null {
+  const navigation = item.route.navigation;
+  const Icon = navigation?.icon;
+  if (!Icon) return null;
+  return <Icon className={navigation.featured ? 'text-agent' : undefined} />;
+}
+
+/** An entry's icon and label, as every form of entry draws them. */
+function EntryContent({
+  item,
+  label,
+}: {
+  readonly item: RouteNavigationItem;
+  readonly label: string;
+}): ReactElement {
+  return (
+    <>
+      <EntryIcon item={item} />
+      <span
+        className={item.route.navigation?.featured ? 'font-medium' : undefined}
+      >
+        {label}
+      </span>
+    </>
+  );
+}
+
 /**
  * A count beside a menu entry. A number is what waits on the viewer, such as unread messages or requests to decide;
  * `live` is work under way, such as runs in progress, with `hint` as its words for the tooltip and screen readers. Zero
@@ -240,7 +281,6 @@ function NavigationItem({
   const closeSheet = useCloseOnNavigate();
   const navigate = onNavigate ?? closeSheet;
   const label = useItemLabel(item);
-  const Icon = item.route.navigation?.icon;
   const isSelected = routeKey(item.route) === selectedKey;
   const children = item.children;
   const disclosure = useDisclosure(item, selectedKey);
@@ -294,8 +334,7 @@ function NavigationItem({
           }
           className={SELECTED}
         >
-          {Icon ? <Icon /> : null}
-          <span>{label}</span>
+          <EntryContent item={item} label={label} />
         </SidebarMenuButton>
         {badge.count > 0 && (
           <EntryBadge
@@ -320,8 +359,7 @@ function NavigationItem({
             tooltip={tooltip}
             className={SELECTED}
           >
-            {Icon ? <Icon /> : null}
-            <span>{label}</span>
+            <EntryContent item={item} label={label} />
           </SidebarMenuButton>
           <SidebarMenuAction
             render={<CollapsibleTrigger />}
@@ -333,8 +371,7 @@ function NavigationItem({
         </>
       ) : (
         <SidebarMenuButton render={<CollapsibleTrigger />} tooltip={tooltip}>
-          {Icon ? <Icon /> : null}
-          <span>{label}</span>
+          <EntryContent item={item} label={label} />
           <ChevronRight className='ml-auto transition-transform group-data-panel-open/menu-button:rotate-90' />
         </SidebarMenuButton>
       )}
@@ -405,7 +442,6 @@ function NavigationSubItem({
   onNavigate,
 }: ItemProps): ReactElement | null {
   const label = useItemLabel(item);
-  const Icon = item.route.navigation?.icon;
   const isSelected = routeKey(item.route) === selectedKey;
   const disclosure = useDisclosure(item, selectedKey);
   const children = item.children;
@@ -426,12 +462,7 @@ function NavigationSubItem({
       aria-current={isSelected ? 'page' : undefined}
     />
   ) : undefined;
-  const content = (
-    <>
-      {Icon ? <Icon /> : null}
-      <span>{label}</span>
-    </>
-  );
+  const content = <EntryContent item={item} label={label} />;
 
   if (children.length === 0)
     return (
@@ -471,8 +502,7 @@ function NavigationSubItem({
         </>
       ) : (
         <SidebarMenuSubButton render={<CollapsibleTrigger />}>
-          {Icon ? <Icon /> : null}
-          <span>{label}</span>
+          {content}
           <ChevronRight className='ml-auto transition-transform in-data-panel-open:rotate-90' />
         </SidebarMenuSubButton>
       )}
@@ -542,7 +572,6 @@ function NavigationPopover({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const restoringFocusRef = useRef(false);
-  const Icon = item.route.navigation?.icon;
   const page = Boolean(item.route.componentLoader);
   const close = () => setOpen(false);
   return (
@@ -588,7 +617,11 @@ function NavigationPopover({
         }
         aria-label={label}
       >
-        {Icon ? <Icon /> : <span>{label}</span>}
+        {item.route.navigation?.icon ? (
+          <EntryIcon item={item} />
+        ) : (
+          <span>{label}</span>
+        )}
       </SidebarMenuButton>
       <PopoverContent
         side='right'

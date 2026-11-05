@@ -9,7 +9,7 @@
   "client/components/seo/table-pagination.tsx": 1,
   "client/i18n/index.tsx": 8,
   "client/lib/network-failure.ts": 1,
-  "client/nocoreach-routes.ts": 7,
+  "client/nocoreach-routes.ts": 3,
   "client/pages/ai-questions.tsx": 2,
   "client/pages/ai-search.tsx": 5,
   "client/pages/article-targets-api.ts": 1,

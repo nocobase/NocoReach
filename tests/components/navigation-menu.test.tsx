@@ -419,6 +419,70 @@ describe('collapsed navigation', () => {
   );
 });
 
+describe('featured entries', () => {
+  function Mark({ className }: { readonly className?: string }) {
+    return <svg data-slot='entry-icon' className={className} />;
+  }
+  const featured: AppClientRegisteredRoute = {
+    ...page('keywords'),
+    navigation: { title: 'keywords', icon: Mark, featured: true },
+  };
+  const plain: AppClientRegisteredRoute = {
+    ...page('trends'),
+    navigation: { title: 'trends', icon: Mark },
+  };
+  const group: RouteNavigationItem = {
+    route: { ...page('Search'), componentLoader: undefined },
+    children: [
+      { route: featured, children: [] },
+      { route: plain, children: [] },
+    ],
+  };
+  function expectFeatured(menu: HTMLElement) {
+    const link = within(menu).getByRole('link', { name: 'keywords' });
+    expect(link.querySelector('[data-slot="entry-icon"]')).toHaveClass(
+      'text-agent',
+    );
+    expect(within(link).getByText('keywords')).toHaveClass('font-medium');
+    const other = within(menu).getByRole('link', { name: 'trends' });
+    expect(other.querySelector('[data-slot="entry-icon"]')).not.toHaveClass(
+      'text-agent',
+    );
+    expect(within(other).getByText('trends')).not.toHaveClass('font-medium');
+    return link;
+  }
+
+  it('keeps the violet icon and the normal selected colors when selected', () => {
+    render(shell([group], routeKey(featured), false), { wrapper: I18n });
+    const link = expectFeatured(document.body);
+    expect(link).toHaveAttribute('data-active');
+    expect(link).toHaveClass(
+      'data-active:bg-sidebar-primary',
+      'data-active:text-sidebar-primary-foreground',
+    );
+  });
+
+  it('marks the entry while another page is selected', () => {
+    render(shell([group], routeKey(plain), false), { wrapper: I18n });
+    expect(expectFeatured(document.body)).not.toHaveAttribute('data-active');
+  });
+
+  it('marks the entry in the collapsed sidebar popup', async () => {
+    setCollapsed(true);
+    render(shell([group], routeKey(plain), false), { wrapper: I18n });
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Search' }));
+    expectFeatured(await screen.findByRole('dialog', { name: 'Search' }));
+  });
+
+  it('marks the entry in the phone sheet', async () => {
+    vi.stubGlobal('innerWidth', 390);
+    const user = userEvent.setup();
+    render(shell([group], routeKey(plain), false), { wrapper: I18n });
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }));
+    expectFeatured(await screen.findByRole('dialog'));
+  });
+});
+
 describe('sidebar shell', () => {
   it('collapses from the header toggle into the shared preference', async () => {
     const user = userEvent.setup();
