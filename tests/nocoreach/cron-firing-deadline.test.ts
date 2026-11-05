@@ -2,8 +2,10 @@
 // NocoReach's timers share one schedule executor that runs one firing at a time (the built-in memory jobs
 // configuration). A firing that does not end used to stop every other timer, and kept the executor from shutting down:
 // LegacyApp.tick now lets the executor go on after a deadline, or at shutdown, while the firing finishes on its own.
-// GitHub trends' requests keep their own deadline, a read the server stops saves nothing, and a demo or simulated
-// project's searches no longer wait for GitHub's pacing. The sync's stop is in transaction-responsiveness.test.ts.
+// A firing still running when shutdown gives up on it writes nothing more, so the closing network is not recorded as
+// its failure. GitHub trends' requests keep their own deadline, a read the server stops saves nothing, and a demo or
+// simulated project's searches no longer wait for GitHub's pacing. The sync's stop is in
+// transaction-responsiveness.test.ts.
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -16,7 +18,7 @@ import {
   LegacyApp,
   type LegacyLogger,
 } from '../../server/nocoreach/legacy/app.js';
-import type { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
+import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
 import type { LegacyVariables } from '../../server/nocoreach/legacy/variables.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -276,6 +278,66 @@ for (const finish of ['resolves', 'rejects'] as const) {
     expect(firings).toBe(2);
   });
 }
+
+test('a firing still running when shutdown gives up on it writes nothing more; other work still writes', async () => {
+  const written: unknown[] = [];
+  const repository = {
+    createOne: async ({ values }: { values: unknown }) => {
+      written.push(values);
+      return { record: values };
+    },
+  };
+  const manager = {
+    repository: () => repository,
+    collections: () => ({ get: async () => ({ fields: [] }) }),
+    transaction: async (fn: (connection: object) => unknown) =>
+      fn({
+        repository: () => repository,
+        collections: { get: async () => ({ fields: [] }) },
+      }),
+  };
+  const db = new LegacyDatabase(
+    manager as unknown as ConstructorParameters<typeof LegacyDatabase>[0],
+    { generate: () => '1' } as unknown as ConstructorParameters<
+      typeof LegacyDatabase
+    >[1],
+  );
+  const { logger } = recordingLogger();
+  const legacy = new LegacyApp(db, logger, {
+    all: () => ({}),
+  } as unknown as LegacyVariables);
+  db.refuseWritesWhen(() => legacy.abandoned());
+  const closed = Promise.withResolvers<void>();
+  const failure = Promise.withResolvers<unknown>();
+  const job = legacy.cronJobManager.addJob({
+    name: 'githubCron',
+    cronTime: '* * * * * *',
+    // As a source does: its request fails when the network closes, and it records the failure.
+    onTick: async () => {
+      await closed.promise;
+      await db
+        .getRepository('nrSnapshots')
+        .create({ values: { key: 'github:1', payload: { failedAt: 'now' } } })
+        .catch((error: unknown) => failure.resolve(error));
+      await db.sequelize
+        .transaction(async () => undefined)
+        .catch((error: unknown) => failure.resolve(error));
+    },
+  });
+  const shutdown = new AbortController();
+  shutdown.abort();
+  expect(await legacy.tick(job, { signal: shutdown.signal })).toBe(true);
+  expect(await legacy.settle(20)).toBe(false);
+  expect(legacy.abandon()).toBe(1);
+  closed.resolve();
+  expect(await failure.promise).toMatchObject({ code: 'NR_SHUTTING_DOWN' });
+  expect(written).toEqual([]);
+  // Writes outside the firing go on.
+  await db
+    .getRepository('nrSnapshots')
+    .create({ values: { key: 'other', payload: {} } });
+  expect(written).toHaveLength(1);
+});
 
 test('a GitHub trends read the server stops does not save the run, so the day is not marked as read', async () => {
   const entered = Promise.withResolvers<void>();

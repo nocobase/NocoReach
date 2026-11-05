@@ -176,6 +176,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       db.define('users', users);
       const variables = new LegacyVariables(db, this.app.container.resolve(secretsServiceToken));
       const legacy = new LegacyApp(db, logger, variables);
+      db.refuseWritesWhen(() => legacy.abandoned());
       // The daily analysis workflow: its instruction is captured here and run when the Scheduler fires (boot()).
       const workflows = new LegacyWorkflows(database, { [WORKFLOW_TITLE]: ANALYSIS_SCHEDULE });
       if (this.app.container.has(schedulerServiceToken)) {
@@ -433,8 +434,12 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   public override async shutdown(): Promise<void> {
     await this.executor?.shutdown();
     const runtime = this.app.container.resolveIfCreated?.(nocoReachToken);
-    // A timer firing the executor no longer waits for gets a moment to finish before the sources and the network close.
-    await runtime?.legacy.settle(SHUTDOWN_GRACE_MS);
+    // A timer firing the executor no longer waits for gets a moment to finish before the sources and the network close;
+    // one still running then writes nothing more, so the closing network is not recorded as its failure.
+    if (runtime && !(await runtime.legacy.settle(SHUTDOWN_GRACE_MS)))
+      runtime.logger.warn('NocoReach timers still running at shutdown write nothing more', {
+        firings: runtime.legacy.abandon(),
+      });
     const analysis = await this.analysisExecutor?.catch(() => undefined);
     this.analysisExecutor = undefined;
     await analysis?.shutdown();

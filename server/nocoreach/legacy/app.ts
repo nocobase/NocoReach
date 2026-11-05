@@ -2,6 +2,8 @@
 // (their HTTP actions), `acl.allow` (which of them answer without a session), `cronJobManager` (their timers),
 // `pm.get` (other plugins), `on('afterStart')`, `logger` and `environment.getVariables()`. Here they only collect what
 // the services register; the NocoReach provider starts the timers and the NocoReach route serves the actions.
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { ScheduleJob } from '@nocobase/jobs';
 import type { Logger } from '@nocobase/logging';
 import type { LegacyDatabase } from './database.js';
@@ -141,8 +143,9 @@ export class LegacyApp {
   overrunReport = OVERRUN_REPORT_MS;
   /** Timers whose last firing outlived its deadline and still runs: when it started, last reported, firings skipped. */
   private readonly overrunning = new Map<string, { started: number; reported: number; skipped: number }>();
-  /** Firings still running, which `settle` waits for. */
-  private readonly firings = new Set<Promise<unknown>>();
+  /** Firings still running, which `settle` waits for, each with the state its async context carries. */
+  private readonly firings = new Map<Promise<unknown>, { abandoned: boolean }>();
+  private readonly firing = new AsyncLocalStorage<{ abandoned: boolean }>();
   private readonly plugins = new Map<string, unknown>();
   private readonly listeners = new Map<string, (() => unknown)[]>();
   readonly resourceManager: { define: LegacyResources['define'] };
@@ -209,8 +212,9 @@ export class LegacyApp {
       return false;
     }
     const started = Date.now();
-    const work = this.importHold.track(new Promise((resolve) => resolve(job.onTick())));
-    this.firings.add(work);
+    const state = { abandoned: false };
+    const work = this.importHold.track(new Promise((resolve) => this.firing.run(state, () => resolve(job.onTick()))));
+    this.firings.set(work, state);
     const settled = () => this.firings.delete(work);
     work.then(settled, settled);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -270,11 +274,27 @@ export class LegacyApp {
   async settle(ms: number): Promise<boolean> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      Promise.allSettled([...this.firings]),
+      Promise.allSettled([...this.firings.keys()]),
       new Promise((resolve) => (timer = setTimeout(resolve, ms))),
     ]);
     clearTimeout(timer);
     return this.firings.size === 0;
+  }
+
+  /**
+   * At shutdown, after `settle`: the firings still running, and the work they started, write nothing more through the
+   * classic database (`LegacyDatabase.refuseWritesWhen`), so the network closing under them is not recorded as their
+   * failure. They end as in a killed process: a sync job stays `running`, a day is not marked as read, no failure waits
+   * for a retry. Returns how many there were.
+   */
+  abandon(): number {
+    for (const state of this.firings.values()) state.abandoned = true;
+    return this.firings.size;
+  }
+
+  /** Whether the caller runs in a firing `abandon` gave up on. */
+  abandoned(): boolean {
+    return this.firing.getStore()?.abandoned === true;
   }
 
   /** Makes a NocoBase 3 capability answer a classic `pm.get(name)`. */
