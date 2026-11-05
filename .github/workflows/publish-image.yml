@@ -1,0 +1,113 @@
+name: Publish internal Docker image
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
+      archive_name:
+        required: true
+        type: string
+    secrets:
+      ACR_USERNAME:
+        required: true
+      ACR_PASSWORD:
+        required: true
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing published release tag to recover, such as v1.0.0-beta.75'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nocoreach-image-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      REGISTRY: registry.cn-beijing.aliyuncs.com
+    steps:
+      - name: Isolate registry credentials
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/nocoreach-docker-auth" >> "$GITHUB_ENV"
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ inputs.release_sha || inputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Verify published release and registry configuration
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          test -n "$ACR_USERNAME" || { echo 'Missing ACR_USERNAME'; exit 1; }
+          test -n "$ACR_PASSWORD" || { echo 'Missing ACR_PASSWORD'; exit 1; }
+          node scripts/ci/image-release.mjs metadata
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: inputs.archive_name != ''
+        with:
+          name: ${{ inputs.archive_name }}
+          path: storage/exports
+      - name: Unpack the tested release archive
+        if: inputs.archive_name != ''
+        run: tar -xzf storage/exports/dist.tar.gz
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0
+        if: inputs.archive_name == ''
+      - name: Rebuild a release for manual recovery
+        if: inputs.archive_name == ''
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test --maxWorkers=2 --passWithNoTests=false
+          pnpm build --target linux-x64 --node-version 24
+      - name: Build and verify the production image
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          REVISION: ${{ steps.release.outputs.sha }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          node scripts/ci/image-release.mjs artifact
+          docker build --platform linux/amd64 --build-arg DIST=prebuilt \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE" .
+          docker run --rm --network none --workdir /app/dist "$IMAGE" \
+            node --input-type=module -e "await import('@nocobase/db-postgres'); await import('@nocobase/db-sqlite');"
+      - name: Authenticate and push the versioned image
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          printf '%s' "$ACR_PASSWORD" | docker login "$REGISTRY" --username "$ACR_USERNAME" --password-stdin
+          docker push "$IMAGE"
+          docker pull "$IMAGE"
+          digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          test -n "$digest"
+          printf 'Image: `%s`\n\nDigest: `%s`\n\nPlatform: `linux/amd64`\n' "$IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Clear registry credentials
+        if: always()
+        run: |
+          docker logout "$REGISTRY"
+          rm -rf "$DOCKER_CONFIG"
