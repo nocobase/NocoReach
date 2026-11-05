@@ -151,8 +151,11 @@ class SyncService{
   const fresh=await this.repo('nrSyncJobs').findOne({filterByTk:flight.job.id,transaction,lock:true});
   return fresh&&fresh.get('status')==='running'&&fresh.get('cursor')===flight.job.get('cursor')&&fresh.get('resource')===flight.job.get('resource')?fresh:null;
  }
+ // Shutdown: a Google read in flight takes its cancellation path, so its job stays `running` and the next start resumes
+ // it without spending an attempt (closing the network under it would count as a failed attempt); nothing new starts.
+ stop(){this.stopped=true;this.inFlight?.controller.abort();for(const flights of this.freshFlights.values())for(const controller of flights)controller.abort();}
  async step(projectId?: string){
-  if(this.busy)return false;this.busy=true;let flight: SyncFlight | undefined;
+  if(this.busy||this.stopped)return false;this.busy=true;let flight: SyncFlight | undefined;
   try{
    // The instance's busy flag owns the external work. Only claim and commit hold a DB transaction;
    // SQLite has one connection, so awaiting Google inside it would block every page and control action.
@@ -237,7 +240,7 @@ class SyncService{
  // The 初步 days after `cutoff` for one source, or none when the store is for other resources.
  async fresh(id,source,cutoff){if(!cutoff)return [];const s=(await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload');const link=await this.p.link(id).catch(()=>null);
   if(!s||!link||s.ga4Resource!==link.get('ga4PropertyId')||s.gscResource!==link.get('gscSiteUrl'))return [];return (s[source]||[]).filter(r=>r.date>cutoff);}
- async tick(){if(this.busy)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
+ async tick(){if(this.busy||this.stopped)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
@@ -248,7 +251,7 @@ class SyncService{
   // refuses in part keeps a short lifetime so that a person opening it soon gets another try, but the tick would read it
   // again each time that ends, all day, if Google goes on refusing the same part: it waits PARTIAL_RETRY_MS instead.
   let idleReads=0;
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(this.stopped)return;await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
    const link=links.find(l=>String(l.get('projectId'))===id),authorizedAt=link?.get('authorizedAt'),active=!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt);
    const lately=active&&(!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,authorizedAt,MORNING_REREAD_WITHIN_MS));
    // An idle project's next read waits IDLE_READ_MS, unless someone opens it meanwhile. Traffic is read ahead once per
@@ -270,7 +273,7 @@ class SyncService{
      await waitForFresh(()=>this.p.dataViews.websiteTables(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)tablesNext.set(id,Date.now()+PARTIAL_RETRY_MS);else tablesNext.delete(id);},()=>tablesNext.set(id,Date.now()+15*60000));}
    if(!active)continue;
    const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000||this.stopped)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}
  }
