@@ -40,10 +40,14 @@ vi.mock('../../client/hooks/use-business-access', () => ({
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({ session: fixture.session, isPending: false }),
 }));
-vi.mock('@nocobase/app-plugin-authorization/client', () => ({
-  useAuthorizationRevision: () => fixture.revision,
-  useCan: () => ({ can: true, isPending: false, error: null }),
-}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => {
+  const client = { revision: () => fixture.revision };
+  return {
+    useAuthorizationClient: () => client,
+    useAuthorizationRevision: () => fixture.revision,
+    useCan: () => ({ can: true, isPending: false, error: null }),
+  };
+});
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action, wrapRequests: vi.fn() },

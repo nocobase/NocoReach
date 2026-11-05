@@ -321,7 +321,10 @@ interface ImportRuntime {
   readonly legacy: LegacyApp;
   readonly users: LegacyUsers;
   readonly variables: LegacyVariables;
-  readonly plugin?: { readonly mock?: { readonly enabled: boolean } };
+  readonly plugin?: {
+    readonly mock?: { readonly enabled: boolean };
+    readonly taskExecution?: { readonly activeRuns: { rescan(): void } };
+  };
 }
 
 /** The two NocoBase 3 repository calls the import makes on a table inside a transaction. */
@@ -440,6 +443,9 @@ export function registerClassicImport(nr: ImportRuntime) {
             await db.access.event(t.connection as import('@nocobase/db').DatabaseConnection, userId, 'member.import', 'classic-import', { count: Object.keys(selected).length });
           }
         });
+      // Imported task runs may still be in flight: the task tick reads them all again (execution/active-runs.ts).
+      if (name === 'nrSnapshots' && values.length)
+        nr.plugin?.taskExecution?.activeRuns.rescan();
       return { inserted: values.length, skipped: rows.length - values.length };
     },
     async variables(v) {

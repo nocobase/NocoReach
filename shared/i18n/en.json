@@ -1632,6 +1632,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "Online AI didn't answer this time. Try again later or add them manually",
   "aiQuestions.generationManualFallback": "Online AI didn't answer this time. Try again later or enter topics yourself",
   "dailyAnalysis.onlineAiGaveNoVerdict": "Online AI gave no verdict this time. Try again",
+  "dailyAnalysis.judgeRetryIn": "The remaining changes couldn't be judged this time. Try again in {0} min.",
   "messages.onlineAiConnectedMessage": "Online AI is connected.",
   "messages.modelChosenOnlineAiNot": "The model chosen for online AI isn't enabled now",
   "taskDetail.sawChangeLive": "Saw the change live",

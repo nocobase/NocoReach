@@ -1687,6 +1687,7 @@
   "competitorWatch.onlineAiNotAnswerTime": "Lần này AI trực tuyến không trả lời. Vui lòng thử lại sau hoặc thêm thủ công",
   "aiQuestions.generationManualFallback": "Lần này AI trực tuyến không trả lời. Vui lòng thử lại sau hoặc tự nhập chủ đề",
   "dailyAnalysis.onlineAiGaveNoVerdict": "Lần này AI trực tuyến không đưa ra nhận định. Vui lòng thử lại",
+  "dailyAnalysis.judgeRetryIn": "Lần này chưa thể nhận định các thay đổi còn lại. Vui lòng thử lại sau {0} phút.",
   "messages.onlineAiConnectedMessage": "AI trực tuyến đã được kết nối.",
   "messages.modelChosenOnlineAiNot": "Mô hình được chọn cho AI trực tuyến hiện chưa được bật",
   "taskDetail.sawChangeLive": "Đã thấy thay đổi trên trang web đang hoạt động",

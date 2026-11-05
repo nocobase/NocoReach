@@ -42,6 +42,7 @@ import {confirmAction} from "#components/reach/confirm";
 import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { formatDate, joinList } from '#lib/format';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Saved = { tags: Tag[]; items: SavedKeyword[] };
 type Filters = { include: string; exclude: string; minVol: string; maxVol: string; minKd: string; maxKd: string; tagIds: string[] };
@@ -198,7 +199,7 @@ export default function SavedKeywords() {
         <Dialog open onOpenChange={(o) => { if (!o) setDialog(undefined); }}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>{$tj('savedKeywords.deleteKeywords',{0:selected.length})}</DialogTitle><DialogDescription>{$t('savedKeywords.savedKeywordsTagsDeletedResearch')}</DialogDescription></DialogHeader>
-            <DialogFooter><Button variant="outline" onClick={() => setDialog(undefined)}>{$t('common.cancel')}</Button><Button variant="destructive" onClick={() => void keywordRequest<{ removed: number }>("removeSaved", { ids: selected.map((s) => s.id) }).then((r) => { toast.success(() => ($t('savedKeywords.keywordsDeleted',{0:r.removed}))); setRowSelection({}); setDialog(undefined); void load(); }).catch((e) => toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('savedKeywords.notDelete'))))}>{$t('common.delete')}</Button></DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setDialog(undefined)}>{$t('common.cancel')}</Button><Button variant="destructive" onClick={() => void keywordRequest<{ removed: number }>("removeSaved", { ids: selected.map((s) => s.id) }).then((r) => { toast.success(() => ($t('savedKeywords.keywordsDeleted',{0:r.removed}))); refreshNavSources(); setRowSelection({}); setDialog(undefined); void load(); }).catch((e) => toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('savedKeywords.notDelete'))))}>{$t('common.delete')}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       ) : null}

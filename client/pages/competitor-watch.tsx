@@ -22,6 +22,7 @@ import { competitorEventsDraft } from "./seo-hand-off";
 import {confirmAction} from "#components/reach/confirm";
 import { formatCount, formatDate, formatDateTime, formatSigned, joinList } from '#lib/format';
 import { ConnectionError } from '#components/connection-error';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[]; noSitemap?: boolean };
 export type Suggestion = { name: string; site: string; repo: string };
@@ -151,17 +152,17 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
   const ticked = view?.events.filter((e) => picked[e.id]) || [];
   useHandOffSource("competitor-events", view?.list.length ? { count: ticked.length, playbookId: "competitor-compare", description: $t('competitorWatch.selectedCompetitorActivityBecomesOne'), draft: () => competitorEventsDraft(ticked), clear: () => setPicked({}) } : null);
   const check = async () => { setBusy(true); try { const r = await call<{ events: number; errors: string[] }>(projectId, "check"); toast.success(() => (r.errors.length ? $t('competitorWatch.partlyNotRead',{0:$legacyText(r.errors[0])}) : r.events ? $t('competitorWatch.newActivitiesFound',{0:r.events}) : $t('competitorWatch.noNewActivity'))); await load(); } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notFullyChecked'))); } finally { setBusy(false); } };
-  const remove = async (c: Competitor) => { if (!(await confirmAction({ title: () => ($t('common.stopWatching',{0:c.name})), description: () => ($t('competitorWatch.activityHistoryDeletedToo')), action: 'competitorWatch.stopWatching' }))) return; try { await call(projectId, "remove", { competitorId: c.id }); await load(); } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notComplete'))); } };
+  const remove = async (c: Competitor) => { if (!(await confirmAction({ title: () => ($t('common.stopWatching',{0:c.name})), description: () => ($t('competitorWatch.activityHistoryDeletedToo')), action: 'competitorWatch.stopWatching' }))) return; try { await call(projectId, "remove", { competitorId: c.id }); refreshNavSources(); await load(); } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notComplete'))); } };
   if (error) return <p className="nr-error" role="alert">{error}</p>;
   if (!view) return <ListSkeleton rows={4} />;
   const chosen = view.events.filter((e) => picked[e.id]);
   const addDialog = adding && canAdd ? (
     <Dialog open onOpenChange={(o) => { if (!o) setAdding(false); }}><DialogContent className="sm:max-w-md">
       <DialogHeader><DialogTitle>{$t('common.addCompetitor')}</DialogTitle><DialogDescription>{$t('competitorWatch.checksWebsiteNewPagesGithub')}</DialogDescription></DialogHeader>
-      <AddForm projectId={projectId} suggestions={view.suggestions} onAdded={() => { setAdding(false); toast.success(() => ($t('competitorWatch.addedCheckingFirstTime'))); void load(); }} onCancel={() => setAdding(false)} />
+      <AddForm projectId={projectId} suggestions={view.suggestions} onAdded={() => { setAdding(false); refreshNavSources(); toast.success(() => ($t('competitorWatch.addedCheckingFirstTime'))); void load(); }} onCancel={() => setAdding(false)} />
     </DialogContent></Dialog>
   ) : null;
-  const added = (msg: Message) => { setSuggesting(false); toast.success(msg); void load(); };
+  const added = (msg: Message) => { setSuggesting(false); refreshNavSources(); toast.success(msg); void load(); };
   const suggestDialog = suggesting && canSuggest ? (
     <Dialog open onOpenChange={(o) => { if (!o) setSuggesting(false); }}><DialogContent className="sm:max-w-lg">
       <DialogHeader><DialogTitle>{$t('competitorWatch.competitorsAiDetected')}</DialogTitle><DialogDescription>{$t('competitorWatch.checksWebsitesNewPagesGithub')}</DialogDescription></DialogHeader>

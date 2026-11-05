@@ -29,6 +29,7 @@ import {confirmAction} from "#components/reach/confirm";
 import { InfoTip } from "#components/reach/info-tip";
 import { formatDate } from '#lib/format';
 import { Delta } from '#components/reach/delta';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Check = { at: string; position: number | null; url: string | null; runId: string };
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };
@@ -48,6 +49,7 @@ export function StartTrackingDialog({ keywords, onClose, onDone }: { keywords: {
     try {
       const r = await rankRequest<{ added: number }>("add", { keywords: keywords.map((k) => ({ keyword: k.keyword, locationCode: k.market?.locationCode ?? market.locationCode, language: k.market?.language ?? market.language })) });
       toast.success(() => (r.added ? $t('rankTracking.startedTrackingKeywordsRunningFirst',{0:r.added}) : $t('rankTracking.keywordsAlreadyTracked')));
+      refreshNavSources();
       onDone();
     } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('rankTracking.notTrackingYet'))); }
     finally { setBusy(false); }
@@ -115,7 +117,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = rows.filter((r) => rowSelection[r.id]);
   const [handing, setHanding] = useState<TrackedRow[]>();
-  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)), noun: $t('common.keywordsSelected'), actions: <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: () => ($t('rankTracking.stopTrackingKeywords',{0:selected.length})), description: () => ($t('rankTracking.checkHistoryDeletedToo')), action: 'rankTracking.stopTracking' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t('rankTracking.stopTracking')}</TableBulkActionButton></>, clear: () => setRowSelection({}) } : null);
+  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)), noun: $t('common.keywordsSelected'), actions: <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: () => ($t('rankTracking.stopTrackingKeywords',{0:selected.length})), description: () => ($t('rankTracking.checkHistoryDeletedToo')), action: 'rankTracking.stopTracking' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); refreshNavSources(); }); }}>{$t('rankTracking.stopTracking')}</TableBulkActionButton></>, clear: () => setRowSelection({}) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {

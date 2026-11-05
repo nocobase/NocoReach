@@ -40,6 +40,7 @@ import "./data-views.css";
 import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { formatDateTime } from '#lib/format';
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type View = keyof ReturnType<typeof getResearchViews>;
 const VIEWS = Object.keys(getResearchViews()) as View[];
@@ -257,6 +258,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
     try {
       const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) });
       toast.success(() => ($t('common.keywordsSaved',{0:r.saved,1:r.skipped ? $t('common.alreadySaved',{0:r.skipped}) : ""})));
+      refreshNavSources();
       setRowSelection({});
     } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'))); }
   };
