@@ -168,9 +168,13 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     const attemptKey = `${projectId}:${attempt}`;
     if (startedRef.current === attemptKey) return;
     startedRef.current = attemptKey;
-    // Keep the large task response behind state so their downloads do not compete.
+    // The tasks start with the state too: "Waiting for you" waits for them, so asking for them once Insights mounted
+    // made the page ready a round trip later. On a slow link their download shares the bandwidth with the state's.
     early.start(cache, insightSummaryKey(projectId), () =>
       insightSummary(projectId),
+    );
+    early.start(cache, insightTasksKey(projectId), () =>
+      insightTasks(projectId),
     );
     cache
       .load(
