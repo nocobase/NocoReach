@@ -163,9 +163,11 @@ class StrategyService{
  // hand-off that cites none needs nothing, and an opportunity's hand-off takes its batch's evidence inside the transaction
  // (computing an analysis can call the model for custom rules).
  async handOffContext(id,v,fields){if(v.insightId||!fields.signalKey)return null;const latest=await this.state(id).then(s=>s?.insights,()=>null);
-  const recent=Date.now()-Date.parse(latest?.generatedAt||'')<HAND_OFF_ANALYSIS_MS;
-  if(recent&&(latest.evidence?.signals?.items||[]).some(s=>s.key===fields.signalKey))return {evidence:latest.evidence};
-  return this.context(id);}
+  const holds=e=>(e?.signals?.items||[]).some(s=>s.key===fields.signalKey),recent=Math.abs(Date.now()-Date.parse(latest?.generatedAt||''))<HAND_OFF_ANALYSIS_MS;
+  if(recent&&holds(latest?.evidence))return {evidence:latest.evidence};
+  // An analysis computed now that no longer holds the change the person handed off (it faded) leaves the task the one
+  // they saw on Insights, whatever its age.
+  const fresh=await this.context(id);return holds(fresh?.evidence)||!holds(latest?.evidence)?fresh:{evidence:latest.evidence};}
  // An analysis leaving the state keeps its whole evidence here, once; older archives than ARCHIVE_KEEP_MS go.
  async archive(id,batch,transaction){if(!batch?.generatedAt||!batch.evidence||isSlim(batch.evidence))return;
   const key=archiveKey(id,batch.generatedAt),old=await this.repo().findOne({filter:{key},transaction});
@@ -193,6 +195,7 @@ class StrategyService{
   // saves meanwhile is never written back over; `silent` keeps updatedAt, which orders Agent queues and Done.
   const tasks=this.p.db.getRepository('nrTasks'),due=[];
   for await(const page of pagesById(tasks,{filter:{projectId:id},fields:['id','evidence']}))for(const t of page){const e=t.get?t.get('evidence'):t.evidence;if(e?.context&&!isSlim(e.context)&&e.context.signals)due.push(String(t.get?t.get('id'):t.id));}
+  if(due.length)this.p.app?.logger?.info('NocoReach analysis evidence slimmed',{projectId:String(id),tasks:due.length});
   for(const taskId of due)await this.p.taskExecution.lock(String(id),taskId,async tx=>{const t=await tasks.findOne({filter:{id:taskId,projectId:id},transaction:tx});const e=t?.get?t.get('evidence'):t?.evidence;if(!e?.context||isSlim(e.context))return;const context=taskContext(e.context,e);if(context!==e.context)await tasks.update({filterByTk:taskId,values:{evidence:{...e,context}},silent:true,transaction:tx});});
  }
  // Hand off to agent on an opportunity with several places: what the confirmation dialog lists.

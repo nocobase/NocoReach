@@ -64,7 +64,7 @@ test('a change handed off on its own stands on the latest analysis when it holds
  assert.equal(computed,1,'a change the latest analysis does not hold is computed');assert.equal(writes[1].values.evidence.context.signals.items[0].key,'change-c');
  state.insights.generatedAt=new Date(Date.now()-3*86400000).toISOString();
  await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',signalKey:'change-a'});
- assert.equal(computed,2,'an analysis days old is not stood on');
+ assert.equal(computed,2,'an analysis days old is not stood on');assert.equal(writes[2].values.evidence.context.signals.items[0].key,'change-a','when the analysis computed now has lost the change, the one seen on Insights is kept');
  await service.confirmDirection(1,{title:'t',brief:'b',objective:'o'});
  assert.equal(computed,2,'a hand-off citing no change computes nothing');assert.equal(writes[3].values.evidence.context,undefined);
  assert.ok(state.proposals.every(p=>!('evidence' in p)),'plans keep no evidence');
