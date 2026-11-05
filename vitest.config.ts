@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import { createReactVitestConfig } from '@nocobase/dev-config/vitest/react';
 
+import { DurationSequencer } from './tests/setup/shard-sequencer';
+
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default createReactVitestConfig({
@@ -32,6 +34,8 @@ export default createReactVitestConfig({
     // Playwright runs tests/playwright/ against a built application; its files are named *.test.ts too.
     exclude: ['tests/playwright/**'],
     setupFiles: ['./tests/setup/client-config.ts'],
+    // CI runs `--shard`; split by expected time rather than by path hash, and start slow files first.
+    sequence: { sequencer: DurationSequencer },
     // Keep the command usable if an application intentionally removes all scaffold tests before adding its own.
     passWithNoTests: true,
     coverage: {
