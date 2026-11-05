@@ -5,9 +5,9 @@
 // NocoBase 3 orders every Repository read by a nulls-last `case` that no index serves, so each page these read with
 // `offset` read and sorted every matching row again, `evidence` (about 5.5 KB a task) included. On SQLite's synchronous
 // driver the whole read held the process: with 10,000 tasks `articleFlow.tick` took 18 s every minute, `verifyReleases`
-// and `observeEffects` 16 to 17 s each, and the first tick after a start 49.7 s; with 5,000 tasks in a project
-// `wakeSnoozed` took 9 s every minute (2026-11-05 measurement on copies of the demo database). See docs/DEVELOPMENT.md,
-// Backend and data.
+// and `observeEffects` 16 to 17 s each, and the first tick after a start 49.7 s; with 5,000 tasks in each of two
+// projects `wakeSnoozed` took 9 s every minute (2026-11-05 measurement on copies of the demo database). See
+// docs/DEVELOPMENT.md, Backend and data.
 //
 // - `pagesById` reads the next page after the last id read (`id > last`), so a page sorts only the rows after it and
 //   a scan visits the same rows in the same order as the offset pages did. A row written during a scan is no worse off
