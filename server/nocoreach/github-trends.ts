@@ -39,18 +39,21 @@ function parseTrending(html){const out=[];for(const m of String(html||'').matchA
 // record within a day); unknown when either is missing.
 function gained(samples,today,days){const now=samples?.[today];if(!Number.isFinite(now))return null;const target=add(today,-days),before=samples[target]??samples[add(target,-1)];return Number.isFinite(before)?now-before:null;}
 class GitHubTrends{
- constructor(plugin,request){this.p=plugin;this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.lastSearch=0;this.running=new Set();this.p.network?.bind(this,['refresh','setTopics'],request?undefined:'github');
-  this.request=request||((url,init,id)=>(this.p.network?this.p.network.fetch('github',url,{...init,signal:AbortSignal.timeout(20000)},String(id)):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));}
+ // Each request's deadline: a request GitHub does not answer fails with the others' errors in `lastRun`.
+ constructor(plugin,request){this.p=plugin;this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.lastSearch=0;this.timeout=20000;this.running=new Set();this.p.network?.bind(this,['refresh','setTopics'],request?undefined:'github');
+  this.request=request||((url,init,id)=>(this.p.network?this.p.network.fetch('github',url,{...init,signal:AbortSignal.timeout(this.timeout)},String(id)):fetch(url,{...init,signal:AbortSignal.timeout(this.timeout)})));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async state(id){return (await this.repo().findOne({filter:{key:KEY(id)}}))?.get('payload')||null;}
  async mutate(id,fn){const key=KEY(id);return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key},transaction});const row=await this.repo().findOne({filter:{key},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key,payload:state},transaction});return state;});}
  token(id){return this.p.github?.token?.(String(id))||'';}
+ async inProcess(id){const n=this.p.network;return Boolean(n?.simulation?.enabled||await n?.inDemoProject?.(String(id)));}
  headers(token,accept='application/vnd.github+json'){return {Accept:accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})};}
  async json(id,url,token,init={}){const res=await this.request(url,{...init,headers:{...this.headers(token),...(init.headers||{})}},id);if(res.ok)return res.json();let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}
   if(res.status===429||(res.status===403&&/rate limit/i.test(said)))throw Object.assign(new Error(systemMessageText('githubTrends.rateLimited')),{status:429,limited:true});
   fail(systemMessageText('messages.githubStatusDetail',{0:res.status,1:said?`（GitHub：${said}）`:''}),502);}
- // Search, spaced out under GitHub's limit (30 a minute with a token, 10 without).
- async search(id,q,token,{sort='',per=10}={}){const gap=token?2100:6500,wait=this.lastSearch+gap-Date.now();if(wait>0)await this.sleep(wait);this.lastSearch=Date.now();
+ // Search, spaced out under GitHub's limit (30 a minute with a token, 10 without). A simulated or demo project is answered
+ // in process, so it waits for nothing: spaced out, a first read of two demo projects slept about 15 minutes.
+ async search(id,q,token,{sort='',per=10}={}){const gap=token?2100:6500,wait=this.lastSearch+gap-Date.now();if(wait>0&&!await this.inProcess(id))await this.sleep(wait);this.lastSearch=Date.now();
   return this.json(id,`${API}/search/repositories?q=${encodeURIComponent(q)}${sort?`&sort=${sort}&order=desc`:''}&per_page=${per}`,token);}
  // Today's stars for repositories the searches and Trending did not cover, 100 a GraphQL request (only with a token).
  async starCounts(id,repos,token){const out={};if(!token)return out;for(let i=0;i<repos.length;i+=100){const part=repos.slice(i,i+100).filter(r=>/^[\w.-]+\/[\w.-]+$/.test(r));if(!part.length)continue;

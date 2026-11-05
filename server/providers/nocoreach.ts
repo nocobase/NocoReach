@@ -40,7 +40,7 @@ import {
 import { ScheduleManagement, ANALYSIS_SCHEDULE } from '../nocoreach/schedule-management.js';
 import { DEFAULT_CRON, NODE_TYPE, WORKFLOW_TITLE } from '../nocoreach/daily-analysis.js';
 import { registerClassicImport } from '../nocoreach/classic-import.js';
-import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
+import { LegacyApp, legacyLogger, SHUTDOWN_GRACE_MS, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
 import { ConnectionStatusCache } from '../nocoreach/connection-status-cache.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
@@ -426,24 +426,18 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     // Classic timers ran in the server's local time; so do these.
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     this.executor = this.app.container.resolve(jobExecutorServiceToken).getScheduleExecutor('nocoreach');
-    for (const job of runtime.legacy.jobs)
-      await this.executor.addJob({
-        name: job.name,
-        options: { cron: job.cronTime, tz },
-        payload: {},
-        execute: async () => {
-          await runtime.legacy.tick(job);
-        },
-      });
+    for (const job of runtime.legacy.jobs) await this.executor.addJob(runtime.legacy.scheduleJob(job, tz));
     await this.executor.setup();
   }
 
   public override async shutdown(): Promise<void> {
     await this.executor?.shutdown();
+    const runtime = this.app.container.resolveIfCreated?.(nocoReachToken);
+    // A timer firing the executor no longer waits for gets a moment to finish before the sources and the network close.
+    await runtime?.legacy.settle(SHUTDOWN_GRACE_MS);
     const analysis = await this.analysisExecutor?.catch(() => undefined);
     this.analysisExecutor = undefined;
     await analysis?.shutdown();
-    const runtime = this.app.container.resolveIfCreated?.(nocoReachToken);
     try {
       await runtime?.plugin.afterDisable?.();
     } finally {
