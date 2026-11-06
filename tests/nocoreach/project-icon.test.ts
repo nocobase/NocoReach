@@ -21,3 +21,13 @@ test('demo icon reads never fetch or write a cache while browsing',async()=>{
  const p={demoConfiguration:{enabled:true},project:async()=>({domains:['x.dev']}),db:{getRepository:()=>({findOne:async()=>null,create:forbidden,update:forbidden})}};
  assert.deepEqual(await new ProjectIcon(p,forbidden).get('1'),{dataUrl:null,source:null});
 });
+test('icon: one held for the domain answers at once when it is due again, and the new read replaces it',async()=>{
+ const rows={'project-icon:1':{domain:'x.dev',fetchedAt:'2020-01-01T00:00:00Z',dataUrl:'data:image/png;base64,AA',source:'https://x.dev/old.png'}};
+ const p={project:async()=>({id:1,domains:['x.dev']}),db:{getRepository:()=>({findOne:async o=>rows[o.filter.key]&&{id:1,get:()=>rows[o.filter.key]},create:async o=>{rows[o.values.key]=o.values.payload;},update:async o=>{rows['project-icon:1']=o.values.payload;}})}};
+ let release;const gate=new Promise(r=>{release=r;});
+ const read=async url=>{await gate;if(url==='https://x.dev/')return {text:'<link rel="icon" href="/new.png">',url};if(url.endsWith('/new.png'))return {type:'image/png',body:Buffer.from([1,2,3])};throw new Error('404');};
+ const icon=new ProjectIcon(p,read);
+ assert.deepEqual(await icon.get('1'),{dataUrl:'data:image/png;base64,AA',source:'https://x.dev/old.png'},'the held icon, without waiting for the site');
+ release();await icon.pending;
+ assert.equal((await icon.get('1')).dataUrl,'data:image/png;base64,AQID');
+});

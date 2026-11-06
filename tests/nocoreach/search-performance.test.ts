@@ -39,7 +39,7 @@ function views({filtered=false}={}){
  const end='2026-09-27',daily=[];for(let i=59;i>=0;i--)daily.push({date:add(end,-i),clicks:10,impressions:100,position:8});
  const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
  const calls=[],saved=[];const snaps=[{key:'history-search',payload:daily}];let built=0;const state={snap:'s1'};
- const repo={find:async o=>{calls.push(o.filter);return (o.filter.grain==='overview'?daily.map(r=>({date:r.date,payload:[r]})):parts).filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
+ const repo={count:async o=>parts.filter(r=>o.filter.date.$in.includes(r.date)).length,find:async o=>{calls.push(o.filter);return (o.filter.grain==='overview'?daily.map(r=>({date:r.date,payload:[r]})):parts).filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
   findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>o.filterByTk?x.id===o.filterByTk:x.key===o.filter.key).payload=o.values.payload;}};
  const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>repo}};
  const dv=new DataViews(p);dv.gscQuery=async(_id,_site,body)=>body.dimensions[0]==='date'?parts.filter(r=>r.date>=body.startDate&&r.date<=body.endDate).map(r=>({keys:[r.date],clicks:2,impressions:20,position:9})):[];
@@ -119,7 +119,18 @@ test('本站排名: queries match case-insensitively, position weighted over pag
 test('ranks view reads the last 28 synced days once per synced data',async()=>{
  const {dv,calls,end}=views();const r=await dv.ranks('1',{keywords:['CRM','none']});
  assert.equal(r.cutoff,end);assert.equal(r.ranks.crm.clicks,28);assert.equal(r.ranks.crm.position,9);assert.equal(r.ranks.none,undefined);
- await dv.ranks('1',{keywords:['erp']});assert.equal(calls.length,1);
+ const read=calls.length;assert.equal(read,7,'four days a query');
+ await dv.ranks('1',{keywords:['erp']});assert.equal(calls.length,read,'held, whatever the keywords');
+ assert.deepEqual((await dv.ranks('1',{keywords:['ERP']})).ranks,{erp:{clicks:14,impressions:420,position:3,page:'https://x/b'}});
+});
+test('ranks view: the held pairs stay through other writes and are read again when the window\'s own days change',async()=>{
+ const {dv,calls,state}=views();await dv.ranks('1',{keywords:['crm']});const read=calls.length;
+ state.snap='s2';await dv.ranks('1',{keywords:['crm']});assert.equal(calls.length,read,'a history fill writing older days');
+ calls.length=0;dv.pairHold.clear();await Promise.all([dv.ranks('1',{keywords:['crm']}),dv.ranks('1',{keywords:['erp']})]);assert.equal(calls.length,read,'callers at the same time share one read');
+});
+test('本站排名: the query index answers as the row scan does',()=>{
+ const rows=[{keyword:'open crm',page:'/a',clicks:2,impressions:100,position:12},{keyword:'Open CRM ',page:'/b',clicks:1,impressions:300,position:8},{keyword:'open crm',page:'/c',clicks:1,impressions:400,position:8},{keyword:'other',page:'/d',clicks:9,impressions:0,position:1}];
+ const keywords=['open crm','OTHER','missing'];assert.deepEqual(sp.indexedRanks(sp.queryIndex(rows),keywords),sp.ranks(rows,keywords));
 });
 test('page view: daily clicks, impressions and views of one page; www and trailing slash ignored; days without a partition stay empty',async()=>{
  const end='2026-09-27',daily=[{date:end,clicks:1,impressions:1}],parts={gsc:[{date:end,payload:[{page:'https://www.x.dev/docs/a/',clicks:3,impressions:40},{page:'https://x.dev/docs/b',clicks:9,impressions:9}]}],ga4:[{date:end,payload:[{page:'/docs/a',views:12},{page:'/docs/a?ref=1',views:3},{page:'/',views:99}]}]};
@@ -176,4 +187,10 @@ test('涨跌: queries and pages by clicks against the period before; new ones ha
  assert.deepEqual(q.rising[0],{key:'a',clicks:30,previousClicks:10,change:20,impressions:300,previousImpressions:200,position:4,previousPosition:6});
  assert.equal(q.falling[1].position,null);
  assert.deepEqual(sp.movers(cur,prev,'page').rising.map(r=>r.key),['/1','/3']);
+});
+test('ranks view: held pairs are let go, least recently read first, past the projects or pairs held',async()=>{
+ const {dv}=views();
+ for(const id of ['1','2','3','4','5','6','7'])await dv.ranks(id,{keywords:['crm']});
+ await new Promise(r=>setImmediate(r));
+ assert.deepEqual([...dv.pairHold.keys()],['2','3','4','5','6','7']);
 });

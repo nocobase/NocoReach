@@ -35,6 +35,11 @@ const getStateNames = () => ({todo:$t('contentDetail.notStarted'),doing:$t('comm
 // Tasks that changed or are changing this page: its released pages, the published page or the linked page, at any
 // address the project's page identity gives the page (shared/page-identity.ts).
 export function tasksForPage(tasks:ContentTask[],url:string,identity?:PageIdentity|null){const key=pageKey(url,identity);return tasks.filter(t=>{const w=t.evidence?.work;return w&&!w.archivedAt&&[...effectPages(w),w.page?.url].some(u=>pageKey(u,identity)===key);});}
+// tasksForPage for every page of a list at once: each task's pages are keyed once, not once per page (1,610 pages and
+// 69 tasks were 111,090 address comparisons on every range change of Pages, 2026-11-06).
+export function tasksByPage(tasks:ContentTask[],identity?:PageIdentity|null){const by=new Map<string,ContentTask[]>();
+ for(const t of tasks){const w=t.evidence?.work;if(!w||w.archivedAt)continue;for(const key of new Set([...effectPages(w),w.page?.url].map(u=>pageKey(u,identity)).filter(Boolean))){const list=by.get(key);if(list)list.push(t);else by.set(key,[t]);}}
+ return (url:string)=>by.get(pageKey(url,identity))||[];}
 export const activeTasks=(list:ContentTask[])=>list.filter(t=>{const w=t.evidence?.work;return w&&!w.cancelledAt&&workState(w,t.status)!=='done';});
 export function ContentDetail({projectId,googleScope,page,tasks,identity,range,from,to,rangeLabel=$t('common.selectedPeriod'),onClose}:{projectId:number;googleScope?:string;page:{url:string;title?:string;type:string;lastmod?:string|null;views?:number|null;clicks?:number|null;impressions?:number|null;position?:number|null;words?:number|null};tasks:ContentTask[];identity?:PageIdentity;range:string;from?:string;to?:string;rangeLabel?:string;onClose:()=>void}){
  const [handing,setHanding]=useState(false),[handed,setHanded]=useState<HandOffResult>(),navigate=useNavigate();

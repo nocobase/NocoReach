@@ -271,12 +271,41 @@ class SyncService{
    if(lately&&!webNext.get(id)?.failed){const tablesNext=this.tablesNext=this.tablesNext||new Map();
     if(Date.now()>=(tablesNext.get(id)||0)&&await this.p.dataViews?.websiteDayRead?.(id,link?.get('ga4PropertyId'))?.catch(()=>false))
      await waitForFresh(()=>this.p.dataViews.websiteTables(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)tablesNext.set(id,Date.now()+PARTIAL_RETRY_MS);else tablesNext.delete(id);},()=>tablesNext.set(id,Date.now()+15*60000));}
+   // Traffic's Today card of a project opened in the last day: its day's first read, once a day (`readAhead`: the day's
+   // report held answers whatever its age; the card reads it again itself), so the morning's first open shows a figure.
+   // A failure waits 15 minutes.
+   const todayNext=this.todayNext=this.todayNext||new Map();if(lately&&Date.now()>=(todayNext.get(id)||0))await readAhead(()=>this.p.dataViews?.websiteToday?.(id)).then(()=>todayNext.delete(id),()=>todayNext.set(id,Date.now()+15*60000));
+   // The ranges chosen lately are extra work: left for the next firing once this one has run past the time it gives the
+   // other projects' syncs (the same bound as the preliminary reads below).
+   const extra=Date.now()<deadline+20000;
+   if(extra)await this.readLocalViews(id).catch(()=>{});
    if(!active)continue;
-   const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
+   const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}
+   if(extra&&Date.now()<deadline+20000)await this.readChosenViews(id,link,lately).catch(()=>{});}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000||this.stopped)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}
  }
+ // Pages' figures and Keywords' site ranks are summed from the stored days, no Google read, but a large site's take
+ // seconds: the ranges a person chose there in the last days (`DataViews.recentViews`) are summed here after a sync or a
+ // restart, at most once a minute a project, so opening the page or changing its range does not. Each is kept under the
+ // days it sums, so this only checks them until those days change.
+ async readLocalViews(id){const dv=this.p.dataViews,next=this.localNext=this.localNext||new Map();if(!dv?.recentViews||Date.now()<(next.get(id)||0))return;next.set(id,Date.now()+60000);
+  if((await dv.recentViews(id,'ranks')).length)await dv.pairRows(id);
+  for(const range of await dv.recentViews(id,'pages'))await dv.pageFigures(id,range);}
+ // The other ranges a person chose on Search performance and Traffic in the last days, for a project read lately: Search
+ // performance's tables and breakdown as `warm` reads the default's, and Traffic's two parts once a window (`readAhead`),
+ // the second only for a project opened in the last day, as for the default. Traffic is read in the day only
+ // (`websiteDayRead`), so the night's report is not held all day. Each is checked every 15 minutes; one refused in part
+ // waits PARTIAL_RETRY_MS, a failure 15 minutes.
+ async readChosenViews(id,link,lately){const dv=this.p.dataViews,next=this.viewNext=this.viewNext||new Map();if(!dv?.recentViews)return;
+  const due=k=>Date.now()>=(next.get(k)?.at||0),failed=k=>next.set(k,{at:Date.now()+15*60000,partial:next.get(k)?.partial});
+  const settle=(k,r)=>{const partial=Boolean(r?.partial||r?.complete===false||r?.missing?.length);next.set(k,{at:Date.now()+(partial?PARTIAL_RETRY_MS:15*60000),partial});};
+  for(const range of await dv.recentViews(id,'search')){const k=`${id}:search:${range}`;if(!due(k))continue;let bad=false;const r=await waitForFresh(()=>dv.warm(id,range)).catch(()=>{bad=true;});if(bad)failed(k);else settle(k,r);}
+  const ranges=(await dv.recentViews(id,'website')).filter(range=>due(`${id}:website:${range}`));if(!ranges.length||!await dv.websiteDayRead?.(id,link?.get('ga4PropertyId'))?.catch(()=>false))return;
+  for(const range of ranges){const k=`${id}:website:${range}`;const read=next.get(k)?.partial?waitForFresh:readAhead;
+   let bad=false;const r=await read(()=>dv.website(id,{range})).catch(()=>{bad=true;});if(bad){failed(k);continue;}
+   if(lately)await read(()=>dv.websiteTables(id,{range})).catch(()=>{});settle(k,r);}}
  // Rebuilding from every stored day takes seconds and grows daily, while partitions only change when a sync writes them.
  // Reuse the result until the partition count, latest write, linked resources or project change; concurrent callers share one build.
  // What the built snapshots depend on; cheap, so views can key their own saved results by it without building.

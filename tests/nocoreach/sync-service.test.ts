@@ -313,3 +313,23 @@ test('the GA4 property name and time zone are kept on the project, filled in by 
  await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');assert.equal(project().analyticsPropertyTimeZone,'','another property drops the old zone');
  await sync.select('1','789','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'');
 });
+test('tick: the other ranges chosen lately are read ahead too, Traffic\'s in the day and once a window, and the stored sums once a minute',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const opened={lately:true},{sync,website,warm,scopes}=tickFixture(opened);
+  const chosen={website:['all','90'],search:['90'],pages:['28','90'],ranks:['28']},tables=vi.fn(async()=>({complete:true,missing:[]})),pairRows=vi.fn(async()=>({})),pageFigures=vi.fn(async()=>null);
+  let day=false;
+  Object.assign(sync.p.dataViews,{recentViews:async(_id,kind)=>chosen[kind]||[],websiteDayRead:async()=>day,websiteTables:tables,pairRows,pageFigures});
+  await sync.tick();
+  assert.deepEqual(warm.mock.calls.map(c=>c[1]),[undefined,'90'],'the default and the range chosen');
+  assert.deepEqual(website.mock.calls.map(c=>c[1].range),['28'],'not in the night');
+  assert.equal(pairRows.mock.calls.length,1);assert.deepEqual(pageFigures.mock.calls.map(c=>c[1]),['28','90']);
+  day=true;scopes.length=0;await sync.tick();
+  assert.deepEqual(website.mock.calls.slice(1).map(c=>c[1].range),['28','all','90']);assert.deepEqual(scopes,['fresh','ahead','ahead'],'a chosen range once a window');
+  assert.deepEqual(tables.mock.calls.map(c=>c[1].range),['28','all','90']);
+  assert.equal(pairRows.mock.calls.length,1,'the sums are checked once a minute');
+  await sync.tick();assert.equal(website.mock.calls.length,5,'a chosen range is checked every 15 minutes');assert.equal(warm.mock.calls.length,2);assert.equal(tables.mock.calls.length,4);
+  vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,8);assert.equal(warm.mock.calls.length,4);assert.equal(pairRows.mock.calls.length,2);
+  opened.lately=false;chosen.website=[];vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(tables.mock.calls.length,7,'the other tables only for a project opened in the last day');
+ }finally{vi.useRealTimers();}
+});

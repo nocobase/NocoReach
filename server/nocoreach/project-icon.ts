@@ -27,9 +27,12 @@ class ProjectIcon{
  async get(id){const project=await this.p.project(id),domain=host(project?.domains?.[0]);if(!domain)return {dataUrl:null};const s=await this.saved(id),now=Date.now();
   if((this.p as {demoConfiguration?:{enabled:boolean}}).demoConfiguration?.enabled)return {dataUrl:null,source:null};
   const fresh=s&&s.domain===domain&&(s.dataUrl?now-Date.parse(s.fetchedAt)<WEEK:now-Date.parse(s.fetchedAt)<DAY);if(fresh)return {dataUrl:s.dataUrl||null,source:s.source||null};
-  if(this.pending)return {dataUrl:s?.domain===domain?s.dataUrl||null:null};
-  this.pending=this.fetchIcon(domain).then(r=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:r?.dataUrl||null,source:r?.source||null})).catch(()=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:s?.dataUrl||null,source:s?.source||null})).finally(()=>{this.pending=null;});
-  const r=await this.pending;return {dataUrl:r?.dataUrl||null,source:r?.source||null};}
+  // The icon held for this domain answers at once while it is read again; only a project without one waits for its site.
+  const held=s?.domain===domain?{dataUrl:s.dataUrl||null,source:s.source||null}:null;
+  if(this.pending)return held||{dataUrl:null};
+  const pending=this.pending=this.fetchIcon(domain).then(r=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:r?.dataUrl||null,source:r?.source||null})).catch(()=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:held?.dataUrl||null,source:held?.source||null})).catch(()=>null).finally(()=>{this.pending=null;});
+  if(held)return held;
+  const r=await pending;return {dataUrl:r?.dataUrl||null,source:r?.source||null};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('projectIcon.iconReadingNotComplete'));}};
   this.p.app.resourceManager.define({name:'nrProjectIcon',actions:{get:wrap(id=>this.get(id))}});this.p.app.acl.allow('nrProjectIcon',['get'],'loggedIn');}
 }

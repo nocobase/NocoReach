@@ -139,3 +139,23 @@ export function strategyPageState(state: unknown): unknown {
 
 export const wantsPageView = (values: Obj | undefined) =>
   values?.view === 'page';
+
+// Pages (`nrSiteContent/list`) shows each page's title, type, address, date and figures, and its drawer the words read;
+// what a page's own read keeps for Site audit and the page identity (its description, canonical and markup counts) is
+// sent as `identity` once, not with every page. On 2026-11-06 a site of 1,610 pages sent 1 MB on every range change.
+const SITE_PAGE_OMITTED = [
+  'description',
+  'canonical',
+  'h1',
+  'imagesNoAlt',
+  'noindex',
+  'origin',
+  'firstSeenAt',
+  'fetchedAt',
+];
+/** A page of Pages' list as the page reads it. */
+export function siteListRow(page: Obj): Obj {
+  const out: Obj = { ...page };
+  for (const k of SITE_PAGE_OMITTED) delete out[k];
+  return out;
+}

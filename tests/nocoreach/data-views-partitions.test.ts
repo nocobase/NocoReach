@@ -548,3 +548,33 @@ it('keeps the figures of a site with many addresses, so Pages does not read ever
   expect(await views.pageFigures(projectId, '28')).toEqual(built);
   expect(build).toHaveBeenCalledTimes(1);
 });
+
+it.each(paths)(
+  'keeps Pages figures and Keywords ranks through writes to other days, and sums them again when their own days change (%s)',
+  async (path) => {
+    const { views, db } = await fixture(path);
+    const partitions = db.getRepository('nrSyncPartitions');
+    const build = vi.spyOn(views, 'buildPageFigures');
+    const first = await views.pageFigures(projectId, '7');
+    const ranks = await views.ranks(projectId, { keywords: ['crm'] });
+    // A history fill writes days before both periods; the other grain of the same days is not summed either.
+    await partitions.create({
+      values: { projectId, source: 'gsc', resource: site, date: '2024-01-01', grain: 'query_page', payload: [] },
+    });
+    expect(await views.pageFigures(projectId, '7')).toEqual(first);
+    expect(build).toHaveBeenCalledTimes(1);
+    const held = views.pairHold.get(projectId);
+    expect(await views.ranks(projectId, { keywords: ['crm'] })).toEqual(ranks);
+    expect(views.pairHold.get(projectId)).toBe(held);
+    // A day of the window read again is.
+    vi.setSystemTime(Date.now() + 60000);
+    const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
+    await partitions.update({
+      filterByTk: row.get('id'),
+      values: { payload: [{ keyword: 'crm', page: url, clicks: 110, impressions: 100, position: 9 }] },
+    });
+    expect((await views.pageFigures(projectId, '7')).search[0].current.clicks).toBe(170);
+    expect(build).toHaveBeenCalledTimes(2);
+    expect((await views.ranks(projectId, { keywords: ['crm'] })).ranks.crm.clicks).toBe(ranks.ranks.crm.clicks + 100);
+  },
+);
