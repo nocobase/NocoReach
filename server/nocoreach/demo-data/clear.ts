@@ -24,6 +24,8 @@ export const PROJECT_SNAPSHOTS = new Set([
   'project-icon',
   'ai-questions',
   'ai-search',
+  // An earlier analysis's whole evidence (`analysis-evidence:<project>:<generatedAt>`, analysis-evidence.ts).
+  'analysis-evidence',
   'analysis-rules',
   'automatic-content',
   'bilibili',
