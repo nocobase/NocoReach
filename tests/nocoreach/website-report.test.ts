@@ -103,7 +103,24 @@ test('today: compared with yesterday and last week up to the hours GA4 has settl
  assert.equal(t.timeZoneConfirmed,true);
  assert.equal(t.totals.today.users,30);assert.equal(t.totals.yesterday.views,108);assert.equal(t.fullDay.yesterday,288);
  assert.equal(t.hours[8].today,10);assert.equal(t.hours[9].today,null);assert.equal(t.sources[1].ai,'ChatGPT');
- assert.equal((await g.today('1','123')),t,'kept ten minutes');
+ const asked=calls.length;assert.deepEqual(await g.today('1','123'),t,'kept ten minutes');assert.equal(calls.length,asked);
+});
+
+test('today: past ten minutes a page is answered at once with the last read of the day while GA4 is read again; another day never answers',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-14T10:30:00Z'));
+ let views=10,release;const {g,calls}=fake((method,body)=>{const r=body.requests[0];
+  if(dimsOf(r)==='hour')return {reports:[report(['hour','dateRange'],['screenPageViews','sessions','keyEvents'],[[['08','today'],[views,4,0]]])]};
+  return {reports:[report(['dateRange'],['activeUsers','screenPageViews','sessions','keyEvents'],[[['today'],[1,views,1,0]]]),report(['sessionSource','sessionMedium'],['sessions','activeUsers'],[])]};});
+ const first=await g.today('1','123');assert.equal(first.hours[8].today,10);assert.equal(first.refreshing,undefined);
+ vi.setSystemTime(new Date('2026-10-14T10:41:00Z'));views=20;const asked=calls.length;
+ const post=g.post;g.post=(...a)=>new Promise(r=>{release=()=>r(post(...a));});
+ const copy=await g.today('1','123');
+ assert.equal(copy.hours[8].today,10,'the earlier read answers');assert.equal(copy.refreshing,true);assert.equal(copy.savedAt,Date.parse('2026-10-14T10:30:00Z'));
+ assert.ok(copy.cacheExpiresAt<=Date.now()+5000,'asked for again within seconds');
+ await vi.waitFor(()=>assert.ok(release));g.post=post;release();await g.history.settled();
+ assert.ok(calls.length>asked);const fresh=await g.today('1','123');assert.equal(fresh.hours[8].today,20);assert.equal(fresh.refreshing,undefined);
+ vi.setSystemTime(new Date('2026-10-15T00:30:00Z'));views=30;
+ const next=await g.today('1','123');assert.equal(next.date,'2026-10-15');assert.equal(next.hours[8].today,30,'a new day waits for its own read');assert.equal(next.refreshing,undefined);
 });
 
 test('today: a failed time zone lookup is retried after five minutes, and an unconfirmed zone does not cap the hours by the clock',async()=>{

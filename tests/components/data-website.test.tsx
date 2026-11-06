@@ -668,6 +668,37 @@ describe('访问', () => {
     expect(within(drawer).getByText('美国')).toBeTruthy();
   });
 
+  it('shows the day’s last read of 今天 at once, saying it is being replaced', async () => {
+    const savedAt = Date.parse('2026-10-14T06:00:00Z');
+    action.mockImplementation(
+      async (
+        _resource: string,
+        name: string,
+        init?: { body?: Record<string, unknown> },
+      ) => {
+        if (name === 'website') return firstOf(report);
+        if (name === 'websiteTables') return restOf(report);
+        if (name === 'websiteToday') {
+          expect(init?.body?.acceptSaved).toBe(true);
+          return {
+            ...today,
+            savedAt,
+            refreshing: true,
+            cacheExpiresAt: Date.now() + 5000,
+          };
+        }
+        if (name === 'websiteRealtime') return live;
+        throw new Error(`unexpected ${name}`);
+      },
+    );
+    renderPage();
+    const card = await screen
+      .findByText('今天浏览量')
+      .then((el) => el.closest('[data-today-card]') as HTMLElement);
+    await waitFor(() => expect(within(card).getByText('1,284')).toBeTruthy());
+    expect(card.querySelector('[data-saved-report="updating"]')).toBeTruthy();
+  });
+
   it('says why 实时 could not be read, and which parts GA4 left out', async () => {
     const fallback = action.getMockImplementation()!;
     action.mockImplementation(async (resource: string, name: string) => {

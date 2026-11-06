@@ -57,7 +57,7 @@ index 8ba3b80dbbc4ef49f7318e02c41e41f9b2f53412..fa5db2cccc4b765432ce41d43e83903c
  import { AuthorizationClient } from './authorization-client.js';
  import { authorizationClientToken } from './tokens.js';
  import { AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, } from '../shared.js';
-+/** NocoReach patch: how long after the connection opens or a topic is ready the snapshot is read again. */
++/** NocoReach patch: how long after a permission topic is ready the snapshot is read again. */
 +const REVALIDATE_DELAY_MS = 50;
  export class AuthorizationServiceProvider extends ServiceProvider {
      name = '@nocobase/app-plugin-authorization/client';
@@ -71,9 +71,10 @@ index 8ba3b80dbbc4ef49f7318e02c41e41f9b2f53412..fa5db2cccc4b765432ce41d43e83903c
 -        this.unsubscribeRealtimeOpen = realtime.onOpen(() => {
 -            authz.invalidate();
 -        });
-+        // NocoReach patch: a permission event still invalidates at once. The connection opening and each topic becoming
-+        // ready (both topics answer within a few milliseconds of each other) read the snapshot again once, and
-+        // invalidate only when it changed, so an unchanged snapshot does not make every page check its access again.
++        // NocoReach patch: a permission event still invalidates at once. Each topic becoming ready (both topics answer
++        // within a few milliseconds of each other, after every connection or reconnection) reads the snapshot again once,
++        // and invalidates only when it changed, so an unchanged snapshot does not make every page check its access again.
++        // The connection opening is not watched: its topics become ready one round trip later, which read it a second time.
 +        let timer;
 +        let running;
 +        let again = false;
@@ -97,7 +98,6 @@ index 8ba3b80dbbc4ef49f7318e02c41e41f9b2f53412..fa5db2cccc4b765432ce41d43e83903c
 +        this.cancelRevalidate = () => clearTimeout(timer);
 +        this.unsubscribePermissionsChanged = realtime.watch(AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: schedule }).close;
 +        this.unsubscribeGlobalPermissionsChanged = realtime.watch(AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: schedule }).close;
-+        this.unsubscribeRealtimeOpen = realtime.onOpen(schedule);
          return Promise.resolve();
      }
      shutdown() {

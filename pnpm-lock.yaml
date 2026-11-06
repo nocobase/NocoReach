@@ -8,7 +8,7 @@ overrides:
   react-i18next: 17.1.2
 
 patchedDependencies:
-  '@nocobase/app-plugin-authorization@1.0.0-beta.33': ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65
+  '@nocobase/app-plugin-authorization@1.0.0-beta.33': 1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95
   '@nocobase/app-plugin-scheduler@1.0.0-beta.21': d27e017d59155a3a55760495b2fa756c624bcbcd2fe34eb48bcdad4542371655
 
 importers:
@@ -20,31 +20,31 @@ importers:
         version: 1.0.0-beta.30(c3270567591864797b1ddb9fb56433ff)
       '@nocobase/app-plugin-agents':
         specifier: 2.0.0-beta.0
-        version: 2.0.0-beta.0(32c6a154c2ca13b572b5893265d3b75d)
+        version: 2.0.0-beta.0(97076bad26b5291c0f9f78c3ff496054)
       '@nocobase/app-plugin-api-keys':
         specifier: 1.0.0-beta.19
-        version: 1.0.0-beta.19(8f8b6cfba1543f24957c2178371e79f8)
+        version: 1.0.0-beta.19(0e6067a7c8423536dc1f7f4fc5590696)
       '@nocobase/app-plugin-authentication':
         specifier: 2.0.0-beta.16
         version: 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
       '@nocobase/app-plugin-authorization':
         specifier: 1.0.0-beta.33
-        version: 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+        version: 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-plugin-authz-default-access':
         specifier: 1.0.0-beta.16
-        version: 1.0.0-beta.16(734c2a8fa6c4628bf5650989d483df89)
+        version: 1.0.0-beta.16(a65d1b278700a42a09ba5eca2d1a5489)
       '@nocobase/app-plugin-authz-restriction-rules':
         specifier: 1.0.0-beta.15
-        version: 1.0.0-beta.15(734c2a8fa6c4628bf5650989d483df89)
+        version: 1.0.0-beta.15(a65d1b278700a42a09ba5eca2d1a5489)
       '@nocobase/app-plugin-authz-sharing-rules':
         specifier: 1.0.0-beta.16
-        version: 1.0.0-beta.16(734c2a8fa6c4628bf5650989d483df89)
+        version: 1.0.0-beta.16(a65d1b278700a42a09ba5eca2d1a5489)
       '@nocobase/app-plugin-database-explorer':
         specifier: 1.0.0-beta.17
-        version: 1.0.0-beta.17(eeba5c352d7dd0e199754346b75c9c48)
+        version: 1.0.0-beta.17(094cfe450210cc7ef944377d8ab42645)
       '@nocobase/app-plugin-demo-mode':
         specifier: 0.2.0-beta.6
-        version: 0.2.0-beta.6(901aef2d1e2b1f2b2242d4246e8ff62c)
+        version: 0.2.0-beta.6(a8c7d810526fea783d42aafb0879422d)
       '@nocobase/app-plugin-file':
         specifier: 1.0.0-beta.27
         version: 1.0.0-beta.27(323b4e8aa5efba8c5f557a8bbcf8f604)
@@ -53,25 +53,25 @@ importers:
         version: 1.0.0-beta.18(@nocobase/app-client@4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1))(@nocobase/app-server@3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2))(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(hono@4.13.14)(react@19.3.1)
       '@nocobase/app-plugin-mail':
         specifier: 1.0.0-beta.18
-        version: 1.0.0-beta.18(ae4eb5b423d2675975d3b8306709c1a4)
+        version: 1.0.0-beta.18(44c35f5c58003ed24da2eae3f17a8acc)
       '@nocobase/app-plugin-notification':
         specifier: 2.0.0-beta.2
-        version: 2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39)
+        version: 2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f)
       '@nocobase/app-plugin-notification-in-app':
         specifier: ^2.0.0-beta.0
-        version: 2.0.0-beta.0(f77c7c65c83c034aaab39eb9da283ed9)
+        version: 2.0.0-beta.0(72b4b8f9d20538981fc4305754ed8129)
       '@nocobase/app-plugin-notification-providers':
         specifier: ^1.0.0-beta.16
-        version: 1.0.0-beta.16(@nocobase/app-plugin-notification@2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39))(@nocobase/app-server@3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2))(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/service-provider@0.0.2-beta.2)
+        version: 1.0.0-beta.16(@nocobase/app-plugin-notification@2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f))(@nocobase/app-server@3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2))(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/service-provider@0.0.2-beta.2)
       '@nocobase/app-plugin-scheduler':
         specifier: 1.0.0-beta.21
-        version: 1.0.0-beta.21(patch_hash=d27e017d59155a3a55760495b2fa756c624bcbcd2fe34eb48bcdad4542371655)(aceef97ef1c84239be6ac85a9a4e73ad)
+        version: 1.0.0-beta.21(patch_hash=d27e017d59155a3a55760495b2fa756c624bcbcd2fe34eb48bcdad4542371655)(b798260ded645074e9fff6169abe19bf)
       '@nocobase/app-plugin-template-print':
         specifier: 0.0.2-beta.2
         version: 0.0.2-beta.2
       '@nocobase/app-plugin-users':
         specifier: 2.0.0-beta.11
-        version: 2.0.0-beta.11(8d5b1fa75b2326daff2536d1a44f61eb)
+        version: 2.0.0-beta.11(686d419b9e2b782655bc100405f4cd75)
       '@nocobase/app-server':
         specifier: 3.0.0-beta.5
         version: 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
@@ -8864,7 +8864,7 @@ snapshots:
       - '@nocobase/repository-input'
       - supports-color
 
-  '@nocobase/app-plugin-agents@2.0.0-beta.0(32c6a154c2ca13b572b5893265d3b75d)':
+  '@nocobase/app-plugin-agents@2.0.0-beta.0(97076bad26b5291c0f9f78c3ff496054)':
     dependencies:
       '@ai-sdk/alibaba': 2.0.61(zod@4.6.5)
       '@ai-sdk/anthropic': 4.0.72(zod@4.6.5)
@@ -8883,7 +8883,7 @@ snapshots:
       '@nocobase/app-cli-client': 0.1.0-beta.17
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-plugin-file': 1.0.0-beta.27(323b4e8aa5efba8c5f557a8bbcf8f604)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/authorization': 1.0.0-beta.15(@nocobase/db@1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1))
@@ -8919,14 +8919,14 @@ snapshots:
       - encoding
       - supports-color
 
-  '@nocobase/app-plugin-api-keys@1.0.0-beta.19(8f8b6cfba1543f24957c2178371e79f8)':
+  '@nocobase/app-plugin-api-keys@1.0.0-beta.19(0e6067a7c8423536dc1f7f4fc5590696)':
     dependencies:
       '@better-auth/api-key': 1.7.5(@better-auth/core@1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.0)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.5))(@better-auth/utils@0.4.2)(better-auth@1.7.5(@opentelemetry/api@1.9.0)(mysql2@3.24.6(@types/node@24.19.1))(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@4.1.11))(better-call@1.4.0(zod@4.6.5))
       '@better-auth/core': 1.7.5(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.0)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.5)
       '@better-auth/utils': 0.4.2
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/authorization': 1.0.0-beta.15(@nocobase/db@1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1))
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
@@ -9006,7 +9006,7 @@ snapshots:
       - vitest
       - vue
 
-  '@nocobase/app-plugin-authorization@1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)':
+  '@nocobase/app-plugin-authorization@1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)':
     dependencies:
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
@@ -9019,57 +9019,57 @@ snapshots:
       react: 19.3.1
       zod: 4.6.5
 
-  '@nocobase/app-plugin-authz-default-access@1.0.0-beta.16(734c2a8fa6c4628bf5650989d483df89)':
+  '@nocobase/app-plugin-authz-default-access@1.0.0-beta.16(a65d1b278700a42a09ba5eca2d1a5489)':
     dependencies:
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/authorization': 1.0.0-beta.15(@nocobase/db@1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1))
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
       zod: 4.6.5
 
-  '@nocobase/app-plugin-authz-restriction-rules@1.0.0-beta.15(734c2a8fa6c4628bf5650989d483df89)':
+  '@nocobase/app-plugin-authz-restriction-rules@1.0.0-beta.15(a65d1b278700a42a09ba5eca2d1a5489)':
     dependencies:
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/authorization': 1.0.0-beta.15(@nocobase/db@1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1))
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
       zod: 4.6.5
 
-  '@nocobase/app-plugin-authz-sharing-rules@1.0.0-beta.16(734c2a8fa6c4628bf5650989d483df89)':
+  '@nocobase/app-plugin-authz-sharing-rules@1.0.0-beta.16(a65d1b278700a42a09ba5eca2d1a5489)':
     dependencies:
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/authorization': 1.0.0-beta.15(@nocobase/db@1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1))
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
       zod: 4.6.5
 
-  '@nocobase/app-plugin-database-explorer@1.0.0-beta.17(eeba5c352d7dd0e199754346b75c9c48)':
+  '@nocobase/app-plugin-database-explorer@1.0.0-beta.17(094cfe450210cc7ef944377d8ab42645)':
     dependencies:
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       hono: 4.13.14
       zod: 4.6.5
 
-  '@nocobase/app-plugin-demo-mode@0.2.0-beta.6(901aef2d1e2b1f2b2242d4246e8ff62c)':
+  '@nocobase/app-plugin-demo-mode@0.2.0-beta.6(a8c7d810526fea783d42aafb0879422d)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nocobase/app-cli': 1.0.0-beta.30(c3270567591864797b1ddb9fb56433ff)
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
-      '@nocobase/app-plugin-users': 2.0.0-beta.11(8d5b1fa75b2326daff2536d1a44f61eb)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-users': 2.0.0-beta.11(686d419b9e2b782655bc100405f4cd75)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
@@ -9084,7 +9084,7 @@ snapshots:
       react-router: 7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       zod: 4.6.5
     optionalDependencies:
-      '@nocobase/app-plugin-agents': 2.0.0-beta.0(32c6a154c2ca13b572b5893265d3b75d)
+      '@nocobase/app-plugin-agents': 2.0.0-beta.0(97076bad26b5291c0f9f78c3ff496054)
 
   '@nocobase/app-plugin-file@1.0.0-beta.27(323b4e8aa5efba8c5f557a8bbcf8f604)':
     dependencies:
@@ -9104,12 +9104,12 @@ snapshots:
       react: 19.3.1
       zod: 4.6.5
 
-  '@nocobase/app-plugin-mail@1.0.0-beta.18(ae4eb5b423d2675975d3b8306709c1a4)':
+  '@nocobase/app-plugin-mail@1.0.0-beta.18(44c35f5c58003ed24da2eae3f17a8acc)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
@@ -9129,12 +9129,12 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       zod: 4.6.5
 
-  '@nocobase/app-plugin-notification-in-app@2.0.0-beta.0(f77c7c65c83c034aaab39eb9da283ed9)':
+  '@nocobase/app-plugin-notification-in-app@2.0.0-beta.0(72b4b8f9d20538981fc4305754ed8129)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-notification': 2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39)
+      '@nocobase/app-plugin-notification': 2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
@@ -9168,9 +9168,9 @@ snapshots:
       - vitest
       - vue
 
-  '@nocobase/app-plugin-notification-providers@1.0.0-beta.16(@nocobase/app-plugin-notification@2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39))(@nocobase/app-server@3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2))(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/service-provider@0.0.2-beta.2)':
+  '@nocobase/app-plugin-notification-providers@1.0.0-beta.16(@nocobase/app-plugin-notification@2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f))(@nocobase/app-server@3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2))(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/service-provider@0.0.2-beta.2)':
     dependencies:
-      '@nocobase/app-plugin-notification': 2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39)
+      '@nocobase/app-plugin-notification': 2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
       '@nocobase/mailer': 0.1.0-beta.1
@@ -9178,11 +9178,11 @@ snapshots:
     transitivePeerDependencies:
       - '@react-email/render'
 
-  '@nocobase/app-plugin-notification@2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39)':
+  '@nocobase/app-plugin-notification@2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f)':
     dependencies:
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
@@ -9196,12 +9196,12 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       zod: 4.6.5
 
-  '@nocobase/app-plugin-scheduler@1.0.0-beta.21(patch_hash=d27e017d59155a3a55760495b2fa756c624bcbcd2fe34eb48bcdad4542371655)(aceef97ef1c84239be6ac85a9a4e73ad)':
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.21(patch_hash=d27e017d59155a3a55760495b2fa756c624bcbcd2fe34eb48bcdad4542371655)(b798260ded645074e9fff6169abe19bf)':
     dependencies:
       '@nocobase/app-cli': 1.0.0-beta.30(c3270567591864797b1ddb9fb56433ff)
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)
       '@nocobase/i18n': 2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
@@ -9215,13 +9215,13 @@ snapshots:
 
   '@nocobase/app-plugin-template-print@0.0.2-beta.2': {}
 
-  '@nocobase/app-plugin-users@2.0.0-beta.11(8d5b1fa75b2326daff2536d1a44f61eb)':
+  '@nocobase/app-plugin-users@2.0.0-beta.11(686d419b9e2b782655bc100405f4cd75)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nocobase/app-client': 4.0.0-beta.5(@noble/hashes@2.3.0)(@nocobase/i18n@2.0.0-beta.1(hono@4.13.14)(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3))(@nocobase/repository-input@0.1.0-beta.3)(@nocobase/service-provider@0.0.2-beta.2)(@tanstack/react-query@5.105.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react-i18next@17.1.2(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(react-router@7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@nocobase/app-plugin-authentication': 2.0.0-beta.16(4ea2c2a43ff14b91884c467cef695ddf)
-      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=ec8a0440a47588f6dec4094b9b86dc813d734fdf490928fc36f18d6d9bdefa65)(0c76157f4a17dce8e71a587037bfbaa4)
-      '@nocobase/app-plugin-notification': 2.0.0-beta.2(01eeef4c2636173e9ea92d12093f9f39)
+      '@nocobase/app-plugin-authorization': 1.0.0-beta.33(patch_hash=1a25a21538eaed3010489bd7f76a43b3526f144f47ea29b5aa74ac4b7abdea95)(0c76157f4a17dce8e71a587037bfbaa4)
+      '@nocobase/app-plugin-notification': 2.0.0-beta.2(d28c2cd6aab44537e1fc18ef8a1f4b0f)
       '@nocobase/app-server': 3.0.0-beta.5(ed57636934f4aad43d2e217046e8cce2)
       '@nocobase/authorization': 1.0.0-beta.15(@nocobase/db@1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1))
       '@nocobase/db': 1.0.0-beta.24(better-sqlite3@13.0.3)(mysql2@3.24.6(@types/node@24.19.1))(pg-query-stream@4.17.1(pg@8.23.1))(pg@8.23.1)

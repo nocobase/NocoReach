@@ -1,6 +1,6 @@
 // NocoReach's patch of the authorization plugin's client (patches/@nocobase__app-plugin-authorization@1.0.0-beta.33.patch):
-// the connection opening and its topics becoming ready read the snapshot again once and invalidate only on a change;
-// a permission event still invalidates at once.
+// its topics becoming ready, after each connection, read the snapshot again once and invalidate only on a change; the
+// connection opening itself reads nothing; a permission event still invalidates at once.
 import { apiClientToken, realtimeClientToken } from '@nocobase/app-client';
 import authorization, {
   AuthorizationClient,
@@ -33,9 +33,16 @@ function realtimeFake() {
       opens.add(listener);
       return () => opens.delete(listener);
     },
+    // The connection opens; its topics become ready a round trip later.
     open: () => {
       for (const listener of opens) listener();
+    },
+    ready: () => {
       for (const topic of topics.values()) topic.onReady?.();
+    },
+    connect() {
+      this.open();
+      this.ready();
     },
   };
 }
@@ -68,18 +75,30 @@ async function boot(answers: unknown[]) {
 afterEach(() => vi.useRealTimers());
 
 describe('patched authorization client', () => {
-  it('reads the snapshot again once when the connection opens and keeps the revision when it is unchanged', async () => {
+  it('reads the snapshot again once when the topics are ready and keeps the revision when it is unchanged', async () => {
     vi.useFakeTimers();
     const { authz, request, realtime } = await boot([allowed, allowed]);
     await authz.snapshot();
     const revision = authz.revision();
     const invalidated = vi.fn();
     authz.onInvalidated(invalidated);
-    realtime.open();
+    realtime.connect();
     await vi.advanceTimersByTimeAsync(100);
     expect(request).toHaveBeenCalledTimes(2);
     expect(authz.revision()).toBe(revision);
     expect(invalidated).not.toHaveBeenCalled();
+  });
+
+  it('reads nothing when the connection opens, only once its topics are ready a round trip later', async () => {
+    vi.useFakeTimers();
+    const { authz, request, realtime } = await boot([allowed, allowed]);
+    await authz.snapshot();
+    realtime.open();
+    await vi.advanceTimersByTimeAsync(900);
+    expect(request).toHaveBeenCalledTimes(1);
+    realtime.ready();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it('invalidates when the snapshot read on opening changed', async () => {
@@ -88,7 +107,7 @@ describe('patched authorization client', () => {
     const { authz, realtime } = await boot([allowed, denied]);
     await authz.snapshot();
     const revision = authz.revision();
-    realtime.open();
+    realtime.connect();
     await vi.advanceTimersByTimeAsync(100);
     expect(authz.revision()).toBe(revision + 1);
     await expect(authz.snapshot()).resolves.toEqual(denied);
@@ -107,13 +126,13 @@ describe('patched authorization client', () => {
   it('reads nothing on opening before anything was read, and invalidates when the read fails', async () => {
     vi.useFakeTimers();
     const { authz, request, realtime } = await boot([]);
-    realtime.open();
+    realtime.connect();
     await vi.advanceTimersByTimeAsync(100);
     expect(request).not.toHaveBeenCalled();
     await authz.snapshot();
     request.mockRejectedValueOnce(new Error('offline'));
     const revision = authz.revision();
-    realtime.open();
+    realtime.connect();
     await vi.advanceTimersByTimeAsync(100);
     expect(authz.revision()).toBe(revision + 1);
   });
