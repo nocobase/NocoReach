@@ -638,6 +638,63 @@ describe('Insights opened again on the state it last showed', () => {
     expect(calls('nrAnalysis', 'judgeMissing')).toBe(1);
   });
 
+  it('still judges unjudged changes once the state this visit read has them', async () => {
+    server = stateWith(['Opportunity B'], { judge: true });
+    const answerAll = action.getMockImplementation()!;
+    action.mockImplementation(
+      async (resource: string, operation: string, options: never) =>
+        resource === 'nrAnalysis' && operation === 'judgeMissing'
+          ? { judged: 0, held: true }
+          : answerAll(resource, operation, options),
+    );
+    const view = await setup();
+    await pageShown();
+    await waitFor(() => expect(calls('nrAnalysis', 'judgeMissing')).toBe(1));
+    await settle();
+    const read = holdNextState();
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    await settle();
+    expect(calls('nrAnalysis', 'judgeMissing')).toBe(1);
+    // The read answers a state that still has the unjudged change: this visit judges it, once.
+    await read.answer(structuredClone(server));
+    await waitFor(() => expect(calls('nrAnalysis', 'judgeMissing')).toBe(2));
+    await settle();
+    expect(calls('nrAnalysis', 'judgeMissing')).toBe(2);
+  });
+
+  it('reports nothing when a read a mutation replaced fails afterwards', async () => {
+    const view = await setup();
+    await pageShown();
+    await settle();
+    const answerAll = action.getMockImplementation()!;
+    const out = Promise.withResolvers<StrategyState>();
+    let hold = true;
+    action.mockImplementation(
+      async (resource: string, operation: string, options: never) => {
+        if (resource === 'nrStrategy' && operation === 'state' && hold) {
+          hold = false;
+          return out.promise;
+        }
+        return answerAll(resource, operation, options);
+      },
+    );
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    fireEvent.click(
+      within(opportunity('Opportunity B')!).getByRole('button', {
+        name: 'Ignore',
+      }),
+    );
+    await screen.findByText('Dismissed 1');
+    await act(async () => out.reject(new Error('offline')));
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Dismissed 1')).toBeInTheDocument();
+  });
+
   it('keeps the state when reading it again fails, retries the state only, and clears the error', async () => {
     const view = await setup();
     await pageShown();

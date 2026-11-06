@@ -39,6 +39,8 @@ export class InsightsState {
   private readonly listeners = new Set<(state: StrategyState) => void>();
   /** The state last shown, which a later mount in the same cache shows while it reads the state again. */
   private latest?: StrategyState;
+  /** Counts reads and writes, so a read that failed after a later read or write began does not report its failure. */
+  private turn = 0;
   private kept?: EarlyRequests;
   private judgedKey = '';
 
@@ -57,13 +59,21 @@ export class InsightsState {
    * RECHECK_REUSE_MS; otherwise a new read fences every earlier one.
    */
   async read(reuse = false): Promise<StrategyState | undefined> {
+    const turn = ++this.turn;
     if (!reuse) this.cache.invalidate((key) => key === this.key);
-    const state = await this.cache.load(
-      this.key,
-      () => request<StrategyState>(this.projectId, 'state'),
-      false,
-      { staleTime: reuse ? RECHECK_REUSE_MS : 0 },
-    );
+    let state: StrategyState;
+    try {
+      state = await this.cache.load(
+        this.key,
+        () => request<StrategyState>(this.projectId, 'state'),
+        false,
+        { staleTime: reuse ? RECHECK_REUSE_MS : 0 },
+      );
+    } catch (error) {
+      // A read a later read or a write replaced does not fail the page: what replaced it is shown.
+      if (turn !== this.turn) return undefined;
+      throw error;
+    }
     if (this.cache.peek<StrategyState>(this.key) !== state) return undefined;
     this.publish(state);
     return state;
@@ -71,6 +81,7 @@ export class InsightsState {
 
   /** The state a mutation answered with: it replaces the entry, and every read started before it is discarded. */
   readonly write = (state: StrategyState): void => {
+    this.turn += 1;
     this.cache.replace(this.key, state);
     this.publish(state);
   };

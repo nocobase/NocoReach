@@ -375,10 +375,13 @@ function Insights({
     void analysisRequest(projectId, 'status')
       .then((st) => {
         setAnalysis(st);
-        if (st.running) void followAnalysis();
+        if (st.running)
+          followAnalysis().catch(() =>
+            setError(() => $t('strategy.notLoadInsightsTryAgain')),
+          );
       })
       .catch(() => undefined);
-  }, [projectId, followAnalysis]);
+  }, [projectId, followAnalysis, setError]);
   async function act(fn: () => Promise<void>) {
     if (pendingRef.current) return;
     pendingRef.current = true;
