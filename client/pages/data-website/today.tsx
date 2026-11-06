@@ -30,7 +30,8 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Card } from '#components/ui/card';
 import { Button } from '#components/ui/button';
 import { InfoTip } from '#components/reach/info-tip';
-import { InlineError } from '#components/reach/states';
+import { InlineError, SavedReportNote } from '#components/reach/states';
+import { savedCopyNote } from '../../../shared/google-cache.js';
 import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { DetailDrawer } from '../detail-drawer';
@@ -86,7 +87,8 @@ export function TodayCard({
     () =>
       api.action<Today>('nrDataViews', 'websiteToday', {
         method: 'POST',
-        body: { projectId },
+        // The last read of the day answers at once while GA4 is read again (the server's GoogleReportCache).
+        body: { projectId, acceptSaved: true },
         unwrap: 'data',
       }),
     GA4_TODAY_CACHE_MS,
@@ -164,6 +166,7 @@ export function TodayCard({
           <p>{$t('dataWebsite.realtimeLast30MinutesNote')}</p>
         </InfoTip>
       </div>
+      {t ? <SavedReportNote {...savedCopyNote(t)} /> : null}
       {today.error && !t ? (
         <InlineError>
           {$t('dataWebsite.todayNotLoaded', { 0: message(today.error) })}

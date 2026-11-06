@@ -1008,9 +1008,13 @@ it.each([
     expect(first.cacheExpiresAt).toBe(Date.now() + ttl);
     vi.setSystemTime(Date.now() + ttl - 1);
     const reused = await service[method]('1', '123');
-    expect(reused).toBe(first);
+    // Today is kept with Traffic's reports, which answer with a copy of what they hold.
+    expect(reused).toEqual(first);
     vi.setSystemTime(Date.now() + 1);
-    const refreshed = (await service[method]('1', '123')) as {
+    // A reader that waits for a new read (no `acceptSaved`) gets one with a new lifetime.
+    const refreshed = (await waitForFresh(() =>
+      service[method]('1', '123'),
+    )) as {
       cacheExpiresAt: number;
     };
     expect(refreshed.cacheExpiresAt).toBe(Date.now() + ttl);

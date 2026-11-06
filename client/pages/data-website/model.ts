@@ -83,7 +83,7 @@ export type TodayTotals = {
   sessions: number;
   keyEvents: number;
 };
-export type Today = {
+export type Today = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
   timeZone: string;
