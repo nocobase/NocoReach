@@ -32,7 +32,7 @@ const ADMIN_ONLY={
  nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover','connections'],nrKeywords:['configure','disconnect'],
  nrAgent:['saveDefault','saveRepo','removeRepo','checkRepo'],
  nrOnlineAI:['setModel'],
- nrArticles:['saveTarget','removeTarget','setDefaultTarget','savePlaybookTargets','testTarget'],
+ nrArticles:['saveTarget','removeTarget','setDefaultTarget','savePlaybookTargets','testTarget','detectCover','saveCover'],
  nrPlaybooks:['save','copy','remove','restore','draft'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],
  nrKnowledge:['add','edit','remove','saveMemory'],nrKnowledgeAdd:['suggest','confirm'],nrMemory:['sources','draft','check','accept','dismiss'],

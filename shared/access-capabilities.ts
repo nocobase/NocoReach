@@ -361,6 +361,8 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'setDefaultTarget',
       'savePlaybookTargets',
       'testTarget',
+      'detectCover',
+      'saveCover',
     ]),
   ],
   'app.projects': ['nrProjects.create'],

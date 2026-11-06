@@ -11,7 +11,12 @@ const ok = (data: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   });
 
-export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
+// A cover is an attachment record (2026-11-05): rows keep its id under the relation's name, and reads with `appends`
+// give the record. The collection's fields answer `collections/<name>/fields:list`; images are served without a key.
+export function fakeNocoBase(
+  rows: Record<string, unknown>[] = [],
+  { fields = [] as Record<string, unknown>[] } = {},
+) {
   const state = {
     rows: rows.map((r) => ({ ...r })),
     requests: [] as {
@@ -31,11 +36,48 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
       params: URLSearchParams;
     }[],
     uploadDenied: false,
+    fields,
+    attachments: [] as {
+      id: number;
+      url: string;
+      meta?: Record<string, number>;
+    }[],
+    images: new Map<string, Buffer>(),
+  };
+  /** An attachment record for a cover, served at its address with `bytes`. */
+  const attach = (
+    name: string,
+    bytes: Buffer,
+    meta?: Record<string, number>,
+  ) => {
+    const id = 500 + state.attachments.length;
+    const url = `/storage/uploads/${id}-${name}`;
+    state.attachments.push({ id, url, ...(meta ? { meta } : {}) });
+    state.images.set(url, bytes);
+    return id;
+  };
+  const withAppends = (
+    row: Record<string, unknown>,
+    appends: string | null,
+  ) => {
+    if (!appends) return row;
+    const out = { ...row };
+    for (const name of appends.split(','))
+      out[name] =
+        state.attachments.find((a) => String(a.id) === String(row[name])) ??
+        null;
+    return out;
   };
   const stamp = () =>
     new Date(Date.UTC(2026, 9, 18, 0, 0, ++state.clock)).toISOString();
   const fetcher = async (url: string, init: Init) => {
     const u = new URL(url);
+    if (u.pathname.startsWith('/storage/')) {
+      const bytes = state.images.get(u.pathname);
+      return bytes
+        ? new Response(new Uint8Array(bytes), { status: 200 })
+        : new Response('', { status: 404 });
+    }
     if (init.headers?.Authorization !== 'Bearer cms-key')
       return ok({ errors: [{ message: 'Unauthorized' }] }, 401);
     if (u.pathname === '/api/attachments:create') {
@@ -48,14 +90,15 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
         bytes: Buffer.from(await file.arrayBuffer()),
         params: u.searchParams,
       });
-      return ok({
-        data: {
-          id: state.uploads.length,
-          filename: file.name,
-          url: `/storage/uploads/${state.uploads.length}-${file.name}`,
-        },
-      });
+      const record = {
+        id: state.uploads.length,
+        url: `/storage/uploads/${state.uploads.length}-${file.name}`,
+      };
+      state.attachments.push(record);
+      return ok({ data: { ...record, filename: file.name } });
     }
+    if (/^\/api\/collections\/[^/]+\/fields:list$/.test(u.pathname))
+      return ok({ data: state.fields });
     const action = u.pathname.split(':')[1],
       body = init.body ? JSON.parse(String(init.body)) : undefined;
     state.requests.push({
@@ -66,9 +109,10 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
     });
     const byId = (id: string | null) =>
       state.rows.find((r) => String(r.id) === id);
+    const appends = u.searchParams.get('appends');
     if (action === 'get') {
       const row = byId(u.searchParams.get('filterByTk'));
-      return row ? ok({ data: row }) : ok({ data: null });
+      return row ? ok({ data: withAppends(row, appends) }) : ok({ data: null });
     }
     if (action === 'list') {
       const filter = JSON.parse(u.searchParams.get('filter') || '{}');
@@ -81,7 +125,9 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
         );
       }
       return ok({
-        data: out.slice(0, Number(u.searchParams.get('pageSize') || 20)),
+        data: out
+          .slice(0, Number(u.searchParams.get('pageSize') || 20))
+          .map((r) => withAppends(r, appends)),
       });
     }
     const failure = state.failNextWrite;
@@ -116,7 +162,7 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
       values,
       { updatedAt: stamp() },
     );
-  return { state, fetcher, edit };
+  return { state, fetcher, edit, attach };
 }
 
 export function fakeArticleApi() {
@@ -126,8 +172,12 @@ export function fakeArticleApi() {
     status: string;
     version: string;
     locales: Record<string, Record<string, string>>;
+    cover?: string | null;
   };
   const state = {
+    // What GET /capabilities answers; none means the site has no such endpoint.
+    capabilities: undefined as undefined | Record<string, unknown>,
+    images: [] as { name: string; key?: string }[],
     articles: [] as A[],
     keys: new Map<string, A>(),
     requests: [] as {
@@ -143,8 +193,22 @@ export function fakeArticleApi() {
       path = u.pathname.replace(/^\/api/, '');
     if (init.headers?.Authorization !== 'Bearer api-key')
       return ok({ error: { code: 'unauthorized' } }, 401);
-    const body = init.body ? JSON.parse(String(init.body)) : undefined,
-      key = init.headers?.['Idempotency-Key'];
+    const key = init.headers?.['Idempotency-Key'];
+    if (init.method === 'GET' && path === '/capabilities')
+      return state.capabilities
+        ? ok({ data: state.capabilities })
+        : ok({ error: { code: 'not_found' } }, 404);
+    if (init.method === 'POST' && path === '/images') {
+      const file = (init.body as FormData).get('file') as File;
+      const known = state.images.findIndex((i) => key && i.key === key);
+      if (known < 0) state.images.push({ name: file.name, key });
+      const n = known < 0 ? state.images.length : known + 1;
+      return ok(
+        { data: { url: `https://cdn.example.com/covers/${n}-${file.name}` } },
+        201,
+      );
+    }
+    const body = init.body ? JSON.parse(String(init.body)) : undefined;
     state.requests.push({ method: String(init.method), path, key, body });
     if (init.method === 'GET' && path === '/articles') {
       const slug = u.searchParams.get('slug'),
@@ -176,6 +240,7 @@ export function fakeArticleApi() {
         status: body.status || 'draft',
         version: `v${++state.v}`,
         locales: body.locales,
+        ...(body.cover !== undefined ? { cover: body.cover } : {}),
       };
       state.articles.push(a);
       state.keys.set(key!, a);
@@ -191,6 +256,7 @@ export function fakeArticleApi() {
       ))
         a.locales[l] = { ...a.locales[l], ...f };
       if (body.status) a.status = body.status;
+      if (body.cover !== undefined) a.cover = body.cover;
       a.version = `v${++state.v}`;
       state.keys.set(key!, a);
       return ok({ data: a });
@@ -200,8 +266,8 @@ export function fakeArticleApi() {
   return { state, fetcher };
 }
 
-const blob = (text: string) => {
-  const buf = Buffer.from(text);
+const blob = (text: string | Buffer) => {
+  const buf = Buffer.isBuffer(text) ? text : Buffer.from(text);
   return createHash('sha1')
     .update(`blob ${buf.length}\0`)
     .update(buf)
@@ -210,21 +276,23 @@ const blob = (text: string) => {
 type Commit = {
   sha: string;
   parent: string | null;
-  files: Map<string, string>;
+  // Text files as strings; binary files (cover images, posted as blobs) as bytes.
+  files: Map<string, string | Buffer>;
   author: { name: string; email: string };
 };
 
 export function fakeGitHub(
   repo: string,
-  files: Record<string, string> = {},
+  files: Record<string, string | Buffer> = {},
   author = { name: 'Person', email: 'person@example.com' },
 ) {
   const commits = new Map<string, Commit>();
-  const pending = new Map<string, Map<string, string>>();
+  const pending = new Map<string, Map<string, string | Buffer>>();
+  const blobs = new Map<string, Buffer>();
   let n = 0;
   const make = (
     parent: string | null,
-    next: Map<string, string>,
+    next: Map<string, string | Buffer>,
     who: { name: string; email: string },
   ) => {
     const sha = createHash('sha1').update(`c${++n}`).digest('hex');
@@ -237,7 +305,10 @@ export function fakeGitHub(
     beforeRef: undefined as undefined | (() => void),
   };
   /** A commit made by someone else (a person, or the CMS exporter). */
-  const push = (changes: Record<string, string | null>, who = author) => {
+  const push = (
+    changes: Record<string, string | Buffer | null>,
+    who = author,
+  ) => {
     const next = new Map(commits.get(state.head)!.files);
     for (const [p, t] of Object.entries(changes))
       if (t === null) next.delete(p);
@@ -265,7 +336,9 @@ export function fakeGitHub(
           type: 'file',
           sha: blob(text),
           encoding: 'base64',
-          content: Buffer.from(text).toString('base64'),
+          content: (Buffer.isBuffer(text) ? text : Buffer.from(text)).toString(
+            'base64',
+          ),
         });
       const names = new Set(
         [...c.files.keys()]
@@ -291,10 +364,17 @@ export function fakeGitHub(
     }
     if (method === 'GET' && path.startsWith('/git/commits/'))
       return ok({ tree: { sha: `tree-${path.split('/').pop()}` } });
+    if (method === 'POST' && path === '/git/blobs') {
+      const bytes = Buffer.from(body.content, 'base64');
+      const sha = blob(bytes);
+      blobs.set(sha, bytes);
+      return ok({ sha }, 201);
+    }
     if (method === 'POST' && path === '/git/trees') {
       const base = commits.get(String(body.base_tree).replace('tree-', ''))!;
       const next = new Map(base.files);
-      for (const e of body.tree) next.set(e.path, e.content);
+      for (const e of body.tree)
+        next.set(e.path, e.sha ? blobs.get(e.sha)! : e.content);
       const id = `t${++n}`;
       pending.set(id, next);
       return ok({ sha: id }, 201);

@@ -3,6 +3,8 @@ import {
   ARTICLE_CAPABILITIES,
   articleLocales,
   articleTargetSchema,
+  coverSettingsSchema,
+  type CoverSettings,
   TARGET_ID,
   type ArticleTarget,
   type ArticleTargetView,
@@ -196,7 +198,12 @@ export class ArticleTargets {
     if (values.revision !== old.revision) fail('stale', 409);
     const parsed = articleTargetSchema.safeParse(values.target);
     if (!parsed.success) fail('invalidTarget');
-    const target = parsed.data;
+    const previous = old.targets.find((e) => e.target.id === parsed.data.id);
+    // Covers are set by detection and Cover › Edit (saveCover): an edit that leaves them out keeps the stored ones.
+    const target =
+      parsed.data.cover || !previous?.target.cover
+        ? parsed.data
+        : ({ ...parsed.data, cover: previous.target.cover } as ArticleTarget);
     // 'repo' stands for the website repository wherever a target is chosen; no new target takes it.
     if (
       target.id === 'repo' &&
@@ -207,6 +214,7 @@ export class ArticleTargets {
       Object.keys(map || {}).some((l) => !target.locales.includes(l));
     if (
       unknownLocale(target.pages) ||
+      unknownLocale(target.cover?.locales) ||
       unknownLocale(
         target.kind === 'nocobase-api'
           ? target.fields.locales
@@ -222,7 +230,6 @@ export class ArticleTargets {
       const s = secret.safeParse(v);
       return s.success ? s.data : fail('invalidSecret');
     };
-    const previous = old.targets.find((e) => e.target.id === target.id);
     const sameEndpoint =
       previous && endpoint(previous.target) === endpoint(target);
     const sameDownstream =
@@ -245,7 +252,100 @@ export class ArticleTargets {
     const targets = previous
       ? old.targets.map((e) => (e.target.id === target.id ? next : e))
       : [...old.targets, next];
-    return this.persist(id, { ...old, revision: old.revision + 1, targets });
+    const saved = await this.persist(id, {
+      ...old,
+      revision: old.revision + 1,
+      targets,
+    });
+    // A target just connected reads its covers from its recent articles (2026-11-05); a failure leaves it without.
+    if (!previous && !target.cover)
+      return (await this.detected(id, target.id)) ?? saved;
+    return saved;
+  }
+  /**
+   * How a target keeps covers, from its latest articles (2026-11-05): its kind reads them (provider `detectCover`). Null
+   * when it keeps none. Read-only; `saveCover` keeps what the administrator settles on.
+   */
+  async detectCover(
+    id: string,
+    targetId: string,
+  ): Promise<CoverSettings | null> {
+    const provider = this.provider(id, targetId);
+    if (!provider.detectCover) return null;
+    try {
+      const found = await provider.detectCover();
+      return found ? coverSettingsSchema.parse(found) : null;
+    } catch (error) {
+      if (error instanceof ArticleError)
+        throw Object.assign(new Error(providerErrorKey(error.code)), {
+          status: error.status,
+        });
+      throw error;
+    }
+  }
+  /**
+   * Detect and keep the covers of a target an administrator has not set by hand: on connect and on each check. A failed
+   * read keeps what it had. Returns the settings when they changed.
+   */
+  private async detected(id: string, targetId: string) {
+    let found: CoverSettings | null;
+    try {
+      found = await this.detectCover(id, targetId);
+    } catch {
+      return undefined;
+    }
+    const now = this.stored(id),
+      entry = now.targets.find((e) => e.target.id === targetId);
+    if (!entry || entry.target.cover?.edited) return undefined;
+    const { cover: _, ...rest } = entry.target;
+    const target = (
+      found ? { ...rest, cover: found } : rest
+    ) as typeof entry.target;
+    // The same findings at a later time are no change: the settings' revision stays, and so does the time shown.
+    const timeless = (c?: CoverSettings) =>
+      JSON.stringify(
+        c && { ...c, detected: c.detected && { ...c.detected, at: '' } },
+      );
+    if (timeless(found ?? undefined) === timeless(entry.target.cover))
+      return undefined;
+    return this.persist(id, {
+      ...now,
+      revision: now.revision + 1,
+      targets: now.targets.map((e) =>
+        e.target.id === targetId ? { ...e, target } : e,
+      ),
+    });
+  }
+  /** The cover settings an administrator saved (Data sources › Blog CMS › Cover › Edit); kept over later detections. */
+  async saveCover(id: string, values: Record<string, unknown>) {
+    const old = this.stored(id);
+    if (values.revision !== old.revision) fail('stale', 409);
+    const entry = old.targets.find((e) => e.target.id === values.targetId);
+    if (!entry) return fail('targetMissing', 404);
+    const parsed =
+      values.cover === null
+        ? null
+        : coverSettingsSchema.safeParse(values.cover);
+    if (parsed && !parsed.success) fail('invalidCover');
+    const cover = parsed?.data;
+    if (
+      cover &&
+      Object.keys(cover.locales || {}).some(
+        (l) => !entry.target.locales.includes(l),
+      )
+    )
+      fail('invalidLocale');
+    const { cover: _, ...rest } = entry.target;
+    const target = (
+      cover ? { ...rest, cover: { ...cover, edited: true } } : rest
+    ) as typeof entry.target;
+    return this.persist(id, {
+      ...old,
+      revision: old.revision + 1,
+      targets: old.targets.map((e) =>
+        e.target.id === entry.target.id ? { ...e, target } : e,
+      ),
+    });
   }
   async setDefault(id: string, values: Record<string, unknown>) {
     const old = this.stored(id);
@@ -317,6 +417,8 @@ export class ArticleTargets {
    */
   async test(id: string, targetId: string) {
     const result = await this.probe(id, targetId);
+    // A target that answers reads its covers again, unless an administrator set them (2026-11-05).
+    const covers = result.ok ? await this.detected(id, targetId) : undefined;
     const now = this.stored(id),
       check = {
         at: new Date().toISOString(),
@@ -330,7 +432,16 @@ export class ArticleTargets {
           e.target.id === targetId ? { ...e, check } : e,
         ),
       });
-    return { ...result, check };
+    const target = this.stored(id).targets.find(
+      (e) => e.target.id === targetId,
+    );
+    return {
+      ...result,
+      check,
+      ...(covers
+        ? { revision: covers.revision, cover: target?.target.cover ?? null }
+        : {}),
+    };
   }
   private async probe(
     id: string,
@@ -553,6 +664,11 @@ export class ArticleTargets {
         setDefaultTarget: wrap((id, v) => this.setDefault(id, v), true),
         savePlaybookTargets: wrap((id, v) => this.savePlaybooks(id, v), true),
         testTarget: wrap((id, v) => this.test(id, scalar(v.targetId)), true),
+        detectCover: wrap(
+          (id, v) => this.detectCover(id, scalar(v.targetId)),
+          true,
+        ),
+        saveCover: wrap((id, v) => this.saveCover(id, v), true),
       },
     });
     p.app.acl.allow(
@@ -567,6 +683,8 @@ export class ArticleTargets {
         'setDefaultTarget',
         'savePlaybookTargets',
         'testTarget',
+        'detectCover',
+        'saveCover',
       ],
       'loggedIn',
     );
