@@ -1941,6 +1941,24 @@ test('task pages: the titles alone are read without asking the publishing target
   expect(match).not.toHaveBeenCalled();
 });
 
+test('task pages: the start card reuses a recent complete lookup, and unreadable targets leave the pages unchecked', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [hello] };
+  const match = vi.spyOn(f.s.p.articleTargets, 'match');
+  const first = await f.s.pagePlaces('1', '1');
+  expect(await f.s.pagePlaces('1', '1')).toEqual(first);
+  expect(match).toHaveBeenCalledTimes(1);
+  const unreadable = Object.assign(new Error('unreadable'), { status: 503 });
+  vi.spyOn(f.s.p.articleTargets, 'targets').mockImplementation(() => {
+    throw unreadable;
+  });
+  match.mockRejectedValueOnce(unreadable);
+  expect(await f.s.pagePlaces('1', '1')).toMatchObject({
+    unchecked: true,
+    pages: [{ url: hello, unchecked: true }],
+  });
+});
+
 test('task pages: the tasks split off a task are listed as its siblings, with their pages', async () => {
   const f = await fixture();
   f.state.nrTasks[0].evidence = { proposalId: 'p1', pages: [pricing, hello] };

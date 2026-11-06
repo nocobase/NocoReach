@@ -181,3 +181,18 @@ it('keeps the saved ranges when a restarted instance saves a read time first', a
   await settled();
   expect(await new DataViews(plugin).recentViews('1', 'search')).toEqual(['90']);
 });
+
+it('keeps only the ranges each page reads, and one row however the saves meet', async () => {
+  const { db, plugin } = await fixture();
+  const views = new DataViews(plugin);
+  views.noteView('2', 'website', '16m');
+  views.noteView('2', 'website', '6m');
+  views.noteRead('2');
+  views.noteView('2', 'search', 'all');
+  await settled();
+  expect(await new DataViews(plugin).recentViews('2', 'website')).toEqual([]);
+  expect(await new DataViews(plugin).recentViews('2', 'search')).toEqual(['all']);
+  expect(
+    await db.getRepository('nrSnapshots').count({ filter: { key: 'report-reads:2' } }),
+  ).toBe(1);
+});

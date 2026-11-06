@@ -69,9 +69,9 @@ export default function ContentPage() {
   const rangeLabel = getRanges().find(([k]) => k === range)?.[1] || $t('common.last28Days');
   const valid = validRange(rangeValue);
   const scope = project ? JSON.stringify([project.id, project.analyticsPropertyId, project.searchConsoleProperty]) : null;
-  const { data: read, error: loadError } = useFreshData(project && valid ? `data-view:site-list:v2:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range, view: "page" }, unwrap: "data" }), googleLocalFreshness);
+  const { data: read, error: loadError, loading } = useFreshData(project && valid ? `data-view:site-list:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range, view: "page" }, unwrap: "data" }), googleLocalFreshness);
   // A range change keeps the table of the range shown until the new one is read, dimmed, instead of a skeleton.
-  const { data, held } = useHeldData(loadError ? undefined : read, scope);
+  const { data, held } = useHeldData(loadError ? undefined : read, scope, Boolean(project && valid && loading));
   const tasks = useFreshData<ContentTask[]>(project ? taskListKey(project.id) : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   // A link finds the page it is whatever its scheme, www., trailing slash or language prefix (shared/page-search.ts).

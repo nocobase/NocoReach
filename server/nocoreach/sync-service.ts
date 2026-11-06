@@ -275,10 +275,13 @@ class SyncService{
    // report held answers whatever its age; the card reads it again itself), so the morning's first open shows a figure.
    // A failure waits 15 minutes.
    const todayNext=this.todayNext=this.todayNext||new Map();if(lately&&Date.now()>=(todayNext.get(id)||0))await readAhead(()=>this.p.dataViews?.websiteToday?.(id)).then(()=>todayNext.delete(id),()=>todayNext.set(id,Date.now()+15*60000));
-   await this.readLocalViews(id).catch(()=>{});
+   // The ranges chosen lately are extra work: left for the next firing once this one has run past the time it gives the
+   // other projects' syncs (the same bound as the preliminary reads below).
+   const extra=Date.now()<deadline+20000;
+   if(extra)await this.readLocalViews(id).catch(()=>{});
    if(!active)continue;
    const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}
-   await this.readChosenViews(id,link,lately).catch(()=>{});}
+   if(extra&&Date.now()<deadline+20000)await this.readChosenViews(id,link,lately).catch(()=>{});}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000||this.stopped)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}

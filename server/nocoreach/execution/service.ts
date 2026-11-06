@@ -1313,10 +1313,13 @@ export class TaskService {
   // reads the targets itself (`lookupPages`), never this.
   private placesCache = new Map<string, { at: number; value: { article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] } }>();
   private async placesLookup(project: string, urls: string[]) {
-    const key = digest([project, urls, this.p.articleTargets?.targets?.(project) ?? null]), hit = this.placesCache.get(key);
+    // Targets that cannot be read are the lookup's to report (each page unchecked), so they are only not cached.
+    let key: string | undefined;
+    try { key = digest([project, urls, this.p.articleTargets?.targets?.(project) ?? null]); } catch { key = undefined; }
+    const hit = key ? this.placesCache.get(key) : undefined;
     if (hit && Date.now() - hit.at < PLACES_MS) return hit.value;
     const value = await this.lookupPages(project, urls);
-    if (!value.unchecked) { if (this.placesCache.size >= 200) this.placesCache.clear(); this.placesCache.set(key, { at: Date.now(), value }); }
+    if (key && !value.unchecked) { if (this.placesCache.size >= 200) this.placesCache.clear(); this.placesCache.set(key, { at: Date.now(), value }); }
     return value;
   }
   // The article lookup of every page; a lookup that fails leaves each page unchecked.

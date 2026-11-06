@@ -188,3 +188,9 @@ test('涨跌: queries and pages by clicks against the period before; new ones ha
  assert.equal(q.falling[1].position,null);
  assert.deepEqual(sp.movers(cur,prev,'page').rising.map(r=>r.key),['/1','/3']);
 });
+test('ranks view: held pairs are let go, least recently read first, past the projects or pairs held',async()=>{
+ const {dv}=views();
+ for(const id of ['1','2','3','4','5','6','7'])await dv.ranks(id,{keywords:['crm']});
+ await new Promise(r=>setImmediate(r));
+ assert.deepEqual([...dv.pairHold.keys()],['2','3','4','5','6','7']);
+});

@@ -48,13 +48,9 @@ function movers(cur,prev,key,limit=MOVERS_LIMIT){const sum=rows=>{const out=new 
 
 // 本站排名 for keywords (关键词研究, 关键词): Search Console queries matched case-insensitively; position is the
 // impression-weighted average over all pages, and the page is the one ranking best (ties: more impressions).
-function ranks(rows,keywords){const want=new Set(keywords.map(k=>String(k).toLowerCase().trim())),out={};
- for(const r of rows){const k=String(r.keyword||'').toLowerCase().trim();if(!want.has(k)||!r.impressions)continue;let o=out[k];if(!o){o=out[k]={clicks:0,impressions:0,weight:0,page:r.page,best:r.position,bestImpressions:r.impressions};}
-  o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best||(r.position===o.best&&r.impressions>o.bestImpressions)){o.best=r.position;o.bestImpressions=r.impressions;o.page=r.page;}}
- for(const k of Object.keys(out)){const o=out[k];out[k]={clicks:o.clicks,impressions:o.impressions,position:o.weight/o.impressions,page:o.page};}
- return out;}
-// `ranks` for any keywords from one pass over the rows: each query's sums and best page, as `ranks` keeps them, so a held
-// window answers a list of keywords without reading every pair again.
+const ranks=(rows,keywords)=>indexedRanks(queryIndex(rows),keywords);
+// Each query's sums and best page from one pass over the rows, so a held window answers any list of keywords
+// (`indexedRanks`) without reading every pair again.
 function queryIndex(rows){const out=new Map();
  for(const r of rows){const k=String(r.keyword||'').toLowerCase().trim();if(!k||!r.impressions)continue;let o=out.get(k);if(!o){o={clicks:0,impressions:0,weight:0,page:r.page,best:r.position,bestImpressions:r.impressions};out.set(k,o);}
   o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best||(r.position===o.best&&r.impressions>o.bestImpressions)){o.best=r.position;o.bestImpressions=r.impressions;o.page=r.page;}}

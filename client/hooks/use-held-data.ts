@@ -1,13 +1,14 @@
 import { useState } from 'react';
 
 /**
- * The last data read for `scope` while the next read is on its way: a page whose range changes keeps showing the
+ * The last data read for `scope` while the next read is on its way (`loading`): a page whose range changes keeps showing the
  * previous range's table, marked `held`, instead of a skeleton. `scope` names what the data must belong to (the project
  * and its connections), so another project's data is never shown; the data says which period it holds.
  */
 export function useHeldData<T>(
   data: T | undefined,
   scope: string | null,
+  loading: boolean,
 ): { data?: T; held: boolean } {
   const [kept, setKept] = useState<{ scope: string | null; data: T } | null>(
     null,
@@ -16,7 +17,8 @@ export function useHeldData<T>(
   if (data !== undefined && (kept?.data !== data || kept.scope !== scope))
     setKept({ scope, data });
   if (data !== undefined) return { data, held: false };
-  return kept?.scope === scope
+  // Nothing is shown for a read that failed or was not asked (an unfinished custom range), as before.
+  return loading && kept?.scope === scope
     ? { data: kept.data, held: true }
     : { held: false };
 }
