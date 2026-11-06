@@ -585,6 +585,146 @@ describe('Insights behind an access re-check', () => {
   });
 });
 
+describe('Insights opened again on the state it last showed', () => {
+  it('joins a task read still out from the last visit instead of sending another nobody reads', async () => {
+    const view = await setup();
+    await pageShown();
+    await settle();
+    const out = Promise.withResolvers<never[]>();
+    tasks.mockReturnValueOnce(out.promise);
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    await settle();
+    expect(tasks).toHaveBeenCalledTimes(2);
+    // Back again while that read is still out: Insights shows at once and waits for the same read.
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    await settle();
+    expect(tasks).toHaveBeenCalledTimes(2);
+    await act(async () => out.resolve([]));
+    await settle();
+    expect(tasks).toHaveBeenCalledTimes(2);
+  });
+
+  it('judges unjudged changes only on the state this visit read', async () => {
+    server = stateWith(['Opportunity B'], { judge: true });
+    const answerAll = action.getMockImplementation()!;
+    // The server held the same unjudged changes, so the page does not read the state again.
+    action.mockImplementation(
+      async (resource: string, operation: string, options: never) =>
+        resource === 'nrAnalysis' && operation === 'judgeMissing'
+          ? { judged: 0, held: true }
+          : answerAll(resource, operation, options),
+    );
+    const view = await setup();
+    await pageShown();
+    await waitFor(() => expect(calls('nrAnalysis', 'judgeMissing')).toBe(1));
+    await settle();
+    const read = holdNextState();
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    await settle();
+    // The state last shown still has the unjudged change; it is not judged again from it.
+    expect(calls('nrAnalysis', 'judgeMissing')).toBe(1);
+    const judged = structuredClone(server);
+    judged.insights!.signalReviews = {
+      unjudged: { verdict: 'skip', reason: '', at: '' },
+    } as never;
+    await read.answer(judged);
+    await settle();
+    expect(calls('nrAnalysis', 'judgeMissing')).toBe(1);
+  });
+
+  it('still judges unjudged changes once the state this visit read has them', async () => {
+    server = stateWith(['Opportunity B'], { judge: true });
+    const answerAll = action.getMockImplementation()!;
+    action.mockImplementation(
+      async (resource: string, operation: string, options: never) =>
+        resource === 'nrAnalysis' && operation === 'judgeMissing'
+          ? { judged: 0, held: true }
+          : answerAll(resource, operation, options),
+    );
+    const view = await setup();
+    await pageShown();
+    await waitFor(() => expect(calls('nrAnalysis', 'judgeMissing')).toBe(1));
+    await settle();
+    const read = holdNextState();
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    await settle();
+    expect(calls('nrAnalysis', 'judgeMissing')).toBe(1);
+    // The read answers a state that still has the unjudged change: this visit judges it, once.
+    await read.answer(structuredClone(server));
+    await waitFor(() => expect(calls('nrAnalysis', 'judgeMissing')).toBe(2));
+    await settle();
+    expect(calls('nrAnalysis', 'judgeMissing')).toBe(2);
+  });
+
+  it('reports nothing when a read a mutation replaced fails afterwards', async () => {
+    const view = await setup();
+    await pageShown();
+    await settle();
+    const answerAll = action.getMockImplementation()!;
+    const out = Promise.withResolvers<StrategyState>();
+    let hold = true;
+    action.mockImplementation(
+      async (resource: string, operation: string, options: never) => {
+        if (resource === 'nrStrategy' && operation === 'state' && hold) {
+          hold = false;
+          return out.promise;
+        }
+        return answerAll(resource, operation, options);
+      },
+    );
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    fireEvent.click(
+      within(opportunity('Opportunity B')!).getByRole('button', {
+        name: 'Ignore',
+      }),
+    );
+    await screen.findByText('Dismissed 1');
+    await act(async () => out.reject(new Error('offline')));
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Dismissed 1')).toBeInTheDocument();
+  });
+
+  it('keeps the state when reading it again fails, retries the state only, and clears the error', async () => {
+    const view = await setup();
+    await pageShown();
+    await settle();
+    const answerAll = action.getMockImplementation()!;
+    let fail = true;
+    action.mockImplementation(
+      async (resource: string, operation: string, options: never) => {
+        if (resource === 'nrStrategy' && operation === 'state' && fail) {
+          fail = false;
+          throw new Error('offline');
+        }
+        return answerAll(resource, operation, options);
+      },
+    );
+    view.show(false);
+    view.show(true);
+    await pageShown();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't load insights. Try again.",
+    );
+    expect(opportunity('Opportunity B')).not.toBeNull();
+    const before = { state: stateCalls(), tasks: tasks.mock.calls.length };
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(stateCalls()).toBe(before.state + 1);
+    expect(tasks.mock.calls.length).toBe(before.tasks);
+  });
+});
+
 describe('Insights when permissions or the session change', () => {
   it('a permission change hides the page while pending, then denies it; a late read of the old permissions is never shown', async () => {
     const read = holdNextState();
