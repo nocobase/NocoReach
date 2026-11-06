@@ -114,11 +114,12 @@ test('multiple sites: confirming one keeps the others, legacy single-site record
  await assert.rejects(sc.remove('1','https://nope.com'),e=>e.status===404);
 });
 test('content list uses the live snapshots for the chosen period and falls back to 28 days',async()=>{
- const payload={sites:[{origin:'https://ex.com',confirmedAt:'t'}],pages:[{url:'https://ex.com/docs/a',type:'docs',origin:'https://ex.com'}]};
+ const payload={sites:[{origin:'https://ex.com',confirmedAt:'t'}],pages:[{url:'https://ex.com/docs/a',type:'docs',origin:'https://ex.com',internalLinks:1,links:['https://ex.com/docs/b']}]};
  const repo={findOne:async()=>({get:()=>payload})};
  const snaps=[{key:'project',payload:{end:'2026-09-27'}},{key:'pages-90',payload:[{page:'/docs/a',views:900}]},{key:'queries-90',payload:[]},{key:'pages-28',payload:[{page:'/docs/a',views:280}]},{key:'queries-28',payload:[]}];
  const sc=new SiteContent({db:{getRepository:()=>repo},sync:{snapshots:async()=>snaps}});
  const a=await sc.list('1','90');assert.equal(a.pages[0].views,900);assert.equal(a.range,'90');assert.equal(a.cutoff,'2026-09-27');assert.match(a.limitations[0],/近 90 天/);
+ assert.equal(a.pages[0].internalLinks,1);assert.equal('links' in a.pages[0],false,'outgoing links stay with the stored pages, for Site audit');assert.deepEqual(payload.pages[0].links,['https://ex.com/docs/b']);
  await assert.rejects(sc.list('1','custom'),e=>e.status===400);const b=await sc.list('1','unsupported');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
 });
 
