@@ -426,6 +426,26 @@ it('names a file over 20 MB and leaves it out', () => {
   expect(screen.queryByText('demo.mp4')).toBeNull();
 });
 
+it('names each file left out on a line of its own and keeps the rest', () => {
+  request.mockImplementation(() => new Promise(() => undefined));
+  render(<TaskCreatePage />);
+  fill();
+  const large = new File(['fixture'], 'demo.mp4', { type: 'video/mp4' });
+  Object.defineProperty(large, 'size', { value: 21 * 1024 * 1024 });
+  paste([
+    new File(['MZ'], 'setup.exe', { type: 'application/x-msdownload' }),
+    file(),
+    large,
+  ]);
+  const lines = [...screen.getByRole('alert').querySelectorAll('p')];
+  expect(lines.map((line) => line.textContent)).toEqual([
+    limit('manualTask.typeRejected', 'setup.exe'),
+    limit('manualTask.tooLarge', 'demo.mp4'),
+  ]);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('safe.png')).toBeInTheDocument();
+});
+
 it('takes ten files and names the limit for the rest, until one is removed', () => {
   request.mockImplementation(() => new Promise(() => undefined));
   render(<TaskCreatePage />);

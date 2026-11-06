@@ -121,8 +121,8 @@ function CreateTask({
     ),
   });
   const [entries, setEntries] = useState<Entry[]>([]);
-  // The files the last paste, drop or pick left out, by the limit each broke.
-  const [problem, setProblem] = useState('');
+  // The files the last paste, drop or pick left out, a line for each limit broken.
+  const [problems, setProblems] = useState<string[]>([]);
   const entriesRef = useRef<Entry[]>([]);
   const activeRef = useRef(true);
   const savedRef = useRef(false);
@@ -207,7 +207,7 @@ function CreateTask({
   }, [discard]);
   async function addFiles(files: File[]) {
     if (!validScope || busy || attempt) return;
-    const problems: string[] = [];
+    const left: string[] = [];
     for (const file of files) {
       const type = taskFileType(file.name, file.type);
       // A file that breaks a limit is not added: one line names it, as under Activity's message box (ImageProblem).
@@ -226,7 +226,7 @@ function CreateTask({
                 ? $t('manualTask.tooMany', { 0: TASK_MEDIA_COUNT })
                 : '';
       if (why) {
-        if (!problems.includes(why)) problems.push(why);
+        if (!left.includes(why)) left.push(why);
         continue;
       }
       const entry: Entry = {
@@ -292,7 +292,7 @@ function CreateTask({
           },
         );
     }
-    setProblem(problems.join(' '));
+    setProblems(left);
   }
   function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(event.clipboardData.files);
@@ -508,10 +508,12 @@ function CreateTask({
       >
         {$t('manualTask.upload')}
       </Button>
-      {problem && (
-        <p role='alert' className='mt-2 text-sm text-destructive'>
-          {problem}
-        </p>
+      {problems.length > 0 && (
+        <div role='alert' className='mt-2 space-y-0.5 text-sm text-destructive'>
+          {problems.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
       )}
       <ul className='mt-3 space-y-2'>
         {entries.map((entry) => (
