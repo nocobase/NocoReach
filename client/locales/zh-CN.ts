@@ -71,6 +71,8 @@ const zhCN: AppResource = {
   'nocoreach.nav.trends': '趋势',
   'nocoreach.nav.competitors': '竞品',
   'nocoreach.nav.aiSearch': 'AI 搜索',
+  'nocoreach.nav.seoTag': 'SEO',
+  'nocoreach.nav.geoTag': 'GEO',
   'nocoreach.nav.community': '社区',
   'nocoreach.nav.forum': '论坛',
   'nocoreach.nav.hackerNews': 'Hacker News',

@@ -1,4 +1,5 @@
 import {
+  compareNavigationOrder,
   resolveAppClientContributions,
   type AppClientRegisteredRoute,
   type AppClientRouteComponentLoader,
@@ -210,6 +211,50 @@ describe('app client routes', () => {
         }),
       ]),
     );
+  });
+
+  it('lists Keywords and AI search first in Search & market, tagged SEO and GEO, and moves nothing else', () => {
+    const findGroup = (name: string) =>
+      resolveRoutes().routes.find((route) => route.name === name);
+    const search = findGroup('nav-search');
+    // The group keeps its place among the top-level entries.
+    expect(search?.navigation).toMatchObject({
+      title: 'nocoreach.nav.search',
+      order: 5,
+    });
+    expect(
+      [...(search?.children ?? [])]
+        .sort(compareNavigationOrder)
+        .map((route) => ({
+          name: route.name,
+          path: route.path,
+          tag: route.navigation?.tag,
+          authz: route.authz,
+        })),
+    ).toEqual(
+      [
+        ['saved-keywords', '/keywords', 'nocoreach.nav.seoTag'],
+        ['ai-search', '/ai-search', 'nocoreach.nav.geoTag'],
+        ['search-growth', '/seo-opportunities', undefined],
+        ['data-trends', '/trends', undefined],
+        ['domain-overview', '/research/domain', undefined],
+      ].map(([name, path, tag]) => ({
+        name,
+        path,
+        tag,
+        authz: { resource: { type: 'page', id: name }, action: 'access' },
+      })),
+    );
+    // The option tags these two entries only.
+    const tagged = (routes: readonly AppClientRegisteredRoute[]): string[] =>
+      routes.flatMap((route) => [
+        ...(route.navigation?.tag ? [route.name] : []),
+        ...tagged(route.children ?? []),
+      ]);
+    expect(tagged(resolveRoutes().routes)).toEqual([
+      'saved-keywords',
+      'ai-search',
+    ]);
   });
 
   it('keeps the inbox out of the application navigation', () => {
