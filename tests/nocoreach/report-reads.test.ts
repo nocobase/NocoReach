@@ -172,3 +172,12 @@ it('remembers the ranges chosen on a page across a restart, the latest two withi
   vi.setSystemTime(Date.now() + 6 * DAY);
   expect(await new DataViews(plugin).recentViews('1', 'website')).toEqual([]);
 });
+
+it('keeps the saved ranges when a restarted instance saves a read time first', async () => {
+  const { plugin } = await fixture();
+  new DataViews(plugin).noteView('1', 'search', '90');
+  await settled();
+  new DataViews(plugin).noteRead('1');
+  await settled();
+  expect(await new DataViews(plugin).recentViews('1', 'search')).toEqual(['90']);
+});

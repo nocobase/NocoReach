@@ -299,8 +299,8 @@ class SyncService{
   const due=k=>Date.now()>=(next.get(k)?.at||0),failed=k=>next.set(k,{at:Date.now()+15*60000,partial:next.get(k)?.partial});
   const settle=(k,r)=>{const partial=Boolean(r?.partial||r?.complete===false||r?.missing?.length);next.set(k,{at:Date.now()+(partial?PARTIAL_RETRY_MS:15*60000),partial});};
   for(const range of await dv.recentViews(id,'search')){const k=`${id}:search:${range}`;if(!due(k))continue;let bad=false;const r=await waitForFresh(()=>dv.warm(id,range)).catch(()=>{bad=true;});if(bad)failed(k);else settle(k,r);}
-  const ranges=await dv.recentViews(id,'website');if(!ranges.length||!await dv.websiteDayRead?.(id,link?.get('ga4PropertyId'))?.catch(()=>false))return;
-  for(const range of ranges){const k=`${id}:website:${range}`;if(!due(k))continue;const read=next.get(k)?.partial?waitForFresh:readAhead;
+  const ranges=(await dv.recentViews(id,'website')).filter(range=>due(`${id}:website:${range}`));if(!ranges.length||!await dv.websiteDayRead?.(id,link?.get('ga4PropertyId'))?.catch(()=>false))return;
+  for(const range of ranges){const k=`${id}:website:${range}`;const read=next.get(k)?.partial?waitForFresh:readAhead;
    let bad=false;const r=await read(()=>dv.website(id,{range})).catch(()=>{bad=true;});if(bad){failed(k);continue;}
    if(lately)await read(()=>dv.websiteTables(id,{range})).catch(()=>{});settle(k,r);}}
  // Rebuilding from every stored day takes seconds and grows daily, while partitions only change when a sync writes them.

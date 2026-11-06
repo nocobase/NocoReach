@@ -353,7 +353,8 @@ class DataViews{
   return {partial:Boolean((await this.searchBreakdown(id,{...report.window,view:reportView({range})}))?.partial)};}
  // D: who has opened this project's reports lately decides whether they are read ahead of time. Kept in memory and saved
  // at most hourly, as a restart must not forget it; a demo's refused write leaves the memory copy working.
- noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.saveRead(key);}
+ noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.readsOf(key).then(()=>this.saveRead(key));}
+ // The ranges saved before are read first (`readsOf`), so writing the read time never drops them.
  async saveRead(id){try{const repo=this.p.db.getRepository('nrSnapshots'),key=`report-reads:${id}`,row=await repo.findOne({filter:{key}}),at=this.readAt.get(id),views=this.viewReads.get(id);
   const payload={...(at?{at:new Date(at).toISOString()}:{}),...(views&&Object.keys(views).length?{views:Object.fromEntries(Object.entries(views).map(([k,t])=>[k,new Date(t).toISOString()]))}:{})};
   if(row)await repo.update({filter:{key},values:{payload}});else await repo.create({values:{key,payload}});}catch{/* the memory copy still works */}}
