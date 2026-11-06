@@ -52,6 +52,20 @@ const calendarDate=(d:unknown):d is string=>typeof d==='string'&&/^\d{4}-\d{2}-\
 const googleDisconnected=(e:unknown)=>Boolean(e&&typeof e==='object'&&'code' in e&&e.code==='NOCOREACH_GOOGLE_NOT_CONNECTED');
 // Partitions store ISO calendar dates as strings. The current Repository supports string $in,
 // not numeric/date comparison operators; include at most the selected and previous 490-day windows.
+// Page figures are kept packed: each page a row of numbers after an index into one list of hosts. As objects a site
+// with some 6,000 addresses outside its sitemap passed the cache's 2 MB an entry over 28 days, so Pages read every
+// synced day again on each visit (2.3 s on 2026-11-06).
+type FigureRow={host:string;path:string;current:Record<string,number>;previous:Record<string,number>};
+type PageFigures={window:unknown;days:unknown;search:FigureRow[];web:FigureRow[]};
+type PackedFigures={window:unknown;days:unknown;hosts:string[];search:(string|number)[][];web:(string|number)[][]};
+const SEARCH_FIELDS=['clicks','impressions'],WEB_FIELDS=['views'];
+function packFigures(f:PageFigures|null):PackedFigures|null{if(!f)return null;const hosts:string[]=[],at=new Map<string,number>();
+ const host=(h:string)=>{let i=at.get(h);if(i===undefined){i=hosts.length;hosts.push(h);at.set(h,i);}return i;};
+ const pack=(rows:FigureRow[],fields:string[])=>rows.map(r=>[host(r.host),r.path,...fields.map(n=>r.current[n]||0),...fields.map(n=>r.previous[n]||0)]);
+ return {window:f.window,days:f.days,hosts,search:pack(f.search,SEARCH_FIELDS),web:pack(f.web,WEB_FIELDS)};}
+function unpackFigures(f:PackedFigures|null):PageFigures|null{if(!f)return null;
+ const unpack=(rows:(string|number)[][],fields:string[])=>rows.map(([h,path,...n])=>({host:f.hosts[Number(h)],path:String(path),current:Object.fromEntries(fields.map((k,i)=>[k,Number(n[i])])),previous:Object.fromEntries(fields.map((k,i)=>[k,Number(n[fields.length+i])]))}));
+ return {window:f.window,days:f.days,search:unpack(f.search,SEARCH_FIELDS),web:unpack(f.web,WEB_FIELDS)};}
 function partitionDates(start:unknown,end:unknown,all=false){if(!calendarDate(start)||!calendarDate(end))fail(systemMessageText('dataViews.pickValidStartEndDates'));if(days(start,end)>(all?36600:980))fail(systemMessageText('dataViews.customRangesUp16Months'));const dates:string[]=[];for(let d=start;d<=end;d=add(d,1))dates.push(d);return {$in:dates};}
 // Same window rules as the Portal period helper: N days ending at the cutoff, or calendar months back from it.
 function windowFor(end,range,from,to,first){if(range==='all'){const start=calendarDate(first)&&first<=end?first:end;return {start,end,days:days(start,end),previousStart:add(start,-1),previousEnd:add(start,-1),all:true};}if(range==='custom'){if(!calendarDate(from)||!calendarDate(to)||from>to)fail(systemMessageText('dataViews.pickValidStartEndDates'));const n=days(from,to);if(from>end)fail(systemMessageText('dataViews.pickValidStartEndDates'));if(n>490)fail(systemMessageText('dataViews.customRangesUp16Months'));const e=to<end?to:end;const count=days(from,e);return {start:from,end:e,days:count,previousStart:add(from,-count),previousEnd:add(from,-1)};}
@@ -356,7 +370,7 @@ class DataViews{
  // samples. Pages are host and path; GA4 rows synced before hosts were kept have host ''. Search Console counts leave out
  // anonymised queries. Built once per synced data and range, and saved like 搜索表现.
  async pageFigures(id,range,from,to){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
-  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,String(range),from||null,to||null,3],()=>this.buildPageFigures(id,String(range),link,from,to),value=>value?GOOGLE_HISTORY_CACHE_MS:0);}
+  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,String(range),from||null,to||null,4],async()=>packFigures(await this.buildPageFigures(id,String(range),link,from,to)),value=>value?GOOGLE_HISTORY_CACHE_MS:0,unpackFigures);}
  async buildPageFigures(id,range,link,from,to){const snaps=await this.p.sync.snapshots(id),end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
   const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,range,from,to,first),repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
   const read=(source,grain,resource)=>resource?repo.find({filter:{projectId:id,source,grain,resource,date:dates},fields:['date','payload']}):Promise.resolve([]);
