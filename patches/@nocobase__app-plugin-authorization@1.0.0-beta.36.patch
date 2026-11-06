@@ -1,10 +1,10 @@
 diff --git a/dist/client/authorization-client.d.ts b/dist/client/authorization-client.d.ts
-index 8ef5b56ac952e90066c08bbf4dee5b55e55059a3..85ffa4e0e68727cc4cb4d91a79489084c21e1099 100644
+index a6704da05d8ae3fdc0aa107a12bde387bd20006f..31b64949fe7e020d5d01a0d39a85fb1627ac72c0 100644
 --- a/dist/client/authorization-client.d.ts
 +++ b/dist/client/authorization-client.d.ts
-@@ -290,6 +290,8 @@ export declare class AuthorizationClient {
-     /** Changes whenever the snapshot is invalidated. */
-     revision(): number;
+@@ -296,6 +296,8 @@ export declare class AuthorizationClient {
+     /** Drop the previous identity's queue without waiting for its HTTP response. */
+     resetSession(): void;
      invalidate(): void;
 +    /** NocoReach patch: reads the snapshot again and invalidates only when it changed. */
 +    revalidate(): Promise<void>;
@@ -12,18 +12,18 @@ index 8ef5b56ac952e90066c08bbf4dee5b55e55059a3..85ffa4e0e68727cc4cb4d91a79489084
      listPermissionSets(): Promise<readonly PermissionSet[]>;
      getPermissionSet(key: string): Promise<PermissionSet>;
 diff --git a/dist/client/authorization-client.js b/dist/client/authorization-client.js
-index 8c34b4fbc5ce89772e9f2f3e5d3cbca0296b6ab4..9f819c87ef81b485ed3241acbd970b18644aa5b0 100644
+index 453fd024b267527414410543cf4609de56b2d705..fc86b13f0290f630b3b4c83bc63b58994850a491 100644
 --- a/dist/client/authorization-client.js
 +++ b/dist/client/authorization-client.js
-@@ -48,6 +48,33 @@ export class AuthorizationClient {
+@@ -64,6 +64,33 @@ export class AuthorizationClient {
          for (const listener of this.invalidationListeners)
              listener();
      }
 +    /**
-+     * NocoReach patch: reads the snapshot again and invalidates only when it changed. A realtime connection opening and
-+     * its topics becoming ready ask for this rather than `invalidate()`: events sent while it was not subscribed may be
-+     * lost, so the snapshot is read again, but an unchanged one keeps the revision, and with it every mounted page.
-+     * Nothing read yet: nothing to check. A hard invalidation meanwhile wins. A failed read invalidates.
++     * NocoReach patch: reads the snapshot again and invalidates only when it changed. A realtime connection's topics
++     * becoming ready ask for this rather than `invalidate()`: events sent while it was not subscribed may be lost, so the
++     * snapshot is read again, but an unchanged one keeps the revision, and with it every mounted page. Nothing read yet:
++     * nothing to check. A hard invalidation meanwhile wins. A failed read invalidates.
 +     */
 +    revalidate() {
 +        const previous = this.cached;
@@ -50,10 +50,13 @@ index 8c34b4fbc5ce89772e9f2f3e5d3cbca0296b6ab4..9f819c87ef81b485ed3241acbd970b18
          this.invalidationListeners.add(listener);
          return () => {
 diff --git a/dist/client/service-provider.js b/dist/client/service-provider.js
-index 8ba3b80dbbc4ef49f7318e02c41e41f9b2f53412..fa5db2cccc4b765432ce41d43e83903c4ba15305 100644
+index f3f706095de650d94820e7330551cbe855d3c4c1..8ec2466d37d23e19e56817daeba31f24d1b2700e 100644
 --- a/dist/client/service-provider.js
 +++ b/dist/client/service-provider.js
-@@ -3,6 +3,8 @@ import { ServiceProvider } from '@nocobase/service-provider';
+@@ -1,8 +1,10 @@
+-import { apiClientToken, realtimeClientToken, watchReadiness, } from '@nocobase/app-client';
++import { apiClientToken, realtimeClientToken, } from '@nocobase/app-client';
+ import { ServiceProvider } from '@nocobase/service-provider';
  import { AuthorizationClient } from './authorization-client.js';
  import { authorizationClientToken } from './tokens.js';
  import { AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, } from '../shared.js';
@@ -62,19 +65,26 @@ index 8ba3b80dbbc4ef49f7318e02c41e41f9b2f53412..fa5db2cccc4b765432ce41d43e83903c
  export class AuthorizationServiceProvider extends ServiceProvider {
      name = '@nocobase/app-plugin-authorization/client';
      unsubscribePermissionsChanged;
-@@ -14,14 +16,38 @@ export class AuthorizationServiceProvider extends ServiceProvider {
-     boot() {
+@@ -15,16 +17,39 @@ export class AuthorizationServiceProvider extends ServiceProvider {
+             return Promise.resolve();
          const authz = this.app.container.resolve(authorizationClientToken);
          const realtime = this.app.container.resolve(realtimeClientToken);
--        this.unsubscribePermissionsChanged = realtime.watch(AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: () => authz.invalidate() }).close;
--        this.unsubscribeGlobalPermissionsChanged = realtime.watch(AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: () => authz.invalidate() }).close;
--        this.unsubscribeRealtimeOpen = realtime.onOpen(() => {
--            authz.invalidate();
+-        const barrier = watchReadiness(realtime, [
+-            AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC,
+-            AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC,
+-        ], {
+-            onEvent: () => authz.invalidate(),
+-            onRecovery: () => authz.invalidate(),
 -        });
-+        // NocoReach patch: a permission event still invalidates at once. Each topic becoming ready (both topics answer
-+        // within a few milliseconds of each other, after every connection or reconnection) reads the snapshot again once,
-+        // and invalidates only when it changed, so an unchanged snapshot does not make every page check its access again.
-+        // The connection opening is not watched: its topics become ready one round trip later, which read it a second time.
+-        authz.waitForRealtime(barrier.wait);
+-        this.unsubscribePermissionsChanged = barrier.close;
+-        this.releaseReadiness = () => authz.waitForRealtime(() => Promise.resolve());
++        // NocoReach patch: the first permission read does not wait for the realtime connection (upstream gates it on
++        // `watchReadiness`, up to ten seconds while connecting). A permission event still invalidates at once. Each topic
++        // becoming ready (both topics answer within a few milliseconds of each other, after every connection or
++        // reconnection) reads the snapshot again once, and invalidates only when it changed, so an unchanged snapshot does
++        // not make every page check its access again. The connection opening is not watched: its topics become ready one
++        // round trip later, which read it a second time.
 +        let timer;
 +        let running;
 +        let again = false;
@@ -95,14 +105,13 @@ index 8ba3b80dbbc4ef49f7318e02c41e41f9b2f53412..fa5db2cccc4b765432ce41d43e83903c
 +            clearTimeout(timer);
 +            timer = setTimeout(revalidate, REVALIDATE_DELAY_MS);
 +        };
-+        this.cancelRevalidate = () => clearTimeout(timer);
-+        this.unsubscribePermissionsChanged = realtime.watch(AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: schedule }).close;
-+        this.unsubscribeGlobalPermissionsChanged = realtime.watch(AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: schedule }).close;
++        const permissions = realtime.watch(AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: schedule });
++        const globalPermissions = realtime.watch(AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, { onEvent: () => authz.invalidate(), onReady: schedule });
++        this.unsubscribePermissionsChanged = () => {
++            clearTimeout(timer);
++            permissions.close();
++            globalPermissions.close();
++        };
          return Promise.resolve();
      }
      shutdown() {
-+        this.cancelRevalidate?.();
-+        this.cancelRevalidate = undefined;
-         this.unsubscribePermissionsChanged?.();
-         this.unsubscribePermissionsChanged = undefined;
-         this.unsubscribeGlobalPermissionsChanged?.();

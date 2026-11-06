@@ -233,7 +233,12 @@
       "template": "템플릿",
       "defaultSignature": "기본 서명",
       "noSignature": "서명 없음",
-      "templateReplaceConfirm": "기존 제목과 본문을 바꿉니다. 계속할까요?"
+      "templateReplaceConfirm": "기존 제목과 본문을 바꿉니다. 계속할까요?",
+      "imapSourceRequired": "이 메시지를 이동하거나 삭제하려면 먼저 원본 폴더를 여세요.",
+      "imapTrashMissing": "이 계정에는 휴지통 폴더가 없습니다. 메일 클라이언트를 사용하세요.",
+      "deleteUnsupported": "이 계정은 삭제를 지원하지 않습니다. 메일 클라이언트를 사용하세요.",
+      "imapScheduled": "이 초안을 삭제하려면 먼저 예약된 발송을 취소하세요.",
+      "invalidRecipient": "이메일 주소 또는 표시 이름을 수정하세요: {{value}}. 필드마다 수신자는 최대 100명입니다."
     },
     "templates": {
       "list": "템플릿",
@@ -639,7 +644,8 @@
       "kilo": "Kilo Code",
       "cline": "Cline",
       "amp": "Amp",
-      "vibe": "Mistral Vibe"
+      "vibe": "Mistral Vibe",
+      "dsh": "DeepSeek Harness"
     },
     "agents": {
       "unavailableNow": "지금은 이용할 수 없습니다",
@@ -1803,10 +1809,12 @@
         "runnersBusy": "호환되는 Runner의 실행 슬롯이 모두 사용 중입니다.",
         "toolSlotsFull": "{{tool}} 슬롯이 가득 참({{used}}/{{limit}})",
         "setupRetrying": "준비에 실패했습니다. 재시도 중: {{detail}}",
-        "next": "실행 환경에 여유가 생기면 다음으로 실행됩니다."
+        "next": "실행 환경에 여유가 생기면 다음으로 실행됩니다.",
+        "toolQuota": "도구 할당량 소진, 재설정 시각: {{until}}"
       },
       "unknown": "대기 중({{reason}})",
-      "unknownValue": "—"
+      "unknownValue": "—",
+      "quotaResetUnknown": "알 수 없음"
     },
     "access": {
       "section": "에이전트 관리",
@@ -1976,8 +1984,12 @@
         "revoked": "이 초대는 취소되었습니다.",
         "password": "비밀번호가 요구 사항을 충족하지 않습니다.",
         "accountConflict": "이 주소로는 계정을 만들 수 없습니다.",
-        "failed": "문제가 발생했습니다. 다시 시도하세요."
-      }
+        "failed": "문제가 발생했습니다. 다시 시도하세요.",
+        "usernameConflict": "이 사용자 이름은 이미 사용자 이름 또는 이메일로 사용 중입니다. 다른 이름을 선택하세요."
+      },
+      "username": "사용자 이름(선택 사항)",
+      "usernameHint": "이 사용자 이름으로 로그인할 수 있습니다.",
+      "alreadyHaveAccount": "이미 계정이 있나요? 로그인"
     }
   },
   "@nocobase/app-plugin-notification-in-app": {
@@ -2062,6 +2074,41 @@
     "errors": {
       "requestFailed": "알림 요청이 실패했습니다.",
       "inAppRecipientNotFound": "인앱 알림 수신자가 존재하지 않습니다."
+    },
+    "templates": {
+      "title": "알림 템플릿",
+      "coverage": "등록된 시나리오만 표시됩니다. 동적 발송, 사용자 지정 콜백 및 비공개 메일 템플릿은 이 목록에 포함되지 않습니다. 정의와 미리보기는 읽기 전용입니다.",
+      "search": "시나리오 검색",
+      "category": "업무 분류",
+      "channel": "채널",
+      "all": "전체",
+      "details": "세부정보 보기",
+      "close": "세부정보 닫기",
+      "trigger": "트리거",
+      "recipients": "수신자 규칙",
+      "businessRule": "업무 활성화 조건",
+      "contributor": "출처",
+      "languagePolicy": "언어 동작",
+      "status": "채널 구성",
+      "statusHelp": "정의가 등록되어 있어도 발송이 활성화된 것은 아닙니다. 구성이 있어도 연결이 확인된 것은 아닙니다.",
+      "configured": "구성됨",
+      "unconfigured": "구성되지 않음",
+      "enabled": "사용",
+      "disabled": "사용 안 함",
+      "unknown": "알 수 없음",
+      "variables": "사용 가능한 변수",
+      "language": "콘텐츠 언어",
+      "synthetic": "합성 예시 데이터만 사용합니다. 미리보기는 알림을 보내지 않으며 구성을 변경하지 않습니다.",
+      "definition": "템플릿 정의",
+      "preview": "합성 미리보기",
+      "html": "HTML 소스(실행되지 않는 텍스트)",
+      "loading": "로드 중…",
+      "failed": "템플릿을 불러올 수 없습니다.",
+      "forbidden": "알림 템플릿을 볼 권한이 없습니다.",
+      "notFound": "이 템플릿은 더 이상 등록되어 있지 않습니다.",
+      "retry": "다시 시도",
+      "empty": "등록된 알림 시나리오가 없습니다.",
+      "noResults": "이 필터와 일치하는 시나리오가 없습니다."
     }
   },
   "@nocobase/app-plugin-scheduler": {

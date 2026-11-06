@@ -28,6 +28,8 @@ vi.mock('@nocobase/app-client', async (importOriginal) => {
   return {
     ...actual,
     useApiClient: () => client,
+    // The inbox waits for its topics to be acknowledged; the hook resolves the realtime client from the application.
+    useRealtimeReadiness: () => true,
     useService: (token: unknown) =>
       token === actual.realtimeClientToken ? realtime : client,
   };
