@@ -18,6 +18,15 @@ const DEPLOYMENT_POLL_TIMEOUT = 30 * 60_000;
 const HEALTH_RETRY_WINDOW = 3 * 60_000;
 const HEALTH_RETRY_INTERVAL = 10_000;
 
+// A deployment Studio reports as failed (the host exiting mid-activation, a
+// network blip on its side) is redeployed from the same, already verified
+// release. An unreachable Studio while polling is read again. Both wait 30s.
+const DEPLOYMENT_RETRIES = 2;
+const RETRY_DELAY = 30_000;
+
+// Studio could not be reached for a read (CLI exit 2, or the read timed out):
+// nothing changed, so reading again is safe. Uploads never throw this.
+export class StudioUnreachable extends Error {}
 export function runStudioCli(env, args, execute = execFileSync) {
   const uploading =
     args[0] === 'deploy' && args[1] === '--app' && args.includes('--file');
@@ -53,13 +62,24 @@ export function runStudioCli(env, args, execute = execFileSync) {
         : 'unavailable';
       reason = `${code}; exit=${status}`;
     }
-    const recovery = uploading
-      ? 'The upload/deployment outcome is unknown and may already exist in Studio. Inspect releases and deployments for this commit before retrying; do not re-upload automatically.'
-      : 'Inspect Studio status and logs before retrying.';
-    // eslint-disable-next-line preserve-caught-error
-    throw new Error(
-      `Studio ${uploading ? 'archive upload' : 'read command'} failed: ${reason}. ${recovery}`,
-    );
+    // `deploy --app` starts a deployment; every other command only reads.
+    const starting = args[0] === 'deploy' && args[1] === '--app';
+    let label = 'read command';
+    let recovery = 'Inspect Studio status and logs before retrying.';
+    if (uploading) {
+      label = 'archive upload';
+      recovery =
+        'The upload/deployment outcome is unknown and may already exist in Studio. Inspect releases and deployments for this commit before retrying; do not re-upload automatically.';
+    } else if (starting) {
+      label = 'deployment request';
+      recovery =
+        'A deployment of this release may already have started. Inspect Studio deployments before retrying.';
+    }
+    const message = `Studio ${label} failed: ${reason}. ${recovery}`;
+    // Child-process errors are never kept as a cause (see above).
+    if (!starting && (error.code === 'ETIMEDOUT' || error.status === 2))
+      throw new StudioUnreachable(message);
+    throw new Error(message); // eslint-disable-line preserve-caught-error
   }
   return parseEnvelope(output);
 }
@@ -248,12 +268,11 @@ function diagnosticId(value) {
 function deploymentState(data, appId, releaseId, deploymentId) {
   assert.equal(data.appId, appId, 'Wrong deployment app');
   assert.equal(data.releaseId, releaseId, 'Wrong deployment release');
-  if (data.status === 'succeeded') return 'succeeded';
+  if (['succeeded', 'failed'].includes(data.status)) return data.status;
   if (['queued', 'deploying'].includes(data.status)) return 'waiting';
-  // "failed" is the observed server state. Do not echo unknown status values.
-  const status = data.status === 'failed' ? 'failed' : 'unknown';
+  // Do not echo unknown status values, and do not retry them.
   throw new Error(
-    `Deployment stopped (${status}); ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}. Inspect Studio deployment logs; no automatic retry or rollback.`,
+    `Deployment stopped (unknown); ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}. Inspect Studio deployment logs; no automatic retry or rollback.`,
   );
 }
 function verifyRelease(release, appId, releaseId, sha, checksum) {
@@ -336,16 +355,16 @@ export async function deploy({
       `Studio 复用了同一提交的已有发布；后续校验使用该发布的 SHA-256：${checksum}，不使用本次重建包的校验值。\n\n`,
     );
   }
-  if (result.request) {
+  const pending = (outcome) => {
     assert.equal(
-      result.request.status,
+      outcome.request.status,
       'pending',
       'Unexpected approval request state',
     );
-    assert(!result.deployment, 'Ambiguous deployment and approval response');
+    assert(!outcome.deployment, 'Ambiguous deployment and approval response');
     let link = 'Studio 未配置公开审批链接，请在 Studio 部署请求列表查看';
-    if (result.request.url) {
-      const url = new URL(result.request.url, env.NB_STUDIO_SERVER);
+    if (outcome.request.url) {
+      const url = new URL(outcome.request.url, env.NB_STUDIO_SERVER);
       assert.equal(
         url.origin,
         new URL(env.NB_STUDIO_SERVER).origin,
@@ -354,23 +373,66 @@ export async function deploy({
       link = url.href;
     }
     summary(
-      `等待 Studio 审批，尚未上线。请求：${result.request.id}\n\n审批链接：${link}\n\n`,
+      `等待 Studio 审批，尚未上线。请求：${outcome.request.id}\n\n审批链接：${link}\n\n`,
     );
     return 'pending';
-  }
-  const deploymentId = result.deployment?.id;
-  assert(
-    typeof deploymentId === 'string' && deploymentId,
-    'Deployment response missing deployment ID',
-  );
-  summary(`Deployment：${diagnosticId(deploymentId)}\n\n`);
+  };
+  if (result.request) return pending(result);
+  const deploymentIdOf = (outcome) => {
+    const id = outcome.deployment?.id;
+    assert(
+      typeof id === 'string' && id,
+      'Deployment response missing deployment ID',
+    );
+    summary(`Deployment：${diagnosticId(id)}\n\n`);
+    return id;
+  };
+  let deploymentId = deploymentIdOf(result);
   const startedAt = now();
   const deadline = startedAt + timeout;
-  const context = `ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}`;
+  const context = () =>
+    `ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}`;
   let nextProgressAt = startedAt;
+  let retries = 0;
   while (now() < deadline) {
-    const data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
-    if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded') {
+    let data;
+    try {
+      data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
+    } catch (error) {
+      if (!(error instanceof StudioUnreachable)) throw error;
+      log(
+        `Studio unreachable while polling; reading again in 30s; ${context()}.`,
+      );
+      await wait(Math.min(RETRY_DELAY, Math.max(0, deadline - now())));
+      continue;
+    }
+    const state = deploymentState(data, appId, releaseId, deploymentId);
+    if (state === 'failed') {
+      if (retries >= DEPLOYMENT_RETRIES || now() + RETRY_DELAY >= deadline)
+        throw new Error(
+          `Deployment stopped (failed) after ${retries + 1} attempt(s); ${context()}. Inspect Studio deployment logs; no rollback.`,
+        );
+      retries += 1;
+      log(
+        `Deployment stopped (failed); redeploying the same release in 30s (retry ${retries}/${DEPLOYMENT_RETRIES}); ${context()}.`,
+      );
+      summary(
+        `部署失败（Deployment：${diagnosticId(deploymentId)}），30 秒后用同一发布重新部署（第 ${retries}/${DEPLOYMENT_RETRIES} 次重试）。\n\n`,
+      );
+      await wait(RETRY_DELAY);
+      const redeployed = await cli([
+        'deploy',
+        '--app',
+        appId,
+        '--release',
+        releaseId,
+        '--json',
+      ]);
+      if (redeployed.request) return pending(redeployed);
+      deploymentId = deploymentIdOf(redeployed);
+      continue;
+    }
+    if (state === 'succeeded') {
       assert.equal(
         data.release?.checksum,
         checksum,
@@ -399,14 +461,14 @@ export async function deploy({
     }
     if (now() >= nextProgressAt) {
       log(
-        `Studio deployment waiting; elapsed=${Math.floor((now() - startedAt) / 1000)}s; budget=${timeout / 1000}s; ${context}.`,
+        `Studio deployment waiting; elapsed=${Math.floor((now() - startedAt) / 1000)}s; budget=${timeout / 1000}s; ${context()}.`,
       );
       nextProgressAt = now() + 60_000;
     }
     await wait(Math.min(10000, Math.max(0, deadline - now())));
   }
   throw new Error(
-    `Deployment timed out after ${timeout / 1000} seconds; ${context}. Studio may still complete this deployment; inspect it before retrying (no automatic rollback).`,
+    `Deployment timed out after ${timeout / 1000} seconds; ${context()}. Studio may still complete this deployment; inspect it before retrying (no automatic rollback).`,
   );
 }
 export function deploymentOutcomeMessage(outcome) {

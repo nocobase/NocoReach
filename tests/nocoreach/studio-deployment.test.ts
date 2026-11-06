@@ -9,6 +9,7 @@ import {
   parseEnvelope,
   probeHealth,
   runStudioCli,
+  StudioUnreachable,
   validateConfig,
   validateHealth,
 } from '../../scripts/ci/deploy-studio.mjs';
@@ -54,7 +55,20 @@ function createScenario(appId: string) {
     release: { ...release },
   };
   const app = { app: { currentDeploymentId: deployment.id } };
+  let redeploys = 0;
   const cli = vi.fn(async (args: string[]) => {
+    if (args[0] === 'deploy' && args.includes('--release')) {
+      redeploys += 1;
+      const id = `deployment-${redeploys + 1}`;
+      deployment.id = id;
+      app.app.currentDeploymentId = id;
+      return {
+        appId,
+        releaseId: release.id,
+        deployment: { id },
+        request: null,
+      };
+    }
     if (args[0] === 'deploy' && args[1] === '--app') return uploaded;
     if (args[0] === 'deploy' && args[1] === 'get') return deployment;
     if (args[0] === 'release') return release;
@@ -303,14 +317,88 @@ describe('Studio deployment to reach', () => {
     expect(options.wait).toHaveBeenCalledTimes(2);
   });
 
-  it('fails on a remote deployment failure', async () => {
+  const redeployArgs = [
+    'deploy',
+    '--app',
+    appId,
+    '--release',
+    'release-1',
+    '--json',
+  ];
+
+  it('redeploys the same release twice, 30 seconds apart, before failing', async () => {
+    const { deployment, options } = scenario();
+    deployment.status = 'failed';
+    await expect(deploy({ ...options, timeout: 30 * 60_000 })).rejects.toThrow(
+      `Deployment stopped (failed) after 3 attempt(s); ci-phase=deployment-poll; app=${appId}; release=release-1; deployment=deployment-3. Inspect Studio deployment logs; no rollback.`,
+    );
+    const calls = options.cli.mock.calls.map(([args]) => args);
+    expect(calls.filter((args) => args.includes('--file'))).toHaveLength(1);
+    expect(calls.filter((args) => args.includes('--release'))).toEqual([
+      redeployArgs,
+      redeployArgs,
+    ]);
+    expect(options.wait.mock.calls).toEqual([[30_000], [30_000]]);
+    expect(options.health).not.toHaveBeenCalled();
+  });
+
+  it('succeeds when a redeployment of the same release succeeds', async () => {
+    const { deployment, options } = scenario();
+    deployment.status = 'failed';
+    options.wait.mockImplementation(async () => {
+      deployment.status = 'succeeded';
+    });
+    await expect(deploy({ ...options, timeout: 30 * 60_000 })).resolves.toBe(
+      'succeeded',
+    );
+    expect(
+      options.cli.mock.calls.filter(([args]) => args.includes('--release')),
+    ).toHaveLength(1);
+    expect(options.summary).toHaveBeenCalledWith(
+      expect.stringContaining('Deployment：deployment-2'),
+    );
+    expect(options.health).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not redeploy when less than 30 seconds of the window remain', async () => {
     const { deployment, options } = scenario();
     deployment.status = 'failed';
     await expect(deploy(options)).rejects.toThrow(
-      `Deployment stopped (failed); ci-phase=deployment-poll; app=${appId}; release=release-1; deployment=deployment-1. Inspect Studio deployment logs; no automatic retry or rollback.`,
+      `Deployment stopped (failed) after 1 attempt(s); ci-phase=deployment-poll; app=${appId}; release=release-1; deployment=deployment-1. Inspect Studio deployment logs; no rollback.`,
     );
     expect(options.cli).toHaveBeenCalledTimes(2);
-    expect(options.health).not.toHaveBeenCalled();
+    expect(options.wait).not.toHaveBeenCalled();
+  });
+
+  it('reads the deployment again after 30 seconds when Studio is unreachable', async () => {
+    const { options } = scenario();
+    const cli = options.cli.getMockImplementation()!;
+    let unreachable = 2;
+    options.cli.mockImplementation(async (args: string[]) => {
+      if (args[1] === 'get' && args[0] === 'deploy' && unreachable-- > 0)
+        throw new StudioUnreachable('Studio read command failed');
+      return cli(args);
+    });
+    await expect(deploy({ ...options, timeout: 30 * 60_000 })).resolves.toBe(
+      'succeeded',
+    );
+    expect(options.wait.mock.calls).toEqual([[30_000], [30_000]]);
+    expect(
+      options.cli.mock.calls.filter(([args]) => args.includes('--release')),
+    ).toHaveLength(0);
+  });
+
+  it('does not retry a read that Studio refused', async () => {
+    const { options } = scenario();
+    const cli = options.cli.getMockImplementation()!;
+    options.cli.mockImplementation(async (args: string[]) => {
+      if (args[1] === 'get' && args[0] === 'deploy')
+        throw new Error('Studio read command failed: ACTION_REQUIRED; exit=3');
+      return cli(args);
+    });
+    await expect(deploy({ ...options, timeout: 30 * 60_000 })).rejects.toThrow(
+      'ACTION_REQUIRED',
+    );
     expect(options.wait).not.toHaveBeenCalled();
   });
 
@@ -344,7 +432,7 @@ describe('Studio deployment to reach', () => {
     deployment.releaseId = id;
     deployment.status = 'failed';
     await expect(deploy(options)).rejects.toThrow(
-      `Deployment stopped (failed); ci-phase=deployment-poll; app=${appId}; release=[unavailable]; deployment=[unavailable]. Inspect Studio deployment logs; no automatic retry or rollback.`,
+      `Deployment stopped (failed) after 1 attempt(s); ci-phase=deployment-poll; app=${appId}; release=[unavailable]; deployment=[unavailable]. Inspect Studio deployment logs; no rollback.`,
     );
     const summary = options.summary.mock.calls.flat().join(' ');
     expect(summary).not.toContain(id);
@@ -775,6 +863,33 @@ describe('Studio CLI process boundaries', () => {
     expect(caught?.cause).toBeUndefined();
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    [['deploy', 'get', 'reach', 'deployment-1', '--json'], { status: 2 }, true],
+    [['app', 'get', 'reach', '--json'], { code: 'ETIMEDOUT' }, true],
+    [['app', 'get', 'reach', '--json'], { status: 3 }, false],
+    [
+      ['deploy', '--app', 'reach', '--release', 'release-1', '--json'],
+      { status: 2 },
+      false,
+    ],
+    [uploadArgs, { status: 2 }, false],
+  ])(
+    'marks only unreachable reads as safe to repeat: %j %j',
+    (args, failure, unreachable) => {
+      const execute = vi.fn(() => {
+        throw Object.assign(new Error('secret-ticket'), failure);
+      });
+      let caught: Error | undefined;
+      try {
+        runStudioCli(env, args, execute);
+      } catch (error) {
+        caught = error as Error;
+      }
+      expect(caught instanceof StudioUnreachable).toBe(unreachable);
+      expect(caught?.message).not.toContain('secret-ticket');
+    },
+  );
 
   it('recognizes an actual timed-out child without leaking its output', () => {
     const execute = vi.fn((_file, _args, options) =>
