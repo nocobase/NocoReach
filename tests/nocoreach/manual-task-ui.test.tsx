@@ -381,6 +381,73 @@ it('preserves text paste and copied URLs, offers file picker/drop and reports up
   );
 });
 
+// The limits show only when a file breaks them (2026-11-04 user request), each in its own words.
+const limit = (key: string, value: string | number) =>
+  english[key as keyof typeof english].replace('{0}', String(value));
+
+it('lists no types or limits beside the idea or the description', () => {
+  render(<TaskCreatePage />);
+  expect(screen.getByLabelText('Upload attachments')).toBeInTheDocument();
+  expect(screen.queryByText(/PNG|20 MiB|20 MB|10 files/)).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+  manual();
+  expect(screen.getByLabelText(/Description and completion/)).toBeVisible();
+  expect(screen.queryByText(/PNG|20 MiB|20 MB|10 files/)).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(english).not.toHaveProperty('manualTask.mediaHint');
+});
+
+it('names a file of another type and leaves it out', () => {
+  render(<TaskCreatePage />);
+  fill();
+  paste([new File(['MZ'], 'setup.exe', { type: 'application/x-msdownload' })]);
+  expect(screen.getByRole('alert').textContent).toBe(
+    limit('manualTask.typeRejected', 'setup.exe'),
+  );
+  expect(request).not.toHaveBeenCalled();
+  expect(screen.queryByText('setup.exe')).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'Create', exact: true }),
+  ).toBeEnabled();
+});
+
+it('names a file over 20 MB and leaves it out', () => {
+  render(<TaskCreatePage />);
+  fill();
+  const large = new File(['fixture'], 'demo.mp4', { type: 'video/mp4' });
+  Object.defineProperty(large, 'size', { value: 20 * 1024 * 1024 + 1 });
+  fireEvent.change(screen.getByLabelText('Upload attachments'), {
+    target: { files: [large] },
+  });
+  expect(screen.getByRole('alert').textContent).toBe(
+    limit('manualTask.tooLarge', 'demo.mp4'),
+  );
+  expect(request).not.toHaveBeenCalled();
+  expect(screen.queryByText('demo.mp4')).toBeNull();
+});
+
+it('takes ten files and names the limit for the rest, until one is removed', () => {
+  request.mockImplementation(() => new Promise(() => undefined));
+  render(<TaskCreatePage />);
+  fill();
+  const files = Array.from(
+    { length: 11 },
+    (_, i) => new File(['fixture'], `shot-${i + 1}.png`, { type: 'image/png' }),
+  );
+  paste(files);
+  expect(request).toHaveBeenCalledTimes(10);
+  expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(10);
+  expect(screen.queryByText('shot-11.png')).toBeNull();
+  expect(screen.getByRole('alert').textContent).toBe(
+    limit('manualTask.tooMany', 10),
+  );
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]);
+  paste([files[10]]);
+  expect(request).toHaveBeenCalledTimes(11);
+  expect(screen.getByText('shot-11.png')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
 it('invalidates a draft on project/session change and prevents stale creation navigation', async () => {
   let finish!: (value: unknown) => void;
   request.mockImplementation(
