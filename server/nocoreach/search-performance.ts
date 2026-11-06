@@ -53,5 +53,12 @@ function ranks(rows,keywords){const want=new Set(keywords.map(k=>String(k).toLow
   o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best||(r.position===o.best&&r.impressions>o.bestImpressions)){o.best=r.position;o.bestImpressions=r.impressions;o.page=r.page;}}
  for(const k of Object.keys(out)){const o=out[k];out[k]={clicks:o.clicks,impressions:o.impressions,position:o.weight/o.impressions,page:o.page};}
  return out;}
+// `ranks` for any keywords from one pass over the rows: each query's sums and best page, as `ranks` keeps them, so a held
+// window answers a list of keywords without reading every pair again.
+function queryIndex(rows){const out=new Map();
+ for(const r of rows){const k=String(r.keyword||'').toLowerCase().trim();if(!k||!r.impressions)continue;let o=out.get(k);if(!o){o={clicks:0,impressions:0,weight:0,page:r.page,best:r.position,bestImpressions:r.impressions};out.set(k,o);}
+  o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best||(r.position===o.best&&r.impressions>o.bestImpressions)){o.best=r.position;o.bestImpressions=r.impressions;o.page=r.page;}}
+ return out;}
+function indexedRanks(index,keywords){const out={};for(const k of new Set(keywords.map(k=>String(k).toLowerCase().trim()))){const o=index.get(k);if(o)out[k]={clicks:o.clicks,impressions:o.impressions,position:o.weight/o.impressions,page:o.page};}return out;}
 
-export { ranks, totals, matcher, readFilter, pairSum, pairs, dimension, striking, movers, TABLE_LIMIT, STRIKING_MIN, STRIKING_MAX, MOVERS_LIMIT };
+export { ranks, queryIndex, indexedRanks, totals, matcher, readFilter, pairSum, pairs, dimension, striking, movers, TABLE_LIMIT, STRIKING_MIN, STRIKING_MAX, MOVERS_LIMIT };

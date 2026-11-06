@@ -149,3 +149,26 @@ it('answers from a saved copy only for a page that says it shows one; API keys a
   await actions.sitemaps(request({}), async () => {});
   expect(seen.slice(2)).toEqual([false, true]);
 });
+
+it('remembers the ranges chosen on a page across a restart, the latest two within six days', async () => {
+  const { plugin } = await fixture();
+  const views = new DataViews(plugin);
+  views.noteView('1', 'website', '90');
+  await settled();
+  vi.setSystemTime(Date.now() + 1000);
+  views.noteView('1', 'website', 'all');
+  views.noteView('1', 'website', 'custom');
+  views.noteView('1', 'website', '28');
+  views.noteView('1', 'pages', '28');
+  await settled();
+  vi.setSystemTime(Date.now() + 1000);
+  views.noteView('1', 'website', '7');
+  await settled();
+  const restarted = new DataViews(plugin);
+  expect(await restarted.recentViews('1', 'website')).toEqual(['7', 'all']);
+  expect(await restarted.recentViews('1', 'pages')).toEqual(['28']);
+  expect(await restarted.recentViews('1', 'search')).toEqual([]);
+  expect(await restarted.recentlyRead('1')).toBe(false);
+  vi.setSystemTime(Date.now() + 6 * DAY);
+  expect(await new DataViews(plugin).recentViews('1', 'website')).toEqual([]);
+});

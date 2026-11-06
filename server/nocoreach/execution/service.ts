@@ -84,6 +84,8 @@ function cleanVisibleChanges(v: unknown): VisibleChange[] {
 // Page text for the live check: tags and entities removed, spaces collapsed.
 export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
 const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.replace(/\s+/g, ' ').trim().toLowerCase());
+// How long the start card's article lookup of a task's pages is reused (`TaskService.placesLookup`).
+const PLACES_MS = 2 * 60000;
 export class TaskService {
   private get simulated() { return (this.p as { mock?: MockEngine }).mock?.enabled === true; }
   private busy = false;
@@ -1303,8 +1305,19 @@ export class TaskService {
     const task = await this.task(project, taskId), work = projectWork(task), urls = match ? pageUrlsOf({ task, work, pageIdentity: identity }) : startedPageUrls({ task, work, pageIdentity: identity });
     if (!urls.length) return { article: null, unchecked: false, pages: [] };
     const titles = new Map<string, string>((Array.isArray(s?.pages) ? s.pages : []).map((p: any) => [pageKey(p.url, identity), String(p.title || '').slice(0, 300)]));
-    const found = match ? await this.lookupPages(project, urls) : { article: null, unchecked: false, pages: urls.map(url => ({ url })) };
+    const found = match ? await this.placesLookup(project, urls) : { article: null, unchecked: false, pages: urls.map(url => ({ url })) };
     return { ...found, pages: found.pages.map(p => ({ ...p, ...(titles.get(pageKey(p.url, identity)) ? { title: titles.get(pageKey(p.url, identity)) } : {}) })) };
+  }
+  // The start card's lookup, asked of the publishing targets on every open of a task not started yet: a complete answer
+  // for the same pages and targets is reused for PLACES_MS, so opening the task again does not wait for the CMS. A start
+  // reads the targets itself (`lookupPages`), never this.
+  private placesCache = new Map<string, { at: number; value: { article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] } }>();
+  private async placesLookup(project: string, urls: string[]) {
+    const key = digest([project, urls, this.p.articleTargets?.targets?.(project) ?? null]), hit = this.placesCache.get(key);
+    if (hit && Date.now() - hit.at < PLACES_MS) return hit.value;
+    const value = await this.lookupPages(project, urls);
+    if (!value.unchecked) { if (this.placesCache.size >= 200) this.placesCache.clear(); this.placesCache.set(key, { at: Date.now(), value }); }
+    return value;
   }
   // The article lookup of every page; a lookup that fails leaves each page unchecked.
   private async lookupPages(project: string, urls: string[]): Promise<{ article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] }> {

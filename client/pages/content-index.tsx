@@ -25,7 +25,8 @@ import { useFreshData } from "./workspace-cache";
 import { getTypeLabels, type SiteSummary } from "./site-content-connect";
 import { RangePicker } from './range-picker';
 import { validRange, useRange, getRanges, defaultRanges } from './range-state';
-import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./content-detail";
+import { ContentDetail, activeTasks, tasksByPage, type ContentTask } from "./content-detail";
+import { useHeldData } from "#hooks/use-held-data";
 import "./data-views.css";
 import { formatChange, formatCount, formatDate, formatSigned } from '#lib/format';
 import type { PageIdentity } from '../../shared/page-identity.js';
@@ -67,13 +68,17 @@ export default function ContentPage() {
   const range = CONTENT_RANGES.includes(rangeValue.range) ? rangeValue.range : "28";
   const rangeLabel = getRanges().find(([k]) => k === range)?.[1] || $t('common.last28Days');
   const valid = validRange(rangeValue);
-  const { data, error: loadError } = useFreshData(project && valid ? `data-view:site-list:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range }, unwrap: "data" }), googleLocalFreshness);
+  const scope = project ? JSON.stringify([project.id, project.analyticsPropertyId, project.searchConsoleProperty]) : null;
+  const { data: read, error: loadError } = useFreshData(project && valid ? `data-view:site-list:v2:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range, view: "page" }, unwrap: "data" }), googleLocalFreshness);
+  // A range change keeps the table of the range shown until the new one is read, dimmed, instead of a skeleton.
+  const { data, held } = useHeldData(loadError ? undefined : read, scope);
   const tasks = useFreshData<ContentTask[]>(project ? taskListKey(project.id) : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   // A link finds the page it is whatever its scheme, www., trailing slash or language prefix (shared/page-search.ts).
   const hosts = useMemo(() => [...(data?.summary.sites || []).map((x) => x.origin), ...(project?.domains || [])], [data, project]);
+  const pageTasks = useMemo(() => tasksByPage(tasks, data?.identity), [tasks, data?.identity]);
   const rows = useMemo<Row[]>(() => findPages((data?.pages || []).filter((p) => type === "all" || (type === OUTSIDE ? p.outsideSitemap : p.type === type)), query, hosts, data?.identity).pages
-    .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url, data?.identity)) })), [data, type, query, tasks, hosts]);
+    .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(pageTasks(p.url)) })), [data, type, query, pageTasks, hosts]);
   // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so.
   const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{l}</p>)}</>;
   const columns = useMemo<ColumnDef<Row>[]>(() => [
@@ -138,7 +143,7 @@ export default function ContentPage() {
       {data && !data.summary.pages ? <EmptyState icon={<Files />} title={$t('contentIndex.onceWebsiteContentConnectedPages')} description={$t('contentIndex.giveAiWebsiteAddressReads')} action={<Button onClick={() => navigate("/connections?source=site")}>{$t('common.connectWebsiteContent')}</Button>} /> : null}
       {data && data.summary.pages > 0 ? (
         <>
-          <Card className="gap-0 py-0">
+          <Card className={`gap-0 py-0 transition-opacity ${held ? "opacity-60" : ""}`} aria-busy={held || undefined} data-held={held ? "" : undefined}>
             <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })} tools={<>
               <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('contentIndex.searchTitleUrl')} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>
               {type === OUTSIDE && data.outsideSitemap && data.outsideSitemap.total > data.outsideSitemap.shown ? <span className='text-xs text-muted-foreground' data-outside-cap=''>{$t('contentIndex.outsideSitemapCapped', { 0: data.outsideSitemap.shown, 1: data.outsideSitemap.total })}</span> : null}

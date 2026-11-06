@@ -18,6 +18,8 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 const SECTIONS=MEMORY_SECTIONS.map(([k])=>k),LABEL=Object.fromEntries(MEMORY_SECTIONS.map(([k,t])=>[k,t]));
 const WEEK=7*86400000,REVIEW_DAYS=90,PAGES=8,PAGE_TEXT=2500,ITEM_TEXT=2000,ITEMS=6,RESULTS=5,NEW_PAGES=30,PENDING=20,DISMISSED=300,DRAFT_SECTION=800;
+// How long the automatic choice of pages, read from the home page, answers the sources dialog again (`sources`).
+const AUTO_PAGES_MS=10*60000;
 const SOURCES={reviews:systemMessageText('memoryUpdate.taskFeedback'),results:systemMessageText('memoryUpdate.approvedDeliverables'),site:systemMessageText('competitorWatch.website'),draft:systemMessageText('memoryUpdate.websiteMaterials')};
 // Pages that say what the product is: about, product, features, pricing and the like, near the top of the site.
 const KEY_PATH=/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(about|about-us|company|pricing|prices?|plans?|products?|features?|solutions?|platform|why[a-z-]*|use-cases?|customers?|overview|enterprise|open-source)(?:\/[^/]*)?\/?$/i;
@@ -62,10 +64,14 @@ class MemoryUpdate{
   return out.map(({url,title,text})=>({url,title,text}));}
  // The pages and materials the next draft reads, for the person to look over and change before it runs: the chosen
  // ones if any (`custom`), else the automatic choice; `auto` is the automatic choice either way, to go back to.
- async sources(id){const project=await this.project(id),s=await this.state(id),auto=(await this.autoPages(id,project)).urls;
+ // The automatic choice reads the home page; the dialog showing it opens again within AUTO_PAGES_MS without reading it.
+ async sources(id){const project=await this.project(id),s=await this.state(id),auto=await this.autoUrls(id,project);
   const {items}=await this.p.knowledge.list(id),newest=items.slice(0,ITEMS).map(i=>i.id),chosen=(s.sources?.itemIds||[]).filter(x=>items.some(i=>i.id===x));
   return {urls:s.sources?.urls||auto,custom:Boolean(s.sources?.urls),auto,
    items:items.map(({id,title,category,addedAt})=>({id,title,category,addedAt})),itemIds:s.sources?.itemIds?chosen:newest,itemsCustom:Boolean(s.sources?.itemIds),autoItemIds:newest};}
+ async autoUrls(id,project){const cache=this.autoCache=this.autoCache||new Map(),key=JSON.stringify([String(id),project.domains?.[0]||'']),hit=cache.get(key);
+  if(hit&&Date.now()-hit.at<AUTO_PAGES_MS)return hit.urls;const {urls}=await this.autoPages(id,project);
+  if(cache.size>=100)cache.clear();cache.set(key,{at:Date.now(),urls});return urls;}
  // Keeps what the person chose: `urls` and `itemIds` replace the choice, null goes back to the automatic one, and a
  // field left out stays as it was. Only public https pages are read, at most eight pages and six materials.
  async setSources(id,v){const next={};
