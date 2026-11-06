@@ -54,6 +54,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
 import { RefreshButton } from '#components/reach/refresh-button';
 import { taskRecords, useProject } from '../reach-data';
+import { taskListKey } from '../task-list-key';
 import { PageSkeleton } from '../workspace-cache';
 import { type Work } from '../task-execution-types';
 import type { StrategyState } from './model';
@@ -97,7 +98,7 @@ type Task = {
 };
 // What Insights reads besides its state. ProjectInsights starts these together with the state rather than after it;
 // Insights reads them with the same keys, requests and freshness.
-const insightTasksKey = (projectId: number) => `insights-tasks:${projectId}`;
+const insightTasksKey = taskListKey;
 const insightTasks = (projectId: number) => taskRecords<Task>(projectId);
 const insightSummaryKey = (projectId: number) =>
   `insights-summary:${projectId}`;
@@ -135,15 +136,22 @@ export default function StrategyPage() {
   return <ProjectInsights key={project.id} projectId={project.id} />;
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
-  const [state, setState] = useState<StrategyState>(),
-    [error, setError] = useMessageState(''),
-    [attempt, setAttempt] = useState(0);
   const cache = useWorkspaceCache(),
     withChat = useOptionalOnlineChat() !== null,
-    store = insightsState(cache, projectId),
-    // A mount right after an access re-check unmounted the page takes over what that mount had started and read,
-    // instead of sending it again; any other mount reads afresh.
-    afterRecheck = useRecheckHandover(store),
+    store = insightsState(cache, projectId);
+  const [state, setState] = useState<StrategyState | undefined>(
+      () => store.shown,
+    ),
+    // Whether the state shown was read (or written) by this mount, not the one the store last showed.
+    [fresh, setFresh] = useState(false),
+    // A mount on the state last shown renders Insights at once, which reads what it needs itself; the early requests
+    // are for a mount that waits for the state (the first visit).
+    [showsAtOnce] = useState(() => store.shown !== undefined),
+    [error, setError] = useMessageState(''),
+    [attempt, setAttempt] = useState(0);
+  // A mount right after an access re-check unmounted the page takes over what that mount had started and read,
+  // instead of sending it again; any other mount reads afresh.
+  const afterRecheck = useRecheckHandover(store),
     [early] = useState(
       () => (afterRecheck && store.early) || new EarlyRequests(),
     ),
@@ -151,7 +159,22 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   useEffect(() => {
     store.keepEarly(early);
   }, [store, early]);
-  useEffect(() => store.subscribe(setState), [store]);
+  useEffect(
+    () =>
+      store.subscribe((next) => {
+        setState(next);
+        setFresh(true);
+        setError('');
+      }),
+    [store, setError],
+  );
+  // Reads the state again after a failed read while the state last shown stays on screen.
+  const retry = () => {
+    setError('');
+    store
+      .read()
+      .catch(() => setError(() => $t('strategy.notLoadInsightsTryAgain')));
+  };
   useEffect(() => {
     let active = true;
     setError('');
@@ -168,9 +191,14 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     const attemptKey = `${projectId}:${attempt}`;
     if (startedRef.current === attemptKey) return;
     startedRef.current = attemptKey;
-    // Keep the large task response behind state so their downloads do not compete.
+    if (showsAtOnce) return;
+    // The tasks start with the state too: "Waiting for you" waits for them, so asking for them once Insights mounted
+    // made the page ready a round trip later. On a slow link their download shares the bandwidth with the state's.
     early.start(cache, insightSummaryKey(projectId), () =>
       insightSummary(projectId),
+    );
+    early.start(cache, insightTasksKey(projectId), () =>
+      insightTasks(projectId),
     );
     cache
       .load(
@@ -180,7 +208,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
         googleLocalFreshness,
       )
       .catch(() => undefined);
-  }, [projectId, attempt, cache, early]);
+  }, [projectId, attempt, cache, early, showsAtOnce]);
   // Kept mounted in the same place while the state loads and after, so its request is not cancelled in between.
   const threads = withChat ? (
     <EarlyThreads projectId={projectId} attempt={attempt} early={early} />
@@ -210,6 +238,9 @@ function ProjectInsights({ projectId }: { projectId: number }) {
         store={store}
         afterRecheck={afterRecheck}
         early={early}
+        readError={error}
+        fresh={fresh}
+        onRetry={retry}
       />
     </>
   );
@@ -245,6 +276,9 @@ function Insights({
   store,
   afterRecheck,
   early,
+  readError,
+  fresh,
+  onRetry,
 }: {
   projectId: number;
   state: StrategyState;
@@ -252,6 +286,11 @@ function Insights({
   /** This mount follows an access re-check: its first reads may take an answer from the last RECHECK_REUSE_MS. */
   afterRecheck: boolean;
   early: EarlyRequests;
+  /** The state shown is the one last shown, as reading it again failed. */
+  readError?: string;
+  /** The state was read by this mount; until then it is the one Insights last showed. */
+  fresh: boolean;
+  onRetry: () => void;
 }) {
   const cache = useWorkspaceCache(),
     setState = store.write,
@@ -336,10 +375,13 @@ function Insights({
     void analysisRequest(projectId, 'status')
       .then((st) => {
         setAnalysis(st);
-        if (st.running) void followAnalysis();
+        if (st.running)
+          followAnalysis().catch(() =>
+            setError(() => $t('strategy.notLoadInsightsTryAgain')),
+          );
       })
       .catch(() => undefined);
-  }, [projectId, followAnalysis]);
+  }, [projectId, followAnalysis, setError]);
   async function act(fn: () => Promise<void>) {
     if (pendingRef.current) return;
     pendingRef.current = true;
@@ -482,11 +524,13 @@ function Insights({
       (s) => signalDisposition(s, state, tasks).next === 'judge',
     ).length,
     judgedRef = useRef(afterRecheck ? store.judged : '');
-  const taskDataAvailable = taskView.data !== undefined,
+  // Judged on the state and tasks this mount read, never on the ones last shown while they are read again.
+  const taskDataAvailable = taskView.data !== undefined && !taskView.loading,
     analyzedAt = state.insights?.generatedAt || '';
   useEffect(() => {
     const key = `${projectId}:${analyzedAt}`;
-    if (!unjudged || !taskDataAvailable || judgedRef.current === key) return;
+    if (!fresh || !unjudged || !taskDataAvailable || judgedRef.current === key)
+      return;
     judgedRef.current = key;
     store.markJudged(key);
     void judgeMissing(projectId)
@@ -496,7 +540,7 @@ function Insights({
         if (next) refreshNavBadges();
       })
       .catch(() => undefined);
-  }, [projectId, analyzedAt, unjudged, taskDataAvailable, store]);
+  }, [projectId, analyzedAt, unjudged, taskDataAvailable, store, fresh]);
   const situation = (
     <RequestBlock
       quiet
@@ -586,9 +630,19 @@ function Insights({
           />
         }
       />
-      {error && (
+      {(error || readError) && (
         <p role='alert' className='nr-error'>
-          {error}
+          {error || readError}
+          {!error && readError ? (
+            <Button
+              variant='outline'
+              size='sm'
+              className='ml-2'
+              onClick={onRetry}
+            >
+              {$t('common.retry')}
+            </Button>
+          ) : null}
         </p>
       )}
       {notice && (

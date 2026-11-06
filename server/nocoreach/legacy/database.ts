@@ -107,6 +107,7 @@ export class LegacyDatabase {
   private hooks = new Map<string, Hook[]>();
   private custom = new Map<string, LegacyRepository>();
   private current = new AsyncLocalStorage<LegacyTransaction>();
+  private refused?: () => boolean;
   readonly sequelize: {
     transaction<T>(fn: (t: LegacyTransaction) => Promise<T>): Promise<T>;
     query(sql: string, options?: Values): Promise<unknown>;
@@ -120,6 +121,21 @@ export class LegacyDatabase {
       transaction: (fn) => this.transaction(fn),
       query: (sql, options) => this.query(sql, options),
     };
+  }
+
+  /**
+   * Refuses transactions and writes while `refused()` holds: for the timer firings still running at shutdown
+   * (`LegacyApp.abandon`), so the closing network is not recorded as their failure.
+   */
+  refuseWritesWhen(refused: () => boolean) {
+    this.refused = refused;
+  }
+
+  private assertWritable() {
+    if (this.refused?.())
+      throw Object.assign(new Error('NocoReach is shutting down: this timer firing writes nothing more'), {
+        code: 'NR_SHUTTING_DOWN',
+      });
   }
 
   /** Classic `db.on('nrTasks.beforeCreate', fn)`. */
@@ -157,6 +173,7 @@ export class LegacyDatabase {
   }
 
   private async transaction<T>(fn: (t: LegacyTransaction) => Promise<T>): Promise<T> {
+    this.assertWritable();
     // A transaction opened inside another one joins it, as one Postgres connection would have serialized them.
     const outer = this.current.getStore();
     if (outer) return fn(outer);
@@ -259,6 +276,7 @@ export class LegacyDatabase {
         return target(options).count(filter ? { filter } : {});
       },
       create: async (options: Values) => {
+        this.assertWritable();
         const now = new Date();
         const values: Values = { ...(options.values as Values) };
         if (values.id == null) values.id = this.ids.generate();
@@ -274,9 +292,11 @@ export class LegacyDatabase {
         return legacyRecord(result.record as Values);
       },
       update: async (options: Values) => {
+        this.assertWritable();
         const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped update of ${name}`);
-        const values: Values = { ...(options.values as Values), updatedAt: new Date() };
+        // `silent` keeps the record's updatedAt, as the classic option did: a rewrite of stored data that is not an edit.
+        const values: Values = { ...(options.values as Values), ...(options.silent ? {} : { updatedAt: new Date() }) };
         if (values.createdAt !== undefined) values.createdAt = timestamp(values.createdAt);
         delete values.id;
         validateStringLengths(await collectionFor(options), values);
@@ -284,6 +304,7 @@ export class LegacyDatabase {
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
       },
       destroy: async (options: Values) => {
+        this.assertWritable();
         const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped delete of ${name}`);
         const result = await target(options).deleteMany({ filter });

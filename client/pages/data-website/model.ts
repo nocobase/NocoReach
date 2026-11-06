@@ -83,7 +83,7 @@ export type TodayTotals = {
   sessions: number;
   keyEvents: number;
 };
-export type Today = {
+export type Today = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
   timeZone: string;
@@ -132,6 +132,8 @@ export type Realtime = {
   events: { name: string; count: number }[];
   /** Queries GA4 refused, left out on their own, with Google's reason. */
   missing?: { part: string; reason: string }[];
+  /** Read for the card only: the figures and the minutes, with empty lists (server/nocoreach/website-report.ts). */
+  summary?: boolean;
 };
 
 const ratio = (a?: number | null, b?: number | null) =>

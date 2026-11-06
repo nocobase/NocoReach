@@ -518,3 +518,33 @@ it('all-time search and page figures include stored history and custom caches ke
  const two=await views.pageFigures(projectId,'custom',dateAt(-13),dateAt(-7));
  expect(one.window.start).toBe(dateAt(-6));expect(two.window.start).toBe(dateAt(-13));
 });
+
+it('keeps the figures of a site with many addresses, so Pages does not read every synced day again', async () => {
+  const { views } = await fixture(paths[0]);
+  // About 3 MB as objects, past the cache's 2 MB an entry; packed it is kept.
+  const rows = (n: number, fields: string[]) =>
+    Array.from({ length: n }, (_, i) => ({
+      host: i % 2 ? 'docs.example.test' : 'example.test',
+      path: `/docs/section-${i}/a-rather-long-page-name`,
+      current: Object.fromEntries(fields.map((f, j) => [f, i + j])),
+      previous: Object.fromEntries(fields.map((f) => [f, 0])),
+    }));
+  const built = {
+    window: windowFor(end, '28'),
+    days: {
+      gsc: { current: 28, previous: 28 },
+      ga4: { current: 28, previous: 28 },
+    },
+    search: rows(12000, ['clicks', 'impressions']),
+    web: rows(12000, ['views']),
+  };
+  expect(Buffer.byteLength(JSON.stringify(built))).toBeGreaterThan(
+    2 * 1024 * 1024,
+  );
+  const build = vi
+    .spyOn(views, 'buildPageFigures')
+    .mockResolvedValue(structuredClone(built));
+  expect(await views.pageFigures(projectId, '28')).toEqual(built);
+  expect(await views.pageFigures(projectId, '28')).toEqual(built);
+  expect(build).toHaveBeenCalledTimes(1);
+});

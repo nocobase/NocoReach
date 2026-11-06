@@ -538,7 +538,40 @@ it.each([401, 403, 404])(
   },
 );
 
-it('defers tasks until the state and reads each dependency once', async () => {
+it('starts the tasks with the state and reads each dependency once', async () => {
+  const state = deferred<unknown>();
+  const taskList = deferred<unknown>();
+  const answer = action.getMockImplementation()!;
+  action.mockImplementation(
+    (resource: string, operation: string, options: never) =>
+      resource === 'nrStrategy' && operation === 'state'
+        ? state.promise
+        : answer(resource, operation, options),
+  );
+  tasks.mockReturnValue(taskList.promise);
+  requests.metrics.mockResolvedValue(values.metrics);
+  requests.summary.mockResolvedValue(values.summary);
+  await setup();
+  // The tasks, the situation and the metrics all start while the state is still loading.
+  await waitFor(() => {
+    expect(tasks).toHaveBeenCalledTimes(1);
+    expect(requests.summary).toHaveBeenCalledTimes(1);
+    expect(requests.metrics).toHaveBeenCalledTimes(1);
+  });
+  await act(async () =>
+    state.resolve({ revision: 1, goal: null, proposals: [] }),
+  );
+  await screen.findByText(known.summary, { exact: false });
+  await screen.findByText(known.metrics);
+  await act(async () => taskList.resolve(values.tasks));
+  await screen.findByText(known.tasks, { exact: false });
+  // Insights takes over the requests started for it instead of sending them again.
+  expect(tasks).toHaveBeenCalledTimes(1);
+  expect(requests.summary).toHaveBeenCalledTimes(1);
+  expect(requests.metrics).toHaveBeenCalledTimes(1);
+});
+
+it('shows tasks that answered before the state once Insights mounts', async () => {
   const state = deferred<unknown>();
   const answer = action.getMockImplementation()!;
   action.mockImplementation(
@@ -548,24 +581,71 @@ it('defers tasks until the state and reads each dependency once', async () => {
         : answer(resource, operation, options),
   );
   tasks.mockResolvedValue(values.tasks);
-  requests.metrics.mockResolvedValue(values.metrics);
   requests.summary.mockResolvedValue(values.summary);
   await setup();
-  // Small reads start with state; the task payload waits for Insights to mount.
-  await waitFor(() => {
-    expect(tasks).not.toHaveBeenCalled();
-    expect(requests.summary).toHaveBeenCalledTimes(1);
-    expect(requests.metrics).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(tasks).toHaveBeenCalledTimes(1));
+  // Let the tasks' answer settle well before the state's.
+  await act(async () => {
+    await Promise.resolve();
   });
   await act(async () =>
     state.resolve({ revision: 1, goal: null, proposals: [] }),
   );
+  await screen.findByText(known.tasks, { exact: false });
   await screen.findByText(known.summary, { exact: false });
-  await screen.findByText(known.metrics);
-  // Insights takes over the requests started for it instead of sending them again.
   expect(tasks).toHaveBeenCalledTimes(1);
-  expect(requests.summary).toHaveBeenCalledTimes(1);
-  expect(requests.metrics).toHaveBeenCalledTimes(1);
+});
+
+it('shows the state it last showed while a later visit reads it again', async () => {
+  requests.summary.mockResolvedValue(values.summary);
+  tasks.mockResolvedValue(values.tasks);
+  const view = await setup();
+  await screen.findByText(known.summary, { exact: false });
+  const reads = () =>
+    action.mock.calls.filter(
+      ([resource, operation]) =>
+        resource === 'nrStrategy' && operation === 'state',
+    ).length;
+  const before = reads();
+  const state = deferred<unknown>();
+  const answer = action.getMockImplementation()!;
+  action.mockImplementation(
+    (resource: string, operation: string, options: never) =>
+      resource === 'nrStrategy' && operation === 'state'
+        ? state.promise
+        : answer(resource, operation, options),
+  );
+  view.show(false);
+  view.show(true);
+  await waitFor(() => expect(reads()).toBe(before + 1));
+  // Insights is there at once, not its skeleton, while the state is read again.
+  expect(screen.getByText(known.summary, { exact: false })).toBeInTheDocument();
+  await act(async () =>
+    state.resolve({ revision: 2, goal: null, proposals: [] }),
+  );
+  expect(screen.getByText(known.summary, { exact: false })).toBeInTheDocument();
+  // Each dependency is still read once for the visit.
+  expect(tasks).toHaveBeenCalledTimes(2);
+  expect(requests.summary).toHaveBeenCalledTimes(2);
+});
+
+it('keeps the state it last showed, and says so, when reading it again fails', async () => {
+  requests.summary.mockResolvedValue(values.summary);
+  const view = await setup();
+  await screen.findByText(known.summary, { exact: false });
+  const answer = action.getMockImplementation()!;
+  action.mockImplementation(
+    (resource: string, operation: string, options: never) =>
+      resource === 'nrStrategy' && operation === 'state'
+        ? Promise.reject(new Error('state unavailable'))
+        : answer(resource, operation, options),
+  );
+  view.show(false);
+  view.show(true);
+  expect(
+    await screen.findByText("Couldn't load insights. Try again."),
+  ).toBeInTheDocument();
+  expect(screen.getByText(known.summary, { exact: false })).toBeInTheDocument();
 });
 
 it('reads again when the state fails and its retry succeeds', async () => {

@@ -150,38 +150,40 @@ export function useNavSourcesState(): {
 }
 
 // Mounted inside MeProvider: its session/authorization key discards all badge state on identity changes.
+// The shell below stays in one place in the tree whether or not the member is known yet: wrapping it in another
+// component once `nrMembers:me` answered remounted every page and sent all their reads again (2026-11-05).
 export function NavBadgeProvider({ children }: PropsWithChildren) {
   const { me } = useMe();
-  if (!me?.role)
-    return (
-      <Context.Provider
-        value={{
-          projectId: null,
-          status: 'loading',
-          counts: null,
-          sources: null,
-          fresh: false,
-        }}
+  const userId = me?.role ? String(me.id) : null;
+  const [project, setProject] = useState<CurrentProject>(NO_PROJECT);
+  return (
+    <>
+      {userId ? <ProjectOfMember onChange={setProject} /> : null}
+      <ProjectBadges
+        projectId={userId ? project.projectId : null}
+        userId={userId ?? ''}
+        error={userId ? project.error : false}
       >
         {children}
-      </Context.Provider>
-    );
-  return <AuthorizedBadges userId={String(me.id)}>{children}</AuthorizedBadges>;
-}
-function AuthorizedBadges({
-  userId,
-  children,
-}: PropsWithChildren<{ userId: string }>) {
-  const { project, error } = useProject();
-  return (
-    <ProjectBadges
-      projectId={project && !error ? String(project.id) : null}
-      userId={userId}
-      error={!!error}
-    >
-      {children}
-    </ProjectBadges>
+      </ProjectBadges>
+    </>
   );
+}
+type CurrentProject = { projectId: string | null; error: boolean };
+const NO_PROJECT: CurrentProject = { projectId: null, error: false };
+// The project chosen in the header, read only for a member.
+function ProjectOfMember({
+  onChange,
+}: {
+  onChange: (project: CurrentProject) => void;
+}) {
+  const { project, error } = useProject();
+  const projectId = project && !error ? String(project.id) : null,
+    failed = !!error;
+  useEffect(() => {
+    onChange({ projectId, error: failed });
+  }, [onChange, projectId, failed]);
+  return null;
 }
 function ProjectBadges({
   projectId,

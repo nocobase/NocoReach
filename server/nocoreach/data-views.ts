@@ -52,6 +52,20 @@ const calendarDate=(d:unknown):d is string=>typeof d==='string'&&/^\d{4}-\d{2}-\
 const googleDisconnected=(e:unknown)=>Boolean(e&&typeof e==='object'&&'code' in e&&e.code==='NOCOREACH_GOOGLE_NOT_CONNECTED');
 // Partitions store ISO calendar dates as strings. The current Repository supports string $in,
 // not numeric/date comparison operators; include at most the selected and previous 490-day windows.
+// Page figures are kept packed: each page a row of numbers after an index into one list of hosts. As objects a site
+// with some 6,000 addresses outside its sitemap passed the cache's 2 MB an entry over 28 days, so Pages read every
+// synced day again on each visit (2.3 s on 2026-11-06).
+type FigureRow={host:string;path:string;current:Record<string,number>;previous:Record<string,number>};
+type PageFigures={window:unknown;days:unknown;search:FigureRow[];web:FigureRow[]};
+type PackedFigures={window:unknown;days:unknown;hosts:string[];search:(string|number)[][];web:(string|number)[][]};
+const SEARCH_FIELDS=['clicks','impressions'],WEB_FIELDS=['views'];
+function packFigures(f:PageFigures|null):PackedFigures|null{if(!f)return null;const hosts:string[]=[],at=new Map<string,number>();
+ const host=(h:string)=>{let i=at.get(h);if(i===undefined){i=hosts.length;hosts.push(h);at.set(h,i);}return i;};
+ const pack=(rows:FigureRow[],fields:string[])=>rows.map(r=>[host(r.host),r.path,...fields.map(n=>r.current[n]||0),...fields.map(n=>r.previous[n]||0)]);
+ return {window:f.window,days:f.days,hosts,search:pack(f.search,SEARCH_FIELDS),web:pack(f.web,WEB_FIELDS)};}
+function unpackFigures(f:PackedFigures|null):PageFigures|null{if(!f)return null;
+ const unpack=(rows:(string|number)[][],fields:string[])=>rows.map(([h,path,...n])=>({host:f.hosts[Number(h)],path:String(path),current:Object.fromEntries(fields.map((k,i)=>[k,Number(n[i])])),previous:Object.fromEntries(fields.map((k,i)=>[k,Number(n[fields.length+i])]))}));
+ return {window:f.window,days:f.days,search:unpack(f.search,SEARCH_FIELDS),web:unpack(f.web,WEB_FIELDS)};}
 function partitionDates(start:unknown,end:unknown,all=false){if(!calendarDate(start)||!calendarDate(end))fail(systemMessageText('dataViews.pickValidStartEndDates'));if(days(start,end)>(all?36600:980))fail(systemMessageText('dataViews.customRangesUp16Months'));const dates:string[]=[];for(let d=start;d<=end;d=add(d,1))dates.push(d);return {$in:dates};}
 // Same window rules as the Portal period helper: N days ending at the cutoff, or calendar months back from it.
 function windowFor(end,range,from,to,first){if(range==='all'){const start=calendarDate(first)&&first<=end?first:end;return {start,end,days:days(start,end),previousStart:add(start,-1),previousEnd:add(start,-1),all:true};}if(range==='custom'){if(!calendarDate(from)||!calendarDate(to)||from>to)fail(systemMessageText('dataViews.pickValidStartEndDates'));const n=days(from,to);if(from>end)fail(systemMessageText('dataViews.pickValidStartEndDates'));if(n>490)fail(systemMessageText('dataViews.customRangesUp16Months'));const e=to<end?to:end;const count=days(from,e);return {start:from,end:e,days:count,previousStart:add(from,-count),previousEnd:add(from,-1)};}
@@ -129,11 +143,12 @@ function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.stat
 interface SearchRequest { range?: string; from?: string; to?: string; country?: string; key?: string; dimension?: string; details?: boolean; compare?: boolean; queryFilter?: unknown; pageFilter?: unknown; }
 interface SearchWindow { start: string; end: string; previousStart: string; previousEnd: string; days: number; all?: boolean; }
 interface SearchFilters { queryFilter?: {operator: string;expression: string} | null; pageFilter?: {operator: string;expression: string} | null; }
+const GOOGLE_TOKEN_KEEP_MS=45*60*1000;
 class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.readAt=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
  // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
@@ -144,8 +159,10 @@ class DataViews{
  // `family` names the view whatever its dates, so a new window answers from the previous one while it is read; the report
  // then carries the `window` it holds.
  report(id,identity,read,w,family){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),family?{family}:{});}
- // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
- token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
+ // An access token lasts an hour; keep it for 45 minutes, as WebsiteReport does, so each Search Console report a cache
+ // misses does not first refresh it with Google (2026-11-05). Kept per project, site, authorization and mock scope, so a
+ // new authorization or another upstream reads a new one; never inside a transaction.
+ token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]),hit=this.tokens.get(key);if(hit&&Date.now()-hit.at<GOOGLE_TOKEN_KEEP_MS)return Promise.resolve(hit.token);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).then(token=>{this.tokens.set(key,{at:Date.now(),token});return token;}).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));
@@ -288,7 +305,7 @@ class DataViews{
   const settledThrough=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):null,settled=Boolean(settledThrough)&&w.end<=settledThrough;
   return {connected:true,cutoff,window:w,settledThrough,...await this.ga4.row(id,property,w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled,...(settledThrough?{settledThrough}:{}),view:[range,String(v.from||''),String(v.to||'')]})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
- async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
+ async websiteRealtime(id,v={}){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'),v.summary===true)};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
  // and saved per window.
  async searchCountries(id,v){if(!calendarDate(v.start)||!calendarDate(v.end)||v.start>v.end)fail(systemMessageText('dataViews.invalidDate'));let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
@@ -353,7 +370,7 @@ class DataViews{
  // samples. Pages are host and path; GA4 rows synced before hosts were kept have host ''. Search Console counts leave out
  // anonymised queries. Built once per synced data and range, and saved like 搜索表现.
  async pageFigures(id,range,from,to){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
-  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,String(range),from||null,to||null,3],()=>this.buildPageFigures(id,String(range),link,from,to),value=>value?GOOGLE_HISTORY_CACHE_MS:0);}
+  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,String(range),from||null,to||null,4],async()=>packFigures(await this.buildPageFigures(id,String(range),link,from,to)),value=>value?GOOGLE_HISTORY_CACHE_MS:0,unpackFigures);}
  async buildPageFigures(id,range,link,from,to){const snaps=await this.p.sync.snapshots(id),end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
   const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,range,from,to,first),repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
   const read=(source,grain,resource)=>resource?repo.find({filter:{projectId:id,source,grain,resource,date:dates},fields:['date','payload']}):Promise.resolve([]);
@@ -387,6 +404,6 @@ class DataViews{
   // Only a page that says it shows a saved copy (`acceptSaved`) gets one while a new report is read. API keys, scripts and
   // the command line wait for the new report and see its failure, as they did before saved copies.
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const read=()=>fn(id,v,ctx);ctx.body=v.acceptSaved===true?await read():await waitForFresh(read);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteTables:wrap((id,v)=>this.websiteTables(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteTables','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteTables:wrap((id,v)=>this.websiteTables(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap((id,v)=>this.websiteRealtime(id,v)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteTables','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 export { websiteView, withFresh, redditCard, DataViews, packagesCard, hackernewsCard, windowFor, metric, series, netChange, starRows, githubCard, communityCard, contentCard, gscCard };

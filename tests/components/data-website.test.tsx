@@ -403,9 +403,50 @@ describe('访问', () => {
         await vi.advanceTimersByTimeAsync(3 * 60000);
       });
       expect(reads()).toBe(6);
+      // The card asks for its figures only (two GA4 requests); the details for everything.
+      const bodies = action.mock.calls
+        .filter(([, name]) => name === 'websiteRealtime')
+        .map(
+          ([, , options]) => (options as { body: { summary?: boolean } }).body,
+        );
+      expect(bodies.map((b) => b.summary === true)).toEqual([
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+      ]);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps the newer figures the details read after they are closed', async () => {
+    action.mockImplementation(
+      async (_resource: string, name: string, options?: unknown) => {
+        if (name === 'website') return firstOf(report);
+        if (name === 'websiteTables') return restOf(report);
+        if (name === 'websiteToday') return today;
+        if (name === 'websiteRealtime')
+          return (options as { body: { summary?: boolean } }).body.summary
+            ? { ...live, summary: true, pages: [] }
+            : { ...live, fetchedAt: '2026-10-14T06:25:00Z', users: 52 };
+        throw new Error(`unexpected ${name}`);
+      },
+    );
+    renderPage();
+    const users = () =>
+      document.querySelector('[data-realtime-users]')?.textContent;
+    await waitFor(() => expect(users()).toBe('37'));
+    await userEvent.click(screen.getByRole('button', { name: '实时详情' }));
+    const drawer = await screen.findByRole('dialog');
+    await within(drawer).findByText('Docs');
+    await userEvent.click(
+      within(drawer).getByRole('button', { name: '关闭详情' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(users()).toBe('52');
   });
 
   it('tries realtime again after a minute when it failed, though the card otherwise reads it every half hour', async () => {
@@ -625,6 +666,37 @@ describe('访问', () => {
     const drawer = await screen.findByRole('dialog');
     expect(within(drawer).getByText('正在看的页面')).toBeTruthy();
     expect(within(drawer).getByText('美国')).toBeTruthy();
+  });
+
+  it('shows the day’s last read of 今天 at once, saying it is being replaced', async () => {
+    const savedAt = Date.parse('2026-10-14T06:00:00Z');
+    action.mockImplementation(
+      async (
+        _resource: string,
+        name: string,
+        init?: { body?: Record<string, unknown> },
+      ) => {
+        if (name === 'website') return firstOf(report);
+        if (name === 'websiteTables') return restOf(report);
+        if (name === 'websiteToday') {
+          expect(init?.body?.acceptSaved).toBe(true);
+          return {
+            ...today,
+            savedAt,
+            refreshing: true,
+            cacheExpiresAt: Date.now() + 5000,
+          };
+        }
+        if (name === 'websiteRealtime') return live;
+        throw new Error(`unexpected ${name}`);
+      },
+    );
+    renderPage();
+    const card = await screen
+      .findByText('今天浏览量')
+      .then((el) => el.closest('[data-today-card]') as HTMLElement);
+    await waitFor(() => expect(within(card).getByText('1,284')).toBeTruthy());
+    expect(card.querySelector('[data-saved-report="updating"]')).toBeTruthy();
   });
 
   it('says why 实时 could not be read, and which parts GA4 left out', async () => {

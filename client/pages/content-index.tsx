@@ -20,6 +20,7 @@ import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { taskRecords, useProject } from "./reach-data";
+import { taskListKey } from "./task-list-key";
 import { useFreshData } from "./workspace-cache";
 import { getTypeLabels, type SiteSummary } from "./site-content-connect";
 import { RangePicker } from './range-picker';
@@ -67,7 +68,7 @@ export default function ContentPage() {
   const rangeLabel = getRanges().find(([k]) => k === range)?.[1] || $t('common.last28Days');
   const valid = validRange(rangeValue);
   const { data, error: loadError } = useFreshData(project && valid ? `data-view:site-list:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range }, unwrap: "data" }), googleLocalFreshness);
-  const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
+  const tasks = useFreshData<ContentTask[]>(project ? taskListKey(project.id) : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   // A link finds the page it is whatever its scheme, www., trailing slash or language prefix (shared/page-search.ts).
   const hosts = useMemo(() => [...(data?.summary.sites || []).map((x) => x.origin), ...(project?.domains || [])], [data, project]);

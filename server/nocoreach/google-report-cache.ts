@@ -268,7 +268,15 @@ export class GoogleReportCache {
     };
     // Oversized results still reach the caller, but never turn the shared snapshot into a large blob. A result that is
     // not kept also retires the old copy, or every read would answer from it and ask for a new one again.
-    const kept = entry.expiresAt > at && bytes(entry) <= MAX_ENTRY_BYTES;
+    const size = entry.expiresAt > at ? bytes(entry) : 0;
+    const kept = entry.expiresAt > at && size <= MAX_ENTRY_BYTES;
+    // Every read of a report too large to keep builds it again, so it is logged (Pages' figures did on 2026-11-06).
+    if (entry.expiresAt > at && !kept)
+      this.logger?.warn('NocoReach report too large to keep', {
+        namespace: this.namespace,
+        projectId,
+        bytes: size,
+      });
     this.retire(key, family);
     if (kept) this.remember(entry);
     await this.save(projectId, key, family, kept ? entry : undefined);

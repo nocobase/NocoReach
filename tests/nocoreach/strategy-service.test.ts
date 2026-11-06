@@ -50,6 +50,34 @@ test('a change handed off on its own keeps its change and page on the task',asyn
  await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',page:'javascript:alert(1)'});
  assert.equal('page' in writes[1].values.evidence,false);
 });
+test('a change handed off on its own stands on the latest analysis when it holds the change, and computes one otherwise',async()=>{
+ const {StrategyService}=__strategy_service;
+ const writes=[];const service=new StrategyService({db:{getRepository:()=>({create:async options=>{writes.push(options);return {id:writes.length};}})}});
+ const signals={items:[{key:'change-a',url:'https://example.com/a',facts:['a']},{key:'change-b',facts:['b']}]};
+ const state={goal:null,proposals:[],insights:{generatedAt:new Date().toISOString(),items:[],evidence:{capturedAt:'today',signals}}};
+ let computed=0;service.context=async()=>{computed++;return {evidence:{capturedAt:'now',signals:{items:[{key:'change-c',facts:['c']}]}}};};
+ service.state=async()=>state;service.mutate=async(_id,_v,fn)=>{await fn(state,{});return state;};
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',signalKey:'change-a'});
+ assert.equal(computed,0,'the latest analysis holds the change');
+ assert.deepEqual(writes[0].values.evidence.context.signals.items,[signals.items[0]]);assert.equal(writes[0].values.evidence.context.capturedAt,'today');
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',signalKey:'change-c'});
+ assert.equal(computed,1,'a change the latest analysis does not hold is computed');assert.equal(writes[1].values.evidence.context.signals.items[0].key,'change-c');
+ state.insights.generatedAt=new Date(Date.now()-3*86400000).toISOString();
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',signalKey:'change-a'});
+ assert.equal(computed,2,'an analysis days old is not stood on');assert.equal(writes[2].values.evidence.context.signals.items[0].key,'change-a','when the analysis computed now has lost the change, the one seen on Insights is kept');
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o'});
+ assert.equal(computed,2,'a hand-off citing no change computes nothing');assert.equal(writes[3].values.evidence.context,undefined);
+ assert.ok(state.proposals.every(p=>!('evidence' in p)),'plans keep no evidence');
+});
+test('an opportunity of an earlier, cut-down analysis is handed off with the changes it cites',async()=>{
+ const {StrategyService}=__strategy_service;const {slimBatch}=await import('../../server/nocoreach/analysis-evidence.js');
+ let saved;const service=new StrategyService({db:{getRepository:()=>({create:async({values})=>{saved=values;return {id:9};}})}});
+ const batch=slimBatch({generatedAt:'2026-10-01T08:00:00.000Z',items:[{id:'old',title:'Old',signalIds:['s1']}],evidence:{capturedAt:'then',signals:{items:[{key:'s1',url:'https://example.com/1'},{key:'s2'}]}}});
+ const state={proposals:[],insights:{items:[],evidence:{}},insightHistory:[batch]};let computed=0;service.context=async()=>{computed++;return {evidence:{}};};
+ service.mutate=async(_id,_v,fn)=>{await fn(state,{});return state;};
+ await service.confirmDirection(1,{title:'Action',brief:'Details',objective:'Goal',insightId:'old'});
+ assert.equal(computed,0);assert.deepEqual(saved.evidence.context.signals.items,[{key:'s1',url:'https://example.com/1'}]);assert.equal(saved.evidence.context.capturedAt,'then');
+});
 test('a data page hand-off records who found it and from which page',async()=>{
  // Found by <name> on the task (2026-10-22): the creator and the page they handed it off from.
  const {StrategyService}=__strategy_service;
@@ -86,13 +114,19 @@ test('opportunity validation rejects missing evidence and strips generated ident
  assert.equal(card.source,'mixed');assert.ok(!('id' in card));
  assert.ok(!('reason' in card));assert.equal(insightInput({title:'t',reason:' 曝光 5,848 '+'x'.repeat(400),observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g'}).reason.length,300);
 });
-test('updating insights archives complete prior batches without changing their ids or evidence',async()=>{
- const {StrategyService}=__strategy_service;const service=new StrategyService({});
- const prior={generatedAt:'old',items:[{id:'old-id',title:'Old'}],evidence:{availableThrough:'2026-09-01'}};const state={insights:prior};
- service.context=async()=>({evidence:{availableThrough:'2026-09-24'}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+test('updating insights keeps each earlier analysis with its ids and cited changes, and archives its whole evidence once',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const archived=[];service.archive=async(_id,batch)=>{archived.push(batch);};
+ const signals={analysisRunId:'run-1',analysisSnapshot:{config:{watchDays:7},catalog:[{id:'rule'}]},items:[{key:'a',facts:['cited']},{key:'b',facts:['not cited']}]};
+ const prior={generatedAt:'old',items:[{id:'old-id',title:'Old',signalIds:['a']}],signalReviews:{a:{verdict:'do'}},evidence:{availableThrough:'2026-09-01',periodDays:28,searchQueries:[{q:'x'}],signals}};const state={insights:prior};
+ service.context=async()=>({evidence:{availableThrough:'2026-09-24',signals:{analysisSnapshot:{config:{watchDays:7},catalog:[{id:'rule'}]},items:[]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  const card={title:'New',observation:'Fact',meaning:'Hypothesis',evidenceText:'GSC',limitation:'Sample',suggestion:'Investigate',objective:'Improve',source:'search'};
- await service.saveInsights(1,{insights:[card]});assert.deepEqual(state.insightHistory,[prior]);const second=state.insights;
- await service.saveInsights(1,{insights:[card]});assert.deepEqual(state.insightHistory,[second,prior]);assert.equal(state.insightHistory[1].items[0].id,'old-id');
+ await service.saveInsights(1,{insights:[card]});
+ assert.deepEqual(archived,[prior],'the whole evidence is archived as it was');
+ const [kept]=state.insightHistory;assert.equal(kept.generatedAt,'old');assert.deepEqual(kept.items,prior.items);assert.deepEqual(kept.signalReviews,prior.signalReviews);
+ assert.deepEqual(kept.evidence.signals.items,[signals.items[0]]);assert.equal(kept.evidence.signals.analysisRunId,'run-1');assert.equal(kept.evidence.availableThrough,'2026-09-01');assert.equal('searchQueries' in kept.evidence,false);
+ assert.deepEqual(state.insights.evidence.signals.analysisSnapshot,{config:{watchDays:7}},'the current analysis keeps its config without the rule catalog');
+ const second=state.insights;
+ await service.saveInsights(1,{insights:[card]});assert.equal(state.insightHistory.length,2);assert.equal(state.insightHistory[0].generatedAt,second.generatedAt);assert.equal(state.insightHistory[1],kept,'an earlier analysis already cut down is kept as it is');assert.equal(archived.length,2);
 });
 test('historical opportunities use original evidence when confirmed into a task',async()=>{
  const {StrategyService}=__strategy_service;let saved;const service=new StrategyService({db:{getRepository:()=>({create:async({values})=>{saved=values;return {id:7};}})}});
@@ -100,7 +134,7 @@ test('historical opportunities use original evidence when confirmed into a task'
  await service.confirmDirection(1,{title:'Action',brief:'Details',objective:'Goal',insightId:'old'});assert.equal(saved.evidence.context.availableThrough,'old');assert.equal(saved.evidence.insight.id,'old');
 });
 test('stable opportunity identity preserves discussion and manual decisions when evidence updates',async()=>{
- const {StrategyService}=__strategy_service;const service=new StrategyService({});const card={id:'stable',title:'Guide',observation:'Old fact',meaning:'m',evidenceText:'Old evidence',limitation:'l',suggestion:'Write onboarding',objective:'Help users',source:'website',target:'/docs',audience:'developers'};const state={proposals:[],insights:{generatedAt:'old',items:[card]},opportunityMeta:{stable:{priority:'low',status:'pending'}}};service.context=async()=>({evidence:{}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};await service.saveInsights(1,{insights:[{...card,observation:'New fact',evidenceText:'New evidence',priority:'high'}]});assert.equal(state.insights.items[0].id,'stable');assert.equal(state.insights.items[0].change,'evidence');assert.equal(state.opportunityMeta.stable.priority,'low');assert.equal(state.opportunityMeta.stable.status,'pending');assert.equal(state.insightHistory[0].items[0].evidenceText,'Old evidence');
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});service.archive=async()=>{};const card={id:'stable',title:'Guide',observation:'Old fact',meaning:'m',evidenceText:'Old evidence',limitation:'l',suggestion:'Write onboarding',objective:'Help users',source:'website',target:'/docs',audience:'developers'};const state={proposals:[],insights:{generatedAt:'old',items:[card]},opportunityMeta:{stable:{priority:'low',status:'pending'}}};service.context=async()=>({evidence:{}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};await service.saveInsights(1,{insights:[{...card,observation:'New fact',evidenceText:'New evidence',priority:'high'}]});assert.equal(state.insights.items[0].id,'stable');assert.equal(state.insights.items[0].change,'evidence');assert.equal(state.opportunityMeta.stable.priority,'low');assert.equal(state.opportunityMeta.stable.status,'pending');assert.equal(state.insightHistory[0].items[0].evidenceText,'Old evidence');
  await service.saveInsights(1,{insights:[]});assert.equal(state.insights.items.length,0);assert.equal(state.insightHistory.length,2);
 });
 test('different audience or action never merges and review rejects unknown opportunities',async()=>{const {mergeCards}=__opportunity_board;const old={id:'old',title:'t',objective:'g',suggestion:'s',audience:'a'};assert.notEqual(mergeCards({insights:{items:[old]}},[{...old,audience:'b'}],'now',()=> 'new')[0].id,'old');const {StrategyService}=__strategy_service;const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>fn({insights:{items:[old]}});await assert.rejects(service.reviewOpportunity(1,{insightId:'missing',status:'ignored'}));await assert.rejects(service.reviewOpportunity(1,{insightId:'old',priority:'fake'}));});

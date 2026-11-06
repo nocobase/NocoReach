@@ -18,7 +18,8 @@ export async function records<T>(resource:string,filter?:object):Promise<T[]>{
  }
 }
 // The project's tasks, newest first, through NocoReach so 成员 see them too (2026-10-08; the table itself is for NocoBase admins).
-export async function taskRecords<T>(projectId:number):Promise<T[]>{const r=await api.action<T[]>('nrTaskWork','list',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'});if(!Array.isArray(r))throw new Error($t('reachData.dataResponseMalformedTryAgain'));return r;}
+// The list as the pages read it (server/nocoreach/page-views.ts); a task's page reads the whole task with `get`.
+export async function taskRecords<T>(projectId:number):Promise<T[]>{const r=await api.action<T[]>('nrTaskWork','list',{method:'POST',body:{projectId:String(projectId),view:'page'},unwrap:'data'});if(!Array.isArray(r))throw new Error($t('reachData.dataResponseMalformedTryAgain'));return r;}
 export async function persist(resource:string,body:unknown,id?:number){return api.action(resource,id?'update':'create',{method:'POST',body,query:id?{filterByTk:String(id)}:undefined});}
 export type ProjectList=Project[];
 // All projects (nrProjects:list). NocoBase 3 has no generic table API, so the classic fallback to the single project

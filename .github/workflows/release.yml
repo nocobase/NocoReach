@@ -16,36 +16,91 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  # Creates the version commit without publishing it and hands it to the jobs below as a git bundle, so the tests run
+  # on several machines and the build beside them, and nothing is pushed until both pass.
+  prepare:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: write
+    timeout-minutes: 10
     outputs:
       tag: ${{ steps.prepare.outputs.tag }}
       sha: ${{ steps.prepare.outputs.sha }}
+      version: ${{ steps.prepare.outputs.version }}
+      base_sha: ${{ steps.prepare.outputs.base_sha }}
+      prerelease: ${{ steps.prepare.outputs.prerelease }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
-          cache: pnpm
       - name: Prepare version and changelog
         id: prepare
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+          RELEASE_NOTES_FILE: ${{ runner.temp }}/release/notes.md
         run: |
+          mkdir -p "$RUNNER_TEMP/release"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           node scripts/ci/release.mjs prepare
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+          git bundle create "$RUNNER_TEMP/release/commit.bundle" "${GITHUB_SHA}..HEAD"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-commit
+          path: ${{ runner.temp }}/release
+          retention-days: 7
+          if-no-files-found: error
+
+  tests:
+    name: tests (${{ matrix.shard }})
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-commit
+          path: ${{ runner.temp }}/release
+      - name: Check out the version commit
+        env:
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          git fetch --no-tags "$RUNNER_TEMP/release/commit.bundle" HEAD
+          git checkout --detach "$RELEASE_SHA"
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --maxWorkers=3 --passWithNoTests=false
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-commit
+          path: ${{ runner.temp }}/release
+      - name: Check out the version commit
+        env:
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          git fetch --no-tags "$RUNNER_TEMP/release/commit.bundle" HEAD
+          git checkout --detach "$RELEASE_SHA"
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm build --target linux-x64 --node-version 24 --tar
         env:
           NODE_OPTIONS: --max-old-space-size=6144
@@ -55,25 +110,63 @@ jobs:
           path: storage/exports/dist.tar.gz
           retention-days: 7
           if-no-files-found: error
+
+  release:
+    needs: [prepare, tests, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ needs.prepare.outputs.tag }}
+      sha: ${{ needs.prepare.outputs.sha }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-commit
+          path: ${{ runner.temp }}/release
       - name: Publish version commit and tag atomically
         env:
-          RELEASE_VERSION: ${{ steps.prepare.outputs.version }}
-          RELEASE_SHA: ${{ steps.prepare.outputs.sha }}
-          RELEASE_BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
-        run: node scripts/ci/release.mjs publish
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch --no-tags "$RUNNER_TEMP/release/commit.bundle" HEAD
+          git checkout --detach "$RELEASE_SHA"
+          node scripts/ci/release.mjs publish
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
-          RELEASE_PRERELEASE: ${{ steps.prepare.outputs.prerelease }}
-          RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          RELEASE_NOTES_FILE: ${{ runner.temp }}/release/notes.md
         run: |
           args=(--verify-tag --title "$RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE")
           if [ "$RELEASE_PRERELEASE" = true ]; then
             args+=(--prerelease --latest=false)
           fi
           gh release create "$RELEASE_TAG" "${args[@]}"
-          echo "已创建 $RELEASE_TAG；两个 Solutions 环境的部署结果请查看本次运行的 deploy 作业。" >> "$GITHUB_STEP_SUMMARY"
+          echo "Created $RELEASE_TAG; see the image and deploy jobs for internal image publication and Solutions deployments." >> "$GITHUB_STEP_SUMMARY"
+
+  image:
+    needs: release
+    uses: ./.github/workflows/publish-image.yml
+    with:
+      release_tag: ${{ needs.release.outputs.tag }}
+      release_sha: ${{ needs.release.outputs.sha }}
+      archive_name: solutions-release-archive
+    secrets:
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
 
   # GITHUB_TOKEN tag pushes do not trigger another workflow; call deployment explicitly.
   deploy:
@@ -84,3 +177,26 @@ jobs:
       release_sha: ${{ needs.release.outputs.sha }}
       archive_name: solutions-release-archive
     secrets: inherit
+
+  deploy-hongkong:
+    needs: [release, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    concurrency:
+      group: nocoreach-hongkong-deployment
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Deploy the verified image over HTTPS
+        env:
+          NOCOREACH_DEPLOY_URL: ${{ vars.NOCOREACH_DEPLOY_URL }}
+          NOCOREACH_DEPLOY_SECRET: ${{ secrets.NOCOREACH_DEPLOY_SECRET }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+          IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+        run: node scripts/ci/deploy-webhook.mjs

@@ -195,6 +195,42 @@ test('network failures preserve partitions, retry with backoff and stop after th
   ).toBe(0);
 });
 
+test('a shutdown during a Google wait leaves the job running with its attempts, and the next start resumes it', async ({
+  testApp,
+}) => {
+  const runtime = testApp.application.container.resolve(nocoReachToken);
+  vi.spyOn(runtime.plugin.sync, 'tick').mockResolvedValue(undefined);
+  const f = await syncFixture(runtime.legacy.db);
+  const entered = deferred(),
+    closed = deferred();
+  // Google does not answer before the network closes under the request, as at shutdown.
+  f.plugin.googleJson.mockImplementation(async () => {
+    entered.resolve();
+    await closed.promise;
+    throw Object.assign(new Error('network closed'), {
+      code: 'network_unreachable',
+    });
+  });
+  const step = f.sync.step();
+  await entered.promise;
+  f.sync.stop();
+  closed.resolve();
+  expect(await step).toBe(false);
+  const job = await f.readJob();
+  expect(job?.get('status')).toBe('running');
+  expect(job?.get('attempts')).toBe(0);
+  expect(job?.get('errorCode')).toBeFalsy();
+  // A stopped service starts nothing new: its tick does not even try a step.
+  expect(await f.sync.step()).toBe(false);
+  const stepped = vi.spyOn(f.sync, 'step');
+  await f.sync.tick();
+  expect(stepped).not.toHaveBeenCalled();
+  // The next start picks the job up where it was.
+  f.plugin.googleJson.mockResolvedValue({ timeZone: 'UTC' });
+  expect(await new SyncService(f.plugin).step()).toBe(true);
+  expect((await f.readJob())?.get('status')).toBe('succeeded');
+});
+
 test('the block deadline aborts a waiting paginated Google request and schedules a retry', async ({
   testApp,
 }) => {

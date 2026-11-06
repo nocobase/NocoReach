@@ -22,7 +22,7 @@ import { aiProviders, calendarDateInTimeZone, resolveGa4SyncRange } from './goog
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
 import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
-import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
+import { GOOGLE_REFRESH_POLL_MS, GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
@@ -138,7 +138,7 @@ class WebsiteReport{
  zonePending=new Map<string,Promise<string>>();
  tokens=new Map<string|number,{at:number;token:string}>();
  history:Ga4ReportCache;
- constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
+ constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.liveCache=new Map();this.liveSummaryCache=new Map();}
  // The project's Google connection (proxy profile or simulated upstream), the same one the sync uses.
  json(id,url,init){return googleJson(url,init,this.p.googleFetch?.(id));}
  // Access tokens last an hour; keep one for 45 minutes so the per-minute realtime view does not refresh it every time.
@@ -265,8 +265,14 @@ class WebsiteReport{
  // zone. GA4 has data up to `reached` (never past the clock hour, unless the zone is unconfirmed and the clock would
  // be guessed); the last SETTLING_HOURS of those are still filling in, so the totals, the comparison and the sources
  // all stop at `through`, before them. The hourly line still draws the partial hours, marked from `through`.
- today(id:string|number,property:string){return this.requests.share<unknown>(['today',...this.scope(id,property)],()=>this.readToday(id,property));}
- async readToday(id,property){const key=JSON.stringify(this.scope(id,property)),hit=this.todayCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
+ // It is kept with Traffic's reports (`GoogleReportCache`), so after GA4_TODAY_CACHE_MS, or a restart, a page that
+ // accepts a saved copy (`acceptSaved`) is answered at once with the last read of the same day while a new one is read;
+ // two GA4 rounds one after the other took 4.7 s on 2026-11-06. The day is in the key, so another day's read never answers.
+ async today(id:string|number,property:string){const zone=await this.timeZone(id,property),date=calendarDateInTimeZone(zone,new Date(businessNow(this.p,id,'google')));
+  return this.history.load(String(id),['today',...this.scope(id,property),date],()=>this.readToday(id,property),()=>GA4_TODAY_CACHE_MS,
+   // A copy being replaced is asked for again soon, so the card shows the new read within seconds.
+   (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:saved?.refreshing?Date.now()+GOOGLE_REFRESH_POLL_MS:cacheExpiresAt,...saved}));}
+ async readToday(id,property){
   const zone=await this.timeZone(id,property),now=new Date(businessNow(this.p,id,'google')),date=calendarDateInTimeZone(zone,now);
   const clock=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(p=>[p.type,p.value]));
   const hourNow=Number(clock.hour),days=[range('today','today','today'),range('yesterday','yesterday','yesterday'),range('7daysAgo','7daysAgo','lastWeek')];
@@ -288,29 +294,32 @@ class WebsiteReport{
   const value={timeZone:zone,timeZoneConfirmed:confirmed,date,lastWeekDate,time:`${clock.hour}:${clock.minute}`,through,reached,hours,totals,
    fullDay:{yesterday:sum('yesterday',24),lastWeek:sum('lastWeek',24)},
    sources:sources.map(r=>({source:r.sessionSource||'(direct)',medium:r.sessionMedium||'',sessions:r.sessions,users:r.activeUsers,ai:aiOf(`${r.sessionSource} ${r.sessionMedium}`)})),fetchedAt:now.toISOString()};
-  value.cacheExpiresAt=Date.now()+GA4_TODAY_CACHE_MS;this.todayCache.set(key,value);return value;}
+  return value;}
 
  // 实时: GA4's last 30 minutes. The Realtime API has no source dimension, so where these visitors came from is not here.
  // Events are counted only: the Realtime API refuses eventName with activeUsers ("Selected dimensions and metrics cannot be
  // queried together").
  // Each query stands alone: one GA4 refuses is left out and named in `missing` with Google's reason. Only a failed totals
  // query or an authorization problem fails the view, and then with Google's reason.
- realtime(id:string|number,property:string){return this.requests.share<unknown>(['realtime',...this.scope(id,property)],()=>this.readRealtime(id,property));}
- async readRealtime(id,property){const key=JSON.stringify(this.scope(id,property)),hit=this.liveCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
+ // `summary` is what Traffic's Today card shows with its details closed (the users, the minutes and the figures): two of
+ // the seven requests. A full read still fresh answers it too.
+ realtime(id:string|number,property:string,summary=false){return this.requests.share<unknown>(['realtime',summary?'summary':'full',...this.scope(id,property)],()=>this.readRealtime(id,property,summary));}
+ async readRealtime(id,property,summary=false){const key=JSON.stringify(this.scope(id,property)),cache=summary?this.liveSummaryCache:this.liveCache,full=this.liveCache.get(key),hit=summary&&full&&Date.now()<full.cacheExpiresAt?full:cache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
   const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
    ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount'],'eventCount',20]];
+  if(summary)queries.length=2;
   const settled=await Promise.allSettled(queries.map(([,...q])=>ask(...q))),errors=settled.map(r=>r.status==='rejected'?r.reason:null);
   const denied=errors.find(e=>e&&(e.code==='invalid_grant'||e.code==='invalid_client'||e.status===401||e.status===403));if(denied)this.explain(denied);
   if(errors[0])this.explain(errors[0]);
   const missing=queries.flatMap(([part],i)=>errors[i]?[{part,reason:googleReason(errors[i])||systemMessageText('dataViews.ga4ReadFailed')}]:[]);
   for(const [i,e] of errors.entries())if(e)this.p.app?.logger?.warn('NocoReach GA4 realtime part left out',{part:queries[i][0],message:e.message,code:e.code,status:e.status});
-  const [totals,minutes,pages,countries,cities,devices,events]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
+  const [totals,minutes,pages=[],countries=[],cities=[],devices=[],events=[]]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
   const perMinute=Array(30).fill(0);for(const r of minutes){const m=parseInt(r.minutesAgo,10);if(m>=0&&m<30)perMinute[29-m]=r.activeUsers;}
   const value={fetchedAt:new Date(businessNow(this.p,id,'google')).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
-   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
-  value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;this.liveCache.set(key,value);return value;}
+   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{}),...(summary?{summary:true}:{})};
+  value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;cache.set(key,value);return value;}
 }
 export { WebsiteReport, TABLES, CHANGES, FIRST_TABLES, REST_TABLES, tableRows, changeRows, rowsOf, values, RETRY_429_MS, withGa4RetryDeadline };

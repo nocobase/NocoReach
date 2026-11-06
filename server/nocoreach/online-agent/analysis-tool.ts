@@ -1,3 +1,4 @@
+import { isSlim, withArchived } from '../analysis-evidence.js';
 import { z } from 'zod';
 import type {
   InsightBatch,
@@ -173,6 +174,33 @@ export function analysisForAgent(
 }
 
 /**
+ * The state with the whole evidence of the day asked for: an earlier analysis keeps only the changes its opportunities
+ * cite (analysis-evidence.ts), and every change of that day is listed, so its archived evidence is read back while it is
+ * kept. The analysis of a day is its last one, as analysisForAgent chooses.
+ */
+async function withDayEvidence(
+  state: StrategyState,
+  day: string | undefined,
+  readArchived: (generatedAt: string) => Promise<unknown>,
+): Promise<StrategyState> {
+  if (!day || !state.insightHistory?.length) return state;
+  const batch = [state.insights, ...state.insightHistory]
+    .filter((b): b is InsightBatch => Boolean(b?.generatedAt))
+    .filter((b) => dayOf(b.generatedAt) === day)
+    .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))[0];
+  if (!batch || batch === state.insights || !isSlim(batch.evidence))
+    return state;
+  const archived = await readArchived(batch.generatedAt).catch(() => null);
+  if (!archived) return state;
+  return {
+    ...state,
+    insightHistory: state.insightHistory.map((b) =>
+      b === batch ? (withArchived(b, archived) as InsightBatch) : b,
+    ),
+  };
+}
+
+/**
  * `daily_analysis`: the saved daily analysis, read after `authorize` checks the user may still see Insights; the
  * project's tasks (empty when the user may not list them) say where each handed-off opportunity's task stands.
  */
@@ -181,6 +209,7 @@ export function dailyAnalysisTool(
   authorize: () => Promise<void>,
   link: (opportunityId: string) => string,
   readTasks: () => Promise<AgentTask[]> = async () => [],
+  readArchived: (generatedAt: string) => Promise<unknown> = async () => null,
 ): OnlineTool {
   return {
     name: 'daily_analysis',
@@ -191,7 +220,12 @@ export function dailyAnalysisTool(
       await authorize();
       const value = toolInput(input, args);
       return pageData(
-        analysisForAgent(await read(), value.day, link, await readTasks()),
+        analysisForAgent(
+          await withDayEvidence(await read(), value.day, readArchived),
+          value.day,
+          link,
+          await readTasks(),
+        ),
         value.offset,
       );
     },

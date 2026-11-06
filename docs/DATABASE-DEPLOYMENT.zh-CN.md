@@ -10,13 +10,7 @@ NocoReach 默认使用 SQLite，也支持 PostgreSQL 和 MySQL。数据库回归
 
 源码安装需要 Node.js 24 或更高版本，以及项目声明的 pnpm 版本。先运行 `pnpm install --frozen-lockfile`。
 
-与 NocoCRM 一样，PostgreSQL 和 MySQL 驱动默认放在开发依赖中，用于开发和测试，默认生产包仍只携带 SQLite。**构建之前必须把所选驱动移入生产依赖**，否则开发环境可以连接，部署包却会缺少驱动。
-
-PostgreSQL：
-
-```bash
-pnpm add --save-prod @nocobase/db-postgres@0.1.0-beta.5
-```
+生产包已包含 SQLite 和 PostgreSQL 驱动，PostgreSQL 部署无需额外调整依赖。MySQL 驱动仍在开发依赖中，构建 MySQL 部署包前需要移入生产依赖。
 
 MySQL：
 
@@ -84,7 +78,7 @@ database:
 
 ## 3. 构建和部署
 
-驱动移入生产依赖后，按目标平台构建。例如 Linux x64、Node.js 24：
+确认所选驱动在生产依赖中后，按目标平台构建。例如 Linux x64、Node.js 24：
 
 ```bash
 pnpm build --target linux-x64 --node-version 24 --tar
@@ -103,7 +97,7 @@ node dist/server/standalone.js
 
 在应用目录执行这些命令。`config.yml` 和持久化的 `storage/` 与 `dist/` 同级；也可显式设置 `APP_CONFIG_FILE` 和 `APP_STORAGE_DIR`。正式运行请使用进程管理器，设置 `APP_PUBLIC_ORIGIN`、`APP_BASE_PATH` 和初始管理员凭据。首次 `db apply` 创建表并执行初始化数据，后续启动只执行待运行的迁移和种子。
 
-使用 Docker 时，同样要先把驱动移入生产依赖，再用项目的 `Dockerfile` 构建镜像。将配置只读挂载到 `/app/config.yml`，将可写的持久化目录挂载到 `/app/storage`；具体镜像和反向代理步骤见[构建与部署](APP-TEMPLATE.md)。使用 Studio 时，上传包含所选驱动的新部署包，并在目标应用的部署配置中填写数据库连接。
+使用 Docker 时，确认所选驱动在生产依赖中，再用项目的 `Dockerfile` 构建镜像。将配置只读挂载到 `/app/config.yml`，将可写的持久化目录挂载到 `/app/storage`；具体镜像和反向代理步骤见[构建与部署](APP-TEMPLATE.md)。使用 Studio 时，上传包含所选驱动的新部署包，并在目标应用的部署配置中填写数据库连接。
 
 NocoReach 当前的业务互斥锁依赖单进程。切换到 PostgreSQL 或 MySQL 不会自动使应用具备多副本并发运行能力，应保持一个应用进程。
 

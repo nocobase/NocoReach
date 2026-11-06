@@ -10,13 +10,7 @@ This guide assumes an empty database and a single NocoReach application process.
 
 Installing from source requires Node.js 24 or later and the pnpm version declared by the project. First run `pnpm install --frozen-lockfile`.
 
-As in NocoCRM, the PostgreSQL and MySQL drivers are development dependencies for development and testing. The default production package includes only SQLite. **Move the selected driver into production dependencies before building**, or a connection that works in development will fail in the deployment package because its driver is missing.
-
-For PostgreSQL:
-
-```bash
-pnpm add --save-prod @nocobase/db-postgres@0.1.0-beta.5
-```
+Production packages include SQLite and PostgreSQL drivers. PostgreSQL deployments need no dependency changes. MySQL remains a development dependency and must be moved into production dependencies before building a MySQL deployment.
 
 For MySQL:
 
@@ -84,7 +78,7 @@ The preceding command writes the password. For MySQL, change `dialect` to `mysql
 
 ## 3. Build and deploy
 
-After moving the driver into production dependencies, build for the target platform. For example, for Linux x64 and Node.js 24:
+With the selected driver in production dependencies, build for the target platform. For example, for Linux x64 and Node.js 24:
 
 ```bash
 pnpm build --target linux-x64 --node-version 24 --tar
@@ -103,7 +97,7 @@ node dist/server/standalone.js
 
 Run these commands from the application directory. Keep `config.yml` and persistent `storage/` alongside `dist/`, or explicitly set `APP_CONFIG_FILE` and `APP_STORAGE_DIR`. For production, use a process manager and configure `APP_PUBLIC_ORIGIN`, `APP_BASE_PATH` and the initial administrator credentials. The first `db apply` creates tables and seeds initial data; subsequent starts run only pending migrations and seeds.
 
-For Docker, also move the driver into production dependencies before building with the project's `Dockerfile`. Mount the configuration read-only at `/app/config.yml` and writable persistent storage at `/app/storage`; see [Build and deploy](APP-TEMPLATE.md) for image and reverse proxy instructions. For Studio, upload a new deployment package containing the selected driver and set the connection in the target application's deployment configuration.
+For Docker, ensure the selected driver is in production dependencies before building with the project's `Dockerfile`. Mount the configuration read-only at `/app/config.yml` and writable persistent storage at `/app/storage`; see [Build and deploy](APP-TEMPLATE.md) for image and reverse proxy instructions. For Studio, upload a new deployment package containing the selected driver and set the connection in the target application's deployment configuration.
 
 NocoReach's business locks currently depend on a single process. Switching to PostgreSQL or MySQL does not make the application ready for concurrent replicas; keep one application process.
 

@@ -14,6 +14,7 @@ import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { languageOf } from './language';
 import { fail, projectWork, type Artifact, type Work } from './model';
 import { changeSentence, languagesLine, releaseNote } from './release-note';
+import { pagesById } from './task-scan.js';
 
 // Article delivery inside the task flow (docs/ARTICLE-PUBLISHING.md). A task linked to a publishing target writes a
 // structured article in its change step instead of a pull request; the approved version is published by the server.
@@ -434,8 +435,7 @@ export class ArticleFlow {
     const flag = 'nr-migrations:release-notes-1';
     if (await this.s.snapshot(flag)) return 0;
     let n = 0;
-    for (let offset = 0; ; offset += 100) {
-      const rows = await this.s.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+    for await (const rows of pagesById(this.s.repo('nrTasks'))) {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row,
           project = String(t.projectId),
@@ -457,7 +457,6 @@ export class ArticleFlow {
           n++;
         });
       }
-      if (rows.length < 100) break;
     }
     await this.s.p.db.sequelize.transaction(async (tx: any) => this.s.put(flag, { at: now(), repaired: n }, tx));
     return n;
@@ -794,8 +793,7 @@ export class ArticleFlow {
   /** Background work: interrupted publishes, export tracking and the post-publish overwrite watch. */
   async tick() {
     if (!this.delivery) return;
-    for (let offset = 0; ; offset += 100) {
-      const rows = await this.s.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+    for await (const rows of pagesById(this.s.repo('nrTasks'))) {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row,
           w = projectWork(t),
@@ -811,7 +809,6 @@ export class ArticleFlow {
           /* checked again on the next pass */
         }
       }
-      if (rows.length < 100) break;
     }
   }
   private async checkExport(project: string, taskId: string) {

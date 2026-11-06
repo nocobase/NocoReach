@@ -26,12 +26,15 @@ import { playbookTitle, retitle } from './task-title.js';
 import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ActiveRuns, type SnapshotRows } from './active-runs.js';
+import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
 import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
 import { TASK_IMAGES_PER_MESSAGE, type MessageImage } from '../../../shared/task-images.js';
+import { taskListRow, wantsPageView } from '../page-views.js';
+import { taskContext } from '../analysis-evidence.js';
 // What a page search and Related page read of Website content's snapshot.
 type SiteState = { sites?: { origin?: unknown }[]; pages?: { url?: unknown; title?: unknown; type?: unknown }[] } | null | undefined;
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -196,13 +199,10 @@ export class TaskService {
     const repos = agent.repos.map(r => ({ id: r.id, repo: r.repo, baseBranch: r.baseBranch, allowedPaths: r.allowedPaths, urls: r.urls }));
     return { ...data, language, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
   }
-  // Every task of a project, read in pages outside any business transaction, for what Data sources shows of them.
+  // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
-    for (let offset = 0; ; offset += 200) {
-      const rows = await this.repo('nrTasks').find({ filter: { projectId: project }, fields: ['id', 'title', 'evidence'], sort: ['id'], limit: 200, offset });
+    for await (const rows of pagesById(this.repo('nrTasks'), { filter: { projectId: project }, fields: ['id', 'title', 'evidence'], size: 200 }))
       for (const row of rows) fn(row.toJSON ? row.toJSON() : row);
-      if (rows.length < 200) break;
-    }
   }
   /**
    * Website source repositories as Data sources › Website source shows them: each with the pull request the Agent last
@@ -417,8 +417,7 @@ export class TaskService {
   // Every few minutes: open the live pages of merged tasks and look for the sentence the Agent said would appear.
   async verifyReleases(read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
     if (this.simulated) return;
-    for (let offset = 0; ; offset += 100) {
-      const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+    for await (const rows of pagesById(this.repo('nrTasks'))) {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, rel = projectWork(t).release;
         if (!rel || rel.state !== 'verifying' || Date.parse(rel.nextCheckAt || '') > Date.now()) continue;
@@ -441,7 +440,6 @@ export class TaskService {
           await this.save(task, w, tx);
         });
       }
-      if (rows.length < 100) break;
     }
   }
   // The pages a finished task changed: what was released, the published page and the linked page.
@@ -499,7 +497,7 @@ export class TaskService {
   // Hourly: day 7 and day 28 comparisons for tasks that went live, once the data covers those days.
   async observeEffects() {
     const tasks: any[] = [];
-    for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
+    for await (const rows of pagesById(this.repo('nrTasks'))) tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r));
     const ends = new Map<string, string>(), identities = new Map<string, PageIdentity>();
     for (const t of tasks) {
       const w = projectWork(t);
@@ -592,8 +590,7 @@ export class TaskService {
     const flag = 'nr-migrations:archive-legacy-1';
     if (await this.snapshot(flag)) return 0;
     let n = 0;
-    for (let offset = 0; ; offset += 100) {
-      const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+    for await (const rows of pagesById(this.repo('nrTasks'))) {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, w = projectWork(t);
         const legacy = (w.plan && !w.flow) || w.simple || Boolean(w.flow?.stages.some(s => s.kind === 'publish'));
@@ -605,7 +602,6 @@ export class TaskService {
           await this.save(task, fresh, tx); n++;
         });
       }
-      if (rows.length < 100) break;
     }
     await this.p.db.sequelize.transaction(async (tx: any) => this.put(flag, { at: now(), archived: n }, tx));
     return n;
@@ -869,7 +865,7 @@ export class TaskService {
               const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };
               // The languages chosen with the hand-over, primary first (2026-10-30); the new task's start takes the ones its target has.
               const handLocales = Array.isArray(v.nextLocales) ? [...new Set<string>(v.nextLocales.filter((l: unknown) => typeof l === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l)))].slice(0, 20) : [];
-              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content, ...(handLocales.length ? { locales: handLocales } : {}) }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: taskContext(task.evidence?.context, task.evidence) || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content, ...(handLocales.length ? { locales: handLocales } : {}) }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
               w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
             }
           }
@@ -1277,13 +1273,9 @@ export class TaskService {
     }
     return woke;
   }
-  async tasks(project: string) {
-    const rows: any[] = [];
-    for (let offset = 0; ; offset += 200) {
-      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt', '-id'], limit: 200, offset });
-      rows.push(...page.map((r: any) => r.toJSON ? r.toJSON() : r)); if (page.length < 200) break;
-    }
-    return rows;
+  // Newest first: the ids in this order, then the rows by key (task-scan.ts).
+  async tasks(project: string): Promise<any[]> {
+    return tasksInOrder(this.repo('nrTasks'), project, { sort: ['-createdAt', '-id'] });
   }
   // Pages of Website content matching a search, for linking a task to the page it changes: the page a link names first
   // (shared/page-search.ts), then the ones whose title or address holds the text. A link on the site's own hosts that
@@ -1343,7 +1335,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), repos: wrap(p => this.repoView(p)), saveRepo: wrap(async (p, v) => (await this.agents.saveRepo(p, v), this.repoView(p))), removeRepo: wrap(async (p, v) => (await this.agents.removeRepo(p, v), this.repoView(p))), checkRepo: wrap(async (p, v, c) => (await this.agents.checkRepo(p, v, String(c.auth.user.id)), this.repoView(p))) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'repos', 'saveRepo', 'removeRepo', 'checkRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId), v.match !== false)), articleEdit: wrap((p, v, c) => this.articleEditing.handle(p, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id))) } });
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(async (p, v) => { const rows = await this.tasks(p); return wantsPageView(v) ? rows.map(taskListRow) : rows; }), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId), v.match !== false)), articleEdit: wrap((p, v, c) => this.articleEditing.handle(p, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id))) } });
     this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces', 'articleEdit'], 'loggedIn');
   }
 }

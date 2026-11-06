@@ -183,6 +183,34 @@ async function fixture() {
 
 const handed = () => vi.mocked(buildSnapshots).mock.calls.at(-1)![0];
 
+// SQLite's plan for a statement Knex emitted, its placeholders bound to '1'.
+const planOf = async (client: Knex, sql: string) => {
+  const bindings = Array.from(sql.matchAll(/\?/g), () => '1');
+  const rows = (await client.raw(`explain query plan ${sql}`, bindings)) as {
+    detail: string;
+  }[];
+  return rows.map((r) => r.detail).join('\n');
+};
+
+// What `statements` sends to nr_sync_partitions.
+async function partitionReads(
+  client: Knex,
+  statements: () => Promise<unknown>,
+) {
+  const sql: string[] = [];
+  const log = (q: { sql: string }) => {
+    if (/nr_sync_partitions/.test(q.sql) && /^select/i.test(q.sql))
+      sql.push(q.sql);
+  };
+  client.on('query', log);
+  try {
+    await statements();
+  } finally {
+    client.off('query', log);
+  }
+  return sql;
+}
+
 it('builds the same snapshots from the same rows in id order as the paged read did', async () => {
   const { db, sync } = await fixture();
   const built = await sync.build(projectId, link, project);
@@ -214,17 +242,9 @@ it('builds the same snapshots from the same rows in id order as the paged read d
 
 it('sorts only the ids of every stored day, and reads the days by key without an offset', async () => {
   const { sync, client } = await fixture();
-  const statements: string[] = [];
-  const log = (q: { sql: string }) => {
-    if (/nr_sync_partitions/.test(q.sql) && /^select/i.test(q.sql))
-      statements.push(q.sql);
-  };
-  client.on('query', log);
-  try {
-    await sync.build(projectId, link, project);
-  } finally {
-    client.off('query', log);
-  }
+  const statements = await partitionReads(client, () =>
+    sync.build(projectId, link, project),
+  );
   // The ids, then two reads of up to 200 rows by key. NocoBase 3 still sorts each read in a temporary B-tree (its id
   // order is a nulls-last `case`), but only the ids of every stored day, and the payloads 200 at a time.
   expect(statements).toHaveLength(3);
@@ -232,20 +252,30 @@ it('sorts only the ids of every stored day, and reads the days by key without an
   const [listing, ...byKey] = statements as [string, ...string[]];
   expect(listing).not.toMatch(/payload/);
   for (const sql of byKey) expect(sql).toMatch(/payload/);
-  const plan = async (sql: string) => {
-    const bindings = Array.from(sql.matchAll(/\?/g), () => '1');
-    const rows = (await client.raw(`explain query plan ${sql}`, bindings)) as {
-      detail: string;
-    }[];
-    return rows.map((r) => r.detail).join('\n');
-  };
-  expect(await plan(listing)).toMatch(
-    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_source_date \(project_id=\?\)/,
+  // Either index that leads with the project serves the ids; SQLite picks between them without statistics.
+  expect(await planOf(client, listing)).toMatch(
+    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_(source_date|updated_at) \(project_id=\?\)/,
   );
   for (const sql of byKey)
-    expect(await plan(sql)).toMatch(
+    expect(await planOf(client, sql)).toMatch(
       /SEARCH .* USING INDEX sqlite_autoindex_nr_sync_partitions_1 \(id=\?\)/,
     );
+});
+
+it("reads the latest write for the snapshots' key from the (project, updatedAt) index, not past every payload", async () => {
+  const { sync, client } = await fixture();
+  const statements = await partitionReads(client, () =>
+    sync.snapshotKey(projectId, link, project),
+  );
+  // The count, then the latest write. Its nulls-last `case` order still sorts in a temporary B-tree, but updated_at
+  // now comes from the index: stored after the payload, it was read through every payload of the project.
+  expect(statements).toHaveLength(2);
+  const latest = statements.find((sql) => /order by/i.test(sql));
+  expect(latest).toMatch(/updated_at/);
+  expect(latest).not.toMatch(/payload/);
+  expect(await planOf(client, latest!)).toMatch(
+    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_updated_at \(project_id=\?\)/,
+  );
 });
 
 it('reads uncommitted rows inside a transaction without keeping them, and restores a kept build by its key', async () => {

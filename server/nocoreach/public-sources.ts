@@ -88,6 +88,7 @@ async function download(
   transport?: PublicTransport,
 ): Promise<PublicDownload> {
   transport?.signal?.throwIfAborted();
+  transport?.network.admit?.();
   const u = new URL(input);
   if (u.protocol !== 'https:' || u.username || u.password || u.port)
     fail(systemMessageText('publicSources.urlNotSupported'));

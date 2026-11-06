@@ -9,6 +9,7 @@ import {
 import { taskSource } from '../../../shared/task-source.js';
 import { CHECKPOINTS, shift } from './effect.js';
 import { projectWork, taskStanding, type Work } from './model.js';
+import { pagesById } from './task-scan.js';
 
 type Task = {
   id: string | number;
@@ -164,20 +165,17 @@ export function resultSummary(task: Task, pages: string[]) {
   };
 }
 type Summary = NonNullable<ReturnType<typeof resultSummary>>;
-// Every result of the project, newest first (bounded pages; the task table is per project and small).
+// Every result of the project, newest first (the tasks read in pages by id, task-scan.ts).
 async function summaries(service: Service, project: string) {
   const items: Summary[] = [];
-  for (let offset = 0; ; offset += 100) {
-    const rows = await service
-      .repo('nrTasks')
-      .find({ filter: { projectId: project }, sort: 'id', limit: 100, offset });
+  for await (const rows of pagesById(service.repo('nrTasks'), {
+    filter: { projectId: project },
+  }))
     for (const row of rows) {
       const task = row.toJSON(),
         item = resultSummary(task, service.effectPages(projectWork(task)));
       if (item) items.push(item);
     }
-    if (rows.length < 100) break;
-  }
   return items.sort(
     (a, b) =>
       (b.occurredAt || '').localeCompare(a.occurredAt || '') ||

@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import { useEffect } from 'react';
 import { MemoryRouter, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -16,7 +17,7 @@ import {
 } from '../../client/components/app-shell/nav-badges';
 const state = vi.hoisted(() => ({
   project: { id: 1 },
-  me: { id: 'u', role: 'member' },
+  me: { id: 'u', role: 'member' } as { id: string; role: string } | null,
   action: vi.fn(),
 }));
 vi.mock('../../client/pages/reach-data', () => ({
@@ -64,6 +65,30 @@ beforeEach(() => {
   state.project = { id: 1 };
   state.me = { id: 'u', role: 'member' };
   state.action.mockReset();
+});
+it('keeps the shell mounted when the member becomes known', async () => {
+  state.me = null;
+  state.action.mockImplementation((resource: string) =>
+    Promise.resolve(resource === 'nrHealth' ? {} : counts(4)),
+  );
+  const mounted = vi.fn();
+  function Shell() {
+    useEffect(() => mounted(), []);
+    return <Probe />;
+  }
+  const shell = () => (
+    <MemoryRouter>
+      <NavBadgeProvider>
+        <Shell />
+      </NavBadgeProvider>
+    </MemoryRouter>
+  );
+  const view = render(shell());
+  expect(screen.getByText('loading:unknown')).toBeTruthy();
+  state.me = { id: 'u', role: 'member' };
+  view.rerender(shell());
+  expect(await screen.findByText('ready:4')).toBeTruthy();
+  expect(mounted).toHaveBeenCalledOnce();
 });
 it('clears project counts immediately and rejects responses from the old project and older same-project requests', async () => {
   const requests = [deferred(), deferred(), deferred(), deferred()];

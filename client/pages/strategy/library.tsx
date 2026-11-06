@@ -20,6 +20,9 @@ import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,reasonLine,pri
 import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
 import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {taskRecords} from '../reach-data';
+import {taskListKey} from '../task-list-key';
+import {useOptionalWorkspaceCache} from '../workspace-cache';
+import {insightsState} from './insights-state';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {OpportunityHandOffDialog,OpportunityTasks} from './places';
@@ -54,9 +57,11 @@ export default function OpportunityLibrary(){
 }
 function Library({project,projectError}:{project?:Project;projectError:string}){
  const navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[handing,setHanding]=useState<Row>();
+ // What Insights or another page read shows at once while both are read again (the state Insights last showed is only read here, never written).
+ const cache=useOptionalWorkspaceCache(),cachedState=project&&cache?insightsState(cache,project.id).shown:undefined,cachedTasks=project?cache?.peek<WatchTask[]>(taskListKey(project.id)):undefined;
+ const [state,setState]=useState<StrategyState|undefined>(cachedState),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>(()=>cachedTasks??[]),[watchKey,setWatchKey]=useState<string>(),[handing,setHanding]=useState<Row>();
  const playbooks=localizePlaybookList(rawPlaybooks);
- useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);},[project?.id]);
+ useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(rows=>{setTasks(rows);cache?.replace(taskListKey(project.id),rows);}).catch(()=>undefined);},[project?.id]);
  const byId=new Map(tasks.map(t=>[String(t.id),t]));
  const rows:Item[]=state?rowsFor(state).map(r=>{const st=opportunityState(r,state),t=st.state==='task'&&r.taskId?byId.get(String(r.taskId)):undefined;return {...r,...st,...(t?{task:taskStanding({work:t.evidence?.work,status:t.status})}:{}),...(st.state==='task'&&r.tasks.length>1?{taskStates:r.tasks.map(x=>standingOf(byId.get(String(x.taskId))))}:{})};}):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));

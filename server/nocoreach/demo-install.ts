@@ -42,6 +42,7 @@ const SNAPSHOTS = new Set([
   'ai-questions',
   'rank-tracking',
   'strategy',
+  'analysis-evidence',
   'daily-analysis',
   'google-fresh',
   'ga4-reports',
