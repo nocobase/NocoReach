@@ -142,6 +142,11 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   const [state, setState] = useState<StrategyState | undefined>(
       () => store.shown,
     ),
+    // Whether the state shown was read (or written) by this mount, not the one the store last showed.
+    [fresh, setFresh] = useState(false),
+    // A mount on the state last shown renders Insights at once, which reads what it needs itself; the early requests
+    // are for a mount that waits for the state (the first visit).
+    [showsAtOnce] = useState(() => store.shown !== undefined),
     [error, setError] = useMessageState(''),
     [attempt, setAttempt] = useState(0);
   // A mount right after an access re-check unmounted the page takes over what that mount had started and read,
@@ -154,7 +159,22 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   useEffect(() => {
     store.keepEarly(early);
   }, [store, early]);
-  useEffect(() => store.subscribe(setState), [store]);
+  useEffect(
+    () =>
+      store.subscribe((next) => {
+        setState(next);
+        setFresh(true);
+        setError('');
+      }),
+    [store, setError],
+  );
+  // Reads the state again after a failed read while the state last shown stays on screen.
+  const retry = () => {
+    setError('');
+    store
+      .read()
+      .catch(() => setError(() => $t('strategy.notLoadInsightsTryAgain')));
+  };
   useEffect(() => {
     let active = true;
     setError('');
@@ -171,6 +191,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     const attemptKey = `${projectId}:${attempt}`;
     if (startedRef.current === attemptKey) return;
     startedRef.current = attemptKey;
+    if (showsAtOnce) return;
     // The tasks start with the state too: "Waiting for you" waits for them, so asking for them once Insights mounted
     // made the page ready a round trip later. On a slow link their download shares the bandwidth with the state's.
     early.start(cache, insightSummaryKey(projectId), () =>
@@ -187,7 +208,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
         googleLocalFreshness,
       )
       .catch(() => undefined);
-  }, [projectId, attempt, cache, early]);
+  }, [projectId, attempt, cache, early, showsAtOnce]);
   // Kept mounted in the same place while the state loads and after, so its request is not cancelled in between.
   const threads = withChat ? (
     <EarlyThreads projectId={projectId} attempt={attempt} early={early} />
@@ -218,6 +239,8 @@ function ProjectInsights({ projectId }: { projectId: number }) {
         afterRecheck={afterRecheck}
         early={early}
         readError={error}
+        fresh={fresh}
+        onRetry={retry}
       />
     </>
   );
@@ -254,6 +277,8 @@ function Insights({
   afterRecheck,
   early,
   readError,
+  fresh,
+  onRetry,
 }: {
   projectId: number;
   state: StrategyState;
@@ -263,6 +288,9 @@ function Insights({
   early: EarlyRequests;
   /** The state shown is the one last shown, as reading it again failed. */
   readError?: string;
+  /** The state was read by this mount; until then it is the one Insights last showed. */
+  fresh: boolean;
+  onRetry: () => void;
 }) {
   const cache = useWorkspaceCache(),
     setState = store.write,
@@ -493,11 +521,13 @@ function Insights({
       (s) => signalDisposition(s, state, tasks).next === 'judge',
     ).length,
     judgedRef = useRef(afterRecheck ? store.judged : '');
-  const taskDataAvailable = taskView.data !== undefined,
+  // Judged on the state and tasks this mount read, never on the ones last shown while they are read again.
+  const taskDataAvailable = taskView.data !== undefined && !taskView.loading,
     analyzedAt = state.insights?.generatedAt || '';
   useEffect(() => {
     const key = `${projectId}:${analyzedAt}`;
-    if (!unjudged || !taskDataAvailable || judgedRef.current === key) return;
+    if (!fresh || !unjudged || !taskDataAvailable || judgedRef.current === key)
+      return;
     judgedRef.current = key;
     store.markJudged(key);
     void judgeMissing(projectId)
@@ -507,7 +537,7 @@ function Insights({
         if (next) refreshNavBadges();
       })
       .catch(() => undefined);
-  }, [projectId, analyzedAt, unjudged, taskDataAvailable, store]);
+  }, [projectId, analyzedAt, unjudged, taskDataAvailable, store, fresh]);
   const situation = (
     <RequestBlock
       quiet
@@ -600,6 +630,16 @@ function Insights({
       {(error || readError) && (
         <p role='alert' className='nr-error'>
           {error || readError}
+          {!error && readError ? (
+            <Button
+              variant='outline'
+              size='sm'
+              className='ml-2'
+              onClick={onRetry}
+            >
+              {$t('common.retry')}
+            </Button>
+          ) : null}
         </p>
       )}
       {notice && (
