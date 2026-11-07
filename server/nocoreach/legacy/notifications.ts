@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { NotificationChannelConfig, NotificationService } from '@nocobase/app-plugin-notification/server';
 
+import type { InboxNotices } from '../inbox-notices.js';
 import { legacyRecord, type LegacyRecord, type LegacyRepository } from './database.js';
 
 type Values = Record<string, any>;
@@ -31,21 +32,31 @@ export interface LegacyNotificationLinks {
 interface ClassicMessage {
   readonly channelName: string;
   readonly triggerFrom?: string;
+  /** What the message is about, such as a task's id; kept with its source so it can be closed later. */
+  readonly referenceId?: string;
   readonly message: Values;
   readonly receivers?: { readonly type?: string; readonly value?: unknown };
 }
 
 export class LegacyNotifications {
   /** What `pm.get('notification-manager')` answers. */
-  readonly plugin: { send(message: ClassicMessage): Promise<void> };
+  readonly plugin: {
+    send(message: ClassicMessage): Promise<void>;
+    /** Marks read or deletes the in-app messages of one source type about one reference (`inbox-notices.ts`). */
+    close(type: string, referenceId: string, action: 'read' | 'delete'): Promise<number>;
+  };
 
   constructor(
     private readonly service: () => NotificationService,
     private readonly channels: () => Readonly<Record<string, NotificationChannelConfig>>,
     private readonly users: LegacyRepository,
     private readonly links: LegacyNotificationLinks,
+    private readonly notices?: InboxNotices,
   ) {
-    this.plugin = { send: (message) => this.send(message) };
+    this.plugin = {
+      send: (message) => this.send(message),
+      close: async (type, referenceId, action) => (this.inAppChannel() && this.notices ? this.notices.close(type, referenceId, action) : 0),
+    };
   }
 
   private enabled(test: (provider: string) => boolean): string | undefined {
@@ -91,10 +102,10 @@ export class LegacyNotifications {
     return path.startsWith('/') ? path : undefined;
   }
 
-  private async send({ channelName, triggerFrom, message, receivers }: ClassicMessage): Promise<void> {
+  private async send({ channelName, triggerFrom, referenceId, message, receivers }: ClassicMessage): Promise<void> {
     const ids = receivers?.type === 'userId' ? [...new Set([receivers.value].flat().filter((x) => x != null && x !== '').map(String))] : [];
     if (!ids.length) return;
-    const source = { type: triggerFrom || 'nocoreach' };
+    const source = { type: triggerFrom || 'nocoreach', ...(referenceId ? { referenceId: String(referenceId) } : {}) };
     const idempotencyKey = `nocoreach:${randomUUID()}`;
     const provider = this.channels()?.[channelName]?.provider;
     if (provider && EMAIL_PROVIDERS.has(provider)) {

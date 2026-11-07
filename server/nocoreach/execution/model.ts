@@ -116,6 +116,10 @@ export function boardState(w: Work): BoardState {
   if (w.cancelledAt) return 'done';
   return taskState(w);
 }
+/** Whether the task waits for its owner's review (Needs you), neither cancelled nor archived: what "Waiting for you" says. */
+export function waitsForReview(w: Work | null | undefined): boolean {
+  return Boolean(w && !w.cancelledAt && !w.archivedAt && boardState(w) === 'review');
+}
 /**
  * Where a task stands for people, closed apart (2026-10-23 user feedback: a cancelled task read "Completed · Closed"):
  * a cancelled task, or one archived before it finished (including the old-workflow archive), is closed; one archived
