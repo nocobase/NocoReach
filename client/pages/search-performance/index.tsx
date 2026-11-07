@@ -58,7 +58,7 @@ import { SitemapsView } from "./sitemaps";
 import { BreakdownCards, METRIC_LABEL, MoversTable, RowDrawer, Segmented, SliceTable, showMetric, slices, useBreakdown, type Metric, type MoverRow, type Movers, type Scope } from "./more";
 import "../reach-workspace.css";
 import "../data-views.css";
-import { formatCount, formatDate, formatPercent } from '#lib/format';
+import { directionOf, formatCount, formatDate, formatPercent } from '#lib/format';
 import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Totals = { clicks: number; impressions: number; ctr: number; position: number };
@@ -325,9 +325,12 @@ function TotalsCards({ report, metric, onMetric }: { report: SearchReport; metri
   const { totals, previous } = report;
   const comparable = report.complete && previous;
   const pct = (cur: number, prev: number) => (comparable && prev > 0 ? { change: (cur - prev) / prev, better: cur >= prev } : null);
-  // Position falls as rankings improve, so the change is inverted.
-  const rank = comparable && previous.position > 0 && totals!.position > 0 ? { change: previous.position - totals!.position, better: previous.position >= totals!.position, points: true } : null;
-  const tiles: { key: Metric; label: string; value: string; delta: { change: number; better: boolean; points?: boolean } | null | false | undefined; hint?: string }[] = [
+  // Position falls as rankings improve, so the change is inverted: ↑ is a ranking that rose. The words beside it say so,
+  // and hovering it shows the previous position to check against.
+  const rankChange = comparable && previous.position > 0 && totals!.position > 0 ? previous.position - totals!.position : null;
+  const rankDirection = rankChange == null ? null : directionOf(Math.round(rankChange * 10));
+  const rank = rankChange != null ? { change: rankChange, better: rankChange >= 0, points: true, note: rankDirection === 'up' ? $t('searchPerformance.rankedHigher') : rankDirection === 'down' ? $t('searchPerformance.rankedLower') : undefined, tip: $t('searchPerformance.previousValue', { 0: position(previous!.position) }) } : null;
+  const tiles: { key: Metric; label: string; value: string; delta: { change: number; better: boolean; points?: boolean; note?: string; tip?: string } | null | false | undefined; hint?: string }[] = [
     { key: "clicks", label: $t('common.clicks'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
     { key: "impressions", label: $t('common.impressions'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
     { key: "ctr", label: $t('common.ctr'), value: report.coverage?.current.recordedDays === 0 ? "—" : ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },

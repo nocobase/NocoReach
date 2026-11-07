@@ -7,6 +7,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SearchPerformancePage from '#pages/search-performance/index';
+import { setDictionary } from '#i18n';
+import english from '../../shared/i18n/en.json';
 import { WorkspaceCacheProvider } from '#pages/workspace-cache';
 
 vi.mock('recharts', async (original) => {
@@ -30,7 +32,9 @@ const { action, project } = vi.hoisted(() => ({
   },
 }));
 vi.mock('#pages/me', () => ({ useMe: () => ({ me: { role: 'member' } }) }));
-vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
+vi.mock('#lib/nocoreach-api', () => ({
+  nocobaseClient: { action, wrapRequests: vi.fn() },
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     session: { user: { id: 'u' }, session: { id: 's' } },
@@ -242,6 +246,101 @@ describe('搜索表现', () => {
     ) as HTMLElement;
     await userEvent.click(within(countries).getAllByRole('button')[1]);
     expect(router.state.location.search).toContain('country=usa');
+  });
+
+  // The average position falls as the ranking rises, so its ↑ comes with words saying so and the previous position on
+  // hover; the other figures keep their bare change.
+  const withPositions = (previous: number, current: number) => {
+    const searchReport = report();
+    searchReport.totals.position = current;
+    searchReport.previous.position = previous;
+    const base = action.getMockImplementation()!;
+    action.mockImplementation(
+      async (r: string, name: string, options: { body: Raw }) =>
+        name === 'search' ? searchReport : base(r, name, options),
+    );
+  };
+  const positionChange = () => {
+    const delta = tile('position').querySelector(
+      '[data-slot="delta"]',
+    ) as HTMLElement;
+    const note = tile('position').querySelector('[data-delta-note]');
+    return {
+      direction: delta.dataset.direction,
+      text: delta.textContent,
+      tone: delta.className.match(/text-nr-ink-\w+/)?.[0],
+      note: note?.textContent,
+    };
+  };
+
+  it('reads a smaller average position as a ranking that rose, with the previous position on hover', async () => {
+    withPositions(11.8, 11.0);
+    renderPage();
+    await ready();
+    expect(within(tile('position')).getByText('11.0')).toBeTruthy();
+    expect(positionChange()).toEqual({
+      direction: 'up',
+      text: '↑ 0.8',
+      tone: 'text-nr-ink-green',
+      note: '排名上升',
+    });
+    await userEvent.hover(tile('position').querySelector('[data-delta-tip]')!);
+    expect(await screen.findByText('上期 11.8')).toBeTruthy();
+    for (const key of ['clicks', 'impressions', 'ctr']) {
+      expect(tile(key).querySelector('[data-delta-note]')).toBeNull();
+      expect(tile(key).querySelector('[data-delta-tip]')).toBeNull();
+    }
+  });
+
+  it('reads a larger average position as a ranking that fell', async () => {
+    withPositions(10.2, 11.0);
+    renderPage();
+    await ready();
+    expect(positionChange()).toEqual({
+      direction: 'down',
+      text: '↓ 0.8',
+      tone: 'text-nr-ink-red',
+      note: '排名下降',
+    });
+  });
+
+  it('adds no words to an average position that did not change', async () => {
+    withPositions(11.02, 11.0);
+    renderPage();
+    await ready();
+    expect(positionChange()).toMatchObject({
+      direction: 'flat',
+      note: undefined,
+    });
+  });
+
+  it('says which way the ranking moved in English, and its ⓘ agrees with the arrow', async () => {
+    try {
+      setDictionary(english, 'en-US');
+      withPositions(11.8, 11.0);
+      renderPage();
+      await ready();
+      expect(positionChange()).toMatchObject({
+        text: '↑ 0.8',
+        note: 'ranked higher',
+      });
+      await userEvent.hover(
+        tile('position').querySelector('[data-delta-tip]')!,
+      );
+      expect(await screen.findByText('Previous: 11.8')).toBeTruthy();
+      await userEvent.hover(
+        within(tile('position')).getByRole('button', {
+          name: 'What is Average position',
+        }),
+      );
+      const help = await screen.findByText(
+        /^Our average position in Google search results/,
+      );
+      expect(help.textContent).toContain('↑ means the ranking rose');
+      expect(help.textContent).not.toMatch(/decrease is an improvement/);
+    } finally {
+      setDictionary(null);
+    }
   });
 
   it('reads web search only, with no search type choice', async () => {
