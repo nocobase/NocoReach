@@ -1,4 +1,4 @@
-import { useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText, translateRankCheckError } from "#i18n";
 // 排名跟踪 tab of 关键词: ported from every-app/open-seo db8bde1 src/client/features/rank-tracking/ (RankTrackingTable,
 // RankTrackingTrendChart, CheckConfirmModal; MIT). Changes: weekly desktop checks only (user choice), started from
 // 已保存 instead of a separate add flow, the site's Search Console position alongside, Chinese copy.
@@ -123,7 +123,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const checkNow = async () => {
     setBusy(true);
     // Results from the last 6 days are reused (rankTracking.checkNowReusesResultLast); the toast says how many, not "checked".
-    try { const r = await rankRequest<Status & { checked: number; reused?: number; errors: string[] }>("check"); setStatus(r); const reused = r.reused ?? 0; r.errors.length ? toast.error(() => ($legacyText(r.errors[0]))) : toast.success(() => (!reused ? $t('rankTracking.keywordsChecked',{0:r.checked}) : reused === r.checked ? $t('rankTracking.keywordsReused') : $t('rankTracking.keywordsCheckedSomeReused',{0:r.checked - reused,1:reused}))); }
+    try { const r = await rankRequest<Status & { checked: number; reused?: number; errors: string[] }>("check"); setStatus(r); const reused = r.reused ?? 0; r.errors.length ? toast.error(() => (translateRankCheckError(r.errors[0]))) : toast.success(() => (!reused ? $t('rankTracking.keywordsChecked',{0:r.checked}) : reused === r.checked ? $t('rankTracking.keywordsReused') : $t('rankTracking.keywordsCheckedSomeReused',{0:r.checked - reused,1:reused}))); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('rankTracking.notFullyChecked'))); }
     finally { setBusy(false); }
   };
@@ -136,7 +136,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
       <p className="nr-footnote flex items-center">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1"><p>{$t('rankTracking.weeklyNote')}</p><p>{$t('rankTracking.checkNowReusesResultLast')}</p></InfoTip></p>
       <HeaderActions><RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} /></HeaderActions>
       {/* A check that did not finish is said above the table, as on Competitors › Activity, not under 50 rows (UI review 2026-10-23). */}
-      {status.lastRun && !status.lastRun.ok ? <ConnectionError message={$t('rankTracking.lastCheckNotFinish',{0:$legacyText(status.lastRun.errors[0])})} /> : null}
+      {status.lastRun && !status.lastRun.ok ? <ConnectionError message={$t('rankTracking.lastCheckNotFinish',{0:translateRankCheckError(status.lastRun.errors[0])})} /> : null}
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }} />
       </Card>
