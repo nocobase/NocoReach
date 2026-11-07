@@ -1,3 +1,4 @@
+import { dayNumber } from './page-days.js';
 import { installDemoOpportunities } from './demo-opportunities.js';
 import { MOCK_DATASET_MARKER } from '../../app-plugins/nocoreach-mock/server/engine.js';
 import type { LegacyVariables } from './legacy/variables.js';
@@ -205,6 +206,18 @@ export async function installEditorialDemo(
         await p.db
           .getRepository(table)
           .update({ filterByTk: row.id, values, transaction });
+        // A rewritten partition's page rows (page-days.ts) are summed again from it on the next read.
+        if (table === 'nrSyncPartitions')
+          for (const derived of ['nrPageDays', 'nrPageDayMarks'])
+            await p.db.getRepository(derived).destroy({
+              filter: {
+                projectId: id,
+                source: row.get('source'),
+                resource: row.get('resource'),
+                day: dayNumber(String(row.get('date'))),
+              },
+              transaction,
+            });
         renamed++;
       }
     }

@@ -132,13 +132,6 @@ test('本站排名: the query index answers as the row scan does',()=>{
  const rows=[{keyword:'open crm',page:'/a',clicks:2,impressions:100,position:12},{keyword:'Open CRM ',page:'/b',clicks:1,impressions:300,position:8},{keyword:'open crm',page:'/c',clicks:1,impressions:400,position:8},{keyword:'other',page:'/d',clicks:9,impressions:0,position:1}];
  const keywords=['open crm','OTHER','missing'];assert.deepEqual(sp.indexedRanks(sp.queryIndex(rows),keywords),sp.ranks(rows,keywords));
 });
-test('page view: daily clicks, impressions and views of one page; www and trailing slash ignored; days without a partition stay empty',async()=>{
- const end='2026-09-27',daily=[{date:end,clicks:1,impressions:1}],parts={gsc:[{date:end,payload:[{page:'https://www.x.dev/docs/a/',clicks:3,impressions:40},{page:'https://x.dev/docs/b',clicks:9,impressions:9}]}],ga4:[{date:end,payload:[{page:'/docs/a',views:12},{page:'/docs/a?ref=1',views:3},{page:'/',views:99}]}]};
- const p={sync:{snapshotKey:async()=>({key:'page-fixture'}),snapshots:async()=>[{key:'history-search',payload:daily},{key:'history-web',payload:daily}],link:async()=>({get:k=>k})},db:{getRepository:()=>{const of=f=>parts[f.source].filter(r=>!f.date||f.date.$in.includes(r.date));return {find:async o=>of(o.filter).map(r=>({get:k=>r[k]})),count:async o=>of(o.filter).length,findOne:async ()=>null};}}};
- const r=await new DataViews(p).page('1',{url:'https://x.dev/docs/a',range:'7'});
- assert.deepEqual(r.daily.at(-1),{date:end,clicks:3,impressions:40,views:15});assert.deepEqual(r.daily[0],{date:'2026-09-21'});
- await assert.rejects(new DataViews(p).page('1',{url:'nope'}),/网址/);
-});
 test('search report by country: asks Search Console with the country (and text) filter, same window, coverage from the actual query',async()=>{
  const {dv,end}=views();const asked=[];
  dv.gscQuery=async(_id,site,body)=>{asked.push({site,...body});if(body.dimensions[0]==='country')return [{keys:['usa'],clicks:50,impressions:900},{keys:['chn'],clicks:80,impressions:700}];

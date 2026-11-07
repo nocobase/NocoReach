@@ -19,7 +19,12 @@ type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) 
 
 /** What a classic transaction object was to the ported code: something passed along in `{ transaction }`. */
 export interface LegacyTransaction {
-  readonly connection: { collections: Pick<ConnectionCollections, 'get'>; repository(name: string): any; afterCommit?(fn: () => unknown): void };
+  readonly connection: {
+    collections: Pick<ConnectionCollections, 'get'>;
+    repository(name: string): any;
+    afterCommit?(fn: () => unknown): void;
+    query?: { insertInto(table: string): { values(rows: readonly Values[]): { execute(): Promise<unknown> } } };
+  };
   readonly held: (() => void)[];
   afterCommit(fn: () => unknown): void;
 }
@@ -87,6 +92,9 @@ const OWN = new Set([
   'nrGoogleLinks',
   'nrSyncJobs',
   'nrSyncPartitions',
+  // Summed from nrSyncPartitions (page-days.ts), with database-generated ids, written in bulk through `insertMany`.
+  'nrPageDays',
+  'nrPageDayMarks',
   'nrKeywordRuns',
   'nrKeywordCandidates',
   'nrVariables',
@@ -157,6 +165,25 @@ export class LegacyDatabase {
     if (custom) return custom;
     if (!OWN.has(name)) throw new Error(`NocoReach has no table ${name} on NocoBase 3`);
     return this.repository(name);
+  }
+
+  /**
+   * Rows of a table whose ids the database generates, written one statement per chunk in the transaction the caller is
+   * in. No hooks, timestamps or string-length checks: for derived rows whose values the caller has already bounded.
+   */
+  async insertMany(name: string, rows: Values[], transaction?: unknown, chunk = 200) {
+    this.assertWritable();
+    if (!OWN.has(name)) throw new Error(`NocoReach has no table ${name} on NocoBase 3`);
+    const t = (transaction as LegacyTransaction) || this.current.getStore();
+    // The Query layer, not the Repository: a Repository create checks and decodes every row, about 0.6 s for one day's
+    // 4,000 page rows on SQLite.
+    const query = t ? t.connection.query : this.db.query();
+    for (let i = 0; i < rows.length; i += chunk) {
+      const part = rows.slice(i, i + chunk);
+      if (query) await query.insertInto(name).values(part).execute();
+      // A joined plugin transaction may not offer the Query layer; its Repository still writes in that transaction.
+      else await this.target(name, { transaction: t }).createMany({ values: part as unknown as [Values, ...Values[]] });
+    }
   }
 
   /** Scope derived-data caches to the connection whose uncommitted rows they may read. */

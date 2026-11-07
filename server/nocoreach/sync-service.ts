@@ -9,6 +9,7 @@ import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
+import { fillDays, fillPageDaysInBackground, releasePageDay } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
 const FRESH_MS=3*3600000;
@@ -192,14 +193,19 @@ class SyncService{
     const payload=compact(collector.batches.filter(r=>r.periodDate===date&&r.grainType===grain),grain);
     partitions.push({partitionKey:JSON.stringify([id,source,job.get('resource'),date,grain]),projectId:id,source,resource:job.get('resource'),date,grain,payload});
    }
-   return await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   const written=await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
     if(!await this.lock(transaction)||!await this.currentJob(flight,transaction))return false;
     const currentLink=await this.link(id);
     if(currentLink.get('ga4PropertyId')!==link.get('ga4PropertyId')||currentLink.get('gscSiteUrl')!==link.get('gscSiteUrl'))throw new Error('resource_changed');
-    for(const values of partitions){const r=this.repo('nrSyncPartitions'),old=await r.findOne({filter:{partitionKey:values.partitionKey},transaction});if(old)await r.update({filterByTk:old.id,values,transaction});else await r.create({values,transaction});}
+    for(const values of partitions){const r=this.repo('nrSyncPartitions'),old=await r.findOne({filter:{partitionKey:values.partitionKey},transaction});if(old)await r.update({filterByTk:old.id,values,transaction});else await r.create({values,transaction});
+     // The page drawer's rows of a day whose content changed are summed again after the sync (page-days.ts).
+     await releasePageDay(this.p.db,values,transaction);}
     const finished=end===job.get('endDate');await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{cursor:shift(end,1),status:finished?'succeeded':'running',recordCount:Number(job.get('recordCount')||0)+collector.batches.length,attempts:0,errorCode:null,retryAt:null,...(finished?{finishedAt:new Date().toISOString()}: {})},transaction});
     if(finished&&!overviewOnly)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:currentLink.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
    });
+   // The page drawer's rows of the days just written, summed after the sync's transaction (page-days.ts).
+   if(written&&!overviewOnly)fillPageDaysInBackground(this.p.db,String(id),[[source,String(job.get('resource'))]],(days,ms)=>this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days,ms}));
+   return written;
    };
    if((this.p as Connections).mock?.enabled){if(!flight.mockSnapshot||typeof flight.mockSnapshot!=='object'||!('projectId' in flight.mockSnapshot)||flight.mockSnapshot.projectId!==String(id))throw Object.assign(new Error('NR_MOCK_RUN_SNAPSHOT_REQUIRED'),{code:'NR_MOCK_RUN_SNAPSHOT_REQUIRED'});return await (this.p as Connections).mock.runSnapshot(flight.mockSnapshot,()=>(this.p as Connections).network.run(String(id),execute));}
    return await execute();
@@ -292,7 +298,13 @@ class SyncService{
  // days it sums, so this only checks them until those days change.
  async readLocalViews(id){const dv=this.p.dataViews,next=this.localNext=this.localNext||new Map();if(!dv?.recentViews||Date.now()<(next.get(id)||0))return;next.set(id,Date.now()+60000);
   if((await dv.recentViews(id,'ranks')).length)await dv.pairRows(id);
-  for(const range of await dv.recentViews(id,'pages'))await dv.pageFigures(id,range);}
+  for(const range of await dv.recentViews(id,'pages'))await dv.pageFigures(id,range);
+  await this.fillPageDays(id);}
+ // The page drawer's rows of the days synced before nrPageDays or brought in another way, summed from their partitions
+ // (page-days.ts): no Google read. A project's first fill after an upgrade sums every synced day, one day at a time.
+ async fillPageDays(id){const link=await this.link(id).catch(()=>null);if(!link)return;let filled=0;const started=Date.now();
+  for(const [source,resource] of [['gsc',link.get('gscSiteUrl')],['ga4',link.get('ga4PropertyId')]])if(resource&&!this.stopped)filled+=await fillDays(this.p.db,String(id),source,String(resource));
+  if(filled)this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days:filled,ms:Date.now()-started});}
  // The other ranges a person chose on Search performance and Traffic in the last days, for a project read lately: Search
  // performance's tables and breakdown as `warm` reads the default's, and Traffic's two parts once a window (`readAhead`),
  // the second only for a project opened in the last day, as for the default. Traffic is read in the day only

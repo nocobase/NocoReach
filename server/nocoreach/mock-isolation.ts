@@ -13,6 +13,8 @@ export async function assertPristineMockDataset(
     'nrGoogleLinks',
     'nrSyncJobs',
     'nrSyncPartitions',
+    'nrPageDays',
+    'nrPageDayMarks',
     'nrKeywordRuns',
     'nrKeywordCandidates',
     'nrYouTubeVideos',
