@@ -1,6 +1,6 @@
 // Ported from every-app/open-seo db8bde1 src/client/components/StatTile.tsx (MIT).
 // Changes: change shown only when both periods are complete (`delta` null otherwise), lower-is-better metrics, a note slot,
-// an ⓘ with what the metric means, and a change's own note and hover detail.
+// an ⓘ with what the metric means, and a change's hover detail.
 import type { ReactNode } from "react";
 import { cn } from "#lib/utils";
 import { WithInfo } from "#components/reach/info-tip";
@@ -24,9 +24,9 @@ export function StatTile({
   tone?: "success" | "destructive";
   /**
    * `change` is a ratio (0.12 = +12%) or, with `points`, an absolute difference; `better` says which way is good.
-   * `note` follows the change in words ("ranked higher"); `tip` shows on hovering or focusing it ("Previous: 11.8").
+   * `tip` shows on hovering or focusing it ("Ranked higher by 0.8 · Previous: 11.8").
    */
-  delta?: { change: number; better: boolean; points?: boolean; note?: string; tip?: ReactNode } | null;
+  delta?: { change: number; better: boolean; points?: boolean; tip?: ReactNode } | null;
   hint?: string;
   /** What the metric means, in an ⓘ beside the label. */
   help?: ReactNode;
@@ -50,9 +50,6 @@ export function StatTile({
   );
 }
 
-function DeltaLine({ delta }: { delta: { change: number; better: boolean; points?: boolean; note?: string } }) {
-  return <>
-    <Delta value={delta.change} kind={delta.points ? 'points' : 'percent'} good={(delta.change >= 0) === delta.better ? 'up' : 'down'} />
-    {delta.note ? <span className='ml-1 text-muted-foreground' data-delta-note=''>{delta.note}</span> : null}
-  </>;
+function DeltaLine({ delta }: { delta: { change: number; better: boolean; points?: boolean } }) {
+  return <Delta value={delta.change} kind={delta.points ? 'points' : 'percent'} good={(delta.change >= 0) === delta.better ? 'up' : 'down'} />;
 }

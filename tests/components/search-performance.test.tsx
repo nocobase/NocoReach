@@ -248,8 +248,8 @@ describe('搜索表现', () => {
     expect(router.state.location.search).toContain('country=usa');
   });
 
-  // The average position falls as the ranking rises, so its ↑ comes with words saying so and the previous position on
-  // hover; the other figures keep their bare change.
+  // The average position falls as the ranking rises, so hovering its ↑ says so in words, with the previous position;
+  // the card keeps the bare change like the other figures.
   const withPositions = (previous: number, current: number) => {
     const searchReport = report();
     searchReport.totals.position = current;
@@ -264,16 +264,17 @@ describe('搜索表现', () => {
     const delta = tile('position').querySelector(
       '[data-slot="delta"]',
     ) as HTMLElement;
-    const note = tile('position').querySelector('[data-delta-note]');
     return {
       direction: delta.dataset.direction,
       text: delta.textContent,
       tone: delta.className.match(/text-nr-ink-\w+/)?.[0],
-      note: note?.textContent,
+      line: delta.parentElement!.closest('p')!.textContent,
     };
   };
+  const hoverPositionChange = () =>
+    userEvent.hover(tile('position').querySelector('[data-delta-tip]')!);
 
-  it('reads a smaller average position as a ranking that rose, with the previous position on hover', async () => {
+  it('reads a smaller average position as a ranking that rose, in its hover with the previous position', async () => {
     withPositions(11.8, 11.0);
     renderPage();
     await ready();
@@ -282,12 +283,11 @@ describe('搜索表现', () => {
       direction: 'up',
       text: '↑ 0.8',
       tone: 'text-nr-ink-green',
-      note: '排名上升',
+      line: '↑ 0.8',
     });
-    await userEvent.hover(tile('position').querySelector('[data-delta-tip]')!);
-    expect(await screen.findByText('上期 11.8')).toBeTruthy();
+    await hoverPositionChange();
+    expect(await screen.findByText('排名上升 0.8 位 · 上期 11.8')).toBeTruthy();
     for (const key of ['clicks', 'impressions', 'ctr']) {
-      expect(tile(key).querySelector('[data-delta-note]')).toBeNull();
       expect(tile(key).querySelector('[data-delta-tip]')).toBeNull();
     }
   });
@@ -300,18 +300,19 @@ describe('搜索表现', () => {
       direction: 'down',
       text: '↓ 0.8',
       tone: 'text-nr-ink-red',
-      note: '排名下降',
+      line: '↓ 0.8',
     });
+    await hoverPositionChange();
+    expect(await screen.findByText('排名下降 0.8 位 · 上期 10.2')).toBeTruthy();
   });
 
-  it('adds no words to an average position that did not change', async () => {
+  it('shows only the previous position for an average position that did not change', async () => {
     withPositions(11.02, 11.0);
     renderPage();
     await ready();
-    expect(positionChange()).toMatchObject({
-      direction: 'flat',
-      note: undefined,
-    });
+    expect(positionChange()).toMatchObject({ direction: 'flat' });
+    await hoverPositionChange();
+    expect(await screen.findByText('上期 11.0')).toBeTruthy();
   });
 
   it('says which way the ranking moved in English, and its ⓘ agrees with the arrow', async () => {
@@ -320,14 +321,11 @@ describe('搜索表现', () => {
       withPositions(11.8, 11.0);
       renderPage();
       await ready();
-      expect(positionChange()).toMatchObject({
-        text: '↑ 0.8',
-        note: 'ranked higher',
-      });
-      await userEvent.hover(
-        tile('position').querySelector('[data-delta-tip]')!,
-      );
-      expect(await screen.findByText('Previous: 11.8')).toBeTruthy();
+      expect(positionChange()).toMatchObject({ text: '↑ 0.8', line: '↑ 0.8' });
+      await hoverPositionChange();
+      expect(
+        await screen.findByText('Ranked higher by 0.8 · Previous: 11.8'),
+      ).toBeTruthy();
       await userEvent.hover(
         within(tile('position')).getByRole('button', {
           name: 'What is Average position',

@@ -325,12 +325,15 @@ function TotalsCards({ report, metric, onMetric }: { report: SearchReport; metri
   const { totals, previous } = report;
   const comparable = report.complete && previous;
   const pct = (cur: number, prev: number) => (comparable && prev > 0 ? { change: (cur - prev) / prev, better: cur >= prev } : null);
-  // Position falls as rankings improve, so the change is inverted: ↑ is a ranking that rose. The words beside it say so,
-  // and hovering it shows the previous position to check against.
+  // Position falls as rankings improve, so the change is inverted: ↑ is a ranking that rose. Hovering it says so in
+  // words, with the previous position to check against; the card itself keeps the bare change like the other figures.
   const rankChange = comparable && previous.position > 0 && totals!.position > 0 ? previous.position - totals!.position : null;
   const rankDirection = rankChange == null ? null : directionOf(Math.round(rankChange * 10));
-  const rank = rankChange != null ? { change: rankChange, better: rankChange >= 0, points: true, note: rankDirection === 'up' ? $t('searchPerformance.rankedHigher') : rankDirection === 'down' ? $t('searchPerformance.rankedLower') : undefined, tip: $t('searchPerformance.previousValue', { 0: position(previous!.position) }) } : null;
-  const tiles: { key: Metric; label: string; value: string; delta: { change: number; better: boolean; points?: boolean; note?: string; tip?: string } | null | false | undefined; hint?: string }[] = [
+  const rankTip = rankChange == null ? undefined : rankDirection === 'up' || rankDirection === 'down'
+    ? $t(rankDirection === 'up' ? 'searchPerformance.rankedHigherBy' : 'searchPerformance.rankedLowerBy', { 0: formatCount(Math.abs(rankChange), 1), 1: position(previous!.position) })
+    : $t('searchPerformance.previousValue', { 0: position(previous!.position) });
+  const rank = rankChange != null ? { change: rankChange, better: rankChange >= 0, points: true, tip: rankTip } : null;
+  const tiles: { key: Metric; label: string; value: string; delta: { change: number; better: boolean; points?: boolean; tip?: string } | null | false | undefined; hint?: string }[] = [
     { key: "clicks", label: $t('common.clicks'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
     { key: "impressions", label: $t('common.impressions'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
     { key: "ctr", label: $t('common.ctr'), value: report.coverage?.current.recordedDays === 0 ? "—" : ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },

@@ -1,5 +1,4 @@
 ## Search performance: Average position says which way the ranking moved
 
-- The Average position card adds "ranked higher" or "ranked lower" after its change, so a green ↑ on a smaller number reads as the ranking rising.
-- Hovering or focusing the change shows the previous period's average position.
+- Hovering or focusing the Average position card's change says which way the ranking moved and gives the previous period's average position ("Ranked higher by 0.8 · Previous: 11.8"); the card itself still shows only "↑ 0.8".
 - The card's ⓘ now says that ↑ means the ranking rose (the average position got smaller), matching the arrow instead of calling a decrease an improvement.
