@@ -32,7 +32,7 @@ vi.mock('#pages/reach-data', () => ({
 
 afterEach(() => setDictionary(null));
 
-const CJK = /[㐀-鿿＀-￯　-〿]/;
+const CJK = /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/;
 const fill = (text: string, label: string) => text.replace('{0}', label);
 
 // What the server answers (server/nocoreach/site-content.ts): every synced day for All time, the top-page samples
