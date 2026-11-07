@@ -3628,6 +3628,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "対象サイトの Search Console にアクセスできる Google アカウント",
   "playbook.automatic": "自動",
   "syncPanel.autoUpdate": "自動更新",
+  "syncPanel.pageHistory": "ページ履歴",
   "rangePicker.custom": "カスタム",
   "rangePicker.apply": "適用",
   "rangePicker.invalidStart": "有効な開始日を省略せずに入力してください。",

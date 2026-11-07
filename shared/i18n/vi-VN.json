@@ -3710,6 +3710,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "Tài khoản Google có quyền truy cập Search Console của trang web đó",
   "playbook.automatic": "Tự động",
   "syncPanel.autoUpdate": "Tự động cập nhật",
+  "syncPanel.pageHistory": "Lịch sử trang",
   "rangePicker.custom": "Tùy chỉnh",
   "rangePicker.apply": "Áp dụng",
   "rangePicker.invalidStart": "Vui lòng nhập ngày bắt đầu đầy đủ và hợp lệ.",

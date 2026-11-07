@@ -267,15 +267,19 @@ it("reads the latest write for the snapshots' key from the (project, updatedAt) 
   const statements = await partitionReads(client, () =>
     sync.snapshotKey(projectId, link, project),
   );
-  // The count, then the latest write. Its nulls-last `case` order still sorts in a temporary B-tree, but updated_at
-  // now comes from the index: stored after the payload, it was read through every payload of the project.
-  expect(statements).toHaveLength(2);
-  const latest = statements.find((sql) => /order by/i.test(sql));
-  expect(latest).toMatch(/updated_at/);
-  expect(latest).not.toMatch(/payload/);
-  expect(await planOf(client, latest!)).toMatch(
-    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_updated_at \(project_id=\?\)/,
-  );
+  // The count, then the latest write, of the days other than page days and of the page days the snapshots read. The
+  // nulls-last `case` order still sorts in a temporary B-tree, but updated_at now comes from the index: stored after the
+  // payload, it was read through every payload of the project. Grain and date are stored before it.
+  expect(statements).toHaveLength(4);
+  const latest = statements.filter((sql) => /order by/i.test(sql));
+  expect(latest).toHaveLength(2);
+  for (const sql of latest) {
+    expect(sql).toMatch(/updated_at/);
+    expect(sql).not.toMatch(/payload/);
+    expect(await planOf(client, sql)).toMatch(
+      /SEARCH .* USING INDEX ix_nr_sync_partitions_project_updated_at \(project_id=\?\)/,
+    );
+  }
 });
 
 it('reads uncommitted rows inside a transaction without keeping them, and restores a kept build by its key', async () => {

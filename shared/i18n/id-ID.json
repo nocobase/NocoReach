@@ -3710,6 +3710,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "Akun Google dengan akses Search Console ke situs tersebut",
   "playbook.automatic": "Otomatis",
   "syncPanel.autoUpdate": "Pembaruan otomatis",
+  "syncPanel.pageHistory": "Riwayat halaman",
   "rangePicker.custom": "Kustom",
   "rangePicker.apply": "Terapkan",
   "rangePicker.invalidStart": "Masukkan tanggal mulai yang lengkap dan valid.",

@@ -3656,6 +3656,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "能访问该站点 Search Console 的 Google 账号",
   "playbook.automatic": "自动",
   "syncPanel.autoUpdate": "自动更新",
+  "syncPanel.pageHistory": "页面历史",
   "rangePicker.custom": "自定义",
   "rangePicker.apply": "应用",
   "rangePicker.invalidStart": "请输入完整且有效的开始日期。",

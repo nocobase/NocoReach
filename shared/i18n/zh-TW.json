@@ -3628,6 +3628,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "能存取該站點 Search Console 的 Google 帳號",
   "playbook.automatic": "自動",
   "syncPanel.autoUpdate": "自動更新",
+  "syncPanel.pageHistory": "頁面歷史",
   "rangePicker.custom": "自訂",
   "rangePicker.apply": "套用",
   "rangePicker.invalidStart": "請輸入完整且有效的開始日期。",
