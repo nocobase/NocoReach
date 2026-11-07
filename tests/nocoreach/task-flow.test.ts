@@ -507,6 +507,14 @@ test('notifications: when the Agent finishes and the task waits for its owner, t
  const d=await f.view();assert.equal(d.work.flow.stages[d.work.stageIndex].kind,'review');assert.deepEqual(told,[['waiting',d.work.flow.stages[d.work.stageIndex].name]]);
 });
 
+test('notifications: once the task no longer waits for review its Waiting for you messages are closed, and only then',async()=>{
+ const f=fixture();const told=[],closed=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>e.kind));},close:async(taskId,action)=>{closed.push([String(taskId),action]);}};
+ await connectAgent(f);await f.command('startTask',{playbookId:'change-research'});
+ const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
+ assert.deepEqual(told,['waiting']);assert.deepEqual(closed,[],'waiting for review: nothing to close');
+ await f.command('comment',{comment:'still reading'});assert.deepEqual(closed,[],'a comment leaves it waiting');
+ await f.command('cancelTask');assert.deepEqual(closed,[['1','read']]);
+});
 test('a failed Agent run waits for its owner as Needs you, without a message; Try again puts it back in progress',async()=>{
  const f=fixture();f.state.users.push({id:2,nickname:'Lin',roles:[{name:'nr.member'}]});
  const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>e.kind));}};

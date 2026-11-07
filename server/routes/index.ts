@@ -10,6 +10,7 @@ import { chatBusinessRoutes } from './chat-business.js';
 import { taskAgentRoutes } from './task-agent.js';
 import { manualTaskRoutes, taskMediaContentRoutes } from './manual-tasks.js';
 import { connectRoutes } from './connect.js';
+import { inboxNoticeRoutes } from './inbox-notices.js';
 
 const routes: readonly AppRouteContribution<Application>[] = [
   accessKeyRoutes,
@@ -22,6 +23,7 @@ const routes: readonly AppRouteContribution<Application>[] = [
   manualTaskRoutes,
   taskMediaContentRoutes,
   connectRoutes,
+  inboxNoticeRoutes,
 ];
 
 export default routes;

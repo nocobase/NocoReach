@@ -45,6 +45,8 @@ import { LegacyCache } from '../nocoreach/legacy/context.js';
 import { ConnectionStatusCache } from '../nocoreach/connection-status-cache.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
 import { LegacyNotifications } from '../nocoreach/legacy/notifications.js';
+import { InboxNotices } from '../nocoreach/inbox-notices.js';
+import { inAppNotificationStoreToken } from '@nocobase/app-plugin-notification-in-app/server';
 import {
   JOB_STATUS,
   LegacyWorkflows,
@@ -86,6 +88,8 @@ export interface NocoReachRuntime {
   readonly plugin: Connections;
   readonly users: LegacyUsers;
   readonly variables: LegacyVariables;
+  /** What NocoReach knows about the in-app messages it sent, for the Inbox. */
+  readonly inboxNotices: InboxNotices;
   readonly cache: LegacyCache;
   readonly connectionStatus: ConnectionStatusCache;
   readonly logger: LegacyLogger;
@@ -187,12 +191,18 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       const basePath = identity?.publicBasePath ?? '/main';
       // Task and analysis notifications: `pm.get('notification-manager')` and its channels, answered by the
       // Notification plugin; in-app messages go to the configured in-app channel, the header's inbox.
+      // What NocoReach knows about the in-app messages it sent (inbox-notices.ts): read by the Inbox, closed by tasks.
+      const inboxNotices = new InboxNotices(
+        () => database,
+        () => (this.app.container.has(inAppNotificationStoreToken) ? this.app.container.resolve(inAppNotificationStoreToken) : undefined),
+      );
       if (this.app.container.has(notificationServiceToken)) {
         const notifications = new LegacyNotifications(
           () => this.app.container.resolve(notificationServiceToken),
           () => this.app.config.get<NotificationConfig>('notification')?.channels ?? {},
           users,
           { basePath, origin: identity?.publicOrigin },
+          inboxNotices,
         );
         legacy.provide('notification-manager', notifications.plugin);
         db.define('notificationChannels', notifications.repository());
@@ -206,7 +216,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
       const schedules = new ScheduleManagement(db, workflows, this.app.container.resolve(schedulerServiceToken));
-      return { legacy, plugin, users, variables, cache: new LegacyCache(), connectionStatus: new ConnectionStatusCache(), logger, workflows, analysisRuns, schedules, ready };
+      return { legacy, plugin, users, variables, inboxNotices, cache: new LegacyCache(), connectionStatus: new ConnectionStatusCache(), logger, workflows, analysisRuns, schedules, ready };
     });
   }
 

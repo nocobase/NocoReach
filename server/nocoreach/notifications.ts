@@ -2,6 +2,7 @@
 import type { Connections } from './plugin.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { boardState } from './execution/model.js';
+import { TASK_NOTICE, ANALYSIS_FAILED_NOTICE, NOCOREACH_SOURCE } from './inbox-notices.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // 通知 (2026-10-08 user decision): NocoBase's own notifications. Everyone gets an in-app message — the bell in
@@ -22,37 +23,42 @@ class Notifications{
   if(!await repo.findOne({filter:{name:IN_APP}}))await repo.create({values:{name:IN_APP,title:'NocoReach',notificationType:'in-app-message',options:{},description:'NocoReach 的任务和分析提醒'}});return true;}
  async emailChannel(){const row=await this.repo('notificationChannels')?.findOne({filter:{notificationType:'email'},sort:['id']});return row?.get?row.get('name'):row?.name||null;}
  // One message to some people: in the app, and by email when there is an email channel. Returns how many were told.
- async send(userIds,{title,content,url}){
+ // `source` names its kind and `ref` what it is about (inbox-notices.ts), so the Inbox can show it and close it later.
+ async send(userIds,{title,content,url,source=NOCOREACH_SOURCE,ref}){
   try{const ids=[...new Set((userIds||[]).filter(x=>x!=null&&x!=='').map(String))],m=this.manager();if(!ids.length||!m)return 0;
    if(!this.ready)this.ready=this.channel().catch(e=>{this.ready=null;throw e;});await this.ready;
    const receivers={type:'userId',value:ids};
-   await m.send({channelName:IN_APP,triggerFrom:'nocoreach',message:{title,content,options:url?{url:`${PORTAL}${url}`}:{}},receivers});
+   await m.send({channelName:IN_APP,triggerFrom:source,...(ref!=null&&ref!==''?{referenceId:String(ref)}:{}),message:{title,content,options:url?{url:`${PORTAL}${url}`}:{}},receivers});
    // Dedicated mock deployments retain inbox notifications but never send real email.
    const email=(this.p as Connections).mock?.enabled?null:await this.emailChannel().catch(()=>null);
-   if(email)await m.send({channelName:email,triggerFrom:'nocoreach',message:{subject:`NocoReach：${title}`,contentType:'text',text:`${content}\n\n在 NocoReach 里查看：${PORTAL}${url||'/home'}`},receivers}).catch(e=>this.warn('NocoReach email notification failed',e));
+   if(email)await m.send({channelName:email,triggerFrom:source,message:{subject:`NocoReach：${title}`,contentType:'text',text:`${content}\n\n在 NocoReach 里查看：${PORTAL}${url||'/home'}`},receivers}).catch(e=>this.warn('NocoReach email notification failed',e));
    return ids.length;
   }catch(e){this.warn('NocoReach notification failed',e);return 0;}}
  async userName(id){try{return nameOf((await this.repo('users').findOne({filterByTk:id}))?.toJSON?.()||{id});}catch{return String(id);}}
  // What happened on a task, worked out by the task service when it saved: it now waits for its owner (step), it has a
  // new owner (by), someone else left a message (by, comment).
  async taskEvents(task,w,events){
-  const no=taskNoOf(task),label=no||task.title,url=`/actions/${task.id}`,owner=w.humanOwnerId;if(!owner)return 0;let told=0;
+  const no=taskNoOf(task),label=no||task.title,url=`/actions/${task.id}`,owner=w.humanOwnerId,ref=task.id;if(!owner)return 0;let told=0;
   for(const e of events){
-   if(e.kind==='waiting')told+=await this.send([owner],{title:systemMessageText('messages.waits', { 0: label, 1: e.step }),content:task.title,url});
-   else if(e.kind==='owner')told+=await this.send([owner],{title:systemMessageText('messages.nowOwn', { 0: label }),content:e.by?systemMessageText('messages.assigned', { 0: task.title, 1: await this.userName(e.by) }):task.title,url});
-   else if(e.kind==='comment')told+=await this.send([owner],{title:systemMessageText('messages.commented', { 0: await this.userName(e.by), 1: label }),content:String(e.comment||'').slice(0,300),url});
+   // One "Waiting for you" per task: the earlier ones, about a review that is no longer the current one, go.
+   if(e.kind==='waiting'){await this.close(ref,'delete');told+=await this.send([owner],{title:systemMessageText('messages.waits', { 0: label, 1: e.step }),content:task.title,url,source:TASK_NOTICE.waiting,ref});}
+   else if(e.kind==='owner')told+=await this.send([owner],{title:systemMessageText('messages.nowOwn', { 0: label }),content:e.by?systemMessageText('messages.assigned', { 0: task.title, 1: await this.userName(e.by) }):task.title,url,source:TASK_NOTICE.owner,ref});
+   else if(e.kind==='comment')told+=await this.send([owner],{title:systemMessageText('messages.commented', { 0: await this.userName(e.by), 1: label }),content:String(e.comment||'').slice(0,300),url,source:TASK_NOTICE.comment,ref});
   }
   return told;}
+ // The task no longer waits for its owner's review (reviewed, cancelled or archived): its "Waiting for you" messages are
+ // marked read (`read`), or removed before a new one is sent (`delete`). Never fails the work that asked.
+ async close(taskId,action='read'){try{return await this.manager()?.close?.(TASK_NOTICE.waiting,String(taskId),action)||0;}catch(e){this.warn('NocoReach notification close failed',e);return 0;}}
  // A snoozed task came back on its day (execution/snooze.ts): its owner hears it once, with what it was waiting for.
  async snoozeDue(task,w,snooze){
   const owner=w.humanOwnerId;if(!owner)return 0;
   const state=systemMessageText(({doing:'common.inProgress',review:'common.needsConfirmation'})[boardState(w)]||'common.pending');
   const content=[task.title,...(snooze?.reason?[systemMessageText('messages.snoozeReason',{0:snooze.reason})]:[])].join('\n');
-  return this.send([owner],{title:systemMessageText('messages.snoozeDue',{0:taskNoOf(task)||task.title,1:state}),content,url:`/actions/${task.id}`});}
+  return this.send([owner],{title:systemMessageText('messages.snoozeDue',{0:taskNoOf(task)||task.title,1:state}),content,url:`/actions/${task.id}`,source:TASK_NOTICE.snoozeDue,ref:task.id});}
  // The day's analysis failed after its automatic tries: the admins hear it.
  async analysisFailed(projectId,error){
   const admins=(await this.p.members?.list?.().catch(()=>[])||[]).filter(u=>u.role==='admin').map(u=>u.id);
   let project='';try{project=(await this.p.project(String(projectId)))?.name||'';}catch{/* the message still says what failed */}
-  return this.send(admins,{title:systemMessageText('notifications.todayDailyAnalysisNotFinish'),content:`${project?`${project}：`:''}${error}。可以在洞察页点“重新分析”。`,url:'/home'});}
+  return this.send(admins,{title:systemMessageText('notifications.todayDailyAnalysisNotFinish'),content:`${project?`${project}：`:''}${error}。可以在洞察页点“重新分析”。`,url:'/home',source:ANALYSIS_FAILED_NOTICE,ref:String(projectId)});}
 }
 export { Notifications, IN_APP, PORTAL };
