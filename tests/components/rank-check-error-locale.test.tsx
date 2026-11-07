@@ -90,12 +90,17 @@ const reasons: Array<[string, string, string]> = [
     en('dataforseo.thirdPartyRequestFailedCheck'),
   ],
 ];
-// A keyword in English, one in Chinese, and one holding a full-width colon (the keyword check refuses only ":").
+// A keyword in English, one in Chinese, and ones holding full-width colons anywhere, also at the start or the end and
+// in a row (the keyword check refuses only ":").
 const keywords = [
   'ERPNext alternative',
   '开源 CRM',
   'CRM：开源',
   '没有完成：A',
+  '：CRM',
+  '：：CRM',
+  'CRM：',
+  '：：CRM：：开源',
 ];
 
 afterEach(() => {
@@ -122,6 +127,49 @@ describe('rank check failures', () => {
     expect(translateRankCheckError('kw：connection reset by peer')).toBe(
       'kw: connection reset by peer',
     );
+  });
+
+  it('keeps a keyword that begins with a colon whole when the reason is unknown', () => {
+    setDictionary(english);
+    expect(translateRankCheckError('：CRM：connection reset by peer')).toBe(
+      '：CRM: connection reset by peer',
+    );
+  });
+
+  it('reads a keyword that begins with a colon on Keywords › Rank tracking', async () => {
+    const text = `：CRM：${zh('common.notComplete')}`;
+    action.mockResolvedValue({
+      lastRun: {
+        at: '2026-11-01T00:00:00Z',
+        ok: false,
+        errors: [text],
+        checked: 0,
+      },
+      keywords: [
+        {
+          id: 'k',
+          keyword: '：CRM',
+          locationCode: 2840,
+          language: 'en',
+          addedAt: '2026-10-01T00:00:00Z',
+          latest: null,
+          previous: null,
+          history: [],
+          nextCheckAt: null,
+        },
+      ],
+    });
+    setDictionary(english);
+    render(
+      <MemoryRouter>
+        <RankTrackingTab />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText(
+        "The last check didn't finish: ：CRM: Didn't complete",
+      ),
+    ).toBeTruthy();
   });
 
   it('shows the whole sentence on Keywords › Rank tracking in English and Chinese', async () => {
@@ -168,34 +216,35 @@ describe('rank check failures', () => {
     expect(await screen.findByText(`上次检查有没完成的：${text}`)).toBeTruthy();
   });
 
-  it('reads the rank row on Connections › Health in English', () => {
-    const stored = `开源 CRM：${zh('messages.resultUncertainMayChargedNot')}`;
-    const item: HealthItem = {
-      id: 'rank',
-      name: '排名跟踪',
-      state: 'failing',
-      message: stored,
-      messageText: {
-        key: 'dataHealth.extendedFailure',
-        params: { 0: { systemError: stored } },
-      },
-      lastSuccessAt: null,
-      dataThrough: null,
-      nextSyncAt: null,
-      retry: null,
-    };
-    setDictionary(english);
-    render(<HealthLine item={item} />);
-    const line = screen.getByText(
-      new RegExp(en('messages.resultUncertainMayChargedNot').slice(0, 20)),
-    );
-    expect(line.textContent).toBe(
-      en('dataHealth.extendedFailure', {
-        0: `开源 CRM: ${en('messages.resultUncertainMayChargedNot')}`,
-      }),
-    );
-    expect(line.textContent!.replace('开源 CRM', '')).not.toMatch(CJK);
-  });
+  for (const keyword of ['开源 CRM', '：CRM'])
+    it(`reads the rank row for "${keyword}" on Connections › Health in English`, () => {
+      const stored = `${keyword}：${zh('messages.resultUncertainMayChargedNot')}`;
+      const item: HealthItem = {
+        id: 'rank',
+        name: '排名跟踪',
+        state: 'failing',
+        message: stored,
+        messageText: {
+          key: 'dataHealth.extendedFailure',
+          params: { 0: { systemError: stored } },
+        },
+        lastSuccessAt: null,
+        dataThrough: null,
+        nextSyncAt: null,
+        retry: null,
+      };
+      setDictionary(english);
+      render(<HealthLine item={item} />);
+      const line = screen.getByText(
+        new RegExp(en('messages.resultUncertainMayChargedNot').slice(0, 20)),
+      );
+      expect(line.textContent).toBe(
+        en('dataHealth.extendedFailure', {
+          0: `${keyword}: ${en('messages.resultUncertainMayChargedNot')}`,
+        }),
+      );
+      expect(line.textContent!.replace(keyword, '')).not.toMatch(CJK);
+    });
 });
 
 describe('Keywords › Research failures', () => {
