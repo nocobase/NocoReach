@@ -88,7 +88,30 @@ const dayKeyOf = (
     .update(JSON.stringify([projectId, source, resource, date]))
     .digest('hex');
 
-/** A day's partition summed by page, under the address without the page identity. */
+/**
+ * The path a GA4 row is kept under: its stored path without the query or a trailing slash, still undecoded, so Pages'
+ * figures read it as they read the partition (`pathOf` in data-views.ts) and the drawer as it reads the address
+ * (`rowPath`). A path that does not start with `/` is kept whole but for the query; Pages leaves it out.
+ */
+export function storedPath(page: unknown) {
+  const p = text(page || '').split('?')[0];
+  return p.startsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
+}
+/** The path a row's address is matched by in the drawer: the address's path for a GA4 row with a host. */
+function matchPath(source: PageDaySource, host: string, path: string) {
+  if (source === 'gsc' || !host) return normPath(path);
+  try {
+    return normPath(new URL(`https://${host}${path}`).pathname);
+  } catch {
+    // Kept as stored: rowPath falls back to it too.
+    return normPath(path);
+  }
+}
+
+/**
+ * A day's partition summed by address, without the page identity: Search Console rows under their page key, GA4 rows
+ * under their host as stored and `storedPath`.
+ */
 export function pageRows(source: PageDaySource, payload: unknown): Row[] {
   const sums = new Map<string, Row>();
   const keys = new Map<string, string>();
@@ -108,16 +131,7 @@ export function pageRows(source: PageDaySource, payload: unknown): Row[] {
       row.impressions! += Number(x.impressions) || 0;
     } else {
       const host = x.host ? text(x.host) : '';
-      // The address's path is what the page identity reads (rowPath), so the query and a trailing slash go.
-      let path = normPath(x.page);
-      if (host)
-        try {
-          path = normPath(
-            new URL(`https://${host}${text(x.page || '')}`).pathname,
-          );
-        } catch {
-          /* kept as stored: rowPath falls back to it too */
-        }
+      const path = storedPath(x.page);
       const key = `${host} ${path}`;
       let row = sums.get(key);
       if (!row) sums.set(key, (row = { host, path, views: 0 }));
@@ -170,23 +184,100 @@ function dayOfPartition(partition: Partition) {
 function prepareDay(partition: Partition) {
   const at = dayOfPartition(partition);
   if (!at) return null;
-  const summed = pageRows(at.scope.source, partition.payload);
-  const rows = summed.map((r) => ({
-    ...at.scope,
-    host: r.host,
-    path: r.path,
-    pathHash: hashOf(r.path),
-    clicks: r.clicks ?? null,
-    impressions: r.impressions ?? null,
-    views: r.views ?? null,
-  }));
+  const rows = pageRows(at.scope.source, partition.payload);
   const mark = {
     ...at.scope,
     dayKey: at.dayKey,
-    payloadHash: rowsHashOf(summed),
+    payloadHash: rowsHashOf(rows),
     pages: rows.length,
   };
   return { scope: at.scope, rows, mark };
+}
+
+const scopeKeyOf = (projectId: string, source: string, resource: string) =>
+  createHash('sha256')
+    .update(JSON.stringify([projectId, source, resource]))
+    .digest('hex');
+const addressKeyOf = (scopeId: number, host: string, path: string) =>
+  createHash('sha256')
+    .update(JSON.stringify([scopeId, host, path]))
+    .digest('hex');
+
+/** The id of a project's source in nrPageScopes, made when `create` is set; null when it has none. */
+async function scopeIdOf(
+  db: LegacyDatabase,
+  projectId: string,
+  source: string,
+  resource: string,
+  {
+    transaction,
+    create = false,
+  }: { transaction?: LegacyTransaction; create?: boolean } = {},
+): Promise<number | null> {
+  const scopeKey = scopeKeyOf(projectId, source, resource);
+  const find = async (): Promise<unknown> =>
+    (
+      await db.getRepository('nrPageScopes').findOne({
+        filter: { scopeKey },
+        fields: ['id'],
+        transaction,
+      })
+    )?.get('id') as unknown;
+  let id = await find();
+  if (id == null && create) {
+    await db.insertMany(
+      'nrPageScopes',
+      [{ scopeKey, projectId, source, resource }],
+      transaction,
+    );
+    id = await find();
+  }
+  return id == null ? null : Number(id);
+}
+
+/** The ids of a day's addresses in nrPageAddresses, made for the addresses it does not hold yet. */
+async function addressIdsOf(
+  db: LegacyDatabase,
+  projectId: string,
+  source: PageDaySource,
+  scopeId: number,
+  rows: Row[],
+  transaction: LegacyTransaction,
+) {
+  const repo = db.getRepository('nrPageAddresses');
+  const wanted = new Map<string, Row>();
+  for (const r of rows) wanted.set(addressKeyOf(scopeId, r.host, r.path), r);
+  const ids = new Map<string, number>();
+  const read = async (keys: string[]) => {
+    for (let i = 0; i < keys.length; i += PAGE_READ_HASHES)
+      for (const a of await repo.find({
+        filter: { addressKey: { $in: keys.slice(i, i + PAGE_READ_HASHES) } },
+        fields: ['id', 'addressKey'],
+        transaction,
+      }))
+        ids.set(String(a.get('addressKey')), Number(a.get('id')));
+  };
+  await read([...wanted.keys()]);
+  const added = [...wanted.keys()].filter((k) => !ids.has(k));
+  if (added.length) {
+    await db.insertMany(
+      'nrPageAddresses',
+      added.map((addressKey) => {
+        const r = wanted.get(addressKey)!;
+        return {
+          addressKey,
+          projectId,
+          scopeId,
+          host: r.host,
+          path: r.path,
+          pathHash: hashOf(matchPath(source, r.host, r.path)),
+        };
+      }),
+      transaction,
+    );
+    await read(added);
+  }
+  return (r: Row) => ids.get(addressKeyOf(scopeId, r.host, r.path))!;
 }
 
 // A mark whose day is still to be summed from the partition content it names (`pages` is otherwise the day's row count).
@@ -318,14 +409,13 @@ async function markedDays(
   );
 }
 
-/** The synced days of a source (within the range when one is given) not yet held in nrPageDays. */
-async function missingDays(
+/** The synced days of a source, within the range when one is given. */
+async function storedDays(
   db: LegacyDatabase,
   projectId: string,
   source: PageDaySource,
   resource: string,
   range: Range = {},
-  held?: Set<string>,
 ) {
   const partitions = db.getRepository('nrSyncPartitions');
   const filter = { projectId, source, grain: PAGE_GRAINS[source], resource };
@@ -342,9 +432,22 @@ async function missingDays(
         fields: ['date'],
       }))
         stored.push(dayOf(r.get('date')));
+  return [...new Set(stored)].sort();
+}
+
+/** The synced days of a source (within the range when one is given) not yet held in nrPageDays. */
+async function missingDays(
+  db: LegacyDatabase,
+  projectId: string,
+  source: PageDaySource,
+  resource: string,
+  range: Range = {},
+  held?: Set<string>,
+) {
+  const stored = await storedDays(db, projectId, source, resource, range);
   const marked =
     held ?? (await markedDays(db, projectId, source, resource, range));
-  return [...new Set(stored)].filter((d) => !marked.has(d)).sort();
+  return stored.filter((d) => !marked.has(d));
 }
 
 const FILL_DAYS = 8,
@@ -432,23 +535,39 @@ export async function fillDays(
         );
       });
       if (!write.length) return 0;
+      const scopeId = (await scopeIdOf(db, projectId, source, resource, {
+        transaction,
+        create: true,
+      }))!;
       // Rows and the pending mark a released day still has are replaced.
       await db.getRepository('nrPageDays').destroy({
-        filter: {
-          projectId,
-          source,
-          resource,
-          day: { $in: write.map((d) => d.scope.day) },
-        },
+        filter: { scopeId, day: { $in: write.map((d) => d.scope.day) } },
         transaction,
       });
       await db.getRepository('nrPageDayMarks').destroy({
         filter: { dayKey: { $in: write.map((d) => d.mark.dayKey) } },
         transaction,
       });
+      const idOf = await addressIdsOf(
+        db,
+        projectId,
+        source,
+        scopeId,
+        write.flatMap((d) => d.rows),
+        transaction,
+      );
       await db.insertMany(
         'nrPageDays',
-        write.flatMap((d) => d.rows),
+        write.flatMap((d) =>
+          d.rows.map((r) => ({
+            scopeId,
+            day: d.scope.day,
+            pageId: idOf(r),
+            clicks: r.clicks ?? null,
+            impressions: r.impressions ?? null,
+            views: r.views ?? null,
+          })),
+        ),
         transaction,
       );
       await db.insertMany(
@@ -621,36 +740,46 @@ export async function readPageDays(
   const candidates = new Set(candidatePaths(path, identity));
   const hashes = [...new Set([...candidates].map(hashOf))];
   const rows: Held[] = [];
-  for (let i = 0; i < hashes.length; i += PAGE_READ_HASHES)
+  // The page's addresses of each source, then their days.
+  const addresses = new Map<
+    number,
+    { source: PageDaySource; resource: string; host: string; path: string }
+  >();
+  for (const [source, resource] of wanted) {
+    const scopeId = await scopeIdOf(db, projectId, source, resource);
+    if (scopeId == null) continue;
+    for (let i = 0; i < hashes.length; i += PAGE_READ_HASHES)
+      for (const a of await db.getRepository('nrPageAddresses').find({
+        filter: {
+          scopeId,
+          pathHash: { $in: hashes.slice(i, i + PAGE_READ_HASHES) },
+        },
+        fields: ['id', 'host', 'path'],
+      }))
+        addresses.set(Number(a.get('id')), {
+          source,
+          resource,
+          host: String(a.get('host') ?? ''),
+          path: String(a.get('path')),
+        });
+  }
+  const ids = [...addresses.keys()];
+  for (let i = 0; i < ids.length; i += PAGE_READ_HASHES)
     for (const r of await db.getRepository('nrPageDays').find({
       filter: {
-        projectId,
-        pathHash: { $in: hashes.slice(i, i + PAGE_READ_HASHES) },
-        resource: { $in: wanted.map(([, resource]) => resource) },
+        pageId: { $in: ids.slice(i, i + PAGE_READ_HASHES) },
         ...dayRange(range),
       },
-      fields: [
-        'source',
-        'resource',
-        'day',
-        'host',
-        'path',
-        'clicks',
-        'impressions',
-        'views',
-      ],
+      fields: ['pageId', 'day', 'clicks', 'impressions', 'views'],
     })) {
+      const address = addresses.get(Number(r.get('pageId')))!;
       // Rows of a day no longer marked (its partition changed and is still to be summed again) are left out: the day
       // is summed from its partition below.
-      const source = String(r.get('source')) as PageDaySource;
       const date = dateOfDay(r.get('day'));
-      if (!days[source]?.has(date)) continue;
+      if (!days[address.source]?.has(date)) continue;
       rows.push({
-        source,
-        resource: String(r.get('resource')),
+        ...address,
         date,
-        host: String(r.get('host') ?? ''),
-        path: String(r.get('path')),
         clicks: Number(r.get('clicks')) || 0,
         impressions: Number(r.get('impressions')) || 0,
         views: Number(r.get('views')) || 0,
@@ -674,7 +803,7 @@ export async function readPageDays(
         const date = dayOf(r.get('date'));
         days[source]!.add(date);
         for (const row of pageRows(source, r.get('payload')))
-          if (candidates.has(row.path))
+          if (candidates.has(matchPath(source, row.host, row.path)))
             rows.push({
               ...row,
               source,
@@ -709,4 +838,141 @@ export async function readPageDays(
       rowPath({ host: r.host, page: r.path }, identity) === target,
   );
   return { days, search, web };
+}
+
+// Days summed in one GROUP BY: SQLite answers synchronously, so a long range is summed a month at a time, giving way
+// to other requests between them.
+const SUM_DAYS = 31;
+export type PagePeriodRow = Row & { period: number };
+
+/**
+ * Every address's figures of a source in each period (Pages' list): the held days summed by the database from
+ * nrPageDays, the synced days not held yet summed from their partitions, which also starts the project's fill. Rows are
+ * under the address as stored (`pageRows`), one per period and address; `days` counts each period's synced days.
+ */
+export async function sumPageDays(
+  db: LegacyDatabase,
+  projectId: string,
+  source: PageDaySource,
+  resource: string,
+  periods: { start: string; end: string }[],
+  options: { logger?: FillLogger; stopped?: () => boolean } = {},
+) {
+  const range = {
+    start: periods.map((p) => p.start).sort()[0],
+    end: periods
+      .map((p) => p.end)
+      .sort()
+      .at(-1),
+  };
+  const [stored, held] = await Promise.all([
+    storedDays(db, projectId, source, resource, range),
+    markedDays(db, projectId, source, resource, range),
+  ]);
+  const periodOf = (date: string) =>
+    periods.findIndex((p) => date >= p.start && date <= p.end);
+  const days = periods.map(() => 0);
+  const heldDays: [number, number][] = [];
+  const missing: string[] = [];
+  for (const date of stored) {
+    const p = periodOf(date);
+    if (p < 0) continue;
+    days[p]++;
+    if (held.has(date)) heldDays.push([p, dayNumber(date)]);
+    else missing.push(date);
+  }
+  const sums = new Map<string, PagePeriodRow>();
+  const add = (p: number, host: string, path: string, r: Partial<Row>) => {
+    const k = `${p} ${host} ${path}`;
+    let o = sums.get(k);
+    if (!o) sums.set(k, (o = { period: p, host, path }));
+    for (const f of ['clicks', 'impressions', 'views'] as const)
+      if (r[f] != null) o[f] = (o[f] ?? 0) + Number(r[f]);
+  };
+  const scopeId = heldDays.length
+    ? await scopeIdOf(db, projectId, source, resource)
+    : null;
+  if (scopeId != null) {
+    const repo = db.getRepository('nrPageDays');
+    const byPage = new Map<number, Partial<Row>[]>();
+    for (let p = 0; p < periods.length; p++) {
+      const own = heldDays.filter(([q]) => q === p).map(([, d]) => d);
+      for (let i = 0; i < own.length; i += SUM_DAYS) {
+        if (i) await giveWay();
+        for (const r of await repo.groupBy!({
+          by: ['pageId'],
+          sum: ['clicks', 'impressions', 'views'],
+          filter: { scopeId, day: { $in: own.slice(i, i + SUM_DAYS) } },
+        })) {
+          const id = Number(r.pageId);
+          let list = byPage.get(id);
+          if (!list) byPage.set(id, (list = []));
+          list.push({ ...(r as Partial<Row>), period: p } as Partial<Row>);
+        }
+      }
+      await giveWay();
+    }
+    if (byPage.size)
+      for (const a of await db.getRepository('nrPageAddresses').find({
+        filter: { scopeId },
+        fields: ['id', 'host', 'path'],
+      })) {
+        const list = byPage.get(Number(a.get('id')));
+        if (list)
+          for (const r of list)
+            add(
+              (r as PagePeriodRow).period,
+              String(a.get('host') ?? ''),
+              String(a.get('path')),
+              r,
+            );
+      }
+  }
+  // Days not yet held are summed from their partitions, a few at a time, and the project's days filled after.
+  const partitions = db.getRepository('nrSyncPartitions');
+  for (let i = 0; i < missing.length; i += MISSING_READ_DAYS) {
+    if (i) await giveWay();
+    for (const r of await partitions.find({
+      filter: {
+        projectId,
+        source,
+        grain: PAGE_GRAINS[source],
+        resource,
+        date: { $in: missing.slice(i, i + MISSING_READ_DAYS) },
+      },
+      fields: ['date', 'payload'],
+    })) {
+      const p = periodOf(dayOf(r.get('date')));
+      for (const row of pageRows(source, r.get('payload')))
+        add(p, row.host, row.path, row);
+    }
+  }
+  if (missing.length)
+    fillPageDaysInBackground(db, projectId, [{ source, resource }], options);
+  return { days, rows: [...sums.values()] };
+}
+
+/** Deletes the projects' page days, addresses, sources and marks (a demo project cleared). */
+export async function clearPageDays(
+  db: LegacyDatabase,
+  projectIds: string[],
+  transaction?: LegacyTransaction,
+) {
+  const scopes = (
+    await db.getRepository('nrPageScopes').find({
+      filter: { projectId: { $in: projectIds } },
+      fields: ['id'],
+      transaction,
+    })
+  ).map((s) => Number(s.get('id')));
+  if (scopes.length)
+    await db.getRepository('nrPageDays').destroy({
+      filter: { scopeId: { $in: scopes } },
+      transaction,
+    });
+  for (const name of ['nrPageAddresses', 'nrPageScopes', 'nrPageDayMarks'])
+    await db.getRepository(name).destroy({
+      filter: { projectId: { $in: projectIds } },
+      transaction,
+    });
 }

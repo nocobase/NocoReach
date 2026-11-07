@@ -408,9 +408,10 @@ export function registerClassicImport(nr: ImportRuntime) {
           }));
           // The page drawer's days are summed from the partitions replaced here (page-days.ts), and summed again
           // from the imported ones.
-          for (const name of [...TARGET_TABLES, 'nrPageDays', 'nrPageDayMarks'])
+          for (const name of [...TARGET_TABLES, 'nrPageDays', 'nrPageDayMarks', 'nrPageScopes', 'nrPageAddresses'])
             await table(name, t).deleteMany({
-              filter: toFilter({ id: { $ne: null } }),
+              // Every row: nrPageDays is keyed by address and day, without an id.
+              filter: toFilter({ [name === 'nrPageDays' ? 'pageId' : 'id']: { $ne: null } }),
             });
           if (own.length)
             await table('nrSnapshots', t).createMany({ values: own });

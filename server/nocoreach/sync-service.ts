@@ -9,7 +9,7 @@ import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
-import { fillPageDaysInBackground, pageDayMarks, pageDaysFilled, releasePageDays } from './page-days.js';
+import { PAGE_GRAINS, fillPageDaysInBackground, pageDayMarks, pageDaysFilled, releasePageDays } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
 const FRESH_MS=3*3600000;
@@ -25,6 +25,18 @@ const MORNING_REREAD_WITHIN_MS=86400000;
 // restart restores them instead of rebuilding from every stored day.
 const SAVED_SNAPSHOTS='sync-snapshots',MAX_SAVED_SNAPSHOT_BYTES=4*1024*1024;
 const active=['queued','running','retrying'];
+// Page-level history (Search Console query × page, GA4 page) back to the earliest day Search Console keeps, for the days
+// the sync has not stored: a sync reads at most 56 days back, and the overview history fill reads overview rows only, so
+// Pages' long ranges summed the days since the project connected. Queued by the tick for projects whose sync is on, once
+// an hour; run when no other job is ready. The last PAGE_HISTORY_RECENT days are left to the sync.
+const PAGE_HISTORY='page-history',PAGE_HISTORY_EVERY_MS=3600000,PAGE_HISTORY_RECENT=14;
+// The snapshots' page samples (pages-<range>, queries-<range>) are summed from the page days of the last
+// SNAPSHOT_PAGE_DAYS (the longest evidence period, 90 days, and the one before it), with a margin for a sync running
+// behind; older page days are neither read by the build nor part of its key. Reading every stored day held the whole
+// history's query × page rows in memory (about 1.3 MB of JSON a day on 252), and each page history step would have
+// rebuilt it.
+export const SNAPSHOT_PAGE_DAYS=180;
+const SNAPSHOT_PAGE_MARGIN=30,PAGE_GRAIN_LIST=['query_page','page'],OTHER_GRAINS=['overview','source'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
 const safeError=e=>['network_timeout','network_unreachable','response_too_large','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
@@ -46,7 +58,7 @@ class SyncService{
  async lock(transaction): Promise<boolean>{const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
  async enqueue(id,days=7,trigger='manual'){
   if(![7,28,56].includes(days))throw Object.assign(new Error(systemMessageText('sync.syncRanges72856')),{status:400});const mockSnapshot=(this.p as Connections).mock?.enabled?(this.p as Connections).mock.capture(String(id)):null;
-  return this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{if(!await this.lock(transaction))throw Object.assign(new Error(systemMessageText('sync.syncProgressTryAgainLater')),{status:409});const link=await this.link(id);if(trigger==='scheduled'&&!link.get('scheduleEnabled'))return {jobs:[]};const existing=await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction});if(existing.length)return {alreadyQueued:true,jobs:existing.map(r=>r.toJSON())};
+  return this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{if(!await this.lock(transaction))throw Object.assign(new Error(systemMessageText('sync.syncProgressTryAgainLater')),{status:409});const link=await this.link(id);if(trigger==='scheduled'&&!link.get('scheduleEnabled'))return {jobs:[]};const existing=(await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction})).filter(j=>j.get('trigger')!==PAGE_HISTORY);if(existing.length)return {alreadyQueued:true,jobs:existing.map(r=>r.toJSON())};
    // Three days of reporting lag, explicit rather than treating pending Google data as zero.
    const end=shift(calendarDateInTimeZone('America/Los_Angeles',mockSnapshot?new Date(mockSnapshot.clock):new Date()),-3),start=shift(end,-days+1),jobs=[];
    for(const source of ['ga4','gsc'])jobs.push((await this.repo('nrSyncJobs').create({values:{projectId:id,source,resource:link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl'),status:'queued',startDate:start,endDate:end,cursor:start,attempts:0,recordCount:0,trigger},transaction})).toJSON());
@@ -56,7 +68,35 @@ class SyncService{
  }
  // Only unfiltered final web overview rows belong in the durable date partitions.
  async overviewParts(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return this.repo('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',resource,grain:'overview',date:{$in:datesBetween(startDate,endDate)}},fields:['date','payload','updatedAt'],transaction});}
- async historyJobs(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return (await this.repo('nrSyncJobs').find({filter:{projectId:id,source:'gsc',resource,status:{$in:[...active,'paused','failed']}},sort:['createdAt','id'],transaction})).filter(j=>String(j.get('cursor')||j.get('startDate'))<=endDate&&String(j.get('endDate'))>=startDate);}
+ async historyJobs(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return (await this.repo('nrSyncJobs').find({filter:{projectId:id,source:'gsc',resource,status:{$in:[...active,'paused','failed']}},sort:['createdAt','id'],transaction})).filter(j=>j.get('trigger')!==PAGE_HISTORY&&String(j.get('cursor')||j.get('startDate'))<=endDate&&String(j.get('endDate'))>=startDate);}
+ // The dates a source's page grain is stored for, between two dates.
+ async pageDates(id: string | number,source: string,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){const out=new Set<string>(),dates=datesBetween(startDate,endDate);
+  for(let i=0;i<dates.length;i+=400)for(const p of await this.repo('nrSyncPartitions').find({filter:{projectId:id,source,resource,grain:PAGE_GRAINS[source],date:{$in:dates.slice(i,i+400)}},fields:['date'],transaction}))out.add(String(p.get('date')).slice(0,10));
+  return out;}
+ // Queues page history jobs for the days of each source with no page grain stored and no page history job, in whatever
+ // status: a failed one is retried by Retry failed jobs, not queued again, so a property Google refuses does not loop.
+ async enqueuePageHistory(id: string | number){
+  id=String(id);const link=await this.link(id),{earliest,cutoff}=historyBounds(this.p,id),end=shift(cutoff,-PAGE_HISTORY_RECENT);if(earliest>end)return {jobs:[]};
+  const plugin=this.p as {db: LegacyDatabase;mock?: Connections['mock']};
+  const gaps=async(transaction?: LegacyTransaction)=>{const out=[];
+   for(const source of ['gsc','ga4']){const resource=String(link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl')||'');if(!resource)continue;
+    const stored=await this.pageDates(id,source,resource,earliest,end,transaction);
+    // Days another job of the source is about to read are left to it, as are the page history's own.
+    const jobs=(await this.repo('nrSyncJobs').find({filter:{projectId:id,source,resource},fields:['trigger','status','startDate','endDate','cursor'],transaction})).filter(j=>j.get('trigger')===PAGE_HISTORY||active.includes(j.get('status'))||j.get('status')==='paused');
+    const held=d=>jobs.some(j=>String(j.get('startDate'))<=d&&String(j.get('endDate'))>=d);
+    for(const range of intervals(datesBetween(earliest,end).filter(d=>!stored.has(d)&&!held(d))))out.push({source,resource,range});}
+   return out;};
+  if(!(await gaps()).length)return {jobs:[]};
+  const mockSnapshot=plugin.mock?.enabled?plugin.mock.capture(id):null;
+  return plugin.db.sequelize.transaction(async transaction=>{
+   if(!await this.lock(transaction))return {jobs:[]};
+   const current=await this.link(id);if(current.get('ga4PropertyId')!==link.get('ga4PropertyId')||current.get('gscSiteUrl')!==link.get('gscSiteUrl'))return {jobs:[]};
+   const jobs=[];
+   for(const {source,resource,range} of await gaps(transaction)){const job=await this.repo('nrSyncJobs').create({values:{projectId:id,source,resource,status:'queued',startDate:range.start,endDate:range.end,cursor:range.start,attempts:0,recordCount:0,trigger:PAGE_HISTORY},transaction});jobs.push(job.toJSON());
+    if(mockSnapshot)await this.mockSnapshots().create({values:{key:`mock-google-run:${String(job.id)}`,payload:mockSnapshot},transaction});}
+   return {jobs};
+  });
+ }
  async enqueueHistory(id: string | number,v: Record<string,unknown>){
   if(v.scope!=='gscOverview'||(v.mode!=='missing'&&v.mode!=='refresh')||!validDate(v.startDate)||!validDate(v.endDate)||v.startDate>v.endDate||v.type&&v.type!=='web'||v.country||v.queryFilter||v.pageFilter)throw Object.assign(new Error(systemMessageText('dataViews.invalidDate')),{status:400});
   const {earliest,cutoff}=historyBounds(this.p,id),startDate=v.startDate>earliest?v.startDate:earliest,endDate=v.endDate<cutoff?v.endDate:cutoff;
@@ -163,7 +203,8 @@ class SyncService{
    const claimed=await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
     if(!await this.lock(transaction))return false;
     const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active},...(projectId?{projectId}:{})},sort:['createdAt','id'],transaction});
-    const job=jobs.find(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now());if(!job)return false;
+    // A page history fill runs only when no other job is ready, so the daily sync never waits for it.
+    const ready=jobs.filter(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now()),job=ready.find(j=>j.get('trigger')!==PAGE_HISTORY)||ready[0];if(!job)return false;
     flight={job,controller:new AbortController(),mockSnapshot:(this.p as Connections).mock?.enabled?(await this.mockSnapshots().findOne({filter:{key:`mock-google-run:${(job as {id: string}).id}`},transaction}))?.get('payload') as unknown:null};this.inFlight=flight;
     await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{status:'running'},transaction});return true;
    });
@@ -175,20 +216,22 @@ class SyncService{
    // Bound the whole block (including token refresh and pagination), not just each HTTP request.
    const signal=AbortSignal.any([flight.controller.signal,AbortSignal.timeout(120000)]);
    signal.throwIfAborted();
-   const overviewOnly=['history-fill','history-refresh'].includes(job.get('trigger'));
+   const overviewOnly=['history-fill','history-refresh'].includes(job.get('trigger')),pageOnly=job.get('trigger')===PAGE_HISTORY;
+   const grains=pageOnly?[PAGE_GRAINS[source]]:source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page'];
    const cursor=String(job.get('cursor')),end=String([shift(cursor,6),String(job.get('endDate'))].sort()[0]);
    // A normal sync may have filled these dates while this task was waiting. Do not request or overwrite them.
    const stored=job.get('trigger')==='history-fill'?await this.overviewParts(id,String(job.get('resource')),cursor,end):[];
-   const covered=new Set(stored.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
+   // A page history fill leaves the days a sync has stored since it was queued.
+   const covered=pageOnly?await this.pageDates(id,source,String(job.get('resource')),cursor,end):new Set(stored.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
    const missing=intervals(datesBetween(cursor,end).filter(d=>!covered.has(d)));
    const token=missing.length?await this.p.token(id,signal):null;
    let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberProperty(id,job.get('resource'),property);}
    const fetcher=this.p.googleFetch?.(id)||fetch;
-   const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
+   const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:grains,searchTypes:['web'],dataState:'final'});
    for(const range of missing)await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:range.start,endDate:range.end});
    signal.throwIfAborted();
    const partitions=[];
-   for(let date=cursor;date<=end;date=shift(date,1))for(const grain of source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page']){
+   for(let date=cursor;date<=end;date=shift(date,1))for(const grain of grains){
     if(covered.has(date))continue;
     const payload=compact(collector.batches.filter(r=>r.periodDate===date&&r.grainType===grain),grain);
     partitions.push({partitionKey:JSON.stringify([id,source,job.get('resource'),date,grain]),projectId:id,source,resource:job.get('resource'),date,grain,payload});
@@ -203,7 +246,7 @@ class SyncService{
     // The page drawer's rows of the days whose content changed are summed again after the sync (page-days.ts).
     await releasePageDays(this.p.db,marks,transaction);
     const finished=end===job.get('endDate');await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{cursor:shift(end,1),status:finished?'succeeded':'running',recordCount:Number(job.get('recordCount')||0)+collector.batches.length,attempts:0,errorCode:null,retryAt:null,...(finished?{finishedAt:new Date().toISOString()}: {})},transaction});
-    if(finished&&!overviewOnly)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:currentLink.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
+    if(finished&&!overviewOnly&&!pageOnly)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:currentLink.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
    });
    // The page drawer's rows of the days just written, summed after the sync's transaction (page-days.ts).
    if(written&&marks.length)fillPageDaysInBackground(this.p.db,String(id),[{source,resource:String(job.get('resource')),range:{start:cursor,end}}],{logger:this.p.app?.logger,stopped:()=>this.stopped});
@@ -249,6 +292,9 @@ class SyncService{
  async fresh(id,source,cutoff){if(!cutoff)return [];const s=(await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload');const link=await this.p.link(id).catch(()=>null);
   if(!s||!link||s.ga4Resource!==link.get('ga4PropertyId')||s.gscResource!==link.get('gscSiteUrl'))return [];return (s[source]||[]).filter(r=>r.date>cutoff);}
  async tick(){if(this.busy||this.stopped)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
+  const historyNext=this.pageHistoryNext=this.pageHistoryNext||new Map();
+  for(const link of links){const id=String(link.get('projectId'));if(Date.now()<(historyNext.get(id)||0))continue;historyNext.set(id,Date.now()+PAGE_HISTORY_EVERY_MS);
+   try{const queued=await this.enqueuePageHistory(id);if(queued.jobs.length)this.p.app?.logger?.info?.('NocoReach page history queued',{projectId:id,jobs:queued.jobs.length});}catch(e){this.p.app?.logger?.warn?.('NocoReach page history enqueue skipped',{code:safeError(e)});}}
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
@@ -325,9 +371,14 @@ class SyncService{
  // Rebuilding from every stored day takes seconds and grows daily, while partitions only change when a sync writes them.
  // Reuse the result until the partition count, latest write, linked resources or project change; concurrent callers share one build.
  // What the built snapshots depend on; cheap, so views can key their own saved results by it without building.
+ // Page days older than the snapshots read (`snapshotPageDates`) are not part of it, so a page history fill leaves it.
  async snapshotKey(id,link,project){id=String(id);link=link||await this.link(id);project=project||await this.p.project(id);const r=this.repo('nrSyncPartitions');
-  const [count,latest]=await Promise.all([r.count({filter:{projectId:id}}),r.findOne({filter:{projectId:id},sort:['-updatedAt'],fields:['updatedAt']})]);
-  return {count,key:JSON.stringify([link.get('ga4PropertyId'),link.get('gscSiteUrl'),count,latest?.get('updatedAt')??null,project])};}
+  const parts=[{projectId:id,grain:{$in:OTHER_GRAINS}},{projectId:id,grain:{$in:PAGE_GRAIN_LIST},date:{$in:this.snapshotPageDates(id)}}];
+  const read=await Promise.all(parts.map(filter=>Promise.all([r.count({filter}),r.findOne({filter,sort:['-updatedAt'],fields:['updatedAt']})])));
+  const count=read.reduce((n,[c])=>n+c,0),latest=read.map(([,l])=>l?.get('updatedAt')??null);
+  return {count,key:JSON.stringify([link.get('ga4PropertyId'),link.get('gscSiteUrl'),count,latest,project])};}
+ // The page days the snapshots read: SNAPSHOT_PAGE_DAYS and a margin back from the last final day.
+ snapshotPageDates(id){const {cutoff}=historyBounds(this.p,id);return datesBetween(shift(cutoff,1-SNAPSHOT_PAGE_DAYS-SNAPSHOT_PAGE_MARGIN),cutoff);}
  async snapshots(id){id=String(id);const link=await this.link(id),project=await this.p.project(id),{count,key}=await this.snapshotKey(id,link,project);
   // A build outside this transaction may be waiting for its connection. Sharing that promise
   // would deadlock; sharing results from inside it would also expose data that can roll back.
@@ -363,9 +414,10 @@ class SyncService{
  // synchronously). Project and resource are checked again on the rows read: filtering on the project as well would make
  // the database search the project's index instead of looking up the keys.
  async build(id,link,project){const r=this.repo('nrSyncPartitions'),linked=p=>p.resource===(p.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl')),wanted=[],rows=[];
-  const listed=(await r.find({filter:{projectId:id},fields:['id','source','resource'],sort:['id']})).map(p=>p.toJSON());
+  const pageDates=new Set(this.snapshotPageDates(id)),read=p=>linked(p)&&(!PAGE_GRAIN_LIST.includes(p.grain)||pageDates.has(String(p.date).slice(0,10)));
+  const listed=(await r.find({filter:{projectId:id},fields:['id','source','resource','grain','date'],sort:['id']})).map(p=>p.toJSON());
   // The same limit, counted page by page as before, now reached before any stored day is read.
-  for(let offset=0;;offset+=200){const page=listed.slice(offset,offset+200);wanted.push(...page.filter(linked).map(p=>p.id));if(page.length<200)break;if(wanted.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}
+  for(let offset=0;;offset+=200){const page=listed.slice(offset,offset+200);wanted.push(...page.filter(read).map(p=>p.id));if(page.length<200)break;if(wanted.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}
   for(let i=0;i<wanted.length;i+=200){await new Promise(resolve=>setImmediate(resolve));for(const p of (await r.find({filter:{id:{$in:wanted.slice(i,i+200)}},sort:['id']})).map(p=>p.toJSON()))if(String(p.projectId)===String(id)&&linked(p))rows.push(p);}
   return buildSnapshots(rows,project);}
 }

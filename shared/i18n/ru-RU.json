@@ -3656,6 +3656,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "Аккаунт Google с доступом к этому сайту в Search Console.",
   "playbook.automatic": "Автоматический",
   "syncPanel.autoUpdate": "Автоматическое обновление",
+  "syncPanel.pageHistory": "История страниц",
   "rangePicker.custom": "Произвольный период",
   "rangePicker.apply": "Применить",
   "rangePicker.invalidStart": "Введите полную и корректную дату начала.",

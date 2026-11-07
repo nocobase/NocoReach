@@ -15,6 +15,8 @@ export async function assertPristineMockDataset(
     'nrSyncPartitions',
     'nrPageDays',
     'nrPageDayMarks',
+    'nrPageScopes',
+    'nrPageAddresses',
     'nrKeywordRuns',
     'nrKeywordCandidates',
     'nrYouTubeVideos',

@@ -41,7 +41,7 @@ test('a project over the size limit is refused before any stored day is read',as
  repo.find=async o=>{reads.push(o);return find(o);};
  while(parts.length<12201)add('gsc','query_page','2026-09-01',[]);
  await assert.rejects(sync.snapshots('1'),e=>e.status===409);
- assert.equal(reads.length,1);assert.deepEqual(reads[0].fields,['id','source','resource']);
+ assert.equal(reads.length,1);assert.deepEqual(reads[0].fields,['id','source','resource','grain','date']);
 });
 
 function tickFixture(opened={lately:false}){

@@ -3656,6 +3656,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "해당 사이트에 대한 Search Console 액세스 권한이 있는 Google 계정",
   "playbook.automatic": "자동",
   "syncPanel.autoUpdate": "자동 업데이트",
+  "syncPanel.pageHistory": "페이지 기록",
   "rangePicker.custom": "사용자 지정",
   "rangePicker.apply": "적용",
   "rangePicker.invalidStart": "완전하고 유효한 시작일을 입력하세요.",

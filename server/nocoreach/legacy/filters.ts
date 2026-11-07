@@ -186,11 +186,15 @@ export function toFilter(
   return { kind: 'filter', version: 1, root: group('and', items) };
 }
 
-export function toSort(sort: unknown): SortAst {
+export function toSort(
+  sort: unknown,
+  key: readonly string[] = ['id'],
+): SortAst {
   const input = (Array.isArray(sort) ? sort : sort ? [sort] : []) as string[];
   const list = [...input];
-  // Every bridged collection has an ID. Equal timestamps must not reshuffle pages.
-  if (!list.some((s) => s.replace(/^-/, '') === 'id')) list.push('id');
+  // Ends with the table's key (its ID unless it has another): equal timestamps must not reshuffle pages.
+  for (const k of key)
+    if (!list.some((s) => s.replace(/^-/, '') === k)) list.push(k);
   return {
     kind: 'sort',
     version: 1,

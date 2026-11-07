@@ -3628,6 +3628,7 @@
   "dataSources.googleAccountSearchConsoleAccess": "Un compte Google ayant accès à ce site dans Search Console",
   "playbook.automatic": "Automatique",
   "syncPanel.autoUpdate": "Mise à jour automatique",
+  "syncPanel.pageHistory": "Historique des pages",
   "rangePicker.custom": "Personnalisée",
   "rangePicker.apply": "Appliquer",
   "rangePicker.invalidStart": "Saisissez une date de début complète et valide.",
