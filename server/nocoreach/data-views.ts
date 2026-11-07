@@ -452,7 +452,7 @@ class DataViews{
   const aliases=[...Object.entries(identity.canonical||{}).filter(([,u])=>pageKey(u)===key).map(([k])=>k),...(identity.dropped?.[key.slice(0,key.indexOf('/'))]||[])];
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
   const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/'));
-  const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w],async()=>{
+  const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w,2],async()=>{
   const held=await this.pageDays(id,link,w,{gsc:Boolean(gscEnd),ga4:Boolean(ga4End)});
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
   for(const d of held.gscDays){const o=day(d);o.clicks=0;o.impressions=0;}
