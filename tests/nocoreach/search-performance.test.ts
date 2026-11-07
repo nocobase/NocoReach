@@ -134,7 +134,7 @@ test('本站排名: the query index answers as the row scan does',()=>{
 });
 test('page view: daily clicks, impressions and views of one page; www and trailing slash ignored; days without a partition stay empty',async()=>{
  const end='2026-09-27',daily=[{date:end,clicks:1,impressions:1}],parts={gsc:[{date:end,payload:[{page:'https://www.x.dev/docs/a/',clicks:3,impressions:40},{page:'https://x.dev/docs/b',clicks:9,impressions:9}]}],ga4:[{date:end,payload:[{page:'/docs/a',views:12},{page:'/docs/a?ref=1',views:3},{page:'/',views:99}]}]};
- const p={sync:{snapshotKey:async()=>({key:'page-fixture'}),snapshots:async()=>[{key:'history-search',payload:daily},{key:'history-web',payload:daily}],link:async()=>({get:k=>k})},db:{getRepository:()=>({find:async o=>parts[o.filter.source].map(r=>({get:k=>r[k]}))})}};
+ const p={sync:{snapshotKey:async()=>({key:'page-fixture'}),snapshots:async()=>[{key:'history-search',payload:daily},{key:'history-web',payload:daily}],link:async()=>({get:k=>k})},db:{getRepository:()=>{const of=f=>parts[f.source].filter(r=>!f.date||f.date.$in.includes(r.date));return {find:async o=>of(o.filter).map(r=>({get:k=>r[k]})),count:async o=>of(o.filter).length,findOne:async ()=>null};}}};
  const r=await new DataViews(p).page('1',{url:'https://x.dev/docs/a',range:'7'});
  assert.deepEqual(r.daily.at(-1),{date:end,clicks:3,impressions:40,views:15});assert.deepEqual(r.daily[0],{date:'2026-09-21'});
  await assert.rejects(new DataViews(p).page('1',{url:'nope'}),/网址/);

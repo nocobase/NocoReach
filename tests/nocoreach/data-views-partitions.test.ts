@@ -578,3 +578,58 @@ it.each(paths)(
     expect((await views.ranks(projectId, { keywords: ['crm'] })).ranks.crm.clicks).toBe(ranks.ranks.crm.clicks + 100);
   },
 );
+
+it.each(paths)(
+  'reads the window once for every page drawer, and again when its own days change (%s)',
+  async (path) => {
+    const { views, db } = await fixture(path);
+    const partitions = db.getRepository('nrSyncPartitions');
+    const other = 'https://www.example.test/docs/b/';
+    const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
+    await partitions.update({
+      filterByTk: row.get('id'),
+      values: { payload: [{ keyword: 'crm', page: url, clicks: 10, impressions: 100, position: 9 }, { keyword: 'b', page: 'https://example.test/docs/b?ref=x', clicks: 3, impressions: 30, position: 4 }] },
+    });
+    const info = vi.fn();
+    views.p.app = { logger: { info } };
+    const reads = () => info.mock.calls.filter(([m]) => m === 'NocoReach page days read').length;
+    const first = await views.page(projectId, { url, range: '7' });
+    expect(reads()).toBe(1);
+    const second = await views.page(projectId, { url: other, range: '7' });
+    // The second page is answered from the days already read.
+    expect(reads()).toBe(1);
+    expect(first.daily.at(-1)).toEqual({ date: end, clicks: 10, impressions: 100, views: 20 });
+    // Another page's address matches whatever its scheme, www, trailing slash or query; GA4 counts by path.
+    expect(second.daily.at(-1)).toEqual({ date: end, clicks: 3, impressions: 30, views: 0 });
+    expect(second.daily[0]).toEqual({ date: dateAt(-6), clicks: 0, impressions: 0, views: 0 });
+    // A history fill writing older days keeps the days read; a day of the window read again does not.
+    await partitions.create({ values: { projectId, source: 'gsc', resource: site, date: '2024-01-01', grain: 'query_page', payload: [] } });
+    // Any write moves the snapshot key, so the drawer's saved answer is not reused.
+    views.p.sync.snapshotKey = async () => ({ key: 'after-fill' });
+    expect(await views.page(projectId, { url: other, range: '7' })).toEqual(second);
+    expect(reads()).toBe(1);
+    vi.setSystemTime(Date.now() + 60000);
+    await partitions.update({
+      filterByTk: row.get('id'),
+      values: { payload: [{ keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 }] },
+    });
+    views.p.sync.snapshotKey = async () => ({ key: 'after-write' });
+    const changed = await views.page(projectId, { url: other, range: '7' });
+    expect(reads()).toBe(2);
+    expect(changed.daily.at(-1)).toEqual({ date: end, clicks: 5, impressions: 50, views: 0 });
+  },
+);
+
+it('applies the page identity when a page is looked up, not when the days are read', async () => {
+  const { views } = await fixture(paths[0]);
+  const read = vi.spyOn(views, 'pageDays');
+  let identity: { pages: { url: string; canonical: string }[] } | null = null;
+  views.p.siteContent = { state: async () => identity };
+  const before = await views.page(projectId, { url: 'https://example.test/docs/old', range: '7' });
+  expect(before.daily.at(-1)).toEqual({ date: end, clicks: 0, impressions: 0, views: 0 });
+  // Website content reads that /docs/a names /docs/old as its canonical: /docs/a's rows are now /docs/old's.
+  identity = { pages: [{ url, canonical: 'https://example.test/docs/old' }] };
+  const after = await views.page(projectId, { url: 'https://example.test/docs/old', range: '7' });
+  expect(after.daily.at(-1)).toMatchObject({ date: end, clicks: 10, impressions: 100 });
+  expect(await read.mock.results[0].value).toBe(await read.mock.results[1].value);
+});

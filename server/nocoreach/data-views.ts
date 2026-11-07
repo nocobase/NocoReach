@@ -40,6 +40,9 @@ const GA4_PROCESSING_DAYS=2;
 const MAX_PAIR_ROWS=100000;
 // Search Console query × page days read per query by `pairRows`, and the projects whose summed rows stay in memory.
 const PAIR_READ_DAYS=4,PAIR_HOLD_PROJECTS=6,MAX_HELD_PAIRS=300000,FIGURE_READ_DAYS=8;
+// The page drawer's days of every page, held for a few windows: at most PAGE_DAY_HOLDS of them and MAX_HELD_PAGE_DAYS
+// page-days in all.
+const PAGE_DAY_HOLDS=4,MAX_HELD_PAGE_DAYS=1000000;
 // How far a report's window may run ahead of the synced days and still have its tables built from them: the daily sync
 // runs every 24 hours from when it last ran, so it lands up to a day after the final cutoff moves.
 const PENDING_SYNC_DAYS=2;
@@ -163,7 +166,7 @@ class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();this.viewReads=new Map();this.pairHold=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();this.viewReads=new Map();this.pairHold=new Map();this.pageDayHold=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
  // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
@@ -441,21 +444,53 @@ class DataViews{
    for(const x of r.get('payload')||[]){if(!String(x.page||'').startsWith('/'))continue;entry(web,hostOf(x.host),pathOf(x.page),{views:0})[p].views+=Number(x.views)||0;}});
   return {window:w,days,search:[...search.values()],web:[...web.values()]};}
  // A page's own figures (Website content's page drawer), counting every address the project's page identity gives it.
+ // The window's days are summed for every page at once (pageDays) and the page is looked up in them: reading the
+ // window's partitions for each page opened took about three seconds a page at 8,000 query × page rows a day, the whole
+ // process waiting (2026-11-07).
  async page(id,v){if(!pageKey(v.url))fail(systemMessageText('dataViews.providePageUrl'));const identity=pageIdentity(await this.p.siteContent?.state?.(id).catch(()=>null)),key=pageKey(v.url,identity);let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   // The addresses that read as this page, so a newly read canonical is not answered from an older cache entry.
   const aliases=[...Object.entries(identity.canonical||{}).filter(([,u])=>pageKey(u)===key).map(([k])=>k),...(identity.dropped?.[key.slice(0,key.indexOf('/'))]||[])];
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
-  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');
+  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/'));
   const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w],async()=>{
-  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});
-  const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
+  const held=await this.pageDays(id,link,w,{gsc:Boolean(gscEnd),ga4:Boolean(ga4End)});
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
-  for(const r of gscParts){const o=day(r.get('date'));o.clicks=0;o.impressions=0;for(const x of r.get('payload')||[])if(pageKey(x.page,identity)===key){o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
+  for(const d of held.gscDays){const o=day(d);o.clicks=0;o.impressions=0;}
+  for(const e of held.search.values())if(pageKey(`https://${e.at}`,identity)===key)for(let i=0;i<e.dates.length;i++){const o=day(e.dates[i]);o.clicks+=e.clicks[i];o.impressions+=e.impressions[i];}
   const norm=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
   const rowPath=x=>{if(!x.host)return norm(x.page);try{return norm(new URL(canonicalUrl(`https://${x.host}${String(x.page||'')}`,identity)).pathname);}catch{return norm(x.page);}};
-  for(const r of ga4Parts){const o=day(r.get('date'));o.views=0;for(const x of r.get('payload')||[])if(rowPath(x)===norm(path))o.views+=Number(x.views)||0;}
+  for(const d of held.ga4Days){const o=day(d);o.views=0;}
+  for(const e of held.web.values())if(rowPath(e)===norm(path))for(let i=0;i<e.dates.length;i++)day(e.dates[i]).views+=e.views[i];
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
   return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
+ // Every page's daily search clicks and impressions (Search Console query × page rows, under the address without the
+ // page identity: scheme, `www.`, trailing slash and query aside) and views (GA4 page rows, under their host and page as
+ // stored) over a window, with the days each source has stored. The page identity is applied when a page is looked up,
+ // so a newly read canonical does not sum the days again. Kept under the window's own stored days like Pages' figures;
+ // the days are read a few at a time, giving way to other requests between reads.
+ async pageDays(id,link,w,sources){const repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.start,w.end,Boolean(w.all)),site=link.get('gscSiteUrl'),property=link.get('ga4PropertyId');
+  const read=async()=>{const held={gscDays:[],ga4Days:[],search:new Map(),web:new Map(),size:0};
+   // Each address is keyed once, not once a row: a page reached by many queries repeats it in every row of every day.
+   const keys=new Map(),keyOf=page=>{let k=keys.get(page);if(k===undefined){k=pageKey(page);keys.set(page,k);}return k;};
+   if(sources.gsc&&site)await eachPartitionDays(repo,{projectId:id,source:'gsc',grain:'query_page',resource:site},dates.$in,PAIR_READ_DAYS,['date','payload'],r=>{const date=dayOf(r.get('date')),sums=new Map();held.gscDays.push(date);
+    for(const x of r.get('payload')||[]){const k=keyOf(x.page);if(!k)continue;let s=sums.get(k);if(!s)sums.set(k,s=[0,0]);s[0]+=Number(x.clicks)||0;s[1]+=Number(x.impressions)||0;}
+    for(const [k,[clicks,impressions]] of sums){let e=held.search.get(k);if(!e)held.search.set(k,e={at:k,dates:[],clicks:[],impressions:[]});e.dates.push(date);e.clicks.push(clicks);e.impressions.push(impressions);held.size++;}});
+   if(sources.ga4&&property)await eachPartitionDays(repo,{projectId:id,source:'ga4',grain:'page',resource:property},dates.$in,PAIR_READ_DAYS,['date','payload'],r=>{const date=dayOf(r.get('date')),sums=new Map();held.ga4Days.push(date);
+    for(const x of r.get('payload')||[]){const k=`${x.host||''} ${x.page??''}`;let s=sums.get(k);if(!s)sums.set(k,s={host:x.host,page:x.page,views:0});s.views+=Number(x.views)||0;}
+    for(const [k,s] of sums){let e=held.web.get(k);if(!e)held.web.set(k,e={host:s.host,page:s.page,dates:[],views:[]});e.dates.push(date);e.views.push(s.views);held.size++;}});
+   return held;};
+  // Inside a transaction the rows read may still roll back, so they are neither shared nor kept.
+  if(this.p.db?.transactionContext?.())return read();
+  const stored=await Promise.all([sources.gsc&&site?this.storedDays(id,'gsc','query_page',site,dates):null,sources.ga4&&property?this.storedDays(id,'ga4','page',property,dates):null]);
+  const key=JSON.stringify([id,...this.scope(id,link),property,w.start,w.end,Boolean(w.all),stored]),hit=this.pageDayHold.get(key);
+  if(hit){this.pageDayHold.delete(key);this.pageDayHold.set(key,hit);return hit.value;}
+  const started=Date.now(),value=read().then(v=>{this.p.app?.logger?.info?.('NocoReach page days read',{projectId:String(id),days:dates.$in.length,pages:v.search.size+v.web.size,pageDays:v.size,ms:Date.now()-started});return v;});
+  const entry={value,size:0};this.pageDayHold.set(key,entry);
+  // The least recently read let go first; the one just read stays whatever its size.
+  void value.then(v=>{entry.size=v.size;let total=0;for(const e of this.pageDayHold.values())total+=e.size;
+   for(const [k,e] of this.pageDayHold){if(this.pageDayHold.size<=PAGE_DAY_HOLDS&&total<=MAX_HELD_PAGE_DAYS)break;if(e===entry)continue;this.pageDayHold.delete(k);total-=e.size;}},()=>{});
+  value.catch(()=>{if(this.pageDayHold.get(key)===entry)this.pageDayHold.delete(key);});
+  return value;}
  register(){
   // Only a page that says it shows a saved copy (`acceptSaved`) gets one while a new report is read. API keys, scripts and
   // the command line wait for the new report and see its failure, as they did before saved copies.
