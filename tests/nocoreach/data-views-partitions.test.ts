@@ -618,10 +618,12 @@ it.each(paths)(
     const changed = [{ keyword: 'crm', page: url, clicks: 7, impressions: 70, position: 9 }];
     await partitions.update({ filterByTk: row.get('id'), values: { payload: changed } });
     expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: changed })).toBe(true);
-    expect(await marks.count({ filter: { projectId } })).toBe(57);
+    const heldMarks = () => marks.count({ filter: { projectId, pages: { $gte: 0 } } });
+    expect(await heldMarks()).toBe(57);
     const released = await views.page(projectId, { url, range: '7' });
     expect(released.daily.at(-1)).toEqual({ date: end, clicks: 7, impressions: 70, views: 20 });
     await pageDaysFilled(db, projectId);
+    expect(await heldMarks()).toBe(58);
     expect(await marks.count({ filter: { projectId } })).toBe(58);
     expect((await views.page(projectId, { url, range: '7' })).daily).toEqual(released.daily);
     expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: changed })).toBe(false);
@@ -657,4 +659,24 @@ it('reads one page whatever its www, trailing slash or query, with GA4 rows with
   }
   const r = await views.page(projectId, { url: 'https://example.test/docs/a', range: '7' });
   expect(r.daily.at(-1)).toEqual({ date: end, clicks: 3, impressions: 40, views: 15 });
+});
+
+it('does not write a day from a partition the sync has replaced since it was read', async () => {
+  const { views, db } = await fixture(paths[0]);
+  const { fillDays, releasePageDay } = await import('../../server/nocoreach/page-days.js');
+  const marks = db.getRepository('nrPageDayMarks');
+  // The sync is about to write new content for the last day (and has marked the day pending it), while the stored
+  // partition a fill reads is still the old one.
+  const next = [{ keyword: 'crm', page: url, clicks: 99, impressions: 990, position: 9 }];
+  expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: next })).toBe(true);
+  expect(await fillDays(db, projectId, 'gsc', site)).toBe(29);
+  expect(await marks.count({ filter: { projectId, source: 'gsc', pages: { $gte: 0 } } })).toBe(29);
+  // The day is still pending, so the drawer sums it from the partition as stored.
+  expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toMatchObject({ date: end, clicks: 10, impressions: 100 });
+  // Once the partition holds the new content, the next fill writes it.
+  const partitions = db.getRepository('nrSyncPartitions');
+  const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
+  await partitions.update({ filterByTk: row.get('id'), values: { payload: next } });
+  expect(await fillDays(db, projectId, 'gsc', site)).toBe(1);
+  expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toMatchObject({ date: end, clicks: 99, impressions: 990 });
 });

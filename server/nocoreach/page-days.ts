@@ -141,6 +141,23 @@ const payloadHashOf = (payload: unknown) =>
     .update(JSON.stringify(payload ?? null))
     .digest('hex');
 
+/** A synced day's mark, without its rows. */
+function prepareMark(partition: Partition) {
+  const source = sourceOfGrain(partition.grain);
+  if (!source) return null;
+  const projectId = String(partition.projectId),
+    resource = String(partition.resource),
+    date = dayOf(partition.date);
+  return {
+    projectId,
+    source,
+    resource,
+    day: dayNumber(date),
+    dayKey: dayKeyOf(projectId, source, resource, date),
+    payloadHash: payloadHashOf(partition.payload),
+  };
+}
+
 /** A synced day's page rows and mark, summed from its partition outside any transaction. */
 function prepareDay(partition: Partition) {
   const source = sourceOfGrain(partition.grain);
@@ -171,17 +188,17 @@ async function applyDay(
   db: LegacyDatabase,
   day: NonNullable<ReturnType<typeof prepareDay>>,
   transaction: LegacyTransaction | undefined,
-  onlyUnmarked: boolean,
 ) {
   const marks = db.getRepository('nrPageDayMarks');
   const held = await marks.findOne({
     filter: { dayKey: day.mark.dayKey },
-    fields: ['payloadHash'],
+    fields: ['payloadHash', 'pages'],
     transaction,
   });
   if (
     held &&
-    (onlyUnmarked || held.get('payloadHash') === day.mark.payloadHash)
+    Number(held.get('pages')) >= 0 &&
+    held.get('payloadHash') === day.mark.payloadHash
   )
     return false;
   await db
@@ -193,35 +210,37 @@ async function applyDay(
   return true;
 }
 
+// A mark whose day is still to be summed from the partition content it names (`pages` is otherwise the day's row count).
+const PENDING = -1;
+
 /**
- * For the sync's transaction: lets go of a day whose partition the sync wrote with other content, so its rows are
- * summed again in the background after the sync (`fillPageDaysInBackground`) and the drawer sums the day from its
- * partition meanwhile. Writing the day's rows here would hold the sync's transaction, and with it every request on
- * SQLite, 0.2 to 0.7 s a day. A day read again unchanged keeps its rows. Returns whether the day was let go.
+ * For the sync's transaction: marks a day whose partition the sync wrote with other content (or a day not held yet) as
+ * pending that content, so its rows are summed again in the background after the sync (`fillPageDaysInBackground`) and
+ * the drawer sums the day from its partition meanwhile. Writing the day's rows here would hold the sync's transaction,
+ * and with it every request on SQLite, 0.2 to 0.7 s a day. The pending mark names the new content, so a fill that read
+ * the partition before the sync wrote it does not write the old rows. A day read again unchanged keeps its rows.
+ * Returns whether the day was marked pending.
  */
 export async function releasePageDay(
   db: LegacyDatabase,
   partition: Partition,
   transaction?: LegacyTransaction,
 ) {
-  const source = sourceOfGrain(partition.grain);
-  if (!source) return false;
-  const date = dayOf(partition.date);
-  const dayKey = dayKeyOf(
-    String(partition.projectId),
-    source,
-    String(partition.resource),
-    date,
-  );
+  const day = prepareMark(partition);
+  if (!day) return false;
   const marks = db.getRepository('nrPageDayMarks');
   const held = await marks.findOne({
-    filter: { dayKey },
-    fields: ['payloadHash'],
+    filter: { dayKey: day.dayKey },
+    fields: ['payloadHash', 'pages'],
     transaction,
   });
-  if (!held || held.get('payloadHash') === payloadHashOf(partition.payload))
-    return false;
-  await marks.destroy({ filter: { dayKey }, transaction });
+  if (held && held.get('payloadHash') === day.payloadHash) return false;
+  await marks.destroy({ filter: { dayKey: day.dayKey }, transaction });
+  await db.insertMany(
+    'nrPageDayMarks',
+    [{ ...day, pages: PENDING }],
+    transaction,
+  );
   return true;
 }
 
@@ -235,7 +254,7 @@ export async function writePageDay(
   transaction?: LegacyTransaction,
 ) {
   const day = prepareDay(partition);
-  return day ? applyDay(db, day, transaction, false) : false;
+  return day ? applyDay(db, day, transaction) : false;
 }
 
 const giveWay = () => new Promise((resolve) => setImmediate(resolve));
@@ -269,9 +288,14 @@ async function markedDays(
 ) {
   const marks = await db.getRepository('nrPageDayMarks').find({
     filter: { projectId, source, resource, ...dayRange(range) },
-    fields: ['day'],
+    fields: ['day', 'pages'],
   });
-  return new Set(marks.map((m) => dateOfDay(m.get('day'))));
+  // A pending day is not held: its rows are from content the sync has replaced.
+  return new Set(
+    marks
+      .filter((m) => Number(m.get('pages')) >= 0)
+      .map((m) => dateOfDay(m.get('day'))),
+  );
 }
 
 /** The synced days of a source (within the range when one is given) not yet held in nrPageDays. */
@@ -306,9 +330,10 @@ const FILL_DAYS = 8,
 
 /**
  * Sums the synced days of a source not yet held, a few days at a time, giving way between them. The partitions are read
- * and summed outside the transaction, which writes only the days nothing holds yet and whose partitions are still
- * stored: the sync writes or lets go of a day with its partition, so a day it rewrote meanwhile is kept as it is (or
- * summed again by the next fill), and a project cleared meanwhile gets no rows. Returns the days summed.
+ * and summed outside the transaction, which writes only the days whose partitions are still stored and that are
+ * unmarked or pending the very content read: the sync marks a day pending its new content in its transaction, so a
+ * partition read before the sync rewrote it is left for the next fill, and a project cleared meanwhile gets no rows.
+ * Returns the days summed.
  */
 export async function fillDays(
   db: LegacyDatabase,
@@ -363,20 +388,28 @@ export async function fillDays(
           })
         ).map((r) => dayOf(r.get('date'))),
       );
-      const held = new Set(
+      const marks = new Map(
         (
           await db.getRepository('nrPageDayMarks').find({
             filter: { dayKey: { $in: batch.map((d) => d.mark.dayKey) } },
-            fields: ['dayKey'],
+            fields: ['dayKey', 'payloadHash', 'pages'],
             transaction,
           })
-        ).map((m) => String(m.get('dayKey'))),
+        ).map((m) => [String(m.get('dayKey')), m]),
       );
-      const write = batch.filter(
-        (d) => stored.has(dateOfDay(d.scope.day)) && !held.has(d.mark.dayKey),
-      );
+      // A day not marked, or pending the very content read here; a day pending other content was read before the sync
+      // rewrote it and is left for the next fill.
+      const write = batch.filter((d) => {
+        if (!stored.has(dateOfDay(d.scope.day))) return false;
+        const mark = marks.get(d.mark.dayKey);
+        return (
+          !mark ||
+          (Number(mark.get('pages')) < 0 &&
+            mark.get('payloadHash') === d.mark.payloadHash)
+        );
+      });
       if (!write.length) return 0;
-      // Rows a released day still has are replaced.
+      // Rows and the pending mark a released day still has are replaced.
       await db.getRepository('nrPageDays').destroy({
         filter: {
           projectId,
@@ -384,6 +417,10 @@ export async function fillDays(
           resource,
           day: { $in: write.map((d) => d.scope.day) },
         },
+        transaction,
+      });
+      await db.getRepository('nrPageDayMarks').destroy({
+        filter: { dayKey: { $in: write.map((d) => d.mark.dayKey) } },
         transaction,
       });
       await db.insertMany(
