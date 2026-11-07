@@ -604,8 +604,6 @@ it.each(paths)(
     expect(second.daily[0]).toEqual({ date: dateAt(-6), clicks: 0, impressions: 0, views: 0 });
     // A history fill writing older days keeps the days read; a day of the window read again does not.
     await partitions.create({ values: { projectId, source: 'gsc', resource: site, date: '2024-01-01', grain: 'query_page', payload: [] } });
-    // Any write moves the snapshot key, so the drawer's saved answer is not reused.
-    views.p.sync.snapshotKey = async () => ({ key: 'after-fill' });
     expect(await views.page(projectId, { url: other, range: '7' })).toEqual(second);
     expect(reads()).toBe(1);
     vi.setSystemTime(Date.now() + 60000);
@@ -613,7 +611,6 @@ it.each(paths)(
       filterByTk: row.get('id'),
       values: { payload: [{ keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 }] },
     });
-    views.p.sync.snapshotKey = async () => ({ key: 'after-write' });
     const changed = await views.page(projectId, { url: other, range: '7' });
     expect(reads()).toBe(2);
     expect(changed.daily.at(-1)).toEqual({ date: end, clicks: 5, impressions: 50, views: 0 });

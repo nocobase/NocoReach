@@ -458,13 +458,11 @@ class DataViews{
  // A page's own figures (Website content's page drawer), counting every address the project's page identity gives it.
  // The window's days are summed for every page at once (pageDays) and the page is looked up in them: reading the
  // window's partitions for each page opened took about three seconds a page at 8,000 query × page rows a day, the whole
- // process waiting (2026-11-07).
+ // process waiting (2026-11-07). The answer is not saved: the days are held, and saving each page's answer rewrote the
+ // project's saved reports (up to 8 MB, about 300 ms a page on 252) and pushed Pages' and Search's copies out of them.
  async page(id,v){if(!pageKey(v.url))fail(systemMessageText('dataViews.providePageUrl'));const identity=pageIdentity(await this.p.siteContent?.state?.(id).catch(()=>null)),key=pageKey(v.url,identity);let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  // The addresses that read as this page, so a newly read canonical is not answered from an older cache entry.
-  const aliases=[...Object.entries(identity.canonical||{}).filter(([,u])=>pageKey(u)===key).map(([k])=>k),...(identity.dropped?.[key.slice(0,key.indexOf('/'))]||[])];
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
   const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/'));
-  const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w,2],async()=>{
   const held=await this.pageDays(id,link,w,{gsc:Boolean(gscEnd),ga4:Boolean(ga4End)});
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;},{search,web}=pagesBy(held,identity);
   for(const d of held.gscDays){const o=day(d);o.clicks=0;o.impressions=0;}
@@ -472,7 +470,7 @@ class DataViews{
   for(const d of held.ga4Days){const o=day(d);o.views=0;}
   for(const e of web.get(normPath(path))||[])for(let i=0;i<e.dates.length;i++)day(e.dates[i]).views+=e.views[i];
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
-  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
+  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
  // Every page's daily search clicks and impressions (Search Console query × page rows, under the address without the
  // page identity: scheme, `www.`, trailing slash and query aside) and views (GA4 page rows, under their host and page as
  // stored) over a window, with the days each source has stored. The page identity is applied when a page is looked up,
