@@ -475,16 +475,20 @@ export function translateRankCheckError(
   text: string | null | undefined,
 ): string {
   if (!text) return text ?? '';
-  for (let i = text.indexOf('：'); i > 0; i = text.indexOf('：', i + 1)) {
+  // A keyword is never empty but may begin with a colon, so a colon at the very start only separates nothing.
+  const first = text.indexOf('：', 1);
+  for (let i = first; i > 0; i = text.indexOf('：', i + 1)) {
     const reason = rankReason(text.slice(i + 1));
     if (reason !== undefined)
       return $t('common.labelValue', { 0: text.slice(0, i), 1: reason });
   }
   const whole = rankReason(text);
   if (whole !== undefined) return whole;
-  const i = text.indexOf('：');
-  return i > 0
-    ? $t('common.labelValue', { 0: text.slice(0, i), 1: text.slice(i + 1) })
+  return first > 0
+    ? $t('common.labelValue', {
+        0: text.slice(0, first),
+        1: text.slice(first + 1),
+      })
     : text;
 }
 
