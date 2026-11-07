@@ -1,3 +1,4 @@
+import { pageDayMarks, releasePageDays } from './page-days.js';
 import { installDemoOpportunities } from './demo-opportunities.js';
 import { MOCK_DATASET_MARKER } from '../../app-plugins/nocoreach-mock/server/engine.js';
 import type { LegacyVariables } from './legacy/variables.js';
@@ -205,6 +206,13 @@ export async function installEditorialDemo(
         await p.db
           .getRepository(table)
           .update({ filterByTk: row.id, values, transaction });
+        // A rewritten partition's page rows are summed again from its new content (page-days.ts).
+        if (table === 'nrSyncPartitions')
+          await releasePageDays(
+            p.db,
+            pageDayMarks([{ ...after, projectId: id } as never]),
+            transaction,
+          );
         renamed++;
       }
     }

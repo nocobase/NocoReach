@@ -10,6 +10,7 @@ import { userManagementServiceToken } from '@nocobase/app-plugin-users/server/to
 import { driveManagerToken } from '@nocobase/app-server/drive';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import { PROJECT_VARIABLES } from '../../server/nocoreach/demo-data/clear';
+import { pageDaysFilled } from '../../server/nocoreach/page-days';
 import { taskOwner, taskState, taskClosed } from '../../shared/task-pending';
 import { historyBounds } from '../../server/nocoreach/search-history';
 import { projectWork } from '../../server/nocoreach/execution/model';
@@ -306,6 +307,22 @@ test('imports the demo through the API and clears all business data while preser
     expect(outcomes, `${name}: measured outcome coverage`).toEqual(
       new Set(['up', 'down', 'flat', 'insufficient']),
     );
+    // Each synced day is summed by page for the page drawer after the sync (page-days.ts); the tick's fill takes what
+    // a running fill left.
+    await pageDaysFilled(runtime.plugin.db, String(id));
+    await runtime.plugin.sync.fillPageDays(id);
+    const pageDayMarks = await connection
+      .repository('nrPageDayMarks')
+      .count({ filter: { projectId: id } });
+    let pagePartitions = 0;
+    for (const grain of ['query_page', 'page'])
+      pagePartitions += await connection
+        .repository('nrSyncPartitions')
+        .count({ filter: { projectId: id, grain } });
+    expect(pageDayMarks, `${name}: page days held`).toBe(pagePartitions);
+    expect(
+      await connection.repository('nrPageDays').count({ filter: { projectId: id } }),
+    ).toBeGreaterThan(0);
     const search = await runtime.plugin.dataViews.search(id, { range: '12m' });
     expect(search.complete, `${name}: full year of search`).toBe(true);
     expect(search.coverage.current.missingDays).toBe(0);
@@ -850,6 +867,8 @@ test('imports the demo through the API and clears all business data while preser
       'nrTasks',
       'nrGoogleLinks',
       'nrSyncPartitions',
+      'nrPageDays',
+      'nrPageDayMarks',
       'nrProjectMembers',
     ])
       expect(

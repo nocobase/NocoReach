@@ -17,7 +17,8 @@ import { GoogleReportCache, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_MS, reportView } from '../../shared/google-cache.js';
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
-import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { readPageDays } from './page-days.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -441,21 +442,22 @@ class DataViews{
    for(const x of r.get('payload')||[]){if(!String(x.page||'').startsWith('/'))continue;entry(web,hostOf(x.host),pathOf(x.page),{views:0})[p].views+=Number(x.views)||0;}});
   return {window:w,days,search:[...search.values()],web:[...web.values()]};}
  // A page's own figures (Website content's page drawer), counting every address the project's page identity gives it.
+ // The page's days are read from nrPageDays by key (page-days.ts): reading the window's partitions for each page opened
+ // took 3.7 to 5.8 s a page on 252 (2026-11-07). The answer is not saved: saving each page's answer rewrote the
+ // project's saved reports (up to 8 MB, about 300 ms a page on 252) and pushed Pages' and Search's copies out of them.
  async page(id,v){if(!pageKey(v.url))fail(systemMessageText('dataViews.providePageUrl'));const identity=pageIdentity(await this.p.siteContent?.state?.(id).catch(()=>null)),key=pageKey(v.url,identity);let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  // The addresses that read as this page, so a newly read canonical is not answered from an older cache entry.
-  const aliases=[...Object.entries(identity.canonical||{}).filter(([,u])=>pageKey(u)===key).map(([k])=>k),...(identity.dropped?.[key.slice(0,key.indexOf('/'))]||[])];
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
-  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');
-  const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w],async()=>{
-  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});
-  const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
+  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]);
+  // Refuses a range past what the synced days may hold, as reading the partitions did (the 400 a custom range gets).
+  partitionDates(w.start,w.end,Boolean(w.all));
+  const held=await readPageDays(this.p.db,String(id),key,identity,{start:w.start,end:w.end},{gsc:gscEnd?link.get('gscSiteUrl'):null,ga4:ga4End?link.get('ga4PropertyId'):null},{logger:this.p.app?.logger,stopped:()=>Boolean(this.p.sync?.stopped)});
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
-  for(const r of gscParts){const o=day(r.get('date'));o.clicks=0;o.impressions=0;for(const x of r.get('payload')||[])if(pageKey(x.page,identity)===key){o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
-  const norm=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
-  const rowPath=x=>{if(!x.host)return norm(x.page);try{return norm(new URL(canonicalUrl(`https://${x.host}${String(x.page||'')}`,identity)).pathname);}catch{return norm(x.page);}};
-  for(const r of ga4Parts){const o=day(r.get('date'));o.views=0;for(const x of r.get('payload')||[])if(rowPath(x)===norm(path))o.views+=Number(x.views)||0;}
+  for(const d of [...(held.days.gsc||[])].sort()){const o=day(d);o.clicks=0;o.impressions=0;}
+  for(const r of held.search){const o=day(r.date);o.clicks+=r.clicks;o.impressions+=r.impressions;}
+  for(const d of [...(held.days.ga4||[])].sort())day(d).views=0;
+  for(const r of held.web)day(r.date).views+=r.views;
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
-  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
+  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
  register(){
   // Only a page that says it shows a saved copy (`acceptSaved`) gets one while a new report is read. API keys, scripts and
   // the command line wait for the new report and see its failure, as they did before saved copies.

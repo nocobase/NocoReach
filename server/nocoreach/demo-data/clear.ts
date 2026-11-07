@@ -6,6 +6,8 @@ export const PROJECT_TABLES = [
   'nrGoogleLinks',
   'nrSyncJobs',
   'nrSyncPartitions',
+  'nrPageDays',
+  'nrPageDayMarks',
   'nrKeywordRuns',
   'nrKeywordCandidates',
   'nrYouTubeVideos',
