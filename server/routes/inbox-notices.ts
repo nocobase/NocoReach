@@ -2,6 +2,11 @@ import {
   authenticationToken,
   type AuthEnv,
 } from '@nocobase/app-plugin-authentication';
+import { scopedApiKeysToken } from '@nocobase/app-plugin-api-keys/server';
+import {
+  authorizationToken,
+  type AuthorizationEnv,
+} from '@nocobase/app-plugin-authorization/server';
 import type { Application } from '@nocobase/app-server/application';
 import {
   apiErrorHandler,
@@ -36,14 +41,17 @@ const Notice = z.object({
 /**
  * What NocoReach knows about the signed-in user's own in-app messages (server/nocoreach/inbox-notices.ts): their kind
  * and the task each is about, for the Inbox's details and actions. Only the viewer's messages are read, so it needs
- * no permission beyond being signed in; the task itself is read through the task API, which checks access.
+ * no permission beyond being signed in. A message names its task only while the viewer may still read it through the
+ * task API (nrTaskWork get on its project): once they leave the project or lose the permission, `task` is null.
  */
 export const inboxNoticeRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono();
-    const routes = new Hono<AuthEnv>();
+    const routes = new Hono<AuthEnv & AuthorizationEnv>();
+    const keys = app.container.resolve(scopedApiKeysToken);
     routes.onError(apiErrorHandler);
     routes.use('*', app.container.resolve(authenticationToken).required());
+    routes.use('*', app.container.resolve(authorizationToken).middleware());
     routes.get(
       '/notices',
       describeRoute({
@@ -64,15 +72,43 @@ export const inboxNoticeRoutes: AppApiRouteContribution<Application> =
           .ids.split(',')
           .map((id) => id.trim())
           .filter(Boolean);
-        const tasks = async (taskIds: readonly string[]) =>
-          (
+        const session = context.get('auth')!;
+        const userId = String(session.user.id);
+        const access = runtime.legacy.db.access!;
+        const tasks = async (taskIds: readonly string[]) => {
+          // No longer a NocoReach member: none of their tasks is readable.
+          if (!(await access.roleFor(context.req.raw, userId))) return [];
+          const keyScope = await keys.resolve(session, context.req.raw);
+          const rows = (
             await runtime.legacy.db.getRepository('nrTasks').find({
               filter: { id: { $in: [...taskIds] } },
               fields: ['id', 'projectId', 'title', 'updatedAt', 'evidence'],
             })
           ).map((row) => row.toJSON() as unknown as TaskRow);
+          return access.run(
+            {
+              userId,
+              http: context.req.raw,
+              context: context.get('authz'),
+              ...(keyScope ? { keyScope } : {}),
+            },
+            async () => {
+              const readable: TaskRow[] = [];
+              for (const row of rows)
+                if (
+                  await access.allows(
+                    'nrTaskWork',
+                    'get',
+                    String(row.projectId),
+                  )
+                )
+                  readable.push(row);
+              return readable;
+            },
+          );
+        };
         const data = await runtime.inboxNotices.list(
-          String(context.get('auth')!.user.id),
+          userId,
           ids,
           tasks,
           waitsForReview as (work: unknown) => boolean,
