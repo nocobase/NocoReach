@@ -24,6 +24,18 @@ const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
+// The page drawer's matching: a GA4 row is the page whose path its address has under the page identity, whatever its
+// host; rows synced before hosts were kept have none and match by their own path.
+const normPath=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
+const rowPath=(x,identity)=>{if(!x.host)return normPath(x.page);try{return normPath(new URL(canonicalUrl(`https://${x.host}${String(x.page||'')}`,identity)).pathname);}catch{return normPath(x.page);}};
+// The held days of every page (DataViews.pageDays) grouped by the page they are under the page identity: Search Console
+// days by page key, GA4 days by path. Grouped once per identity and kept with the days, so each drawer opened is a
+// lookup; matching every address on each read took 150 to 900 ms at 23,895 addresses (2026-11-07).
+function pagesBy(held,identity){const at=JSON.stringify(identity);if(held.groups?.at===at)return held.groups;
+ const search=new Map(),web=new Map(),put=(m,k,e)=>{const list=m.get(k);if(list)list.push(e);else m.set(k,[e]);};
+ for(const e of held.search.values()){const k=pageKey(`https://${e.at}`,identity);if(k)put(search,k,e);}
+ for(const e of held.web.values())put(web,rowPath(e,identity),e);
+ return held.groups={at,search,web};}
 // What makes a new day's window the same view as yesterday's. Breakdowns and rows receive dates alone, so the page names
 // its view (`reportView`: the range, or a custom range's dates): without it a custom week would answer for the rolling one
 // and evict it. The window's length and whether it is all of history guard a view sent with the wrong dates. A request
@@ -454,13 +466,11 @@ class DataViews{
   const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/'));
   const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w,2],async()=>{
   const held=await this.pageDays(id,link,w,{gsc:Boolean(gscEnd),ga4:Boolean(ga4End)});
-  const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
+  const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;},{search,web}=pagesBy(held,identity);
   for(const d of held.gscDays){const o=day(d);o.clicks=0;o.impressions=0;}
-  for(const e of held.search.values())if(pageKey(`https://${e.at}`,identity)===key)for(let i=0;i<e.dates.length;i++){const o=day(e.dates[i]);o.clicks+=e.clicks[i];o.impressions+=e.impressions[i];}
-  const norm=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
-  const rowPath=x=>{if(!x.host)return norm(x.page);try{return norm(new URL(canonicalUrl(`https://${x.host}${String(x.page||'')}`,identity)).pathname);}catch{return norm(x.page);}};
+  for(const e of search.get(key)||[])for(let i=0;i<e.dates.length;i++){const o=day(e.dates[i]);o.clicks+=e.clicks[i];o.impressions+=e.impressions[i];}
   for(const d of held.ga4Days){const o=day(d);o.views=0;}
-  for(const e of held.web.values())if(rowPath(e)===norm(path))for(let i=0;i<e.dates.length;i++)day(e.dates[i]).views+=e.views[i];
+  for(const e of web.get(normPath(path))||[])for(let i=0;i<e.dates.length;i++)day(e.dates[i]).views+=e.views[i];
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
   return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
  // Every page's daily search clicks and impressions (Search Console query × page rows, under the address without the
