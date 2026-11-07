@@ -27,11 +27,12 @@ import {
   type InboxPartProps,
 } from '#extensions/nocobase-inbox/registry';
 import type { InboxEntry } from '#extensions/nocobase-inbox/model';
-import { $t, useNocoReachLocale } from '#i18n';
+import { $legacyText, $t, useNocoReachLocale } from '#i18n';
 import { formatDateTime } from '#lib/format';
 import { NocoReachHttpError, nocobaseClient as api } from '#lib/nocoreach-api';
 
 import { useMe } from '../me';
+import { stageName } from '../playbook-model';
 import { localizeWorkSnapshots } from '../playbook-snapshot';
 import { TaskStatusTag } from '../task-status-tag';
 import { SnoozeDialog } from '../task-detail/task-snooze';
@@ -117,6 +118,11 @@ function useTaskModel(entry: InboxEntry): TaskModel {
 }
 
 const stageOf = (w: Work) => w.flow?.stages[w.stageIndex || 0];
+/** The current step's name as the task page words it. */
+const stepName = (w: Work) => {
+  const stage = stageOf(w);
+  return stage ? $legacyText(stageName(stage, w)) : '';
+};
 /** Waiting for its owner's review now: in Needs you, neither closed nor finished. */
 const inReview = (w: Work) =>
   !isClosed(w) && w.stage !== 'done' && stageOf(w)?.kind === 'review';
@@ -243,6 +249,8 @@ function TaskActions({
 function summaryOf(content: string): string {
   const plain = content
     .replace(/```[\s\S]*?```/g, ' ')
+    // Tables read badly as plain text; the summary leaves them out.
+    .replace(/^\s*\|.*$/gm, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^[#>\-*+\s]+/gm, '')
@@ -335,7 +343,7 @@ function TaskBody({ entry, model }: InboxPartProps<TaskModel>): ReactElement {
         <Fact label={$t('taskInbox.currentStep')}>
           {w.stage === 'done'
             ? $t('taskInbox.allStepsDone')
-            : stage?.name || $t('taskInbox.notStarted')}
+            : stepName(w) || $t('taskInbox.notStarted')}
         </Fact>
         <Fact label={$t('common.owner')}>
           {w.humanOwnerName || $t('taskInbox.noOwner')}
@@ -380,10 +388,11 @@ function TaskBody({ entry, model }: InboxPartProps<TaskModel>): ReactElement {
 
 /** The message as sent, in full, with when it came. */
 function MessageText({ entry }: { readonly entry: InboxEntry }): ReactElement {
-  const { title, body, createdAt } = entry.item;
+  const { body } = textOf(entry);
+  const { createdAt } = entry.item;
   return (
     <div className='flex flex-col gap-2' data-slot='message-body'>
-      {body && body !== title ? (
+      {body ? (
         <p className='text-sm whitespace-pre-wrap wrap-anywhere'>{body}</p>
       ) : null}
       <p className='text-xs text-muted-foreground'>
@@ -408,12 +417,15 @@ const taskLabel = (type: string) =>
     'task.snoozeDue': $t('taskInbox.kinds.snoozeDue'),
   })[type] ?? $t('taskInbox.kinds.task');
 
+/** The message's text as sent: the server stores its own wording in one language, read here in the viewer's. */
+const textOf = (entry: InboxEntry) => {
+  const title = $legacyText(entry.item.title ?? '');
+  const body = $legacyText(entry.item.body ?? '');
+  return { title, body: body && body !== title ? body : '' };
+};
 const titleOf = (entry: InboxEntry) => {
-  const { title, body } = entry.item;
-  return {
-    title: title || body,
-    sentence: body && body !== title ? body : null,
-  };
+  const { title, body } = textOf(entry);
+  return { title: title || body, sentence: body || null };
 };
 
 /** A task message: what happened, and the task as it is now. */
@@ -426,8 +438,22 @@ export const taskRenderer = defineInboxRenderer<TaskModel>({
     useNocoReachLocale();
     return {
       label: (entry) => taskLabel(entry.notice?.type ?? ''),
-      text: (entry) => {
+      text: (entry, model) => {
         const text = titleOf(entry);
+        // The step it waits on, as the task names it now in the viewer's language.
+        const step = model?.data ? stepName(model.data.work) : undefined;
+        if (
+          entry.notice?.type === 'task.waiting' &&
+          step &&
+          entry.notice.subject?.label
+        )
+          return {
+            title: $t('messages.waits', {
+              0: entry.notice.subject.label,
+              1: step,
+            }),
+            sentence: text.sentence,
+          };
         // The detail's body shows the task; the comment itself is a line of it, not the sentence.
         return entry.notice?.type === 'task.waiting' ||
           entry.notice?.type === 'task.owner'
