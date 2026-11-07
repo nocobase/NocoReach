@@ -680,3 +680,16 @@ it('does not write a day from a partition the sync has replaced since it was rea
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(1);
   expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toMatchObject({ date: end, clicks: 99, impressions: 990 });
 });
+
+it('fills a pending day whose partition reads back with its keys in another order, as MySQL returns JSON', async () => {
+  const { db } = await fixture(paths[0]);
+  const { fillDays, releasePageDay } = await import('../../server/nocoreach/page-days.js');
+  const written = [{ keyword: 'crm', page: url, clicks: 12, impressions: 120, position: 9 }];
+  const stored = [{ clicks: 12, impressions: 120, keyword: 'crm', page: url, position: 9 }];
+  const partitions = db.getRepository('nrSyncPartitions');
+  const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
+  await partitions.update({ filterByTk: row.get('id'), values: { payload: stored } });
+  expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: written })).toBe(true);
+  expect(await fillDays(db, projectId, 'gsc', site)).toBe(30);
+  expect(await db.getRepository('nrPageDayMarks').count({ filter: { projectId, source: 'gsc', pages: { $lt: 0 } } })).toBe(0);
+});

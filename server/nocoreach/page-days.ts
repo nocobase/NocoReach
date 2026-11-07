@@ -136,26 +136,27 @@ type Partition = {
   payload: unknown;
 };
 
-const payloadHashOf = (payload: unknown) =>
+// What a day's rows are summed from, as a hash of the rows themselves: the partition's JSON as stored is not compared,
+// as MySQL reorders an object's keys, so the same content read back would not match what the sync wrote.
+const rowsHashOf = (rows: Row[]) =>
   createHash('sha256')
-    .update(JSON.stringify(payload ?? null))
+    .update(
+      JSON.stringify(
+        rows
+          .map((r) => ({
+            at: `${r.host} ${r.path}`,
+            figures: [r.clicks ?? null, r.impressions ?? null, r.views ?? null],
+          }))
+          .sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0))
+          .map((r) => [r.at, ...r.figures]),
+      ),
+    )
     .digest('hex');
 
 /** A synced day's mark, without its rows. */
 function prepareMark(partition: Partition) {
-  const source = sourceOfGrain(partition.grain);
-  if (!source) return null;
-  const projectId = String(partition.projectId),
-    resource = String(partition.resource),
-    date = dayOf(partition.date);
-  return {
-    projectId,
-    source,
-    resource,
-    day: dayNumber(date),
-    dayKey: dayKeyOf(projectId, source, resource, date),
-    payloadHash: payloadHashOf(partition.payload),
-  };
+  const day = prepareDay(partition);
+  return day && { ...day.mark, pages: undefined };
 }
 
 /** A synced day's page rows and mark, summed from its partition outside any transaction. */
@@ -166,7 +167,8 @@ function prepareDay(partition: Partition) {
     resource = String(partition.resource),
     date = dayOf(partition.date);
   const scope = { projectId, source, resource, day: dayNumber(date) };
-  const rows = pageRows(source, partition.payload).map((r) => ({
+  const summed = pageRows(source, partition.payload);
+  const rows = summed.map((r) => ({
     ...scope,
     host: r.host,
     path: r.path,
@@ -178,7 +180,7 @@ function prepareDay(partition: Partition) {
   const mark = {
     ...scope,
     dayKey: dayKeyOf(projectId, source, resource, date),
-    payloadHash: payloadHashOf(partition.payload),
+    payloadHash: rowsHashOf(summed),
     pages: rows.length,
   };
   return { scope, rows, mark };
