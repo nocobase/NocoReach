@@ -32,7 +32,7 @@ import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { useProject } from "./reach-data";
 import {
-  keywordRequest, getMarkets, marketLabel, metric, monthVolume, rankOf, rankRequest, getResearchViews, useOpenKeyword,
+  keywordRequest, getMarkets, marketLabel, metric, monthVolume, rankOf, rankRequest, getResearchViews, useOpenKeyword, researchRunError,
   type KeywordConnectionState, type KeywordItem, type Ranks, type RecentRun, type ResearchRun,
 } from "./keyword-api";
 import "./reach-workspace.css";
@@ -263,7 +263,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
     } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'))); }
   };
   if (run.status !== "completed") {
-    return <EmptyState icon={<Search />} title={getStatusText()[run.status] ?? $t('common.lookupNotComplete')} description={run.errorCode || $t('common.notRunSameLookupAgain')} />;
+    return <EmptyState icon={<Search />} title={getStatusText()[run.status] ?? $t('common.lookupNotComplete')} description={researchRunError(run.errorCode)} />;
   }
   return (
     <div className="space-y-4">

@@ -1,4 +1,4 @@
-import { getCurrentLocale, $t } from "#i18n";
+import { getCurrentLocale, $t, translateDataForSeoReason } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {useLocation,useNavigate} from 'react-router';
 import {currentProjectId} from './current-project';
@@ -34,3 +34,10 @@ export const metric=(v:number|null|undefined)=>v==null?'—':new Intl.NumberForm
 export const DETAIL_PARAMS=['kw','kwLoc','kwLang'] as const;
 export const detailSearch=(search:string,keyword:string,market?:{locationCode:number;language:string}|null)=>{const p=new URLSearchParams(search),m=market??getMarkets()[0];p.set('kw',keyword);p.set('kwLoc',String(m.locationCode));p.set('kwLang',m.language);return `?${p}`;};
 export function useOpenKeyword(){const navigate=useNavigate(),location=useLocation();return (keyword:string,market?:{locationCode:number;language:string}|null)=>{void navigate({pathname:'/keywords/detail',search:detailSearch(location.search,keyword,market)});};}
+
+// Why a lookup did not complete: a provider status or a malformed reply is stored as a code, anything else as a system sentence.
+export const researchRunError = (code?: string | null) =>
+  !code ? $t('common.notRunSameLookupAgain')
+  : code.startsWith('provider_status_') ? $t('dataforseo.thirdPartyRequestFailedCheck')
+  : /^[a-z][a-z0-9_]*$/.test(code) ? $t('common.lookupNotCompleteTryAgain')
+  : translateDataForSeoReason(code);
