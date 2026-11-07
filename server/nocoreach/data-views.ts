@@ -18,7 +18,7 @@ import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_M
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
 import { pageIdentity, pageKey } from '../../shared/page-identity.js';
-import { readPageDays } from './page-days.js';
+import { readPageDays, sumPageDays } from './page-days.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -40,7 +40,7 @@ const GA4_PROCESSING_DAYS=2;
 // tail that differs by day would otherwise grow the sums well past a gigabyte.
 const MAX_PAIR_ROWS=100000;
 // Search Console query × page days read per query by `pairRows`, and the projects whose summed rows stay in memory.
-const PAIR_READ_DAYS=4,PAIR_HOLD_PROJECTS=6,MAX_HELD_PAIRS=300000,FIGURE_READ_DAYS=8;
+const PAIR_READ_DAYS=4,PAIR_HOLD_PROJECTS=6,MAX_HELD_PAIRS=300000;
 // How far a report's window may run ahead of the synced days and still have its tables built from them: the daily sync
 // runs every 24 hours from when it last ran, so it lands up to a day after the final cutoff moves.
 const PENDING_SYNC_DAYS=2;
@@ -417,30 +417,34 @@ class DataViews{
  // samples. Pages are host and path; GA4 rows synced before hosts were kept have host ''. Search Console counts leave out
  // anonymised queries. Built once per synced data and range, and saved like 搜索表现.
  // Pages' figures are kept under the stored days they sum, not every synced day, so a history fill writing older days or
- // the other source's days do not make the next range change sum them again; the days are read a few at a time, giving
- // way to other requests between reads.
+ // the other source's days do not make the next range change sum them again.
  async pageFigures(id,range,from,to){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
   const end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
   const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,String(range),from,to,first),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
   const sources=[['gsc','query_page',link.get('gscSiteUrl')],['ga4','page',link.get('ga4PropertyId')]],stored=await Promise.all(sources.map(([source,grain,resource])=>resource?this.storedDays(id,source,grain,resource,dates):null));
-  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),w.start,w.end,w.previousStart,Boolean(w.all),stored,5],async()=>packFigures(await this.buildPageFigures(id,w,link,dates)),value=>value?GOOGLE_HISTORY_CACHE_MS:0,unpackFigures);}
+  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),w.start,w.end,w.previousStart,Boolean(w.all),stored,6],async()=>packFigures(await this.buildPageFigures(id,w,link)),value=>value?GOOGLE_HISTORY_CACHE_MS:0,unpackFigures);}
  // What a source's stored days of a window are, cheaply: how many and the last write, so a kept sum knows it is current.
  async storedDays(id,source,grain,resource,dates){const repo=this.p.db.getRepository('nrSyncPartitions'),filter={projectId:id,source,grain,resource,date:dates};
   const [count,latest]=await Promise.all([repo.count({filter}),repo.findOne({filter,sort:['-updatedAt'],fields:['updatedAt']})]);
   const at=latest?.get('updatedAt');return [count,at instanceof Date?at.toISOString():at??null];}
- async buildPageFigures(id,w,link,dates){const repo=this.p.db.getRepository('nrSyncPartitions');
-  const period=d=>d>=w.start&&d<=w.end?'current':d>=w.previousStart&&d<=w.previousEnd?'previous':null;
+ // Each source's days are summed by nrPageDays (page-days.ts) in the database, the days it does not hold yet from their
+ // partitions: summing every partition of a long range parsed some 1.3 MB of JSON a day on 252 (2026-11-07). Rows are
+ // then named as the partitions' rows were: Search Console by host without www and path, GA4 by its host without www and
+ // its path without the query, fragment or a trailing slash, leaving out paths that do not start with `/`.
+ async buildPageFigures(id,w,link){
   const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'');
+  const periods=[{start:w.start,end:w.end},{start:w.previousStart,end:w.previousEnd}],names=['current','previous'];
   const days={gsc:{current:0,previous:0},ga4:{current:0,previous:0}},search=new Map(),web=new Map();
-  // Each address is parsed once, not once a day: a page reached by many queries repeats it in every row of every day.
-  const places=new Map(),place=page=>{let at=places.get(page);if(at===undefined){try{const u=new URL(page);at=[hostOf(u.hostname),pathOf(u.pathname)];}catch{at=null;}places.set(page,at);}return at;};
   const entry=(m,host,path,zero)=>{const k=`${host}|${path}`;let o=m.get(k);if(!o){o={host,path,current:{...zero},previous:{...zero}};m.set(k,o);}return o;};
+  const options={logger:this.p.app?.logger,stopped:()=>Boolean(this.p.sync?.stopped)};
   const site=link.get('gscSiteUrl'),property=link.get('ga4PropertyId');
-  if(site)await eachPartitionDays(repo,{projectId:id,source:'gsc',grain:'query_page',resource:site},dates.$in,FIGURE_READ_DAYS,['date','payload'],r=>{const p=period(dayOf(r.get('date')));if(!p)return;days.gsc[p]++;
-   for(const x of r.get('payload')||[]){const at=place(x.page);if(!at)continue;const o=entry(search,at[0],at[1],{clicks:0,impressions:0})[p];o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}});
-  if(property)await eachPartitionDays(repo,{projectId:id,source:'ga4',grain:'page',resource:property},dates.$in,FIGURE_READ_DAYS,['date','payload'],r=>{const p=period(dayOf(r.get('date')));if(!p)return;days.ga4[p]++;
-   for(const x of r.get('payload')||[]){if(!String(x.page||'').startsWith('/'))continue;entry(web,hostOf(x.host),pathOf(x.page),{views:0})[p].views+=Number(x.views)||0;}});
-  return {window:w,days,search:[...search.values()],web:[...web.values()]};}
+  if(site){const sum=await sumPageDays(this.p.db,String(id),'gsc',site,periods,options);sum.days.forEach((n,i)=>{days.gsc[names[i]]=n;});
+   for(const r of sum.rows){const o=entry(search,hostOf(r.host),pathOf(r.path),{clicks:0,impressions:0})[names[r.period]];o.clicks+=r.clicks||0;o.impressions+=r.impressions||0;}}
+  if(property){const sum=await sumPageDays(this.p.db,String(id),'ga4',property,periods,options);sum.days.forEach((n,i)=>{days.ga4[names[i]]=n;});
+   for(const r of sum.rows){if(!r.path.startsWith('/'))continue;entry(web,hostOf(r.host),pathOf(r.path),{views:0})[names[r.period]].views+=r.views||0;}}
+  // In address order, so pages with equal figures keep their order from one build to the next.
+  const sorted=m=>[...m.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,v])=>v);
+  return {window:w,days,search:sorted(search),web:sorted(web)};}
  // A page's own figures (Website content's page drawer), counting every address the project's page identity gives it.
  // The page's days are read from nrPageDays by key (page-days.ts): reading the window's partitions for each page opened
  // took 3.7 to 5.8 s a page on 252 (2026-11-07). The answer is not saved: saving each page's answer rewrote the

@@ -320,9 +320,17 @@ test('imports the demo through the API and clears all business data while preser
         .repository('nrSyncPartitions')
         .count({ filter: { projectId: id, grain } });
     expect(pageDayMarks, `${name}: page days held`).toBe(pagePartitions);
-    expect(
-      await connection.repository('nrPageDays').count({ filter: { projectId: id } }),
-    ).toBeGreaterThan(0);
+    const pageScopes = (
+      await connection
+        .repository('nrPageScopes')
+        .findMany({ filter: { projectId: id } })
+    ).map((s) => s.id);
+    let pageDays = 0;
+    for (const scopeId of pageScopes)
+      pageDays += await connection
+        .repository('nrPageDays')
+        .count({ filter: { scopeId } });
+    expect(pageDays).toBeGreaterThan(0);
     const search = await runtime.plugin.dataViews.search(id, { range: '12m' });
     expect(search.complete, `${name}: full year of search`).toBe(true);
     expect(search.coverage.current.missingDays).toBe(0);
@@ -867,8 +875,9 @@ test('imports the demo through the API and clears all business data while preser
       'nrTasks',
       'nrGoogleLinks',
       'nrSyncPartitions',
-      'nrPageDays',
       'nrPageDayMarks',
+      'nrPageScopes',
+      'nrPageAddresses',
       'nrProjectMembers',
     ])
       expect(

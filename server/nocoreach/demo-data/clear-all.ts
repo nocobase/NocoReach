@@ -121,7 +121,7 @@ export async function clearAllBusinessData(
   // These are set-based deletions, including rows whose old project no longer exists.
   // Keep framework identities, global Agent/Runner/model/network configuration and migration history.
   await database.transaction(async (connection) => {
-    for (const table of [...PROJECT_TABLES, 'nrProjectMembers'])
+    for (const table of [...PROJECT_TABLES, 'nrPageDays', 'nrProjectMembers'])
       await connection.query.deleteFrom(table).allowAllRows().execute();
     await connection.query
       .deleteFrom('nrOnlineAgentRecords')
