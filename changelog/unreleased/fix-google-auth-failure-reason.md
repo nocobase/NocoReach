@@ -1,0 +1,3 @@
+## Data sources › Google: a failed authorization keeps saying when and why, and a dropped connection is tried once more
+
+- A failed attempt to authorize Google stays on the Google connection and on the Google rows of Data health, with its time and reason, until an authorization succeeds; before, the reason was gone once the page's address changed, and Data health still read as if authorizing again had done nothing. The connection now asks to check both permissions on Google's page before authorizing. When the connection to Google drops before Google answers, the authorization code is sent once more; a code Google has answered for is never sent again.

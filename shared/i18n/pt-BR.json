@@ -4332,6 +4332,8 @@
   "google.authorizationLapsed": "Autorização expirada",
   "google.googleRefusedAuthorizationAt": "O Google recusou a autorização em {0}. Autorize novamente.",
   "google.testingAppExpiresWeekly": "O app talvez ainda esteja em status de teste no Google Cloud. Depois de publicá-lo em produção em \"Público\", a autorização deixa de expirar a cada 7 dias.",
+  "google.authorizationAttemptFailedAt": "A autorização de {0} não foi concluída. {1}",
+  "google.checkBothPermissions": "Na página do Google, selecione as duas permissões: Analytics e Search Console.",
   "google.setUpGoogleAppAdmin": "Configurar o aplicativo do Google (administrador)",
   "dataforseo.settingsChangedVerifyAgain": "Configurações alteradas. Verifique novamente",
   "messages.comeBackChooseOne": ", depois volte para escolher um.",

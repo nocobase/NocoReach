@@ -4332,6 +4332,8 @@
   "google.authorizationLapsed": "Autorización caducada",
   "google.googleRefusedAuthorizationAt": "Google rechazó la autorización el {0}. Vuelve a autorizar el acceso.",
   "google.testingAppExpiresWeekly": "Es posible que la aplicación siga en estado de prueba en Google Cloud. Cuando la publiques en producción desde «Audiencia», la autorización dejará de caducar cada 7 días.",
+  "google.authorizationAttemptFailedAt": "La autorización del {0} no se completó. {1}",
+  "google.checkBothPermissions": "En la página de Google, marca los dos permisos: Analytics y Search Console.",
   "google.setUpGoogleAppAdmin": "Configurar la aplicación de Google (administrador)",
   "dataforseo.settingsChangedVerifyAgain": "La configuración ha cambiado. Vuelve a verificarla",
   "messages.comeBackChooseOne": ", y después vuelve para elegir uno.",

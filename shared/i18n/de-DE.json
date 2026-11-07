@@ -4332,6 +4332,8 @@
   "google.authorizationLapsed": "Autorisierung abgelaufen",
   "google.googleRefusedAuthorizationAt": "Google hat die Autorisierung am {0} abgelehnt. Autorisieren Sie den Zugriff erneut.",
   "google.testingAppExpiresWeekly": "Die App befindet sich in Google Cloud möglicherweise noch im Status „Testen“. Sobald Sie sie unter „Zielgruppe“ in die Produktion veröffentlichen, läuft die Autorisierung nicht mehr alle 7 Tage ab.",
+  "google.authorizationAttemptFailedAt": "Die Autorisierung vom {0} war nicht erfolgreich. {1}",
+  "google.checkBothPermissions": "Wählen Sie auf der Google-Seite beide Berechtigungen aus: Analytics und Search Console.",
   "google.setUpGoogleAppAdmin": "Google-App einrichten (Administrator)",
   "dataforseo.settingsChangedVerifyAgain": "Einstellungen geändert. Verifizieren Sie erneut",
   "messages.comeBackChooseOne": ", und kehren Sie anschließend zurück, um eines auszuwählen.",

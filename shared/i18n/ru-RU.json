@@ -4359,6 +4359,8 @@
   "google.authorizationLapsed": "Авторизация истекла",
   "google.googleRefusedAuthorizationAt": "Google отклонил авторизацию {0}. Авторизуйтесь снова.",
   "google.testingAppExpiresWeekly": "Возможно, приложение в Google Cloud всё ещё в статусе Testing. После публикации в рабочем режиме (In production) в разделе Audience авторизация перестанет истекать каждые 7 дней.",
+  "google.authorizationAttemptFailedAt": "Авторизация ({0}) не удалась. {1}",
+  "google.checkBothPermissions": "На странице Google отметьте оба разрешения: Analytics и Search Console.",
   "google.setUpGoogleAppAdmin": "Настройка приложения Google (администратор)",
   "dataforseo.settingsChangedVerifyAgain": "Настройки изменены. Проверьте подключение снова.",
   "messages.comeBackChooseOne": ", затем вернитесь, чтобы выбрать один.",

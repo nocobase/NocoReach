@@ -10,6 +10,8 @@ import { projectId, requireAccess } from './policy.js';
 import { nextAt, lastSuccess } from './sync-policy.js';
 import { nextScheduled } from './schedule-time.js';
 import * as __policy from './policy.js';
+import { failedAttempt } from './google-authorization.js';
+import { authorizationFailureKey } from '../../shared/google-authorization-failures.js';
 // Data health (SPEC §11): one view of every connected source's last success, data cutoff, next sync and failure.
 const H=3600000;
 // Live presentation metadata only. Keep the legacy Chinese fields for older clients; raw
@@ -26,6 +28,10 @@ function assess({lastSuccessAt,attempt,now=Date.now()}){
  return {state:'failing',...text('message','dataHealth.extendedFailure',{0:errorValue(reason)})};
 }
 const googleCodes={network_timeout:systemMessageText('errors.networkTimeout'),network_unreachable:systemMessageText('errors.networkUnavailable'),google_api_error:systemMessageText('google.apiError'),resource_changed:systemMessageText('google.resourceChanged'),invalid_grant:systemMessageText('google.authorizationExpired')};
+// A Google row needing attention also says when authorizing again last failed, and why, while the attempt is recorded
+// (google-oauth-callback.ts, until one succeeds): without it, the row read as if authorizing again had done nothing.
+// The browser writes the time (`dateTime`).
+function attemptOf(tried:{at:string;reason:string}){const reason={key:authorizationFailureKey(tried.reason)??'google.authorizationCallbackFailedAskAdmin'};return {attempt:systemMessageText('google.authorizationAttemptFailedAt',{0:tried.at,1:reason}),attemptText:{key:'google.authorizationAttemptFailedAt',params:{0:{dateTime:tried.at},1:reason}}};}
 // What a row needing attention asks for (`fix`): retry it, change a setting first (`settings`), check whether the last
 // run was billed before retrying (`verify`), or wait for an automatic retry (`wait`). A flagged failure shows the
 // source's own words, since "will retry automatically" would not be true.
@@ -69,10 +75,11 @@ const CONNECTED_CHECKS={
 class DataHealth{
  constructor(plugin){this.p=plugin;}
  async google(id,now){const out=[];let status=null,link=null;try{link=await this.p.link(id);if(link&&this.p.env(__policy.secretKey(id)))status=await this.p.sync.status(id);}catch{status=null;}
+  const tried=failedAttempt(link);
   for(const [source,name,field] of [['gsc','Google Search Console','gscSiteUrl'],['ga4','GA4','ga4PropertyId']]){if(!status||!link?.get(field))continue;const job=status.jobs.find(j=>j.source===source),through=status.coverage.find(c=>c.source===source)?.availableThrough||null;
    const failed=job?.status==='failed',retrying=job?.status==='retrying',attempt=job?{at:job.finishedAt||job.updatedAt||job.createdAt,ok:!failed&&!retrying,errors:failed||retrying?[googleCodes[job.errorCode]||job.errorCode||systemMessageText('errors.unknownReason')]:[]}:null;
    let h=assess({lastSuccessAt:status.lastSyncAt,attempt:attempt||(status.lastSyncAt?{at:status.lastSyncAt,ok:true}:null),now});if(retrying)h={state:'warning',...text('message','dataHealth.retryingValue',{0:errorValue(attempt.errors[0])}),fix:'wait'};if(!status.scheduleEnabled&&h.state==='healthy')h={state:'warning',...text('message','dataHealth.dailySyncDisabled'),fix:'settings'};if(failed&&['invalid_grant','resource_changed'].includes(job.errorCode))h={...h,fix:'settings'};
-   out.push({id:source,...text('name',name),...h,lastSuccessAt:status.lastSyncAt,dataThrough:through,nextSyncAt:status.scheduleEnabled?status.nextSyncAt:null,...(status.scheduleEnabled?{}:{cadence:'manual'}),...text('note','dataHealth.googleDataAbout3Days'),retry:failed?{resource:'nrGoogle',action:'syncControl',body:{command:'retry'}}:h.state!=='healthy'&&!h.fix?{resource:'nrGoogle',action:'syncNow',body:{}}:null});}
+   out.push({id:source,...text('name',name),...h,...(tried&&(h.state==='warning'||h.state==='failing')?attemptOf(tried):{}),lastSuccessAt:status.lastSyncAt,dataThrough:through,nextSyncAt:status.scheduleEnabled?status.nextSyncAt:null,...(status.scheduleEnabled?{}:{cadence:'manual'}),...text('note','dataHealth.googleDataAbout3Days'),retry:failed?{resource:'nrGoogle',action:'syncControl',body:{command:'retry'}}:h.state!=='healthy'&&!h.fix?{resource:'nrGoogle',action:'syncNow',body:{}}:null});}
   return out;}
  async list(id){const now=Date.now(),items=[...await this.google(id,now)];
   const site=await this.p.siteContent?.state(id);if(site?.sites?.length){const last=site.refresh||{at:site.sites.map(x=>x.confirmedAt).sort().at(-1),ok:true,lastSuccessAt:site.sites.map(x=>x.confirmedAt).sort().at(-1)};items.push({id:'site',...text('name','common.websiteContent'),...assess({lastSuccessAt:last.lastSuccessAt,attempt:last,now}),lastSuccessAt:last.lastSuccessAt,dataThrough:null,nextSyncAt:nextAt(site.refresh,now),...text('note','dataHealth.pagesDetailsRead',{0:site.pages.length,1:site.pages.filter(p=>p.fetchedAt).length}),retry:{resource:'nrSiteContent',action:'refresh',body:{}}});}

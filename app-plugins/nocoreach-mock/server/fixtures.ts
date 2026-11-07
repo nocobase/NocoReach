@@ -474,8 +474,11 @@ function google(
       refresh_token: `mock-refresh-${fixtureHash(c, 'google').slice(0, 16)}`,
       token_type: 'Bearer',
       expires_in: 3600,
+      // `simulated-partial-consent` stands for a consent page left with the Search Console box unticked.
       scope:
-        'openid email https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
+        b.code === 'simulated-partial-consent'
+          ? 'openid email https://www.googleapis.com/auth/analytics.readonly'
+          : 'openid email https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
     });
   if (u.hostname === 'openidconnect.googleapis.com' && p === '/v1/userinfo')
     return json({

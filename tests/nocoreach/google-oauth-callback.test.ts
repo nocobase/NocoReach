@@ -89,6 +89,7 @@ async function fixture() {
     ),
     variable: vi.fn(async () => undefined),
     metadata: vi.fn(async () => undefined),
+    authAttemptFailed: vi.fn(async () => undefined),
     RETURN: '/main/connections',
   };
   const context = (
@@ -241,6 +242,8 @@ it.each(['expired', 'mismatch', 'missing-cookie', 'missing-state'])(
     );
     await f.denied(await f.run(ctx), 'state_expired');
     expect(f.host.googleJson).not.toHaveBeenCalled();
+    // Nothing verified which project or browser this was, so nothing is recorded against a project.
+    expect(f.host.authAttemptFailed).not.toHaveBeenCalled();
   },
 );
 
@@ -395,6 +398,8 @@ it('keeps the confirmed resources and retries the refused syncs when the same ac
     accountEmail: 'test@example.com',
     authorizedAt: expect.any(String),
     authFailedAt: null,
+    authAttemptFailedAt: null,
+    authAttemptReason: null,
     status: 'ready_for_sync',
   });
   expect(retryRefused).toHaveBeenCalledWith('123');
@@ -448,3 +453,141 @@ it('keeps the new authorization when the refused syncs cannot be queued again', 
     { message: 'busy' },
   );
 });
+
+// A failed attempt is kept on the link (plugin.ts authAttemptFailed) until one succeeds.
+const tokens = (scope = GOOGLE_SCOPES.join(' ')) => ({
+  refresh_token: 'fictional-refresh',
+  access_token: 'fictional-access',
+  scope,
+});
+// What googleJson throws when fetch itself failed, before Google answered anything.
+const unanswered = (code: 'network_timeout' | 'network_unreachable') =>
+  Object.assign(new Error('Google API is currently unreachable'), {
+    code,
+    status: 502,
+  });
+// What googleJson throws for an answer Google gave with an error.
+const answered = (code: string, status: number) =>
+  Object.assign(new Error('Google refused'), { code, status });
+const exchanges = (host: { googleJson: ReturnType<typeof vi.fn> }) =>
+  host.googleJson.mock.calls.filter(
+    ([, url]) => url === GOOGLE_ENDPOINTS.token,
+  );
+
+it('records why an attempt failed and clears it with the next authorization that succeeds', async () => {
+  const f = await fixture();
+  f.host.googleJson.mockImplementation(async (_id, url) =>
+    url === GOOGLE_ENDPOINTS.token
+      ? tokens(
+          'openid email https://www.googleapis.com/auth/analytics.readonly',
+        )
+      : { email: 'test@example.com' },
+  );
+  await f.denied(await f.run(), 'missing_permissions');
+  expect(f.host.authAttemptFailed).toHaveBeenCalledWith(
+    '123',
+    'missing_permissions',
+  );
+  // A failure is recorded after the attempt, never inside the network scope it ran in.
+  expect(f.host.network.run).toHaveBeenCalledTimes(1);
+  expect(f.host.authAttemptFailed.mock.invocationCallOrder[0]).toBeGreaterThan(
+    f.host.googleJson.mock.invocationCallOrder[0],
+  );
+
+  const next = await fixture();
+  expect((await next.run()).redirectTo).toBe(
+    '/main/connections?google=authorized',
+  );
+  expect(next.host.metadata).toHaveBeenCalledWith(
+    '123',
+    expect.objectContaining({
+      authAttemptFailedAt: null,
+      authAttemptReason: null,
+    }),
+  );
+  expect(next.host.authAttemptFailed).not.toHaveBeenCalled();
+});
+
+it('records an attempt Google did not approve, and one the initiator may no longer finish', async () => {
+  const f = await fixture();
+  const ctx = f.context();
+  ctx.request.query.error = 'access_denied';
+  await f.denied(await f.run(ctx), 'authorization_denied');
+  expect(f.host.authAttemptFailed).toHaveBeenCalledWith(
+    '123',
+    'authorization_denied',
+  );
+  const member = await fixture();
+  member.identity.role = 'member';
+  await member.denied(await member.run());
+  expect(member.host.authAttemptFailed).toHaveBeenCalledWith(
+    '123',
+    'initiator_access_denied',
+  );
+});
+
+it('still redirects with the reason when the failure cannot be recorded', async () => {
+  const f = await fixture();
+  f.host.authAttemptFailed.mockRejectedValue(new Error('database is locked'));
+  f.host.googleJson.mockRejectedValue(answered('google_api_error', 503));
+  await f.denied(await f.run(), 'google_api_error');
+});
+
+it('exchanges the code once more when the connection failed before Google answered', async () => {
+  const f = await fixture();
+  let first = true;
+  f.host.googleJson.mockImplementation(async (_id, url) => {
+    if (url !== GOOGLE_ENDPOINTS.token) return { email: 'test@example.com' };
+    if (first) {
+      first = false;
+      throw unanswered('network_unreachable');
+    }
+    return tokens();
+  });
+  expect((await f.run()).redirectTo).toBe(
+    '/main/connections?google=authorized',
+  );
+  const sent = exchanges(f.host);
+  expect(sent).toHaveLength(2);
+  // The same authorization code both times; Google never answered the first.
+  expect(
+    sent.map(([, , init]) => new URLSearchParams(init.body).get('code')),
+  ).toEqual(['fictional-code', 'fictional-code']);
+  expect(f.host.variable).toHaveBeenCalledTimes(1);
+  expect(f.host.authAttemptFailed).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['invalid_grant', 400],
+  ['invalid_client', 401],
+  ['google_api_error', 503],
+])(
+  'never sends the code again once Google answered, even with %s',
+  async (code, status) => {
+    const f = await fixture();
+    f.host.googleJson.mockRejectedValue(answered(code, status));
+    await f.denied(await f.run(), code);
+    expect(exchanges(f.host)).toHaveLength(1);
+    expect(f.host.authAttemptFailed).toHaveBeenCalledWith('123', code);
+  },
+);
+
+it.each([
+  ['the second try also gets no answer', unanswered('network_timeout')],
+  // The first request reached Google and used the code; only its answer was lost.
+  ['the code was used by the first try', answered('invalid_grant', 400)],
+])(
+  'says the connection failed when %s, after one retry',
+  async (_case, second) => {
+    const f = await fixture();
+    f.host.googleJson
+      .mockRejectedValueOnce(unanswered('network_timeout'))
+      .mockRejectedValueOnce(second);
+    await f.denied(await f.run(), 'network_timeout');
+    expect(exchanges(f.host)).toHaveLength(2);
+    expect(f.host.authAttemptFailed).toHaveBeenCalledWith(
+      '123',
+      'network_timeout',
+    );
+  },
+);
