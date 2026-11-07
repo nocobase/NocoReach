@@ -1,5 +1,5 @@
 import { googleLocalFreshness } from '../../shared/google-cache.js';
-import { $t, $tj } from "#i18n";
+import { $t, $tj, $legacyText } from "#i18n";
 // 页面 (网站与产品): every page 网站内容 lists, with visits and search for the chosen period and the tasks working on it;
 // a row opens its details (chart, tasks, 交给 Agent). Same table, tabs and toolbar as the other data pages (2026-10-04).
 import { useMemo, useState } from "react";
@@ -79,8 +79,9 @@ export default function ContentPage() {
   const pageTasks = useMemo(() => tasksByPage(tasks, data?.identity), [tasks, data?.identity]);
   const rows = useMemo<Row[]>(() => findPages((data?.pages || []).filter((p) => type === "all" || (type === OUTSIDE ? p.outsideSitemap : p.type === type)), query, hosts, data?.identity).pages
     .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(pageTasks(p.url)) })), [data, type, query, pageTasks, hosts]);
-  // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so.
-  const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{l}</p>)}</>;
+  // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so. The server writes
+  // these notes in Chinese, so they are read in the interface language, like NotesTip does.
+  const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{$legacyText(l)}</p>)}</>;
   const columns = useMemo<ColumnDef<Row>[]>(() => [
     helper.accessor("title", {
       enableSorting: false,
