@@ -153,34 +153,26 @@ const rowsHashOf = (rows: Row[]) =>
     )
     .digest('hex');
 
-/** A synced day's mark, without its rows (the sync's transaction holds while it is summed). */
-function prepareMark(partition: Partition) {
+/** Which day of which source a partition is, or null for a partition the drawer does not read. */
+function dayOfPartition(partition: Partition) {
   const source = sourceOfGrain(partition.grain);
   if (!source) return null;
   const projectId = String(partition.projectId),
     resource = String(partition.resource),
     date = dayOf(partition.date);
   return {
-    projectId,
-    source,
-    resource,
-    day: dayNumber(date),
+    scope: { projectId, source, resource, day: dayNumber(date) },
     dayKey: dayKeyOf(projectId, source, resource, date),
-    payloadHash: rowsHashOf(pageRows(source, partition.payload)),
   };
 }
 
 /** A synced day's page rows and mark, summed from its partition outside any transaction. */
 function prepareDay(partition: Partition) {
-  const source = sourceOfGrain(partition.grain);
-  if (!source) return null;
-  const projectId = String(partition.projectId),
-    resource = String(partition.resource),
-    date = dayOf(partition.date);
-  const scope = { projectId, source, resource, day: dayNumber(date) };
-  const summed = pageRows(source, partition.payload);
+  const at = dayOfPartition(partition);
+  if (!at) return null;
+  const summed = pageRows(at.scope.source, partition.payload);
   const rows = summed.map((r) => ({
-    ...scope,
+    ...at.scope,
     host: r.host,
     path: r.path,
     pathHash: hashOf(r.path),
@@ -189,46 +181,100 @@ function prepareDay(partition: Partition) {
     views: r.views ?? null,
   }));
   const mark = {
-    ...scope,
-    dayKey: dayKeyOf(projectId, source, resource, date),
+    ...at.scope,
+    dayKey: at.dayKey,
     payloadHash: rowsHashOf(summed),
     pages: rows.length,
   };
-  return { scope, rows, mark };
+  return { scope: at.scope, rows, mark };
 }
 
 // A mark whose day is still to be summed from the partition content it names (`pages` is otherwise the day's row count).
 const PENDING = -1;
+export type PageDayMark = {
+  projectId: string;
+  source: PageDaySource;
+  resource: string;
+  day: number;
+  dayKey: string;
+  payloadHash: string;
+};
 
 /**
- * For the sync's transaction: marks a day whose partition the sync wrote with other content (or a day not held yet) as
- * pending that content, so its rows are summed again in the background after the sync (`fillPageDaysInBackground`) and
- * the drawer sums the day from its partition meanwhile. Writing the day's rows here would hold the sync's transaction,
- * and with it every request on SQLite, 0.2 to 0.7 s a day. The pending mark names the new content, so a fill that read
- * the partition before the sync wrote it does not write the old rows. A day read again unchanged keeps its rows.
- * Returns whether the day was marked pending.
+ * The marks of the partitions the drawer reads, summed before a writer's transaction so it does not hold it: the sync
+ * builds them before its write transaction, and the classic import with the rows it writes.
  */
+export function pageDayMarks(partitions: Partition[]): PageDayMark[] {
+  const marks: PageDayMark[] = [];
+  for (const partition of partitions) {
+    const at = dayOfPartition(partition);
+    if (at)
+      marks.push({
+        ...at.scope,
+        dayKey: at.dayKey,
+        payloadHash: rowsHashOf(pageRows(at.scope.source, partition.payload)),
+      });
+  }
+  return marks;
+}
+
+/**
+ * For a writer's transaction (the sync, the classic import, an edited demo): marks the days whose partitions it wrote
+ * with other content (or days not held yet) as pending that content, so their rows are summed again in the background
+ * (`fillPageDaysInBackground`) and the drawer sums them from their partitions meanwhile. Writing the rows there would
+ * hold the transaction, and with it every request on SQLite, 0.2 to 0.7 s a day. The pending mark names the new content,
+ * so a fill that read a partition before it was rewritten does not write the old rows. A day written again unchanged
+ * keeps its rows. Returns the days marked pending.
+ */
+export async function releasePageDays(
+  db: LegacyDatabase,
+  marks: PageDayMark[],
+  transaction?: LegacyTransaction,
+) {
+  if (!marks.length) return 0;
+  const repo = db.getRepository('nrPageDayMarks');
+  const held = new Map<string, unknown>();
+  for (let i = 0; i < marks.length; i += PAGE_READ_HASHES)
+    for (const m of await repo.find({
+      filter: {
+        dayKey: {
+          $in: marks.slice(i, i + PAGE_READ_HASHES).map((m) => m.dayKey),
+        },
+      },
+      fields: ['dayKey', 'payloadHash'],
+      transaction,
+    }))
+      held.set(String(m.get('dayKey')), m.get('payloadHash'));
+  const changed = [...new Map(marks.map((m) => [m.dayKey, m])).values()].filter(
+    (m) => held.get(m.dayKey) !== m.payloadHash,
+  );
+  if (!changed.length) return 0;
+  for (let i = 0; i < changed.length; i += PAGE_READ_HASHES)
+    await repo.destroy({
+      filter: {
+        dayKey: {
+          $in: changed.slice(i, i + PAGE_READ_HASHES).map((m) => m.dayKey),
+        },
+      },
+      transaction,
+    });
+  await db.insertMany(
+    'nrPageDayMarks',
+    changed.map((m) => ({ ...m, pages: PENDING })),
+    transaction,
+  );
+  return changed.length;
+}
+
+/** `releasePageDays` for one partition. Returns whether its day was marked pending. */
 export async function releasePageDay(
   db: LegacyDatabase,
   partition: Partition,
   transaction?: LegacyTransaction,
 ) {
-  const day = prepareMark(partition);
-  if (!day) return false;
-  const marks = db.getRepository('nrPageDayMarks');
-  const held = await marks.findOne({
-    filter: { dayKey: day.dayKey },
-    fields: ['payloadHash', 'pages'],
-    transaction,
-  });
-  if (held && held.get('payloadHash') === day.payloadHash) return false;
-  await marks.destroy({ filter: { dayKey: day.dayKey }, transaction });
-  await db.insertMany(
-    'nrPageDayMarks',
-    [{ ...day, pages: PENDING }],
-    transaction,
+  return (
+    (await releasePageDays(db, pageDayMarks([partition]), transaction)) > 0
   );
-  return true;
 }
 
 const giveWay = () => new Promise((resolve) => setImmediate(resolve));
@@ -317,10 +363,11 @@ export async function fillDays(
   source: PageDaySource,
   resource: string,
   stopped = () => false,
+  range: Range = {},
 ) {
   const partitions = db.getRepository('nrSyncPartitions');
   const filter = { projectId, source, grain: PAGE_GRAINS[source], resource };
-  const missing = await missingDays(db, projectId, source, resource);
+  const missing = await missingDays(db, projectId, source, resource, range);
   let filled = 0;
   for (let i = 0; i < missing.length && !stopped();) {
     // Days read together until a batch holds FILL_DAYS days or about FILL_ROWS rows.
@@ -416,41 +463,102 @@ export async function fillDays(
   return filled;
 }
 
-// One background fill a project at a time. Sources asked for while one runs are filled once it ends, so the days a
-// second sync job marks pending are not left to the drawers.
-type Fill = { done: Promise<unknown>; queued: Map<PageDaySource, string> };
+// One background fill a project at a time. Sources asked for while one runs are filled once it ends (over the union of
+// the ranges asked for), so the days a second sync job marks pending are not left to the drawers.
+export type PageDayFill = {
+  source: PageDaySource;
+  resource: string;
+  range?: Range;
+};
+type FillLogger = {
+  info?(message: string, meta?: Values): void;
+  warn?(message: string, meta?: Values): void;
+};
+type Fill = { done: Promise<unknown>; queued: Map<PageDaySource, PageDayFill> };
 const filling = new WeakMap<LegacyDatabase, Map<string, Fill>>();
+function queue(queued: Map<PageDaySource, PageDayFill>, fills: PageDayFill[]) {
+  for (const f of fills) {
+    const held = queued.get(f.source);
+    // Another resource replaces the one queued; ranges of the same one join, and no range is the whole history.
+    const range =
+      held && held.resource === f.resource
+        ? held.range &&
+          f.range &&
+          held.range.start &&
+          held.range.end &&
+          f.range.start &&
+          f.range.end
+          ? {
+              start:
+                held.range.start < f.range.start
+                  ? held.range.start
+                  : f.range.start,
+              end: held.range.end > f.range.end ? held.range.end : f.range.end,
+            }
+          : undefined
+        : f.range;
+    queued.set(f.source, { ...f, range });
+  }
+}
 export function fillPageDaysInBackground(
   db: LegacyDatabase,
   projectId: string,
-  sources: [PageDaySource, string][],
-  log?: (days: number, ms: number) => void,
-  stopped = () => false,
+  fills: PageDayFill[],
+  {
+    logger,
+    stopped = () => false,
+  }: { logger?: FillLogger; stopped?: () => boolean } = {},
 ) {
   let running = filling.get(db);
   if (!running) filling.set(db, (running = new Map<string, Fill>()));
   const current = running.get(projectId);
   if (current) {
-    for (const [source, resource] of sources)
-      current.queued.set(source, resource);
+    queue(current.queued, fills);
     return;
   }
-  const fill: Fill = { done: Promise.resolve(), queued: new Map(sources) };
+  const fill: Fill = { done: Promise.resolve(), queued: new Map() };
+  queue(fill.queued, fills);
   const started = Date.now();
   fill.done = (async () => {
     // Started after the drawer or sync that asked has answered.
     await giveWay();
     let days = 0;
-    while (fill.queued.size && !stopped()) {
-      const next = [...fill.queued];
+    for (;;) {
+      // Checked and let go in one step, so a request queued after the last check starts a fill of its own.
+      if (!fill.queued.size || stopped()) {
+        if (running.get(projectId) === fill) running.delete(projectId);
+        break;
+      }
+      const next = [...fill.queued.values()];
       fill.queued.clear();
-      for (const [source, resource] of next)
-        days += await fillDays(db, projectId, source, resource, stopped);
+      for (const f of next)
+        try {
+          days += await fillDays(
+            db,
+            projectId,
+            f.source,
+            f.resource,
+            stopped,
+            f.range,
+          );
+        } catch (e) {
+          // The days stay pending: the drawers sum them from their partitions, and the next sync or drawer fills them.
+          logger?.warn?.('NocoReach page days fill failed', {
+            projectId,
+            source: f.source,
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
     }
-    if (days) log?.(days, Date.now() - started);
-  })()
-    .catch(() => undefined)
-    .finally(() => running.delete(projectId));
+    if (days)
+      logger?.info?.('NocoReach page days filled', {
+        projectId,
+        days,
+        ms: Date.now() - started,
+      });
+  })().finally(() => {
+    if (running.get(projectId) === fill) running.delete(projectId);
+  });
   running.set(projectId, fill);
 }
 
@@ -490,7 +598,7 @@ export async function readPageDays(
   identity: PageIdentity | null | undefined,
   range: { start: string; end: string },
   sources: Partial<Record<PageDaySource, string | null>>,
-  log?: (days: number, ms: number) => void,
+  options: { logger?: FillLogger; stopped?: () => boolean } = {},
 ) {
   const wanted = (
     Object.entries(sources) as [PageDaySource, string | null][]
@@ -518,6 +626,7 @@ export async function readPageDays(
       filter: {
         projectId,
         pathHash: { $in: hashes.slice(i, i + PAGE_READ_HASHES) },
+        resource: { $in: wanted.map(([, resource]) => resource) },
         ...dayRange(range),
       },
       fields: [
@@ -579,7 +688,13 @@ export async function readPageDays(
     }
   }
   // The project's days are filled in the background once this drawer has read what it needs.
-  if (missing.length) fillPageDaysInBackground(db, projectId, wanted, log);
+  if (missing.length)
+    fillPageDaysInBackground(
+      db,
+      projectId,
+      wanted.map(([source, resource]) => ({ source, resource })),
+      options,
+    );
   const target = normPath(path);
   const search = rows.filter(
     (r) =>

@@ -450,7 +450,7 @@ class DataViews{
   const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]);
   // Refuses a range past what the synced days may hold, as reading the partitions did (the 400 a custom range gets).
   partitionDates(w.start,w.end,Boolean(w.all));
-  const held=await readPageDays(this.p.db,String(id),key,identity,{start:w.start,end:w.end},{gsc:gscEnd?link.get('gscSiteUrl'):null,ga4:ga4End?link.get('ga4PropertyId'):null},(days,ms)=>this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days,ms}));
+  const held=await readPageDays(this.p.db,String(id),key,identity,{start:w.start,end:w.end},{gsc:gscEnd?link.get('gscSiteUrl'):null,ga4:ga4End?link.get('ga4PropertyId'):null},{logger:this.p.app?.logger,stopped:()=>Boolean(this.p.sync?.stopped)});
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
   for(const d of [...(held.days.gsc||[])].sort()){const o=day(d);o.clicks=0;o.impressions=0;}
   for(const r of held.search){const o=day(r.date);o.clicks+=r.clicks;o.impressions+=r.impressions;}

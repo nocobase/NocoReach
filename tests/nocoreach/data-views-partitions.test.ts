@@ -611,8 +611,8 @@ it.each(paths)(
     const moved = [{ keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 }];
     await partitions.update({ filterByTk: row.get('id'), values: { payload: moved } });
     expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: moved })).toBe(true);
-    fillPageDaysInBackground(db, projectId, [['ga4', '123']]);
-    fillPageDaysInBackground(db, projectId, [['gsc', site]]);
+    fillPageDaysInBackground(db, projectId, [{ source: 'ga4', resource: '123' }]);
+    fillPageDaysInBackground(db, projectId, [{ source: 'gsc', resource: site, range: { start: end, end } }]);
     await pageDaysFilled(db, projectId);
     expect(await marks.count({ filter: { projectId, pages: { $gte: 0 } } })).toBe(58);
     expect((await views.page(projectId, { url: other, range: '7' })).daily.at(-1)).toEqual({ date: end, clicks: 5, impressions: 50, views: 0 });
@@ -702,4 +702,21 @@ it('fills a pending day whose partition reads back with its keys in another orde
 it('refuses a page drawer for an address that is not one', async () => {
   const { views } = await fixture(paths[0]);
   await expect(views.page(projectId, { url: 'nope', range: '7' })).rejects.toThrow(/网址/);
+});
+
+it('marks only the changed days of a writer pending, and reads only the current resources\' rows', async () => {
+  const { db } = await fixture(paths[0]);
+  const { fillDays, pageDayMarks, readPageDays, releasePageDays } = await import('../../server/nocoreach/page-days.js');
+  expect(await fillDays(db, projectId, 'gsc', site)).toBe(30);
+  const partitions = db.getRepository('nrSyncPartitions');
+  const days = await partitions.find({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: { $in: [dateAt(-1), end] } }, fields: ['projectId', 'source', 'resource', 'date', 'grain', 'payload'] });
+  const written = days.map((r) => ({ ...r.toJSON(), payload: r.get('date') === end ? [] : r.get('payload') }));
+  // An overview partition is not the drawer's, and an unchanged day keeps its rows.
+  expect(await releasePageDays(db, pageDayMarks([...written, { ...written[0], grain: 'overview' }]))).toBe(1);
+  expect(await db.getRepository('nrPageDayMarks').count({ filter: { projectId, pages: { $lt: 0 } } })).toBe(1);
+  const read = (resource: string) => readPageDays(db, projectId, 'example.test/docs/a', null, { start: dateAt(-6), end }, { gsc: resource });
+  // Six held days from the table and the pending one summed from its partition.
+  expect((await read(site)).search.length).toBe(7);
+  // Rows held for another resource of the project are not read.
+  expect((await read('sc-domain:none.test')).search).toEqual([]);
 });

@@ -1,3 +1,4 @@
+import { pageDayMarks, releasePageDays } from './page-days.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { timestamp } from '../../shared/timestamps.js';
 // The one-time import of the classic NocoReach's data (docs/PORT-PLAN.md, step 5), the receiving end.
@@ -434,6 +435,8 @@ export function registerClassicImport(nr: ImportRuntime) {
           const membership = name === 'nrSnapshots' ? values.find(row => row.key === MEMBERS_KEY) : undefined;
           if (membership && db.access) await db.access.lockManagement(t.connection as import('@nocobase/db').DatabaseConnection);
           await table(name, t).createMany({ values });
+          // The page drawer sums these days again from the imported partitions (page-days.ts).
+          if (name === 'nrSyncPartitions') await releasePageDays(db, pageDayMarks(values as never[]), t);
           if (membership && db.access) {
             const sets = db.access.authorization.permissionSets.withTransaction(t.connection as import('@nocobase/db').DatabaseConnection);
             const selected = (membership.payload as { users: Record<string, string> }).users;
