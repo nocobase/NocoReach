@@ -42,7 +42,7 @@ export function StatTile({
           <TooltipTrigger render={<span tabIndex={0} />} className='pointer-events-auto cursor-help rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50' data-delta-tip=''>
             <DeltaLine delta={delta} />
           </TooltipTrigger>
-          <TooltipContent>{delta.tip}</TooltipContent>
+          <TooltipContent side='bottom'>{delta.tip}</TooltipContent>
         </Tooltip>
       ) : <DeltaLine delta={delta} />}</p> : null}
       {hint ? <p className="text-xs text-muted-foreground">{$legacyText(hint)}</p> : null}
