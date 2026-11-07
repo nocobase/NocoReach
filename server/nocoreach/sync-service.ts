@@ -9,7 +9,7 @@ import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
-import { fillDays, fillPageDaysInBackground, releasePageDay } from './page-days.js';
+import { fillPageDaysInBackground, pageDaysFilled, releasePageDay } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
 const FRESH_MS=3*3600000;
@@ -204,7 +204,7 @@ class SyncService{
     if(finished&&!overviewOnly)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:currentLink.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
    });
    // The page drawer's rows of the days just written, summed after the sync's transaction (page-days.ts).
-   if(written&&!overviewOnly)fillPageDaysInBackground(this.p.db,String(id),[[source,String(job.get('resource'))]],(days,ms)=>this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days,ms}));
+   if(written&&!overviewOnly)fillPageDaysInBackground(this.p.db,String(id),[[source,String(job.get('resource'))]],(days,ms)=>this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days,ms}),()=>this.stopped);
    return written;
    };
    if((this.p as Connections).mock?.enabled){if(!flight.mockSnapshot||typeof flight.mockSnapshot!=='object'||!('projectId' in flight.mockSnapshot)||flight.mockSnapshot.projectId!==String(id))throw Object.assign(new Error('NR_MOCK_RUN_SNAPSHOT_REQUIRED'),{code:'NR_MOCK_RUN_SNAPSHOT_REQUIRED'});return await (this.p as Connections).mock.runSnapshot(flight.mockSnapshot,()=>(this.p as Connections).network.run(String(id),execute));}
@@ -299,12 +299,14 @@ class SyncService{
  async readLocalViews(id){const dv=this.p.dataViews,next=this.localNext=this.localNext||new Map();if(!dv?.recentViews||Date.now()<(next.get(id)||0))return;next.set(id,Date.now()+60000);
   if((await dv.recentViews(id,'ranks')).length)await dv.pairRows(id);
   for(const range of await dv.recentViews(id,'pages'))await dv.pageFigures(id,range);
-  await this.fillPageDays(id);}
+  void this.fillPageDays(id,{once:true}).catch(()=>{});}
  // The page drawer's rows of the days synced before nrPageDays or brought in another way, summed from their partitions
- // (page-days.ts): no Google read. A project's first fill after an upgrade sums every synced day, one day at a time.
- async fillPageDays(id){const link=await this.link(id).catch(()=>null);if(!link)return;let filled=0;const started=Date.now();
-  for(const [source,resource] of [['gsc',link.get('gscSiteUrl')],['ga4',link.get('ga4PropertyId')]])if(resource&&!this.stopped)filled+=await fillDays(this.p.db,String(id),source,String(resource));
-  if(filled)this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days:filled,ms:Date.now()-started});}
+ // in the background (page-days.ts), no Google read. The tick asks once a project after a start (`once`): later days are
+ // filled after each sync, and a drawer that finds days missing starts a fill itself. Resolves when the fill has ended.
+ async fillPageDays(id,{once=false}={}){id=String(id);const asked=this.pageDaysAsked=this.pageDaysAsked||new Set();if(once&&asked.has(id))return;asked.add(id);
+  const link=await this.link(id).catch(()=>null);if(!link)return;const sources=[['gsc',link.get('gscSiteUrl')],['ga4',link.get('ga4PropertyId')]].filter(([,r])=>r).map(([s,r])=>[s,String(r)]);
+  fillPageDaysInBackground(this.p.db,id,sources,(days,ms)=>this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:id,days,ms}),()=>this.stopped);
+  await pageDaysFilled(this.p.db,id);}
  // The other ranges a person chose on Search performance and Traffic in the last days, for a project read lately: Search
  // performance's tables and breakdown as `warm` reads the default's, and Traffic's two parts once a window (`readAhead`),
  // the second only for a project opened in the last day, as for the default. Traffic is read in the day only

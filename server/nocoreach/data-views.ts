@@ -447,7 +447,9 @@ class DataViews{
  // project's saved reports (up to 8 MB, about 300 ms a page on 252) and pushed Pages' and Search's copies out of them.
  async page(id,v){if(!pageKey(v.url))fail(systemMessageText('dataViews.providePageUrl'));const identity=pageIdentity(await this.p.siteContent?.state?.(id).catch(()=>null)),key=pageKey(v.url,identity);let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
-  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]);partitionDates(w.start,w.end,Boolean(w.all));
+  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]);
+  // Refuses a range past what the synced days may hold, as reading the partitions did (the 400 a custom range gets).
+  partitionDates(w.start,w.end,Boolean(w.all));
   const held=await readPageDays(this.p.db,String(id),key,identity,{start:w.start,end:w.end},{gsc:gscEnd?link.get('gscSiteUrl'):null,ga4:ga4End?link.get('ga4PropertyId'):null},(days,ms)=>this.p.app?.logger?.info?.('NocoReach page days filled',{projectId:String(id),days,ms}));
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
   for(const d of [...(held.days.gsc||[])].sort()){const o=day(d);o.clicks=0;o.impressions=0;}

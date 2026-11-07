@@ -591,7 +591,7 @@ it.each(paths)(
       filterByTk: row.get('id'),
       values: { payload: [{ keyword: 'crm', page: url, clicks: 10, impressions: 100, position: 9 }, { keyword: 'b', page: 'https://example.test/docs/b?ref=x', clicks: 3, impressions: 30, position: 4 }] },
     });
-    const { pageDaysFilled, writePageDay } = await import('../../server/nocoreach/page-days.js');
+    const { fillPageDaysInBackground, pageDaysFilled, releasePageDay } = await import('../../server/nocoreach/page-days.js');
     const first = await views.page(projectId, { url, range: '7' });
     // The first drawer sums its page's days from the partitions and has every synced day summed in the background.
     await pageDaysFilled(db, projectId);
@@ -604,17 +604,22 @@ it.each(paths)(
     expect(second.daily.at(-1)).toEqual({ date: end, clicks: 3, impressions: 30, views: 0 });
     expect(second.daily[0]).toEqual({ date: dateAt(-6), clicks: 0, impressions: 0, views: 0 });
     expect((await views.page(projectId, { url, range: '7' })).daily).toEqual(first.daily);
-    // The sync rewrites a day's rows with its partition (writePageDay, in the sync's transaction), and leaves a day it
-    // read again unchanged as it is.
+    // A day the sync reads again unchanged keeps its rows.
     const sameDay = await partitions.findOne({ filter: { projectId, source: 'ga4', grain: 'page', resource: '123', date: end } });
-    expect(await writePageDay(db, { projectId, source: 'ga4', resource: '123', date: end, grain: 'page', payload: sameDay.get('payload') })).toBe(false);
-    expect(await writePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: [{ keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 }] })).toBe(true);
+    expect(await releasePageDay(db, { projectId, source: 'ga4', resource: '123', date: end, grain: 'page', payload: sameDay.get('payload') })).toBe(false);
+    // Sources asked for while a fill runs are filled once it ends.
+    const moved = [{ keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 }];
+    await partitions.update({ filterByTk: row.get('id'), values: { payload: moved } });
+    expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: moved })).toBe(true);
+    fillPageDaysInBackground(db, projectId, [['ga4', '123']]);
+    fillPageDaysInBackground(db, projectId, [['gsc', site]]);
+    await pageDaysFilled(db, projectId);
+    expect(await marks.count({ filter: { projectId, pages: { $gte: 0 } } })).toBe(58);
     expect((await views.page(projectId, { url: other, range: '7' })).daily.at(-1)).toEqual({ date: end, clicks: 5, impressions: 50, views: 0 });
     expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toEqual({ date: end, clicks: 0, impressions: 0, views: 20 });
     expect(await marks.count({ filter: { projectId } })).toBe(58);
     // The sync writes a partition with other content and lets the day go in its transaction (releasePageDay): the
     // drawer sums the day from the partition until the background fill has written it again.
-    const { releasePageDay } = await import('../../server/nocoreach/page-days.js');
     const changed = [{ keyword: 'crm', page: url, clicks: 7, impressions: 70, position: 9 }];
     await partitions.update({ filterByTk: row.get('id'), values: { payload: changed } });
     expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: changed })).toBe(true);
@@ -692,4 +697,9 @@ it('fills a pending day whose partition reads back with its keys in another orde
   expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: written })).toBe(true);
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(30);
   expect(await db.getRepository('nrPageDayMarks').count({ filter: { projectId, source: 'gsc', pages: { $lt: 0 } } })).toBe(0);
+});
+
+it('refuses a page drawer for an address that is not one', async () => {
+  const { views } = await fixture(paths[0]);
+  await expect(views.page(projectId, { url: 'nope', range: '7' })).rejects.toThrow(/网址/);
 });

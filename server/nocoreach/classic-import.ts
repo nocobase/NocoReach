@@ -405,7 +405,9 @@ export function registerClassicImport(nr: ImportRuntime) {
             createdAt: new Date(String(r.createdAt)),
             updatedAt: new Date(String(r.updatedAt)),
           }));
-          for (const name of TARGET_TABLES)
+          // The page drawer's days are summed from the partitions replaced here (page-days.ts), and summed again
+          // from the imported ones.
+          for (const name of [...TARGET_TABLES, 'nrPageDays', 'nrPageDayMarks'])
             await table(name, t).deleteMany({
               filter: toFilter({ id: { $ne: null } }),
             });
