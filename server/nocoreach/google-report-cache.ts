@@ -270,14 +270,11 @@ export class GoogleReportCache {
           Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS,
       )
       .sort((a, b) => b.at - a.at);
-    // Held in memory once read, so the polls answered from it while the new window is read do not read its row again.
+    // Each copy as the index names it, read from its row: one this cache holds may be an older version of that key, or
+    // one another cache has since retired.
     for (const copy of copies) {
-      const entry =
-        this.memory.get(copy.key) ?? (await this.value(projectId, copy));
-      if (entry) {
-        this.remember(entry);
-        return entry;
-      }
+      const entry = await this.value(projectId, copy);
+      if (entry) return entry;
     }
     return undefined;
   }

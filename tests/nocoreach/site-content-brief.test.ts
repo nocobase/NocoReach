@@ -116,15 +116,32 @@ it('reads a state with no pages, and reads it again after five minutes whatever 
   expect(state).toHaveBeenCalledTimes(1);
 });
 
-it('writes the state through mutate without reading it back', async () => {
+it('writes the state through mutate without reading it back, moving updatedAt for every other reader', async () => {
   const { db, site } = await fixture();
   const repository = db.getRepository('nrSnapshots');
+  const updatedAt = async () =>
+    String(
+      (await repository.findOne({ filter: { key: 'site-content:1' } }))?.get(
+        'updatedAt',
+      ),
+    );
+  const before = await updatedAt();
+  // Another instance (another service of the process) holds the brief.
+  const other = new SiteContent({ db });
+  expect((await other.brief('1'))?.pages).toBe(3);
+  vi.setSystemTime(Date.now() + 1000);
   const update = vi.spyOn(repository, 'update');
-  vi.spyOn(db, 'getRepository').mockReturnValue(repository);
-  await site.mutate('1', (s: object) => ({ ...s, pages: [] }));
-  expect(update).toHaveBeenCalledWith(
-    expect.objectContaining({ returning: false }),
-  );
-  vi.mocked(db.getRepository).mockRestore();
-  expect((await site.brief('1'))?.pages).toBe(0);
+  const repositories = vi
+    .spyOn(db, 'getRepository')
+    .mockReturnValue(repository);
+  try {
+    await site.mutate('1', (s: object) => ({ ...s, pages: [] }));
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ returning: false }),
+    );
+  } finally {
+    repositories.mockRestore();
+  }
+  expect(await updatedAt()).not.toBe(before);
+  expect((await other.brief('1'))?.pages).toBe(0);
 });

@@ -8,7 +8,7 @@ import { GoogleDailySync, calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
-import { shift, compact, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart } from './sync-data.js';
+import { shift, compact, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart, deepFreeze } from './sync-data.js';
 import { PAGE_GRAINS, fillPageDaysInBackground, pageDayMarks, pageDaysFilled, releasePageDays } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
@@ -40,8 +40,6 @@ const SNAPSHOT_PAGE_MARGIN=30,SNAPSHOT_PAGE_READ=7,PAGE_GRAIN_LIST=['query_page'
 const pageWindow=(rows,link)=>{const last=new Map();
  for(const p of rows){if(p.grain!=='overview')continue;const source=String(p.source),date=String(p.date).slice(0,10);if(p.resource===link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl')&&date>(last.get(source)||''))last.set(source,date);}
  const end=[...last.values()].sort()[0];return end?datesBetween(shift(end,1-SNAPSHOT_PAGE_DAYS-SNAPSHOT_PAGE_MARGIN),end):[];};
-// Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
-const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
 const safeError=e=>['network_timeout','network_unreachable','response_too_large','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
 class StagedSync extends GoogleDailySync{
  constructor(options){super(options);this.batches=[];}

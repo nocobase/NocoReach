@@ -3,7 +3,10 @@ import { SnowflakeIdGenerator } from '@nocobase/snowflake';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createNocoReachTestDatabase } from '../fixtures/nocoreach-database.js';
 import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
-import { GoogleReportCache } from '../../server/nocoreach/google-report-cache.js';
+import {
+  GoogleReportCache,
+  waitForFresh,
+} from '../../server/nocoreach/google-report-cache.js';
 import { isProjectSnapshot } from '../../server/nocoreach/demo-data/clear.js';
 
 afterEach(() => vi.useRealTimers());
@@ -195,20 +198,23 @@ it('reads a row once for the callers asking at once, and only the row of the rep
   await cache(db).load('1', ['a'], async () => ({ a: 1 }));
   const restarted = cache(db);
   const findOne = vi.spyOn(snapshots, 'findOne');
-  vi.spyOn(db, 'getRepository').mockReturnValue(snapshots);
+  const repository = vi.spyOn(db, 'getRepository').mockReturnValue(snapshots);
   const build = vi.fn(async () => ({ a: 'rebuilt' }));
-  const answers = await Promise.all(
-    [1, 2, 3].map(() => restarted.load('1', ['a'], build)),
-  );
-  expect(answers).toEqual([{ a: 1 }, { a: 1 }, { a: 1 }]);
-  expect(build).not.toHaveBeenCalled();
-  const valueReads = findOne.mock.calls.filter((c) =>
-    String((c[0] as { filter: { key: string } }).filter.key).startsWith(
-      'google-local-reports:1:',
-    ),
-  );
-  expect(valueReads).toHaveLength(1);
-  vi.mocked(db.getRepository).mockRestore();
+  try {
+    const answers = await Promise.all(
+      [1, 2, 3].map(() => restarted.load('1', ['a'], build)),
+    );
+    expect(answers).toEqual([{ a: 1 }, { a: 1 }, { a: 1 }]);
+    expect(build).not.toHaveBeenCalled();
+    const valueReads = findOne.mock.calls.filter((c) =>
+      String((c[0] as { filter: { key: string } }).filter.key).startsWith(
+        'google-local-reports:1:',
+      ),
+    );
+    expect(valueReads).toHaveLength(1);
+  } finally {
+    repository.mockRestore();
+  }
   // A row whose time is not the index's (a save cut short before its index) is not answered: the report is built again.
   const row = (
     await snapshots.find({
@@ -250,35 +256,36 @@ it("shares a row's read only between callers holding the same saved report", asy
   expect(current).toMatchObject({ value: { a: 1 } });
 });
 
-it("holds a view's copy in memory while its new window is read", async () => {
-  const { db, snapshots } = await fixture();
-  await cache(db).load(
+it("answers a view's new window from the copy the index names, not an older one this cache holds", async () => {
+  const { db } = await fixture();
+  const view = { family: ['view'] };
+  // This cache reads day 1 and holds it.
+  const holder = cache(db);
+  await holder.load(
     '1',
     ['day', 1],
     async () => ({ day: 1 }),
+    () => 1000,
     undefined,
-    undefined,
-    {
-      family: ['view'],
-    },
+    view,
   );
-  const restarted = cache(db);
-  vi.setSystemTime('2026-11-09T06:00:00Z');
-  const findOne = vi.spyOn(snapshots, 'findOne');
-  vi.spyOn(db, 'getRepository').mockReturnValue(snapshots);
-  // The new day's read never ends here, so each poll is answered from the copy.
-  const pending = () => new Promise<{ day: number }>(() => undefined);
-  for (let i = 0; i < 3; i++)
-    expect(
-      await restarted.load('1', ['day', 2], pending, undefined, undefined, {
-        family: ['view'],
-      }),
-    ).toEqual({ day: 1 });
-  const copyReads = findOne.mock.calls.filter((c) =>
-    String((c[0] as { filter: { key: string } }).filter.key).startsWith(
-      'google-local-reports:1:',
+  // Another cache of the namespace (the Insights summary's) reads day 1 again once it has expired.
+  vi.setSystemTime(Date.now() + 2000);
+  await waitForFresh(() =>
+    cache(db).load(
+      '1',
+      ['day', 1],
+      async () => ({ day: '1 again' }),
+      undefined,
+      undefined,
+      view,
     ),
   );
-  expect(copyReads).toHaveLength(1);
-  vi.mocked(db.getRepository).mockRestore();
+  // The new day is still being read: the copy answered is the one the index names.
+  const pending = () => new Promise<{ day: number }>(() => undefined);
+  expect(
+    await holder.load('1', ['day', 2], pending, undefined, undefined, view),
+  ).toEqual({
+    day: '1 again',
+  });
 });

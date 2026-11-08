@@ -12,11 +12,9 @@ import { isNetworkError, NETWORK_TEXT } from './sync-policy.js';
 import { due, record } from './sync-policy.js';
 import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.js';
 import { siteListRow, wantsPageView } from './page-views.js';
-import { snapshotCovers, SNAPSHOT_PAGE_DAYS } from './sync-data.js';
+import { snapshotCovers, SNAPSHOT_PAGE_DAYS, deepFreeze } from './sync-data.js';
 // Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
-// Frozen through, for a value every reader of a project shares (`brief`).
-const frozen=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))frozen(x);}return v;};
 const BRIEF_MAX_MS=5*60000,MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5,REREAD_MS=7*86400000,OUTSIDE_KEEP_MS=60*86400000,OUTSIDE_KEEP=1000;
 // Numeric references too: sites write the apostrophe as &#x27; or &#39; (UI review 2026-10-21 found them shown raw).
 const decode=v=>v.replace(/&#x([0-9a-f]+);/gi,(whole:string,h:string)=>decodeHtmlNumericReference(whole,h,16)).replace(/&#(\d+);/g,(whole:string,d:string)=>decodeHtmlNumericReference(whole,d,10)).replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&').trim();
@@ -103,7 +101,7 @@ class SiteContent{
  // the Hong Kong instance (4.5 and 10 MB, 2026-11-08), so it is kept per project while the row's id and updatedAt stay the
  // same, for BRIEF_MAX_MS at most; a write through `mutate` drops it at once. A write with `silent` keeps updatedAt, so
  // one that rewrites this row must go through `mutate` or wait out BRIEF_MAX_MS. Frozen, and no reader of `state` shares it.
- static briefOf(s){return s?Object.freeze({sites:Object.freeze((s.sites||[]).map(x=>Object.freeze({origin:x.origin,confirmedAt:x.confirmedAt}))),refresh:s.refresh?frozen(structuredClone(s.refresh)):null,pages:s.pages?.length||0,fetched:(s.pages||[]).filter(p=>p.fetchedAt).length}):null;}
+ static briefOf(s){return s?Object.freeze({sites:Object.freeze((s.sites||[]).map(x=>Object.freeze({origin:x.origin,confirmedAt:x.confirmedAt}))),refresh:s.refresh?deepFreeze(structuredClone(s.refresh)):null,pages:s.pages?.length||0,fetched:(s.pages||[]).filter(p=>p.fetchedAt).length}):null;}
  async brief(id){const key=String(id),row=await this.repo().findOne({filter:{key:this.key(id)},fields:['id','updatedAt']});
   const briefs=this.briefs??=new Map();if(!row){briefs.delete(key);return null;}
   const at=row.get('updatedAt'),stamp=at?`${String(row.get('id'))}|${at instanceof Date?at.toISOString():String(at)}`:null,held=briefs.get(key);
