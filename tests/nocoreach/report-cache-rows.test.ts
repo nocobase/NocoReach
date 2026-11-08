@@ -227,3 +227,58 @@ it('reads a row once for the callers asking at once, and only the row of the rep
   });
   expect(await cache(db).load('1', ['a'], build)).toEqual({ a: 'rebuilt' });
 });
+
+it("shares a row's read only between callers holding the same saved report", async () => {
+  const { db } = await fixture();
+  const first = cache(db);
+  await first.load('1', ['a'], async () => ({ a: 1 }));
+  const index = (
+    await db
+      .getRepository('nrSnapshots')
+      .findOne({ filter: { key: 'google-local-reports:1' } })
+  )?.get('payload') as { entries: Record<string, unknown>[] };
+  const saved = index.entries[0]!;
+  // One caller holds an older index of the key, the other the current one; each is answered by its own `at`.
+  const reader = cache(db) as unknown as {
+    value(p: string, s: Record<string, unknown>): Promise<unknown>;
+  };
+  const [older, current] = await Promise.all([
+    reader.value('1', { ...saved, at: Number(saved.at) - 1000 }),
+    reader.value('1', saved),
+  ]);
+  expect(older).toBeUndefined();
+  expect(current).toMatchObject({ value: { a: 1 } });
+});
+
+it("holds a view's copy in memory while its new window is read", async () => {
+  const { db, snapshots } = await fixture();
+  await cache(db).load(
+    '1',
+    ['day', 1],
+    async () => ({ day: 1 }),
+    undefined,
+    undefined,
+    {
+      family: ['view'],
+    },
+  );
+  const restarted = cache(db);
+  vi.setSystemTime('2026-11-09T06:00:00Z');
+  const findOne = vi.spyOn(snapshots, 'findOne');
+  vi.spyOn(db, 'getRepository').mockReturnValue(snapshots);
+  // The new day's read never ends here, so each poll is answered from the copy.
+  const pending = () => new Promise<{ day: number }>(() => undefined);
+  for (let i = 0; i < 3; i++)
+    expect(
+      await restarted.load('1', ['day', 2], pending, undefined, undefined, {
+        family: ['view'],
+      }),
+    ).toEqual({ day: 1 });
+  const copyReads = findOne.mock.calls.filter((c) =>
+    String((c[0] as { filter: { key: string } }).filter.key).startsWith(
+      'google-local-reports:1:',
+    ),
+  );
+  expect(copyReads).toHaveLength(1);
+  vi.mocked(db.getRepository).mockRestore();
+});

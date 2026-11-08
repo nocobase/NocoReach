@@ -270,9 +270,14 @@ export class GoogleReportCache {
           Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS,
       )
       .sort((a, b) => b.at - a.at);
+    // Held in memory once read, so the polls answered from it while the new window is read do not read its row again.
     for (const copy of copies) {
-      const entry = await this.value(projectId, copy);
-      if (entry) return entry;
+      const entry =
+        this.memory.get(copy.key) ?? (await this.value(projectId, copy));
+      if (entry) {
+        this.remember(entry);
+        return entry;
+      }
     }
     return undefined;
   }
@@ -289,9 +294,11 @@ export class GoogleReportCache {
     }
     const database = this.database;
     if (!database) return undefined;
-    // One read of a row for the callers asking for it at once (pollers after a restart).
+    // One read of a row for the callers asking for the same saved report at once (pollers after a restart); a caller
+    // holding a newer index of that key asks for another, as the row it reads is checked against its own `at`.
     const rowKey = `${this.namespace}:${projectId}:${saved.key}`;
-    let loading = this.loading.get(rowKey);
+    const shared = `${rowKey}|${saved.at}`;
+    let loading = this.loading.get(shared);
     if (!loading) {
       loading = (async () => {
         try {
@@ -310,8 +317,8 @@ export class GoogleReportCache {
         } catch {
           return undefined;
         }
-      })().finally(() => this.loading.delete(rowKey));
-      this.loading.set(rowKey, loading);
+      })().finally(() => this.loading.delete(shared));
+      this.loading.set(shared, loading);
     }
     return loading;
   }

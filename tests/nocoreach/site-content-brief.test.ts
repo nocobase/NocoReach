@@ -54,6 +54,7 @@ it("keeps the sites, refresh and page counts while the state's row stays the sam
     fetched: 2,
   });
   expect(Object.isFrozen(brief)).toBe(true);
+  expect(Object.isFrozen(brief?.refresh)).toBe(true);
   expect(await site.brief('1')).toBe(brief);
   expect(state).toHaveBeenCalledTimes(1);
   expect(await site.brief('2')).toBeNull();
@@ -113,4 +114,17 @@ it('reads a state with no pages, and reads it again after five minutes whatever 
   vi.setSystemTime(Date.now() + 5 * 60000 + 1);
   await site.brief('1');
   expect(state).toHaveBeenCalledTimes(1);
+});
+
+it('writes the state through mutate without reading it back', async () => {
+  const { db, site } = await fixture();
+  const repository = db.getRepository('nrSnapshots');
+  const update = vi.spyOn(repository, 'update');
+  vi.spyOn(db, 'getRepository').mockReturnValue(repository);
+  await site.mutate('1', (s: object) => ({ ...s, pages: [] }));
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({ returning: false }),
+  );
+  vi.mocked(db.getRepository).mockRestore();
+  expect((await site.brief('1'))?.pages).toBe(0);
 });
