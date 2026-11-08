@@ -567,11 +567,11 @@ it('retires the copy when a new result cannot be kept, so reads stop answering f
   vi.useFakeTimers({ toFake: ['Date'] });
   await cache.load('1', ['a'], async () => ({ rows: 'small' }));
   vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
-  const large = vi.fn(async () => ({ rows: 'x'.repeat(2 * 1024 * 1024) }));
+  const large = vi.fn(async () => ({ rows: 'x'.repeat(4 * 1024 * 1024) }));
   expect(await cache.load('1', ['a'], large)).toEqual({ rows: 'small' });
   await cache.settled();
   expect((await cache.load('1', ['a'], large)).rows).toHaveLength(
-    2 * 1024 * 1024,
+    4 * 1024 * 1024,
   );
   expect(large).toHaveBeenCalledTimes(2);
   expect(
@@ -1031,9 +1031,9 @@ it.each([
 
 it('bounds snapshot bytes and serves oversized results without retaining them', async () => {
   const { db, cache } = await fixture();
-  const oversized = vi.fn(async () => ({ rows: 'x'.repeat(2 * 1024 * 1024) }));
+  const oversized = vi.fn(async () => ({ rows: 'x'.repeat(4 * 1024 * 1024) }));
   expect((await cache.load('1', ['large'], oversized)).rows).toHaveLength(
-    2 * 1024 * 1024,
+    4 * 1024 * 1024,
   );
   await cache.load('1', ['large'], oversized);
   expect(oversized).toHaveBeenCalledTimes(2);
@@ -1042,16 +1042,18 @@ it('bounds snapshot bytes and serves oversized results without retaining them', 
       .getRepository('nrSnapshots')
       .findOne({ filter: { key: 'ga4-reports:1' } }),
   ).toBeNull();
-  const read = vi.fn(async () => ({ rows: 'x'.repeat(400000) }));
-  for (let i = 0; i < 32; i++) await cache.load('1', ['bounded', i], read);
-  const payload = (
-    await db
-      .getRepository('nrSnapshots')
-      .findOne({ filter: { key: 'ga4-reports:1' } })
-  )?.get('payload');
-  expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(
-    8 * 1024 * 1024,
+  // 24 reports of 800 KB: more than the 16 MB a namespace keeps of a project, so the oldest go, rows and all.
+  const read = vi.fn(async () => ({ rows: 'x'.repeat(800000) }));
+  for (let i = 0; i < 24; i++) await cache.load('1', ['bounded', i], read);
+  const rows = await db
+    .getRepository('nrSnapshots')
+    .find({ filter: { key: { $startsWith: 'ga4-reports:1:' } } });
+  const total = rows.reduce(
+    (n, r) => n + Buffer.byteLength(JSON.stringify(r.get('payload'))),
+    0,
   );
-  await new Ga4ReportCache(db).load('1', ['bounded', 31], read);
-  expect(read).toHaveBeenCalledTimes(32);
+  expect(total).toBeLessThan(16 * 1024 * 1024);
+  expect(rows.length).toBeLessThan(24);
+  await new Ga4ReportCache(db).load('1', ['bounded', 23], read);
+  expect(read).toHaveBeenCalledTimes(24);
 });

@@ -26,8 +26,11 @@ type Saved = Omit<Entry, 'value'> & { bytes: number; value?: unknown };
 // both counts are half as large again as before; the byte limits, which the two parts share, stay as they were.
 const MAX_SAVED = 48;
 const MAX_MEMORY = 192;
-const MAX_ENTRY_BYTES = 2 * 1024 * 1024;
-const MAX_SAVED_BYTES = 8 * 1024 * 1024;
+// A report has a row of its own, so its bound no longer keeps one shared row small: Pages' figures of 16 months on 252
+// (2026-11-08) took 2.2 MB, over the 2 MB bound of the shared row, and were summed again on every read. The total bounds
+// the project's rows of one namespace; memory keeps its own bound.
+const MAX_ENTRY_BYTES = 4 * 1024 * 1024;
+const MAX_SAVED_BYTES = 16 * 1024 * 1024;
 const MAX_MEMORY_BYTES = 16 * 1024 * 1024;
 const bytes = (value: unknown) =>
   Buffer.byteLength(JSON.stringify(value), 'utf8');
