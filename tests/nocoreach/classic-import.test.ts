@@ -245,8 +245,10 @@ describe('the nrImport actions', () => {
       nrSyncJobs: [],
       nrSyncPartitions: [],
       // The page drawer's days, summed from the partitions an import replaces.
-      nrPageDays: [{ id: '1', projectId: '1' }],
+      nrPageDays: [{ pageId: 1, day: 20000, scopeId: 1 }],
       nrPageDayMarks: [{ id: '1', projectId: '1' }],
+      nrPageScopes: [{ id: '1', projectId: '1' }],
+      nrPageAddresses: [{ id: '1', projectId: '1' }],
       nrKeywordRuns: [],
       nrKeywordCandidates: [],
       nrVariables: [],
@@ -454,6 +456,8 @@ describe('the nrImport actions', () => {
     expect(tables.nrTasks).toEqual([]);
     expect(tables.nrPageDays).toEqual([]);
     expect(tables.nrPageDayMarks).toEqual([]);
+    expect(tables.nrPageScopes).toEqual([]);
+    expect(tables.nrPageAddresses).toEqual([]);
     expect(tables.nrSnapshots!.map((r) => r.key)).toEqual([
       'daily-analysis:workflow',
     ]);

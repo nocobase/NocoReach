@@ -92,13 +92,21 @@ const OWN = new Set([
   'nrGoogleLinks',
   'nrSyncJobs',
   'nrSyncPartitions',
-  // Summed from nrSyncPartitions (page-days.ts), with database-generated ids, written in bulk through `insertMany`.
+  // Summed from nrSyncPartitions (page-days.ts), written in bulk through `insertMany` (database-generated ids, or none).
   'nrPageDays',
   'nrPageDayMarks',
+  'nrPageScopes',
+  'nrPageAddresses',
   'nrKeywordRuns',
   'nrKeywordCandidates',
   'nrVariables',
 ]);
+
+// Tables of the layer keyed by other fields than an id.
+const KEYS: Record<string, readonly string[]> = {
+  // One row an address a day (page-days.ts).
+  nrPageDays: ['pageId', 'day'],
+};
 
 export interface LegacyRepository {
   find(options?: Values): Promise<LegacyRecord[]>;
@@ -107,6 +115,11 @@ export interface LegacyRepository {
   create(options: Values): Promise<LegacyRecord>;
   update(options: Values): Promise<LegacyRecord[]>;
   destroy(options: Values): Promise<number>;
+  /**
+   * Sums of `sum`'s fields for each value of `by`, as numbers (Postgres answers a sum as text), with `null` where no
+   * row has the field. Only the tables of the layer offer it.
+   */
+  groupBy?(options: Values & { by: string[]; sum: string[] }): Promise<Values[]>;
 }
 
 export class LegacyDatabase {
@@ -281,7 +294,7 @@ export class LegacyDatabase {
     };
     const read = async (options: Values) => {
       const filter = await filterFor(options);
-      const sort = toSort(options.sort);
+      const sort = toSort(options.sort, KEYS[name]);
       const fields = options.fields as string[] | undefined;
       return {
         ...(filter ? { filter } : {}),
@@ -329,6 +342,22 @@ export class LegacyDatabase {
         validateStringLengths(await collectionFor(options), values);
         await target(options).updateMany({ filter, values });
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
+      },
+      groupBy: async (options: Values & { by: string[]; sum: string[] }) => {
+        const filter = await filterFor(options);
+        // The NocoBase 3 Repository's typed groupBy, reached through the bridge's untyped target.
+        const repository = target(options) as { groupBy(options: Values): Promise<Values[]> };
+        const rows = await repository.groupBy({
+          by: options.by,
+          aggregate: (a: { sum(field: string): unknown }) =>
+            Object.fromEntries(options.sum.map((f) => [f, a.sum(f)])),
+          ...(filter ? { filter } : {}),
+        });
+        return rows.map((r) => {
+          const out: Values = { ...r };
+          for (const f of options.sum) out[f] = r[f] == null ? null : Number(r[f]);
+          return out;
+        });
       },
       destroy: async (options: Values) => {
         this.assertWritable();

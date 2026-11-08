@@ -9,13 +9,32 @@ import {
 import { SyncService } from '../../server/nocoreach/sync-service.js';
 import { buildSnapshots } from '../../server/nocoreach/sync-data.js';
 
-// The rows build() hands to buildSnapshots, so they can be compared with the paged read's.
+// The rows build() hands to the snapshot builder (the days other than page days, then each page day), so they can be
+// compared with the paged read's.
+const received: Record<string, unknown>[][] = [];
 vi.mock('../../server/nocoreach/sync-data.js', async (importOriginal) => {
   const actual =
     await importOriginal<
       typeof import('../../server/nocoreach/sync-data.js')
     >();
-  return { ...actual, buildSnapshots: vi.fn(actual.buildSnapshots) };
+  return {
+    ...actual,
+    snapshotBuilder: vi.fn(
+      (base: Record<string, unknown>[], project: unknown) => {
+        const rows = [...base],
+          builder = actual.snapshotBuilder(base, project);
+        received.push(rows);
+        return {
+          end: builder.end,
+          add(p: Record<string, unknown>) {
+            rows.push(p);
+            builder.add(p);
+          },
+          finish: () => builder.finish(),
+        };
+      },
+    ),
+  };
 });
 
 type Knex = {
@@ -26,7 +45,7 @@ type Knex = {
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.mocked(buildSnapshots).mockClear();
+  received.length = 0;
 });
 
 const projectId = '901';
@@ -181,7 +200,11 @@ async function fixture() {
   return { db, sync, client: await testDb.connection.client<Knex>() };
 }
 
-const handed = () => vi.mocked(buildSnapshots).mock.calls.at(-1)![0];
+// In id order, as the paged read gave them.
+const handed = () =>
+  [...received.at(-1)!].sort((a, b) =>
+    BigInt(a.id as string) < BigInt(b.id as string) ? -1 : 1,
+  );
 
 // SQLite's plan for a statement Knex emitted, its placeholders bound to '1'.
 const planOf = async (client: Knex, sql: string) => {
@@ -245,9 +268,10 @@ it('sorts only the ids of every stored day, and reads the days by key without an
   const statements = await partitionReads(client, () =>
     sync.build(projectId, link, project),
   );
-  // The ids, then two reads of up to 200 rows by key. NocoBase 3 still sorts each read in a temporary B-tree (its id
-  // order is a nulls-last `case`), but only the ids of every stored day, and the payloads 200 at a time.
-  expect(statements).toHaveLength(3);
+  // The ids, then the 180 days other than page days in one read by key, then the 120 page days 7 at a time. NocoBase 3
+  // still sorts each read in a temporary B-tree (its id order is a nulls-last `case`), but only the ids of every stored
+  // day, and the payloads a read at a time.
+  expect(statements).toHaveLength(2 + Math.ceil(120 / 7));
   for (const sql of statements) expect(sql).not.toMatch(/offset/i);
   const [listing, ...byKey] = statements as [string, ...string[]];
   expect(listing).not.toMatch(/payload/);
@@ -267,15 +291,24 @@ it("reads the latest write for the snapshots' key from the (project, updatedAt) 
   const statements = await partitionReads(client, () =>
     sync.snapshotKey(projectId, link, project),
   );
-  // The count, then the latest write. Its nulls-last `case` order still sorts in a temporary B-tree, but updated_at
-  // now comes from the index: stored after the payload, it was read through every payload of the project.
-  expect(statements).toHaveLength(2);
-  const latest = statements.find((sql) => /order by/i.test(sql));
-  expect(latest).toMatch(/updated_at/);
-  expect(latest).not.toMatch(/payload/);
-  expect(await planOf(client, latest!)).toMatch(
-    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_updated_at \(project_id=\?\)/,
+  // The last overview day stored of each source (which places the page days the key counts), then the count and the
+  // latest write of the days other than page days and of those page days. The nulls-last `case` order still sorts in a
+  // temporary B-tree, but updated_at now comes from the index: stored after the payload, it was read through every
+  // payload of the project. Grain and date are stored before it.
+  expect(statements).toHaveLength(5);
+  for (const sql of statements) expect(sql).not.toMatch(/payload/);
+  expect(await planOf(client, statements[0]!)).toMatch(
+    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_(source_date|updated_at) \(project_id=\?\)/,
   );
+  const latest = statements.filter((sql) => /order by.*updated_at/is.test(sql));
+  expect(latest).toHaveLength(2);
+  for (const sql of latest) {
+    expect(sql).toMatch(/updated_at/);
+    expect(sql).not.toMatch(/payload/);
+    expect(await planOf(client, sql)).toMatch(
+      /SEARCH .* USING INDEX ix_nr_sync_partitions_project_updated_at \(project_id=\?\)/,
+    );
+  }
 });
 
 it('reads uncommitted rows inside a transaction without keeping them, and restores a kept build by its key', async () => {

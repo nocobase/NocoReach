@@ -121,6 +121,10 @@ test('content list uses the live snapshots for the chosen period and falls back 
  const a=await sc.list('1','90');assert.equal(a.pages[0].views,900);assert.equal(a.range,'90');assert.equal(a.cutoff,'2026-09-27');assert.match(a.limitations[0],/近 90 天/);
  assert.equal(a.pages[0].internalLinks,1);assert.equal('links' in a.pages[0],false,'outgoing links stay with the stored pages, for Site audit');assert.deepEqual(payload.pages[0].links,['https://ex.com/docs/b']);
  await assert.rejects(sc.list('1','custom'),e=>e.status===400);const b=await sc.list('1','unsupported');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
+ // A range longer than the samples cover (180 days) shows them, saying they hold its last 180 days only.
+ snaps.push({key:'pages-12m',payload:[{page:'/docs/a',views:1800}]},{key:'queries-12m',payload:[]});
+ const c=await sc.list('1','12m');assert.equal(c.pages[0].views,1800);assert.match(c.limitations[0],/最近 180 天/);assert.match(c.limitations[0],/12 个月/);
+ assert.doesNotMatch(a.limitations[0],/180/);
 });
 
 test('daily refresh dates pages that appear after the first read (for the weekly 记忆 check)',async()=>{
