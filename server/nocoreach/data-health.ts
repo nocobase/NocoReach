@@ -9,6 +9,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { projectId, requireAccess } from './policy.js';
 import { nextAt, lastSuccess } from './sync-policy.js';
 import { nextScheduled } from './schedule-time.js';
+import { SiteContent } from './site-content.js';
 import * as __policy from './policy.js';
 // Data health (SPEC §11): one view of every connected source's last success, data cutoff, next sync and failure.
 const H=3600000;
@@ -41,8 +42,8 @@ const on=x=>x&&x.status!=='disconnected';
 const collected=async(source,id)=>{const s=await source?.status(id);return s?.connected||s?.total>0;};
 // Reads more than one check needs, made once per call.
 // The site state's sites, last refresh and page counts (`SiteContent.brief`), without parsing the whole state on each
-// poll; a host without it (tests) gives the state's.
-const siteBrief=async(p,id)=>{if(p.siteContent?.brief)return p.siteContent.brief(id);const s=await p.siteContent?.state(id);return s?{sites:s.sites,refresh:s.refresh||null,pages:s.pages?.length||0,fetched:(s.pages||[]).filter(x=>x.fetchedAt).length}:s;};
+// poll; a host whose site content has no brief gives its state's, in the same shape.
+const siteBrief=async(p,id)=>p.siteContent?.brief?p.siteContent.brief(id):SiteContent.briefOf(await p.siteContent?.state(id));
 function sharedReads(p,id){let google,chat;return {
  // Traffic and Search performance read the one Google sync, which needs both the GA4 property and the Search Console
  // site (sync-service.ts `link`); with one chosen, both pages still ask to finish connecting.

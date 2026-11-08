@@ -170,3 +170,60 @@ it('reads an index saved with its values (before 2026-11-08), and moves them int
   expect(await restarted.load('1', ['old'], build)).toEqual({ old: true });
   expect(build).not.toHaveBeenCalled();
 });
+
+it('keeps both reports when two caches of one namespace save at once', async () => {
+  const { db, rows, index } = await fixture();
+  // DataViews and the Insights summary's DataViews each hold a cache of the same namespace.
+  const one = cache(db),
+    other = cache(db);
+  await Promise.all([
+    one.load('1', ['a'], async () => ({ a: 1 })),
+    other.load('1', ['b'], async () => ({ b: 2 })),
+    one.load('1', ['c'], async () => ({ c: 3 })),
+  ]);
+  const saved = await index();
+  expect(saved?.entries).toHaveLength(3);
+  const keys = (await rows()).map((r) => r.key);
+  expect(keys).toHaveLength(4);
+  expect(new Set(keys).size).toBe(4);
+  for (const entry of saved!.entries)
+    expect(keys).toContain(`google-local-reports:1:${String(entry.key)}`);
+});
+
+it('reads a row once for the callers asking at once, and only the row of the report the index names', async () => {
+  const { db, snapshots } = await fixture();
+  await cache(db).load('1', ['a'], async () => ({ a: 1 }));
+  const restarted = cache(db);
+  const findOne = vi.spyOn(snapshots, 'findOne');
+  vi.spyOn(db, 'getRepository').mockReturnValue(snapshots);
+  const build = vi.fn(async () => ({ a: 'rebuilt' }));
+  const answers = await Promise.all(
+    [1, 2, 3].map(() => restarted.load('1', ['a'], build)),
+  );
+  expect(answers).toEqual([{ a: 1 }, { a: 1 }, { a: 1 }]);
+  expect(build).not.toHaveBeenCalled();
+  const valueReads = findOne.mock.calls.filter((c) =>
+    String((c[0] as { filter: { key: string } }).filter.key).startsWith(
+      'google-local-reports:1:',
+    ),
+  );
+  expect(valueReads).toHaveLength(1);
+  vi.mocked(db.getRepository).mockRestore();
+  // A row whose time is not the index's (a save cut short before its index) is not answered: the report is built again.
+  const row = (
+    await snapshots.find({
+      filter: { key: { $startsWith: 'google-local-reports:1:' } },
+    })
+  )[0]!;
+  await snapshots.update({
+    filter: { key: String(row.get('key')) },
+    values: {
+      payload: {
+        ...(row.get('payload') as object),
+        at: Date.now() - 10,
+        value: { a: 'other' },
+      },
+    },
+  });
+  expect(await cache(db).load('1', ['a'], build)).toEqual({ a: 'rebuilt' });
+});

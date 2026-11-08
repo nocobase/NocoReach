@@ -82,6 +82,11 @@ function entries(payload: unknown): Saved[] {
   return bounded(out);
 }
 
+// Saves of one project's reports in one namespace run one after another across every cache of that namespace in the
+// process, not only within one: DataViews holds one and the Insights summary's DataViews another, and a save removes the
+// rows its index does not name, so two saves at once could each remove the other's new report, or both create its row.
+const saving = new WeakMap<object, Map<string, Promise<void>>>();
+
 // Reads inside this scope wait for a new report instead of answering from a saved copy: what a background build reads
 // must be current, or the copy it saves would be old again.
 const freshReads = new AsyncLocalStorage<boolean>();
@@ -114,7 +119,7 @@ export class GoogleReportCache {
   private pending = new Map<string, Promise<Entry>>();
   private reads = new Map<string, Promise<Saved[]>>();
   private failures = new Map<string, { at: number; reason?: string }>();
-  private writes = new Map<string, Promise<void>>();
+  private loading = new Map<string, Promise<Entry | undefined>>();
 
   constructor(
     private readonly database?: LegacyDatabase,
@@ -279,23 +284,33 @@ export class GoogleReportCache {
       const { bytes: _bytes, ...entry } = saved as Saved & Entry;
       return entry;
     }
-    if (!this.database) return undefined;
-    try {
-      const payload: unknown = (
-        await this.database.getRepository('nrSnapshots').findOne({
-          filter: { key: `${this.namespace}:${projectId}:${saved.key}` },
-        })
-      )?.get('payload');
-      if (
-        !current(payload) ||
-        payload.key !== saved.key ||
-        !('value' in payload)
-      )
-        return undefined;
-      return payload;
-    } catch {
-      return undefined;
+    const database = this.database;
+    if (!database) return undefined;
+    // One read of a row for the callers asking for it at once (pollers after a restart).
+    const rowKey = `${this.namespace}:${projectId}:${saved.key}`;
+    let loading = this.loading.get(rowKey);
+    if (!loading) {
+      loading = (async () => {
+        try {
+          const payload: unknown = (
+            await database
+              .getRepository('nrSnapshots')
+              .findOne({ filter: { key: rowKey } })
+          )?.get('payload');
+          // The row of the report the index names, not one a save cut short wrote for a later report of that key.
+          return current(payload) &&
+            payload.key === saved.key &&
+            payload.at === saved.at &&
+            'value' in payload
+            ? payload
+            : undefined;
+        } catch {
+          return undefined;
+        }
+      })().finally(() => this.loading.delete(rowKey));
+      this.loading.set(rowKey, loading);
     }
+    return loading;
   }
 
   private async build<T>(
@@ -378,62 +393,65 @@ export class GoogleReportCache {
   ) {
     if (!this.database) return;
     const repository = this.database.getRepository('nrSnapshots');
-    const write = (this.writes.get(projectId) ?? Promise.resolve()).then(
-      async () => {
-        try {
-          const snapshot = `${this.namespace}:${projectId}`;
-          const own = (k: string) => `${snapshot}:${k}`;
-          const put = async (rowKey: string, payload: unknown) => {
-            const row = await repository.findOne({
-              filter: { key: rowKey },
-              fields: ['id'],
-            });
-            if (row)
-              await repository.update({
-                filterByTk: row.get('id'),
-                values: { payload },
-              });
-            else await repository.create({ values: { key: rowKey, payload } });
-          };
-          const index = await repository.findOne({ filter: { key: snapshot } });
-          const old = entries(index?.get('payload'));
-          // The same view's earlier window is never asked for again, so it gives its room to the new one.
-          const others = old.filter(
-            (saved) =>
-              saved.key !== key && !(family && saved.family === family),
-          );
-          const legacy = old.some((saved) => 'value' in saved);
-          if (!entry && others.length === old.length && !legacy) return;
-          const kept = bounded(
-            entry ? [{ ...entry, bytes: bytes(entry) }, ...others] : others,
-          );
-          for (const saved of kept)
-            if ('value' in saved) {
-              const { bytes: _bytes, ...value } = saved;
-              await put(own(saved.key), value);
-            }
-          await put(snapshot, {
-            entries: kept.map(({ value: _value, ...meta }) => meta),
+    let queue = saving.get(this.database);
+    if (!queue)
+      saving.set(this.database, (queue = new Map<string, Promise<void>>()));
+    const queued = `${this.namespace}:${projectId}`;
+    const write = (queue.get(queued) ?? Promise.resolve()).then(async () => {
+      try {
+        const snapshot = `${this.namespace}:${projectId}`;
+        const own = (k: string) => `${snapshot}:${k}`;
+        const put = async (rowKey: string, payload: unknown) => {
+          const row = await repository.findOne({
+            filter: { key: rowKey },
+            fields: ['id'],
           });
-          const named = new Set(kept.map((saved) => own(saved.key)));
-          for (const row of await repository.find({
-            filter: { key: { $startsWith: `${snapshot}:` } },
-            fields: ['id', 'key'],
-          }))
-            if (!named.has(String(row.get('key'))))
-              await repository.destroy({
-                filter: { key: String(row.get('key')) },
-              });
-        } catch {
-          // The in-memory cache still works if durable storage is unavailable.
-        }
-      },
-    );
-    this.writes.set(projectId, write);
+          // The row just written is not read back: a value is up to MAX_ENTRY_BYTES.
+          if (row)
+            await repository.update({
+              filterByTk: row.get('id'),
+              values: { payload },
+              returning: false,
+            });
+          else await repository.create({ values: { key: rowKey, payload } });
+        };
+        const index = await repository.findOne({ filter: { key: snapshot } });
+        const old = entries(index?.get('payload'));
+        // The same view's earlier window is never asked for again, so it gives its room to the new one.
+        const others = old.filter(
+          (saved) => saved.key !== key && !(family && saved.family === family),
+        );
+        const legacy = old.some((saved) => 'value' in saved);
+        if (!entry && others.length === old.length && !legacy) return;
+        const kept = bounded(
+          entry ? [{ ...entry, bytes: bytes(entry) }, ...others] : others,
+        );
+        for (const saved of kept)
+          if ('value' in saved) {
+            const { bytes: _bytes, ...value } = saved;
+            await put(own(saved.key), value);
+          }
+        await put(snapshot, {
+          entries: kept.map(({ value: _value, ...meta }) => meta),
+        });
+        const named = new Set(kept.map((saved) => own(saved.key)));
+        for (const row of await repository.find({
+          filter: { key: { $startsWith: `${snapshot}:` } },
+          fields: ['id', 'key'],
+        }))
+          if (!named.has(String(row.get('key'))))
+            await repository.destroy({
+              filter: { key: String(row.get('key')) },
+            });
+      } catch {
+        // The in-memory cache still works if durable storage is unavailable.
+      }
+    });
+    queue.set(queued, write);
     try {
       await write;
     } finally {
-      if (this.writes.get(projectId) === write) this.writes.delete(projectId);
+      if (queue.get(queued) === write) queue.delete(queued);
     }
   }
 }

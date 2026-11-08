@@ -99,3 +99,18 @@ it('gives the menu and Data health the site from the brief, not the whole state'
   expect(item.note).toMatch(/2/);
   expect(state).toHaveBeenCalledTimes(1);
 });
+
+it('reads a state with no pages, and reads it again after five minutes whatever its row', async () => {
+  const { db, site } = await fixture();
+  await db.getRepository('nrSnapshots').update({
+    filter: { key: 'site-content:1' },
+    values: { payload: { sites: [{ origin: 'https://ex.com' }] } },
+  });
+  expect(await site.brief('1')).toMatchObject({ pages: 0, fetched: 0 });
+  const state = vi.spyOn(site, 'state');
+  await site.brief('1');
+  expect(state).not.toHaveBeenCalled();
+  vi.setSystemTime(Date.now() + 5 * 60000 + 1);
+  await site.brief('1');
+  expect(state).toHaveBeenCalledTimes(1);
+});

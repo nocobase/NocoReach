@@ -40,7 +40,7 @@ function views({filtered=false}={}){
  const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
  const calls=[],saved=[];const snaps=[{key:'history-search',payload:daily}];let built=0;const state={snap:'s1'};
  const repo={count:async o=>parts.filter(r=>o.filter.date.$in.includes(r.date)).length,find:async o=>{if(o.filter.key?.$startsWith)return saved.filter(x=>x.key.startsWith(o.filter.key.$startsWith)).map(r=>({get:k=>r[k]}));calls.push(o.filter);return (o.filter.grain==='overview'?daily.map(r=>({date:r.date,payload:[r]})):parts).filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
-  findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>o.filterByTk?x.id===o.filterByTk:x.key===o.filter.key).payload=o.values.payload;},destroy:async o=>{const i=saved.findIndex(x=>x.id===o.filterByTk);if(i>=0)saved.splice(i,1);}};
+  findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>o.filterByTk?x.id===o.filterByTk:x.key===o.filter.key).payload=o.values.payload;},destroy:async o=>{for(let i=saved.length-1;i>=0;i--)if(o.filterByTk!=null?saved[i].id===o.filterByTk:saved[i].key===o.filter.key)saved.splice(i,1);}};
  const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>repo}};
  const dv=new DataViews(p);dv.gscQuery=async(_id,_site,body)=>body.dimensions[0]==='date'?parts.filter(r=>r.date>=body.startDate&&r.date<=body.endDate).map(r=>({keys:[r.date],clicks:2,impressions:20,position:9})):[];
  return {dv,p,calls,end,filtered,saved,state,built:()=>built};
@@ -58,6 +58,8 @@ test('search report: saved under the synced data, so a restart reads it back wit
  const again=await new DataViews(p).search('1',{range:'28'});assert.equal(built(),1,'a fresh instance (a restart) reads the saved report');assert.deepEqual(again.totals,first.totals);
  await new DataViews(p).search('1',{range:'7'});assert.equal(index().payload.entries.length,2);
  state.snap='s2';await new DataViews(p).search('1',{range:'28'});assert.equal(built(),3,'new synced data is built again');assert.equal(index().payload.entries.length,3,'versioned reports remain bounded and cannot match the new sync key');
+ // Each report the index names has its row, and no other row is left.
+ assert.deepEqual(saved.filter(x=>x.key.startsWith('google-local-reports:1:')).map(x=>x.key).sort(),index().payload.entries.map(e=>`google-local-reports:1:${e.key}`).sort());
 });
 test('search report: a filter switches totals to the query × page rows and needs both windows covered to compare',async()=>{
  const {dv}=views();const r=await dv.search('1',{range:'7',queryFilter:{operator:'contains',expression:'crm'}});
