@@ -168,12 +168,71 @@ it('queues the days of each source with no page grain stored, once, leaving the 
     ['ga4', earliest, last, 'page-history'],
   ]);
   expect((await sync.enqueuePageHistory(projectId)).jobs).toEqual([]);
-  // A failed job is retried by Retry failed jobs, not queued again.
+  // A job that failed lately holds its days: Retry failed jobs retries it, nothing is queued again.
   await db
     .getRepository('nrSyncJobs')
     .update({ filter: { projectId }, values: { status: 'failed' } });
-  expect((await sync.enqueuePageHistory(projectId)).jobs).toEqual([]);
+  expect(await sync.enqueuePageHistory(projectId)).toEqual({
+    jobs: [],
+    retried: 0,
+  });
   expect((await jobs()).length).toBe(3);
+  // A day later the failed jobs are queued again from where they stopped, not added again; only the day the cutoff
+  // moved on is new.
+  vi.setSystemTime(Date.now() + 86400000 + 1000);
+  const later = await sync.enqueuePageHistory(projectId);
+  expect(later.retried).toBe(3);
+  expect(
+    later.jobs.map((j: Record<string, unknown>) => [
+      j.source,
+      j.startDate,
+      j.endDate,
+    ]),
+  ).toEqual([
+    ['gsc', day(last, 1), day(last, 1)],
+    ['ga4', day(last, 1), day(last, 1)],
+  ]);
+  expect((await jobs()).slice(0, 3).map((j) => j.get('status'))).toEqual([
+    'queued',
+    'queued',
+    'queued',
+  ]);
+});
+
+it('queues the days of a succeeded page history job again once they are no longer stored', async () => {
+  const { sync, store, jobs, db, partitions } = await fixture();
+  const { cutoff } = historyBounds({}, projectId);
+  const last = day(cutoff, -14);
+  await sync.enqueuePageHistory(projectId);
+  await db
+    .getRepository('nrSyncJobs')
+    .update({ filter: { projectId }, values: { status: 'succeeded' } });
+  // The succeeded jobs stored every day but one week of Search Console's (removed by an import, say).
+  const { earliest } = historyBounds({}, projectId);
+  for (const source of ['gsc', 'ga4'])
+    for (let d = earliest; d <= last; d = day(d, 1))
+      if (source === 'ga4' || d < day(last, -20) || d > day(last, -14))
+        await store(source, source === 'ga4' ? 'page' : 'query_page', d);
+  const queued = await sync.enqueuePageHistory(projectId);
+  expect(
+    queued.jobs.map((j: Record<string, unknown>) => [
+      j.source,
+      j.startDate,
+      j.endDate,
+    ]),
+  ).toEqual([['gsc', day(last, -20), day(last, -14)]]);
+  expect((await jobs()).length).toBe(3);
+  expect(await partitions.count({ filter: { projectId } })).toBeGreaterThan(0);
+});
+
+it("leaves page history to the end of the tick's firing", async () => {
+  const { sync, asked } = await fixture();
+  await sync.enqueuePageHistory(projectId);
+  // The firing's first loop takes no page history step.
+  expect(await sync.step(undefined, { pageHistory: false })).toBe(false);
+  expect(asked).toEqual([]);
+  expect(await sync.step()).toBe(true);
+  expect(asked[0].reportTypes).toEqual(['query_page']);
 });
 
 it('runs page history after the other jobs, writes the page grain only, and holds back neither a sync nor an overview fill', async () => {
@@ -200,12 +259,10 @@ it('runs page history after the other jobs, writes the page grain only, and hold
     ['gsc', ['overview', 'query_page']],
   ]);
   expect(asked[2].reportTypes).toEqual(['overview']);
-  await db
-    .getRepository('nrSyncJobs')
-    .update({
-      filter: { projectId, trigger: { $ne: 'page-history' } },
-      values: { status: 'succeeded' },
-    });
+  await db.getRepository('nrSyncJobs').update({
+    filter: { projectId, trigger: { $ne: 'page-history' } },
+    values: { status: 'succeeded' },
+  });
   await db
     .getRepository('nrGoogleLinks')
     .update({ filter: { projectId }, values: { lastSyncAt: null } });

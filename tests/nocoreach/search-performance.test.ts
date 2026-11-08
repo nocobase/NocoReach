@@ -84,7 +84,11 @@ test('search details: more pairs than a report holds reads Search Console, stopp
  const w=__data_views.windowFor(end,'7');
  assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,1,'the first day over the limit ends the reading');
  // While the stored days stay as they were, the span is not read again; once they change, it is.
- reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,0);dv.pairOverflow.get('1|sc-domain:x').state='other';
+ reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,0);
+ // Another window over the limit is remembered beside it, not in its place.
+ const w28=__data_views.windowFor(end,'28');reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w28),null);assert.equal(reads,1);
+ reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(await dv.storedPairs('1','sc-domain:x',w28),null);assert.equal(reads,0);
+ dv.pairOverflow.set(`1|sc-domain:x|${w.previousStart}|${w.end}`,'other');
  reads=0;size=Math.floor(LIMIT/7);const within=await dv.storedPairs('1','sc-domain:x',w);assert.equal(reads,14);assert.equal(within.current.length,size*7);assert.equal(within.previous.length,size*7);
  reads=0;size=LIMIT+1;const asked=[];dv.gscQuery=async(_id,_site,body)=>{asked.push(body);return [];};
  const r=await dv.search('1',{range:'7',details:true});assert.equal(r.live,true);assert.ok(asked.some(b=>b.dimensions.join()==='query,page'));

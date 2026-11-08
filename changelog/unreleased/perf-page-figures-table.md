@@ -6,3 +6,5 @@
 - After the upgrade the table is summed again in the background from the data already stored; until that finishes (about 11 s on 252) the first Pages read of a range is slower than before (3–4.5 s on 252's data on SQLite).
 - The query and page samples behind Traffic's page queries and the analysis cover at most the last 180 days, so a long synced history is not held in memory and page history writing older days does not rebuild them.
 - The snapshots behind Traffic and the analysis are built a week of page data at a time instead of from every day's rows at once: on 252's 210 days the build held about 600 MB of memory at its peak and left the server at 1.1 GB.
+- Page history no longer holds back Traffic's background reads while it runs, a failed page history job is tried again a day later, and page days removed after a fill are filled again. Sync now and Retry failed jobs stay available while page history runs, and it can be paused.
+- Website content no longer labels a sample of the last 180 days as 6, 12 or 16 months when Pages' figures cannot be read; Traffic's page queries name exactly the days they sum.

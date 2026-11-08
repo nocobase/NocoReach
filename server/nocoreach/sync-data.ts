@@ -14,6 +14,13 @@ function compact(rows,grain){
 }
 function periodWindow(end,key){let start=new Date(Date.parse(end+'T00:00:00Z')+day);if(key.endsWith('m')){const d=start.getUTCDate();start.setUTCDate(1);start.setUTCMonth(start.getUTCMonth()-parseInt(key));start.setUTCDate(Math.min(d,new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,0)).getUTCDate()));}else start=new Date(Date.parse(end)-(Number(key)-1)*day);const first=start.toISOString().slice(0,10),days=Math.round((Date.parse(end)-Date.parse(first))/day)+1;return {start:first,previousStart:shift(first,-days)};}
 const RANGES=['7','28','90','3m','6m','12m','16m'];
+// The page days the snapshots' page samples (pages-<range>, queries-<range>) sum: the last SNAPSHOT_PAGE_DAYS through
+// the snapshots' end (the longest evidence period, 90 days, and the one before it). A longer range's sample covers
+// these days only (`snapshotCovers`), and its previous figures the part of its previous period within them.
+const SNAPSHOT_PAGE_DAYS=180;
+const snapshotPageStart=end=>shift(end,1-SNAPSHOT_PAGE_DAYS);
+// Whether a range's page samples cover its whole current period.
+const snapshotCovers=(end,key)=>periodWindow(end,key).start>=snapshotPageStart(end);
 // Each (keyword, page)'s sums for one range: clicks, impressions, previous clicks, previous impressions, position weight.
 const PAIR_FIELDS=5,PAIR_BLOCK=4096;
 const isPageDay=p=>(p.source==='ga4'&&p.grain==='page')||(p.source==='gsc'&&p.grain==='query_page');
@@ -22,24 +29,24 @@ const isPageDay=p=>(p.source==='ga4'&&p.grain==='page')||(p.source==='gsc'&&p.gr
 // (keyword, page) rather than every row of every day (1.5 million rows, 600 MB of heap for 210 days on 252). The
 // result matches summing every row at once, in the same order: rows within a range in the order their days were added,
 // ties kept in the order a (keyword, page) first appeared in that range.
-function snapshotBuilder(base,project){
+function snapshotBuilder(base,project,{limit=true}={}){
  const select=(source,grain)=>base.filter(p=>p.source===source&&p.grain===grain);
  const web=select('ga4','overview').flatMap(p=>p.payload),search=select('gsc','overview').flatMap(p=>p.payload);
  const webEnd=web.map(r=>r.date).sort().at(-1),searchEnd=search.map(r=>r.date).sort().at(-1);if(!webEnd&&!searchEnd)return {add(){},finish:()=>[]};
  const end=webEnd&&searchEnd?(webEnd<searchEnd?webEnd:searchEnd):(webEnd||searchEnd);
- const windows=RANGES.map(key=>periodWindow(end,key)),R=windows.length,pages=windows.map(()=>new Map());
+ const windows=RANGES.map(key=>periodWindow(end,key)),R=windows.length,pages=windows.map(()=>new Map()),from=limit?snapshotPageStart(end):'';
  // Every (keyword, page) seen, by index; for each range, its sums and the order it first appeared in (-1: not in it).
- const index=new Map(),keywords=[],addresses=[],seen=new Int32Array(R),sums=[],first=[];
+ const index=new Map(),keywords=[],addresses=[],seen=new Int32Array(R),sums=[],firsts=[];
  const pairOf=(keyword,page)=>{const k=JSON.stringify([keyword,page]);let j=index.get(k);if(j!==undefined)return j;j=keywords.length;index.set(k,j);keywords.push(keyword);addresses.push(page);
   // Blocks of PAIR_BLOCK pairs: growing one array would copy it, holding both for a moment.
-  if(j%PAIR_BLOCK===0){sums.push(new Float64Array(PAIR_BLOCK*R*PAIR_FIELDS));first.push(new Int32Array(PAIR_BLOCK*R).fill(-1));}return j;};
+  if(j%PAIR_BLOCK===0){sums.push(new Float64Array(PAIR_BLOCK*R*PAIR_FIELDS));firsts.push(new Int32Array(PAIR_BLOCK*R).fill(-1));}return j;};
  const slot=(j,i)=>(j%PAIR_BLOCK)*R+i;
  return {
-  add(p){
+  add(p){if(p.date<from)return;
    if(p.source==='ga4'&&p.grain==='page'){for(let i=0;i<R;i++){if(p.date<windows[i].start||p.date>end)continue;const m=pages[i];for(const r of p.payload){const k=JSON.stringify([r.host||'',r.page]);const o=m.get(k)||{...r,views:0,sessions:0,conversions:0};o.views+=r.views;o.sessions+=r.sessions||0;o.conversions+=r.conversions;m.set(k,o);}}return;}
    if(p.source!=='gsc'||p.grain!=='query_page')return;
    const ranges=windows.map((w,i)=>p.date>=w.previousStart&&p.date<=end?i:-1).filter(i=>i>=0);if(!ranges.length)return;
-   for(const r of p.payload){const j=pairOf(r.keyword,r.page);const b=Math.floor(j/PAIR_BLOCK),f=first[b],v=sums[b];for(const i of ranges){const at=slot(j,i),o=at*PAIR_FIELDS;if(f[at]<0)f[at]=seen[i]++;
+   for(const r of p.payload){const j=pairOf(r.keyword,r.page);const b=Math.floor(j/PAIR_BLOCK),f=firsts[b],v=sums[b];for(const i of ranges){const at=slot(j,i),o=at*PAIR_FIELDS;if(f[at]<0)f[at]=seen[i]++;
     if(p.date>=windows[i].start){v[o]+=r.clicks;v[o+1]+=r.impressions;v[o+4]+=r.position*r.impressions;}else{v[o+2]+=r.clicks;v[o+3]+=r.impressions;}}}
   },
   finish(){
@@ -51,7 +58,7 @@ function snapshotBuilder(base,project){
     out.push({key:`sources-${key}`,payload:[...sources.values()].sort((a,b)=>b.views-a.views).slice(0,40)});
     out.push({key:`pages-${key}`,payload:[...pages[i].values()].sort((a,b)=>b.views-a.views).slice(0,60)});
     // The range's (keyword, page)s in the order they first appeared in it.
-    const order=new Int32Array(seen[i]);for(let j=0;j<keywords.length;j++){const f=first[Math.floor(j/PAIR_BLOCK)][slot(j,i)];if(f>=0)order[f]=j;}
+    const order=new Int32Array(seen[i]);for(let j=0;j<keywords.length;j++){const f=firsts[Math.floor(j/PAIR_BLOCK)][slot(j,i)];if(f>=0)order[f]=j;}
     const field=(j,n)=>sums[Math.floor(j/PAIR_BLOCK)][slot(j,i)*PAIR_FIELDS+n],totals=new Map();for(const j of order)totals.set(keywords[j],(totals.get(keywords[j])||0)+field(j,1));
     const top=new Set([...totals].sort((a,b)=>b[1]-a[1]).slice(0,100).map(([k])=>k));
     out.push({key:`queries-${key}`,payload:[...order].filter(j=>top.has(keywords[j])&&(field(j,1)>20||field(j,2)>5)).sort((a,b)=>field(b,1)-field(a,1)).slice(0,250).map(j=>({keyword:keywords[j],page:addresses[j],clicks:field(j,0),impressions:field(j,1),previous:field(j,2),previousImpressions:field(j,3),position:field(j,1)?field(j,4)/field(j,1):0}))});
@@ -59,5 +66,6 @@ function snapshotBuilder(base,project){
    return out;
   }};
 }
-function buildSnapshots(partitions,project){const builder=snapshotBuilder(partitions.filter(p=>!isPageDay(p)),project);for(const p of partitions)if(isPageDay(p))builder.add(p);return builder.finish();}
-export { shift, compact, periodWindow, buildSnapshots, snapshotBuilder, isPageDay };
+// Every row at once and every page day given, for callers that hold them (tests, imports).
+function buildSnapshots(partitions,project){const builder=snapshotBuilder(partitions.filter(p=>!isPageDay(p)),project,{limit:false});for(const p of partitions)if(isPageDay(p))builder.add(p);return builder.finish();}
+export { shift, compact, periodWindow, buildSnapshots, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart, snapshotCovers };

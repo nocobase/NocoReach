@@ -8,7 +8,7 @@ import { GoogleDailySync, calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
-import { shift, compact, snapshotBuilder, isPageDay } from './sync-data.js';
+import { shift, compact, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS } from './sync-data.js';
 import { PAGE_GRAINS, fillPageDaysInBackground, pageDayMarks, pageDaysFilled, releasePageDays } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
@@ -29,13 +29,12 @@ const active=['queued','running','retrying'];
 // the sync has not stored: a sync reads at most 56 days back, and the overview history fill reads overview rows only, so
 // Pages' long ranges summed the days since the project connected. Queued by the tick for projects whose sync is on, once
 // an hour; run when no other job is ready. The last PAGE_HISTORY_RECENT days are left to the sync.
-const PAGE_HISTORY='page-history',PAGE_HISTORY_EVERY_MS=3600000,PAGE_HISTORY_RECENT=14;
-// The snapshots' page samples (pages-<range>, queries-<range>) are summed from the page days of the last
-// SNAPSHOT_PAGE_DAYS (the longest evidence period, 90 days, and the one before it), with a margin for a sync running
-// behind; older page days are neither read by the build nor part of its key. Reading every stored day held the whole
-// history's query × page rows in memory (about 1.3 MB of JSON a day on 252), and each page history step would have
-// rebuilt it.
-export const SNAPSHOT_PAGE_DAYS=180;
+const PAGE_HISTORY='page-history',PAGE_HISTORY_EVERY_MS=3600000,PAGE_HISTORY_RECENT=14,PAGE_HISTORY_RETRY_MS=86400000;
+// The snapshots' page samples (pages-<range>, queries-<range>) sum the page days of the last SNAPSHOT_PAGE_DAYS through
+// the snapshots' end (sync-data.ts). The build reads them with a margin back from the cutoff, for a sync running behind;
+// older page days are neither read by the build nor part of its key. Reading every stored day held the whole history's
+// query × page rows in memory (about 1.3 MB of JSON a day on 252), and each page history step would have rebuilt it.
+export { SNAPSHOT_PAGE_DAYS };
 const SNAPSHOT_PAGE_MARGIN=30,SNAPSHOT_PAGE_READ=7,PAGE_GRAIN_LIST=['query_page','page'],OTHER_GRAINS=['overview','source'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
@@ -73,28 +72,34 @@ class SyncService{
  async pageDates(id: string | number,source: string,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){const out=new Set<string>(),dates=datesBetween(startDate,endDate);
   for(let i=0;i<dates.length;i+=400)for(const p of await this.repo('nrSyncPartitions').find({filter:{projectId:id,source,resource,grain:PAGE_GRAINS[source],date:{$in:dates.slice(i,i+400)}},fields:['date'],transaction}))out.add(String(p.get('date')).slice(0,10));
   return out;}
- // Queues page history jobs for the days of each source with no page grain stored and no page history job, in whatever
- // status: a failed one is retried by Retry failed jobs, not queued again, so a property Google refuses does not loop.
+ // Queues page history jobs for the days of each source with no page grain stored and no job about to read them. A failed
+ // page history job holds its days for PAGE_HISTORY_RETRY_MS (Retry failed jobs retries it sooner), then is queued again
+ // from its cursor, so a property Google refuses is asked once a day rather than in a loop, and a passing failure heals
+ // without anyone noticing it. A succeeded one holds nothing: its days are stored, and if they are removed (an import,
+ // the resource switched away and back) they are queued again.
  async enqueuePageHistory(id: string | number){
   id=String(id);const link=await this.link(id),{earliest,cutoff}=historyBounds(this.p,id),end=shift(cutoff,-PAGE_HISTORY_RECENT);if(earliest>end)return {jobs:[]};
   const plugin=this.p as {db: LegacyDatabase;mock?: Connections['mock']};
+  const stale=(j: {get(k: string): unknown})=>Date.now()-Date.parse(String(j.get('updatedAt')))>=PAGE_HISTORY_RETRY_MS;
+  const failed=async(transaction?: LegacyTransaction)=>(await this.repo('nrSyncJobs').find({filter:{projectId:id,trigger:PAGE_HISTORY,status:'failed'},fields:['id','updatedAt'],transaction})).filter(stale);
   const gaps=async(transaction?: LegacyTransaction)=>{const out=[];
    for(const source of ['gsc','ga4']){const resource=String(link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl')||'');if(!resource)continue;
     const stored=await this.pageDates(id,source,resource,earliest,end,transaction);
-    // Days another job of the source is about to read are left to it, as are the page history's own.
-    const jobs=(await this.repo('nrSyncJobs').find({filter:{projectId:id,source,resource},fields:['trigger','status','startDate','endDate','cursor'],transaction})).filter(j=>j.get('trigger')===PAGE_HISTORY||active.includes(j.get('status'))||j.get('status')==='paused');
+    // Days another job of the source is about to read are left to it, as are a page history job's that failed lately.
+    const jobs=(await this.repo('nrSyncJobs').find({filter:{projectId:id,source,resource},fields:['trigger','status','startDate','endDate','cursor','updatedAt'],transaction})).filter(j=>active.includes(j.get('status'))||j.get('status')==='paused'||(j.get('trigger')===PAGE_HISTORY&&j.get('status')==='failed'&&!stale(j)));
     const held=d=>jobs.some(j=>String(j.get('startDate'))<=d&&String(j.get('endDate'))>=d);
     for(const range of intervals(datesBetween(earliest,end).filter(d=>!stored.has(d)&&!held(d))))out.push({source,resource,range});}
    return out;};
-  if(!(await gaps()).length)return {jobs:[]};
+  if(!(await failed()).length&&!(await gaps()).length)return {jobs:[],retried:0};
   const mockSnapshot=plugin.mock?.enabled?plugin.mock.capture(id):null;
   return plugin.db.sequelize.transaction(async transaction=>{
-   if(!await this.lock(transaction))return {jobs:[]};
-   const current=await this.link(id);if(current.get('ga4PropertyId')!==link.get('ga4PropertyId')||current.get('gscSiteUrl')!==link.get('gscSiteUrl'))return {jobs:[]};
+   if(!await this.lock(transaction))return {jobs:[],retried:0};
+   const current=await this.link(id);if(current.get('ga4PropertyId')!==link.get('ga4PropertyId')||current.get('gscSiteUrl')!==link.get('gscSiteUrl'))return {jobs:[],retried:0};
+   const retry=await failed(transaction);for(const job of retry)await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{status:'queued',attempts:0,retryAt:null,errorCode:null},transaction});
    const jobs=[];
    for(const {source,resource,range} of await gaps(transaction)){const job=await this.repo('nrSyncJobs').create({values:{projectId:id,source,resource,status:'queued',startDate:range.start,endDate:range.end,cursor:range.start,attempts:0,recordCount:0,trigger:PAGE_HISTORY},transaction});jobs.push(job.toJSON());
     if(mockSnapshot)await this.mockSnapshots().create({values:{key:`mock-google-run:${String(job.id)}`,payload:mockSnapshot},transaction});}
-   return {jobs};
+   return {jobs,retried:retry.length};
   });
  }
  async enqueueHistory(id: string | number,v: Record<string,unknown>){
@@ -195,7 +200,8 @@ class SyncService{
  // Shutdown: a Google read in flight takes its cancellation path, so its job stays `running` and the next start resumes
  // it without spending an attempt (closing the network under it would count as a failed attempt); nothing new starts.
  stop(){this.stopped=true;this.inFlight?.controller.abort();for(const flights of this.freshFlights.values())for(const controller of flights)controller.abort();}
- async step(projectId?: string){
+ // `pageHistory: false` leaves page history jobs for later (`tick`).
+ async step(projectId?: string,{pageHistory=true}: {pageHistory?: boolean}={}){
   if(this.busy||this.stopped)return false;this.busy=true;let flight: SyncFlight | undefined;
   try{
    // The instance's busy flag owns the external work. Only claim and commit hold a DB transaction;
@@ -204,7 +210,7 @@ class SyncService{
     if(!await this.lock(transaction))return false;
     const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active},...(projectId?{projectId}:{})},sort:['createdAt','id'],transaction});
     // A page history fill runs only when no other job is ready, so the daily sync never waits for it.
-    const ready=jobs.filter(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now()),job=ready.find(j=>j.get('trigger')!==PAGE_HISTORY)||ready[0];if(!job)return false;
+    const ready=jobs.filter(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now()),job=ready.find(j=>j.get('trigger')!==PAGE_HISTORY)||(pageHistory?ready[0]:undefined);if(!job)return false;
     flight={job,controller:new AbortController(),mockSnapshot:(this.p as Connections).mock?.enabled?(await this.mockSnapshots().findOne({filter:{key:`mock-google-run:${(job as {id: string}).id}`},transaction}))?.get('payload') as unknown:null};this.inFlight=flight;
     await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{status:'running'},transaction});return true;
    });
@@ -294,8 +300,8 @@ class SyncService{
  async tick(){if(this.busy||this.stopped)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
   const historyNext=this.pageHistoryNext=this.pageHistoryNext||new Map();
   for(const link of links){const id=String(link.get('projectId'));if(Date.now()<(historyNext.get(id)||0))continue;historyNext.set(id,Date.now()+PAGE_HISTORY_EVERY_MS);
-   try{const queued=await this.enqueuePageHistory(id);if(queued.jobs.length)this.p.app?.logger?.info?.('NocoReach page history queued',{projectId:id,jobs:queued.jobs.length});}catch(e){this.p.app?.logger?.warn?.('NocoReach page history enqueue skipped',{code:safeError(e)});}}
-  const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
+   try{const queued=await this.enqueuePageHistory(id);if(queued.jobs.length||queued.retried)this.p.app?.logger?.info?.('NocoReach page history queued',{projectId:id,jobs:queued.jobs.length,retried:queued.retried});}catch(e){this.p.app?.logger?.warn?.('NocoReach page history enqueue skipped',{code:safeError(e)});}}
+  const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step(undefined,{pageHistory:false})){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
   // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
@@ -339,6 +345,10 @@ class SyncService{
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000||this.stopped)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}
+  // Page history last, in what is left of the firing's time: a step takes tens of seconds (30 to 55 for Search Console on
+  // 252), and taken in the loop above it held back the read-aheads for as long as a fill ran. One step a firing at least,
+  // so a fill goes on when the read-aheads take the whole time.
+  for(let first=true;!this.stopped&&(first||Date.now()<deadline)&&await this.step();first=false){}
  }
  // Pages' figures and Keywords' site ranks are summed from the stored days, no Google read, but a large site's take
  // seconds: the ranges a person chose there in the last days (`DataViews.recentViews`) are summed here after a sync or a

@@ -703,6 +703,8 @@ function candidatePaths(path: string, identity?: PageIdentity | null) {
 }
 
 const PAGE_READ_HASHES = 200;
+// Up to this many addresses a sum reads by id (10 reads), more and it reads every address of the source.
+const ADDRESS_READ_BY_ID = 2000;
 const MISSING_READ_DAYS = 4;
 
 /**
@@ -912,11 +914,26 @@ export async function sumPageDays(
       }
       await giveWay();
     }
+    // The addresses summed, by id, when they are few (a short range); every address of the source otherwise, as a range
+    // that touches most of them would take hundreds of reads by id.
+    const ids = [...byPage.keys()];
+    const addresses =
+      ids.length > ADDRESS_READ_BY_ID
+        ? await db.getRepository('nrPageAddresses').find({
+            filter: { scopeId },
+            fields: ['id', 'host', 'path'],
+          })
+        : [];
+    if (ids.length <= ADDRESS_READ_BY_ID)
+      for (let i = 0; i < ids.length; i += PAGE_READ_HASHES)
+        addresses.push(
+          ...(await db.getRepository('nrPageAddresses').find({
+            filter: { id: { $in: ids.slice(i, i + PAGE_READ_HASHES) } },
+            fields: ['id', 'host', 'path'],
+          })),
+        );
     if (byPage.size)
-      for (const a of await db.getRepository('nrPageAddresses').find({
-        filter: { scopeId },
-        fields: ['id', 'host', 'path'],
-      })) {
+      for (const a of addresses) {
         const list = byPage.get(Number(a.get('id')));
         if (list)
           for (const r of list)
@@ -952,7 +969,11 @@ export async function sumPageDays(
   return { days, rows: [...sums.values()] };
 }
 
-/** Deletes the projects' page days, addresses, sources and marks (a demo project cleared). */
+/**
+ * Deletes the projects' page days (a demo project cleared). They are the one page table without a project column; the
+ * addresses, sources and marks are deleted by project with the other project tables (`PROJECT_TABLES`), after this, as
+ * this finds the days by their sources.
+ */
 export async function clearPageDays(
   db: LegacyDatabase,
   projectIds: string[],
@@ -968,11 +989,6 @@ export async function clearPageDays(
   if (scopes.length)
     await db.getRepository('nrPageDays').destroy({
       filter: { scopeId: { $in: scopes } },
-      transaction,
-    });
-  for (const name of ['nrPageAddresses', 'nrPageScopes', 'nrPageDayMarks'])
-    await db.getRepository(name).destroy({
-      filter: { projectId: { $in: projectIds } },
       transaction,
     });
 }

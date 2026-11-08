@@ -4,6 +4,8 @@ import {
   buildSnapshots,
   periodWindow,
   snapshotBuilder,
+  snapshotCovers,
+  snapshotPageStart,
 } from '../../server/nocoreach/sync-data.js';
 
 type Row = Record<string, unknown>;
@@ -170,7 +172,61 @@ it('sums page days one at a time into the same snapshots as every row at once, t
     s.filter((s) => /^(pages|queries)-/.test(s.key));
   expect(pick(built)).toEqual(reference(partitions, end));
   // Page days handed to the builder after the other days give the same snapshots.
-  const builder = snapshotBuilder(partitions.slice(0, 2), { id: '1' });
+  const builder = snapshotBuilder(
+    partitions.slice(0, 2),
+    { id: '1' },
+    { limit: false },
+  );
   for (const p of partitions.slice(2)) builder.add(p);
   expect(pick(builder.finish())).toEqual(pick(built));
+});
+
+it('sums only the page days of the last 180 through the end, the days Traffic names for its queries', () => {
+  const end = '2026-11-04';
+  const day = (n: number) =>
+    new Date(Date.parse(`${end}T00:00:00Z`) - n * 86400000)
+      .toISOString()
+      .slice(0, 10);
+  const base: Partition[] = [
+    {
+      source: 'ga4',
+      grain: 'overview',
+      date: end,
+      payload: [{ date: end, views: 1 }],
+    },
+    {
+      source: 'gsc',
+      grain: 'overview',
+      date: end,
+      payload: [{ date: end, clicks: 1, impressions: 1 }],
+    },
+  ];
+  const pages: Partition[] = [0, 179, 180, 200].map((n) => ({
+    source: 'gsc',
+    grain: 'query_page',
+    date: day(n),
+    payload: [
+      {
+        keyword: 'crm',
+        page: 'https://example.test/a',
+        clicks: 1,
+        impressions: 100 + n,
+        position: 1,
+      },
+    ],
+  }));
+  const builder = snapshotBuilder(base, { id: '1' });
+  for (const p of pages) builder.add(p);
+  const queries = (key: string) =>
+    builder.finish().find((s: { key: string }) => s.key === `queries-${key}`)
+      .payload;
+  // Days 0 and 179 back: 280 impressions in the range, nothing from the days before.
+  expect(queries('12m')).toEqual([
+    expect.objectContaining({ impressions: 100 + 279, previous: 0 }),
+  ]);
+  expect(snapshotPageStart(end)).toBe(day(179));
+  expect(['7', '28', '90', '3m'].every((k) => snapshotCovers(end, k))).toBe(
+    true,
+  );
+  expect(['6m', '12m', '16m'].some((k) => snapshotCovers(end, k))).toBe(false);
 });

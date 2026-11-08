@@ -55,7 +55,9 @@ async function fixture(path: NocoReachSchemaPath = 'fresh') {
   }));
   for (const day of daily) {
     await partitions.create({ values: gsc(day.date) });
-    await partitions.create({ values: { ...gsc(day.date), grain: 'overview', payload: [day] } });
+    await partitions.create({
+      values: { ...gsc(day.date), grain: 'overview', payload: [day] },
+    });
     await partitions.create({
       values: {
         projectId,
@@ -89,9 +91,12 @@ async function fixture(path: NocoReachSchemaPath = 'fresh') {
       fresh: async () => [],
     },
   });
-  views.gscQuery = async (_id, _site, body) => body.dimensions[0] === 'date'
-    ? daily.filter(r => r.date >= body.startDate && r.date <= body.endDate).map(r => ({ keys: [r.date], ...r }))
-    : [{ keys: ['crm', url], clicks: 70, impressions: 700, position: 9 }];
+  views.gscQuery = async (_id, _site, body) =>
+    body.dimensions[0] === 'date'
+      ? daily
+          .filter((r) => r.date >= body.startDate && r.date <= body.endDate)
+          .map((r) => ({ keys: [r.date], ...r }))
+      : [{ keys: ['crm', url], clicks: 70, impressions: 700, position: 9 }];
   return { views, db };
 }
 
@@ -146,12 +151,14 @@ it.each(paths)('reads 490-day comparison ranges (%s)', async (path) => {
   expect(report.totals.clicks).toBe(280);
   expect(report.complete).toBe(false);
   expect(report.previous).toBeNull();
-  await expect(views.page(projectId, {
-    url,
-    range: 'custom',
-    from: dateAt(1),
-    to: dateAt(2),
-  })).rejects.toMatchObject({ status: 400 });
+  await expect(
+    views.page(projectId, {
+      url,
+      range: 'custom',
+      from: dateAt(1),
+      to: dateAt(2),
+    }),
+  ).rejects.toMatchObject({ status: 400 });
 });
 
 it.each(['2026-02-30', '2026-13-01', '2026-1-01', 'not-a-date'])(
@@ -504,19 +511,29 @@ it.each(paths)(
     ]);
     expect(await views.pageFigures(projectId, '7')).toEqual(figures);
     figures.web[0].current.views = -1;
-    expect((await views.pageFigures(projectId, '7')).web[0].current.views).toBe(140);
+    expect((await views.pageFigures(projectId, '7')).web[0].current.views).toBe(
+      140,
+    );
   },
 );
 
 it('all-time search and page figures include stored history and custom caches keep date bounds', async () => {
- const {views}=await fixture(paths[0]);
- const all=await views.search(projectId,{range:'all'});
- expect(all.window.all).toBe(true);expect(all.window.start).toBe('2025-05-30');
- expect(all.previous).toBeNull();expect(all.movers).toBeNull();
- expect(all.trend.every(p=>p.previousClicks===null)).toBe(true);
- const one=await views.pageFigures(projectId,'custom',dateAt(-6),end);
- const two=await views.pageFigures(projectId,'custom',dateAt(-13),dateAt(-7));
- expect(one.window.start).toBe(dateAt(-6));expect(two.window.start).toBe(dateAt(-13));
+  const { views } = await fixture(paths[0]);
+  const all = await views.search(projectId, { range: 'all' });
+  expect(all.window.all).toBe(true);
+  expect(all.window.start).toBe('2025-05-30');
+  expect(all.previous).toBeNull();
+  expect(all.movers).toBeNull();
+  expect(all.trend.every((p) => p.previousClicks === null)).toBe(true);
+  const one = await views.pageFigures(projectId, 'custom', dateAt(-6), end);
+  const two = await views.pageFigures(
+    projectId,
+    'custom',
+    dateAt(-13),
+    dateAt(-7),
+  );
+  expect(one.window.start).toBe(dateAt(-6));
+  expect(two.window.start).toBe(dateAt(-13));
 });
 
 it('keeps the figures of a site with many addresses, so Pages does not read every synced day again', async () => {
@@ -559,7 +576,14 @@ it.each(paths)(
     const ranks = await views.ranks(projectId, { keywords: ['crm'] });
     // A history fill writes days before both periods; the other grain of the same days is not summed either.
     await partitions.create({
-      values: { projectId, source: 'gsc', resource: site, date: '2024-01-01', grain: 'query_page', payload: [] },
+      values: {
+        projectId,
+        source: 'gsc',
+        resource: site,
+        date: '2024-01-01',
+        grain: 'query_page',
+        payload: [],
+      },
     });
     expect(await views.pageFigures(projectId, '7')).toEqual(first);
     expect(build).toHaveBeenCalledTimes(1);
@@ -568,14 +592,36 @@ it.each(paths)(
     expect(views.pairHold.get(projectId)).toBe(held);
     // A day of the window read again is.
     vi.setSystemTime(Date.now() + 60000);
-    const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
+    const row = await partitions.findOne({
+      filter: {
+        projectId,
+        source: 'gsc',
+        grain: 'query_page',
+        resource: site,
+        date: end,
+      },
+    });
     await partitions.update({
       filterByTk: row.get('id'),
-      values: { payload: [{ keyword: 'crm', page: url, clicks: 110, impressions: 100, position: 9 }] },
+      values: {
+        payload: [
+          {
+            keyword: 'crm',
+            page: url,
+            clicks: 110,
+            impressions: 100,
+            position: 9,
+          },
+        ],
+      },
     });
-    expect((await views.pageFigures(projectId, '7')).search[0].current.clicks).toBe(170);
+    expect(
+      (await views.pageFigures(projectId, '7')).search[0].current.clicks,
+    ).toBe(170);
     expect(build).toHaveBeenCalledTimes(2);
-    expect((await views.ranks(projectId, { keywords: ['crm'] })).ranks.crm.clicks).toBe(ranks.ranks.crm.clicks + 100);
+    expect(
+      (await views.ranks(projectId, { keywords: ['crm'] })).ranks.crm.clicks,
+    ).toBe(ranks.ranks.crm.clicks + 100);
   },
 );
 
@@ -586,12 +632,38 @@ it.each(paths)(
     const partitions = db.getRepository('nrSyncPartitions');
     const marks = db.getRepository('nrPageDayMarks');
     const other = 'https://www.example.test/docs/b/';
-    const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
+    const row = await partitions.findOne({
+      filter: {
+        projectId,
+        source: 'gsc',
+        grain: 'query_page',
+        resource: site,
+        date: end,
+      },
+    });
     await partitions.update({
       filterByTk: row.get('id'),
-      values: { payload: [{ keyword: 'crm', page: url, clicks: 10, impressions: 100, position: 9 }, { keyword: 'b', page: 'https://example.test/docs/b?ref=x', clicks: 3, impressions: 30, position: 4 }] },
+      values: {
+        payload: [
+          {
+            keyword: 'crm',
+            page: url,
+            clicks: 10,
+            impressions: 100,
+            position: 9,
+          },
+          {
+            keyword: 'b',
+            page: 'https://example.test/docs/b?ref=x',
+            clicks: 3,
+            impressions: 30,
+            position: 4,
+          },
+        ],
+      },
     });
-    const { fillPageDaysInBackground, pageDaysFilled, releasePageDay } = await import('../../server/nocoreach/page-days.js');
+    const { fillPageDaysInBackground, pageDaysFilled, releasePageDay } =
+      await import('../../server/nocoreach/page-days.js');
     const first = await views.page(projectId, { url, range: '7' });
     // The first drawer sums its page's days from the partitions and has every synced day summed in the background.
     await pageDaysFilled(db, projectId);
@@ -599,39 +671,128 @@ it.each(paths)(
     const held = await db.getRepository('nrPageDays').count();
     const second = await views.page(projectId, { url: other, range: '7' });
     expect(await db.getRepository('nrPageDays').count()).toBe(held);
-    expect(first.daily.at(-1)).toEqual({ date: end, clicks: 10, impressions: 100, views: 20 });
+    expect(first.daily.at(-1)).toEqual({
+      date: end,
+      clicks: 10,
+      impressions: 100,
+      views: 20,
+    });
     // Another page's address matches whatever its scheme, www, trailing slash or query; GA4 counts by path.
-    expect(second.daily.at(-1)).toEqual({ date: end, clicks: 3, impressions: 30, views: 0 });
-    expect(second.daily[0]).toEqual({ date: dateAt(-6), clicks: 0, impressions: 0, views: 0 });
-    expect((await views.page(projectId, { url, range: '7' })).daily).toEqual(first.daily);
+    expect(second.daily.at(-1)).toEqual({
+      date: end,
+      clicks: 3,
+      impressions: 30,
+      views: 0,
+    });
+    expect(second.daily[0]).toEqual({
+      date: dateAt(-6),
+      clicks: 0,
+      impressions: 0,
+      views: 0,
+    });
+    expect((await views.page(projectId, { url, range: '7' })).daily).toEqual(
+      first.daily,
+    );
     // A day the sync reads again unchanged keeps its rows.
-    const sameDay = await partitions.findOne({ filter: { projectId, source: 'ga4', grain: 'page', resource: '123', date: end } });
-    expect(await releasePageDay(db, { projectId, source: 'ga4', resource: '123', date: end, grain: 'page', payload: sameDay.get('payload') })).toBe(false);
+    const sameDay = await partitions.findOne({
+      filter: {
+        projectId,
+        source: 'ga4',
+        grain: 'page',
+        resource: '123',
+        date: end,
+      },
+    });
+    expect(
+      await releasePageDay(db, {
+        projectId,
+        source: 'ga4',
+        resource: '123',
+        date: end,
+        grain: 'page',
+        payload: sameDay.get('payload'),
+      }),
+    ).toBe(false);
     // Sources asked for while a fill runs are filled once it ends.
-    const moved = [{ keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 }];
-    await partitions.update({ filterByTk: row.get('id'), values: { payload: moved } });
-    expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: moved })).toBe(true);
-    fillPageDaysInBackground(db, projectId, [{ source: 'ga4', resource: '123' }]);
-    fillPageDaysInBackground(db, projectId, [{ source: 'gsc', resource: site, range: { start: end, end } }]);
+    const moved = [
+      { keyword: 'b', page: other, clicks: 5, impressions: 50, position: 4 },
+    ];
+    await partitions.update({
+      filterByTk: row.get('id'),
+      values: { payload: moved },
+    });
+    expect(
+      await releasePageDay(db, {
+        projectId,
+        source: 'gsc',
+        resource: site,
+        date: end,
+        grain: 'query_page',
+        payload: moved,
+      }),
+    ).toBe(true);
+    fillPageDaysInBackground(db, projectId, [
+      { source: 'ga4', resource: '123' },
+    ]);
+    fillPageDaysInBackground(db, projectId, [
+      { source: 'gsc', resource: site, range: { start: end, end } },
+    ]);
     await pageDaysFilled(db, projectId);
-    expect(await marks.count({ filter: { projectId, pages: { $gte: 0 } } })).toBe(58);
-    expect((await views.page(projectId, { url: other, range: '7' })).daily.at(-1)).toEqual({ date: end, clicks: 5, impressions: 50, views: 0 });
-    expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toEqual({ date: end, clicks: 0, impressions: 0, views: 20 });
+    expect(
+      await marks.count({ filter: { projectId, pages: { $gte: 0 } } }),
+    ).toBe(58);
+    expect(
+      (await views.page(projectId, { url: other, range: '7' })).daily.at(-1),
+    ).toEqual({ date: end, clicks: 5, impressions: 50, views: 0 });
+    expect(
+      (await views.page(projectId, { url, range: '7' })).daily.at(-1),
+    ).toEqual({ date: end, clicks: 0, impressions: 0, views: 20 });
     expect(await marks.count({ filter: { projectId } })).toBe(58);
     // The sync writes a partition with other content and lets the day go in its transaction (releasePageDay): the
     // drawer sums the day from the partition until the background fill has written it again.
-    const changed = [{ keyword: 'crm', page: url, clicks: 7, impressions: 70, position: 9 }];
-    await partitions.update({ filterByTk: row.get('id'), values: { payload: changed } });
-    expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: changed })).toBe(true);
-    const heldMarks = () => marks.count({ filter: { projectId, pages: { $gte: 0 } } });
+    const changed = [
+      { keyword: 'crm', page: url, clicks: 7, impressions: 70, position: 9 },
+    ];
+    await partitions.update({
+      filterByTk: row.get('id'),
+      values: { payload: changed },
+    });
+    expect(
+      await releasePageDay(db, {
+        projectId,
+        source: 'gsc',
+        resource: site,
+        date: end,
+        grain: 'query_page',
+        payload: changed,
+      }),
+    ).toBe(true);
+    const heldMarks = () =>
+      marks.count({ filter: { projectId, pages: { $gte: 0 } } });
     expect(await heldMarks()).toBe(57);
     const released = await views.page(projectId, { url, range: '7' });
-    expect(released.daily.at(-1)).toEqual({ date: end, clicks: 7, impressions: 70, views: 20 });
+    expect(released.daily.at(-1)).toEqual({
+      date: end,
+      clicks: 7,
+      impressions: 70,
+      views: 20,
+    });
     await pageDaysFilled(db, projectId);
     expect(await heldMarks()).toBe(58);
     expect(await marks.count({ filter: { projectId } })).toBe(58);
-    expect((await views.page(projectId, { url, range: '7' })).daily).toEqual(released.daily);
-    expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: changed })).toBe(false);
+    expect((await views.page(projectId, { url, range: '7' })).daily).toEqual(
+      released.daily,
+    );
+    expect(
+      await releasePageDay(db, {
+        projectId,
+        source: 'gsc',
+        resource: site,
+        date: end,
+        grain: 'query_page',
+        payload: changed,
+      }),
+    ).toBe(false);
   },
 );
 
@@ -639,16 +800,33 @@ it('applies the page identity when a page is read, not when its days are written
   const { views, db } = await fixture(paths[0]);
   let identity: { pages: { url: string; canonical: string }[] } | null = null;
   views.p.siteContent = { state: async () => identity };
-  const before = await views.page(projectId, { url: 'https://example.test/docs/old', range: '7' });
-  expect(before.daily.at(-1)).toEqual({ date: end, clicks: 0, impressions: 0, views: 0 });
-  const { pageDaysFilled } = await import('../../server/nocoreach/page-days.js');
+  const before = await views.page(projectId, {
+    url: 'https://example.test/docs/old',
+    range: '7',
+  });
+  expect(before.daily.at(-1)).toEqual({
+    date: end,
+    clicks: 0,
+    impressions: 0,
+    views: 0,
+  });
+  const { pageDaysFilled } =
+    await import('../../server/nocoreach/page-days.js');
   await pageDaysFilled(db, projectId);
   const held = await db.getRepository('nrPageDays').count();
   // Website content reads that /docs/a names /docs/old as its canonical: /docs/a's rows are now /docs/old's.
   identity = { pages: [{ url, canonical: 'https://example.test/docs/old' }] };
-  const after = await views.page(projectId, { url: 'https://example.test/docs/old', range: '7' });
+  const after = await views.page(projectId, {
+    url: 'https://example.test/docs/old',
+    range: '7',
+  });
   // GA4 rows stored without a host match by their own path, as before the page identity existed.
-  expect(after.daily.at(-1)).toEqual({ date: end, clicks: 10, impressions: 100, views: 0 });
+  expect(after.daily.at(-1)).toEqual({
+    date: end,
+    clicks: 10,
+    impressions: 100,
+    views: 0,
+  });
   expect(await db.getRepository('nrPageDays').count()).toBe(held);
 });
 
@@ -656,65 +834,194 @@ it('reads one page whatever its www, trailing slash or query, with GA4 rows with
   const { views, db } = await fixture(paths[0]);
   const partitions = db.getRepository('nrSyncPartitions');
   for (const [source, grain, resource, payload] of [
-    ['gsc', 'query_page', site, [{ keyword: 'x', page: 'https://www.example.test/docs/a/', clicks: 3, impressions: 40 }, { keyword: 'y', page: 'https://example.test/docs/b', clicks: 9, impressions: 9 }]],
-    ['ga4', 'page', '123', [{ page: '/docs/a', views: 12 }, { host: 'www.example.test', page: '/docs/a/?ref=1', views: 3 }, { page: '/', views: 99 }]],
+    [
+      'gsc',
+      'query_page',
+      site,
+      [
+        {
+          keyword: 'x',
+          page: 'https://www.example.test/docs/a/',
+          clicks: 3,
+          impressions: 40,
+        },
+        {
+          keyword: 'y',
+          page: 'https://example.test/docs/b',
+          clicks: 9,
+          impressions: 9,
+        },
+      ],
+    ],
+    [
+      'ga4',
+      'page',
+      '123',
+      [
+        { page: '/docs/a', views: 12 },
+        { host: 'www.example.test', page: '/docs/a/?ref=1', views: 3 },
+        { page: '/', views: 99 },
+      ],
+    ],
   ] as const) {
-    const row = await partitions.findOne({ filter: { projectId, source, grain, resource, date: end } });
+    const row = await partitions.findOne({
+      filter: { projectId, source, grain, resource, date: end },
+    });
     await partitions.update({ filterByTk: row.get('id'), values: { payload } });
   }
-  const r = await views.page(projectId, { url: 'https://example.test/docs/a', range: '7' });
-  expect(r.daily.at(-1)).toEqual({ date: end, clicks: 3, impressions: 40, views: 15 });
+  const r = await views.page(projectId, {
+    url: 'https://example.test/docs/a',
+    range: '7',
+  });
+  expect(r.daily.at(-1)).toEqual({
+    date: end,
+    clicks: 3,
+    impressions: 40,
+    views: 15,
+  });
 });
 
 it('does not write a day from a partition the sync has replaced since it was read', async () => {
   const { views, db } = await fixture(paths[0]);
-  const { fillDays, releasePageDay } = await import('../../server/nocoreach/page-days.js');
+  const { fillDays, releasePageDay } =
+    await import('../../server/nocoreach/page-days.js');
   const marks = db.getRepository('nrPageDayMarks');
   // The sync is about to write new content for the last day (and has marked the day pending it), while the stored
   // partition a fill reads is still the old one.
-  const next = [{ keyword: 'crm', page: url, clicks: 99, impressions: 990, position: 9 }];
-  expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: next })).toBe(true);
+  const next = [
+    { keyword: 'crm', page: url, clicks: 99, impressions: 990, position: 9 },
+  ];
+  expect(
+    await releasePageDay(db, {
+      projectId,
+      source: 'gsc',
+      resource: site,
+      date: end,
+      grain: 'query_page',
+      payload: next,
+    }),
+  ).toBe(true);
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(29);
-  expect(await marks.count({ filter: { projectId, source: 'gsc', pages: { $gte: 0 } } })).toBe(29);
+  expect(
+    await marks.count({
+      filter: { projectId, source: 'gsc', pages: { $gte: 0 } },
+    }),
+  ).toBe(29);
   // The day is still pending, so the drawer sums it from the partition as stored.
-  expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toMatchObject({ date: end, clicks: 10, impressions: 100 });
+  expect(
+    (await views.page(projectId, { url, range: '7' })).daily.at(-1),
+  ).toMatchObject({ date: end, clicks: 10, impressions: 100 });
   // Once the partition holds the new content, the next fill writes it.
   const partitions = db.getRepository('nrSyncPartitions');
-  const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
-  await partitions.update({ filterByTk: row.get('id'), values: { payload: next } });
+  const row = await partitions.findOne({
+    filter: {
+      projectId,
+      source: 'gsc',
+      grain: 'query_page',
+      resource: site,
+      date: end,
+    },
+  });
+  await partitions.update({
+    filterByTk: row.get('id'),
+    values: { payload: next },
+  });
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(1);
-  expect((await views.page(projectId, { url, range: '7' })).daily.at(-1)).toMatchObject({ date: end, clicks: 99, impressions: 990 });
+  expect(
+    (await views.page(projectId, { url, range: '7' })).daily.at(-1),
+  ).toMatchObject({ date: end, clicks: 99, impressions: 990 });
 });
 
 it('fills a pending day whose partition reads back with its keys in another order, as MySQL returns JSON', async () => {
   const { db } = await fixture(paths[0]);
-  const { fillDays, releasePageDay } = await import('../../server/nocoreach/page-days.js');
-  const written = [{ keyword: 'crm', page: url, clicks: 12, impressions: 120, position: 9 }];
-  const stored = [{ clicks: 12, impressions: 120, keyword: 'crm', page: url, position: 9 }];
+  const { fillDays, releasePageDay } =
+    await import('../../server/nocoreach/page-days.js');
+  const written = [
+    { keyword: 'crm', page: url, clicks: 12, impressions: 120, position: 9 },
+  ];
+  const stored = [
+    { clicks: 12, impressions: 120, keyword: 'crm', page: url, position: 9 },
+  ];
   const partitions = db.getRepository('nrSyncPartitions');
-  const row = await partitions.findOne({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: end } });
-  await partitions.update({ filterByTk: row.get('id'), values: { payload: stored } });
-  expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: written })).toBe(true);
+  const row = await partitions.findOne({
+    filter: {
+      projectId,
+      source: 'gsc',
+      grain: 'query_page',
+      resource: site,
+      date: end,
+    },
+  });
+  await partitions.update({
+    filterByTk: row.get('id'),
+    values: { payload: stored },
+  });
+  expect(
+    await releasePageDay(db, {
+      projectId,
+      source: 'gsc',
+      resource: site,
+      date: end,
+      grain: 'query_page',
+      payload: written,
+    }),
+  ).toBe(true);
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(30);
-  expect(await db.getRepository('nrPageDayMarks').count({ filter: { projectId, source: 'gsc', pages: { $lt: 0 } } })).toBe(0);
+  expect(
+    await db
+      .getRepository('nrPageDayMarks')
+      .count({ filter: { projectId, source: 'gsc', pages: { $lt: 0 } } }),
+  ).toBe(0);
 });
 
 it('refuses a page drawer for an address that is not one', async () => {
   const { views } = await fixture(paths[0]);
-  await expect(views.page(projectId, { url: 'nope', range: '7' })).rejects.toThrow(/网址/);
+  await expect(
+    views.page(projectId, { url: 'nope', range: '7' }),
+  ).rejects.toThrow(/网址/);
 });
 
-it('marks only the changed days of a writer pending, and reads only the current resources\' rows', async () => {
+it("marks only the changed days of a writer pending, and reads only the current resources' rows", async () => {
   const { db } = await fixture(paths[0]);
-  const { fillDays, pageDayMarks, readPageDays, releasePageDays } = await import('../../server/nocoreach/page-days.js');
+  const { fillDays, pageDayMarks, readPageDays, releasePageDays } =
+    await import('../../server/nocoreach/page-days.js');
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(30);
   const partitions = db.getRepository('nrSyncPartitions');
-  const days = await partitions.find({ filter: { projectId, source: 'gsc', grain: 'query_page', resource: site, date: { $in: [dateAt(-1), end] } }, fields: ['projectId', 'source', 'resource', 'date', 'grain', 'payload'] });
-  const written = days.map((r) => ({ ...r.toJSON(), payload: r.get('date') === end ? [] : r.get('payload') }));
+  const days = await partitions.find({
+    filter: {
+      projectId,
+      source: 'gsc',
+      grain: 'query_page',
+      resource: site,
+      date: { $in: [dateAt(-1), end] },
+    },
+    fields: ['projectId', 'source', 'resource', 'date', 'grain', 'payload'],
+  });
+  const written = days.map((r) => ({
+    ...r.toJSON(),
+    payload: r.get('date') === end ? [] : r.get('payload'),
+  }));
   // An overview partition is not the drawer's, and an unchanged day keeps its rows.
-  expect(await releasePageDays(db, pageDayMarks([...written, { ...written[0], grain: 'overview' }]))).toBe(1);
-  expect(await db.getRepository('nrPageDayMarks').count({ filter: { projectId, pages: { $lt: 0 } } })).toBe(1);
-  const read = (resource: string) => readPageDays(db, projectId, 'example.test/docs/a', null, { start: dateAt(-6), end }, { gsc: resource });
+  expect(
+    await releasePageDays(
+      db,
+      pageDayMarks([...written, { ...written[0], grain: 'overview' }]),
+    ),
+  ).toBe(1);
+  expect(
+    await db
+      .getRepository('nrPageDayMarks')
+      .count({ filter: { projectId, pages: { $lt: 0 } } }),
+  ).toBe(1);
+  const read = (resource: string) =>
+    readPageDays(
+      db,
+      projectId,
+      'example.test/docs/a',
+      null,
+      { start: dateAt(-6), end },
+      { gsc: resource },
+    );
   // Six held days from the table and the pending one summed from its partition.
   expect((await read(site)).search.length).toBe(7);
   // Rows held for another resource of the project are not read.
@@ -723,54 +1030,121 @@ it('marks only the changed days of a writer pending, and reads only the current 
 
 // Pages' figures as they were summed before nrPageDays held them (v1.0.0-beta.82): every partition of both periods,
 // row by row.
-async function partitionFigures(db: LegacyDatabase, w: ReturnType<typeof windowFor>) {
+async function partitionFigures(
+  db: LegacyDatabase,
+  w: ReturnType<typeof windowFor>,
+) {
   const repo = db.getRepository('nrSyncPartitions');
-  const period = (d: string) => (d >= w.start && d <= w.end ? 'current' : d >= w.previousStart && d <= w.previousEnd ? 'previous' : null);
-  const pathOf = (v: unknown) => String(v || '').split(/[?#]/)[0].replace(/\/+$/, '') || '/';
-  const hostOf = (v: unknown) => String(v || '').toLowerCase().replace(/^www\./, '');
-  const days = { gsc: { current: 0, previous: 0 }, ga4: { current: 0, previous: 0 } };
-  const sums = { gsc: new Map(), ga4: new Map() } as Record<'gsc' | 'ga4', Map<string, any>>;
-  const entry = (m: Map<string, any>, host: string, path: string, zero: object) => {
+  const period = (d: string) =>
+    d >= w.start && d <= w.end
+      ? 'current'
+      : d >= w.previousStart && d <= w.previousEnd
+        ? 'previous'
+        : null;
+  const pathOf = (v: unknown) =>
+    String(v || '')
+      .split(/[?#]/)[0]
+      .replace(/\/+$/, '') || '/';
+  const hostOf = (v: unknown) =>
+    String(v || '')
+      .toLowerCase()
+      .replace(/^www\./, '');
+  const days = {
+    gsc: { current: 0, previous: 0 },
+    ga4: { current: 0, previous: 0 },
+  };
+  const sums = { gsc: new Map(), ga4: new Map() } as Record<
+    'gsc' | 'ga4',
+    Map<string, any>
+  >;
+  const entry = (
+    m: Map<string, any>,
+    host: string,
+    path: string,
+    zero: object,
+  ) => {
     const k = `${host}|${path}`;
-    if (!m.has(k)) m.set(k, { host, path, current: { ...zero }, previous: { ...zero } });
+    if (!m.has(k))
+      m.set(k, { host, path, current: { ...zero }, previous: { ...zero } });
     return m.get(k);
   };
-  for (const [source, grain, resource] of [['gsc', 'query_page', site], ['ga4', 'page', '123']] as const)
-    for (const r of await repo.find({ filter: { projectId, source, grain, resource } })) {
+  for (const [source, grain, resource] of [
+    ['gsc', 'query_page', site],
+    ['ga4', 'page', '123'],
+  ] as const)
+    for (const r of await repo.find({
+      filter: { projectId, source, grain, resource },
+    })) {
       const p = period(String(r.get('date')).slice(0, 10));
       if (!p) continue;
       days[source][p]++;
       for (const x of r.get('payload') || []) {
         if (source === 'gsc') {
           let u: URL;
-          try { u = new URL(x.page); } catch { continue; }
-          const o = entry(sums.gsc, hostOf(u.hostname), pathOf(u.pathname), { clicks: 0, impressions: 0 })[p];
+          try {
+            u = new URL(x.page);
+          } catch {
+            continue;
+          }
+          const o = entry(sums.gsc, hostOf(u.hostname), pathOf(u.pathname), {
+            clicks: 0,
+            impressions: 0,
+          })[p];
           o.clicks += Number(x.clicks) || 0;
           o.impressions += Number(x.impressions) || 0;
         } else {
           if (!String(x.page || '').startsWith('/')) continue;
-          entry(sums.ga4, hostOf(x.host), pathOf(x.page), { views: 0 })[p].views += Number(x.views) || 0;
+          entry(sums.ga4, hostOf(x.host), pathOf(x.page), { views: 0 })[
+            p
+          ].views += Number(x.views) || 0;
         }
       }
     }
-  const sorted = (m: Map<string, any>) => [...m.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, v]) => v);
+  const sorted = (m: Map<string, any>) =>
+    [...m.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([, v]) => v);
   return { window: w, days, search: sorted(sums.gsc), web: sorted(sums.ga4) };
 }
 
-it('sums Pages\' figures from the held days as from the partitions, whatever days are held or pending', async () => {
+it("sums Pages' figures from the held days as from the partitions, whatever days are held or pending", async () => {
   const { views, db } = await fixture(paths[0]);
-  const { fillDays, pageDaysFilled, releasePageDay } = await import('../../server/nocoreach/page-days.js');
+  const { fillDays, pageDaysFilled, releasePageDay } =
+    await import('../../server/nocoreach/page-days.js');
   const partitions = db.getRepository('nrSyncPartitions');
-  const set = async (source: string, grain: string, resource: string, date: string, payload: unknown[]) => {
-    const row = await partitions.findOne({ filter: { projectId, source, grain, resource, date } });
+  const set = async (
+    source: string,
+    grain: string,
+    resource: string,
+    date: string,
+    payload: unknown[],
+  ) => {
+    const row = await partitions.findOne({
+      filter: { projectId, source, grain, resource, date },
+    });
     await partitions.update({ filterByTk: row.get('id'), values: { payload } });
   };
   // Addresses Pages and the drawer name differently: www and case, trailing slashes, queries and fragments, encoded and
   // unencoded paths, GA4 rows without a host and paths that are not paths.
   await set('gsc', 'query_page', site, end, [
-    { keyword: 'a', page: 'https://WWW.Example.test/docs/a/', clicks: 3, impressions: 40 },
-    { keyword: 'b', page: 'https://example.test/docs/a?ref=1#top', clicks: 2, impressions: 20 },
-    { keyword: 'c', page: 'https://example.test/文档/页', clicks: 1, impressions: 5 },
+    {
+      keyword: 'a',
+      page: 'https://WWW.Example.test/docs/a/',
+      clicks: 3,
+      impressions: 40,
+    },
+    {
+      keyword: 'b',
+      page: 'https://example.test/docs/a?ref=1#top',
+      clicks: 2,
+      impressions: 20,
+    },
+    {
+      keyword: 'c',
+      page: 'https://example.test/文档/页',
+      clicks: 1,
+      impressions: 5,
+    },
     { keyword: 'd', page: 'not an address', clicks: 9, impressions: 9 },
   ]);
   await set('ga4', 'page', '123', end, [
@@ -782,11 +1156,26 @@ it('sums Pages\' figures from the held days as from the partitions, whatever day
     { page: '(not set)', views: 50 },
     { page: '', views: 8 },
   ]);
-  await set('ga4', 'page', '123', dateAt(-9), [{ host: 'docs.example.test', page: '/start/', views: 30 }]);
+  await set('ga4', 'page', '123', dateAt(-9), [
+    { host: 'docs.example.test', page: '/start/', views: 30 },
+  ]);
   const ranges = ['7', '28', 'all'] as const;
-  const window = (range: string) => windowFor(end, range, undefined, undefined, '2025-05-30');
-  const expected = Object.fromEntries(await Promise.all(ranges.map(async (r) => [r, await partitionFigures(db, window(r))])));
-  const built = async () => Object.fromEntries(await Promise.all(ranges.map(async (r) => [r, await views.buildPageFigures(projectId, window(r), link)])));
+  const window = (range: string) =>
+    windowFor(end, range, undefined, undefined, '2025-05-30');
+  const expected = Object.fromEntries(
+    await Promise.all(
+      ranges.map(async (r) => [r, await partitionFigures(db, window(r))]),
+    ),
+  );
+  const built = async () =>
+    Object.fromEntries(
+      await Promise.all(
+        ranges.map(async (r) => [
+          r,
+          await views.buildPageFigures(projectId, window(r), link),
+        ]),
+      ),
+    );
   // Nothing held yet: every day from its partition, and the days filled after.
   expect(await built()).toEqual(expected);
   await pageDaysFilled(db, projectId);
@@ -794,31 +1183,73 @@ it('sums Pages\' figures from the held days as from the partitions, whatever day
   expect(await fillDays(db, projectId, 'gsc', site)).toBe(0);
   // Every day held: a partition rewritten without its day let go still reads as it was summed.
   expect(await built()).toEqual(expected);
-  const next = [{ keyword: 'a', page: 'https://example.test/docs/new', clicks: 4, impressions: 44 }];
+  const next = [
+    {
+      keyword: 'a',
+      page: 'https://example.test/docs/new',
+      clicks: 4,
+      impressions: 44,
+    },
+  ];
   await set('gsc', 'query_page', site, end, next);
   expect(await built()).toEqual(expected);
   // Once the sync lets the day go, it is summed from its partition until the fill has written it again.
-  expect(await releasePageDay(db, { projectId, source: 'gsc', resource: site, date: end, grain: 'query_page', payload: next })).toBe(true);
-  const changed = Object.fromEntries(await Promise.all(ranges.map(async (r) => [r, await partitionFigures(db, window(r))])));
-  expect(changed['7'].search.map((r: { path: string }) => r.path)).toContain('/docs/new');
+  expect(
+    await releasePageDay(db, {
+      projectId,
+      source: 'gsc',
+      resource: site,
+      date: end,
+      grain: 'query_page',
+      payload: next,
+    }),
+  ).toBe(true);
+  const changed = Object.fromEntries(
+    await Promise.all(
+      ranges.map(async (r) => [r, await partitionFigures(db, window(r))]),
+    ),
+  );
+  expect(changed['7'].search.map((r: { path: string }) => r.path)).toContain(
+    '/docs/new',
+  );
   expect(await built()).toEqual(changed);
   await pageDaysFilled(db, projectId);
   expect(await built()).toEqual(changed);
 });
 
-it('clears one project\'s page days, addresses, sources and marks', async () => {
+it("clears one project's page days, found by its sources", async () => {
   const { db } = await fixture(paths[0]);
-  const { clearPageDays, fillDays } = await import('../../server/nocoreach/page-days.js');
+  const { clearPageDays, fillDays } =
+    await import('../../server/nocoreach/page-days.js');
   const partitions = db.getRepository('nrSyncPartitions');
   await partitions.create({
-    values: { projectId: '902', source: 'gsc', resource: site, date: end, grain: 'query_page', payload: [{ keyword: 'x', page: url, clicks: 1, impressions: 1 }] },
+    values: {
+      projectId: '902',
+      source: 'gsc',
+      resource: site,
+      date: end,
+      grain: 'query_page',
+      payload: [{ keyword: 'x', page: url, clicks: 1, impressions: 1 }],
+    },
   });
   await fillDays(db, projectId, 'gsc', site);
   await fillDays(db, '902', 'gsc', site);
-  const count = (name: string, filter?: object) => db.getRepository(name).count(filter ? { filter } : {});
-  const kept = await count('nrPageAddresses', { projectId: '902' });
+  const count = (name: string, filter?: object) =>
+    db.getRepository(name).count(filter ? { filter } : {});
+  const scopes = async (id: string) =>
+    (
+      await db.getRepository('nrPageScopes').find({ filter: { projectId: id } })
+    ).map((s) => s.get('id'));
+  const days = async (id: string) => {
+    let n = 0;
+    for (const scopeId of await scopes(id))
+      n += await count('nrPageDays', { scopeId });
+    return n;
+  };
+  const kept = await days('902');
+  expect(await days(projectId)).toBeGreaterThan(0);
   await clearPageDays(db, [projectId]);
-  for (const name of ['nrPageScopes', 'nrPageAddresses', 'nrPageDayMarks']) expect(await count(name, { projectId })).toBe(0);
-  expect(await count('nrPageAddresses', { projectId: '902' })).toBe(kept);
-  expect(await count('nrPageDays')).toBe(1);
+  expect(await days(projectId)).toBe(0);
+  expect(await days('902')).toBe(kept);
+  expect(kept).toBe(1);
 });

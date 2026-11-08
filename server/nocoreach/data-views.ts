@@ -19,7 +19,7 @@ import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
 import { pageIdentity, pageKey } from '../../shared/page-identity.js';
 import { readPageDays, sumPageDays } from './page-days.js';
-import { SNAPSHOT_PAGE_DAYS } from './sync-service.js';
+import { snapshotPageStart } from './sync-data.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -32,7 +32,7 @@ const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice
 // naming no view, such as the online agent's, has no family and never gets another window's copy.
 const viewFamily=(kind,parts,v,w)=>typeof v.view==='string'&&v.view?[kind,...parts,v.view.slice(0,200),days(w.start,w.end),w.all===true]:undefined;
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
-const MAX_STORED_PAIR_DAYS=200;
+const MAX_STORED_PAIR_DAYS=200,PAIR_OVERFLOW_KEPT=64;
 // GA4 goes on processing a day for about two days after it ends; a report over later days is not kept as settled, and
 // Traffic marks those days as still changing. The page notes and the chart tip say "two days" in every locale
 // (dataWebsite.latestDaysPreliminary).
@@ -105,7 +105,7 @@ async function websiteView(snaps,range,period,from,to,yesterdayOf){const get=k=>
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
  const searched=get(`queries-${range}`)||[],queries=new Map();for(const q of searched){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
- return {connected:true,cutoff:end,settledThrough:settled,queriesWindow:searched.length?{start:[windowFor(synced,range).start,add(synced,1-SNAPSHOT_PAGE_DAYS)].sort().at(-1),end:synced}:null,from:firstDate(web),window:w,...report};}
+ return {connected:true,cutoff:end,settledThrough:settled,queriesWindow:searched.length?{start:[windowFor(synced,range).start,snapshotPageStart(synced)].sort().at(-1),end:synced}:null,from:firstDate(web),window:w,...report};}
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Search Console filters for a country and the query and page filters. Search performance reads web search only
 // (2026-10-22: the other search types were dropped from the page; the sync reads web search only too).
@@ -290,19 +290,20 @@ class DataViews{
  // a table ending on it needs totals on it. A quiet day further back in the window, or older than that, is a real one.
  async publishedDays(id: string | number,site: string,dates: string[]){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'overview',resource:site,date:{$in:dates}},fields:['date','payload']});
   return new Set(parts.filter(p=>{const payload=p.get('payload');return Array.isArray(payload)&&payload.length>0;}).map(p=>dayOf(p.get('date'))));}
- // A span of days that held more pairs than MAX_PAIR_ROWS is read from Search Console while the site's stored pairs stay
- // as they were (`storedDays`), without reading its days again: with a site's page history stored, a 90-day range of a
- // large site reads up to 180 days of pairs before it gives up.
+ // A window whose days held more pairs than MAX_PAIR_ROWS is read from Search Console while its stored pairs stay as they
+ // were (`storedDays`), without reading its days again: with a site's page history stored, a 90-day range of a large site
+ // reads up to 180 days of pairs before it gives up. Each window is remembered on its own (the last PAIR_OVERFLOW_KEPT),
+ // so two ranges over the limit do not undo each other, and the stored days are counted only for a window remembered.
  async storedPairs(id: string | number,site: string,w: SearchWindow){if(w.all||days(w.previousStart,w.end)>MAX_STORED_PAIR_DAYS)return null;
-  const overflow=this.pairOverflow=this.pairOverflow||new Map(),span=days(w.previousStart,w.end),at=`${id}|${site}`,state=JSON.stringify(await this.storedDays(id,'gsc','query_page',site,partitionDates(w.previousStart,w.end))),over=overflow.get(at);
-  if(over?.state===state&&span>=over.span)return null;
+  const overflow=this.pairOverflow=this.pairOverflow||new Map(),at=`${id}|${site}|${w.previousStart}|${w.end}`,stateOf=async()=>JSON.stringify(await this.storedDays(id,'gsc','query_page',site,partitionDates(w.previousStart,w.end)));
+  if(overflow.has(at)&&overflow.get(at)===await stateOf())return null;
   const repo=this.p.db.getRepository('nrSyncPartitions'),scope={projectId:id,source:'gsc',grain:'query_page',resource:site},wanted=partitionDates(w.previousStart,w.end).$in;
   const held=new Set((await repo.find({filter:{...scope,date:{$in:wanted}},fields:['date']})).map(p=>dayOf(p.get('date'))));if(wanted.some(d=>!held.has(d)))return null;
   if(String(w.end)>=add(historyBounds(this.p,id).cutoff,-SYNC_REREAD_DAYS)&&!(await this.publishedDays(id,site,[String(w.end)])).has(String(w.end)))return null;
   const current=sp.pairSum(),previous=sp.pairSum();
   for(const date of wanted){await new Promise(resolve=>setImmediate(resolve));const [part]=await repo.find({filter:{...scope,date:{$in:[date]}},fields:['date','payload']}),sum=date>=w.start?current:previous;sum.add(part?.get('payload'));
    // Too many for one report: Search Console answers it with its own limit, as it did before these tables were summed.
-   if(sum.size()>MAX_PAIR_ROWS){overflow.set(at,{state,span:over?.state===state?Math.min(span,over.span):span});return null;}}
+   if(sum.size()>MAX_PAIR_ROWS){overflow.delete(at);overflow.set(at,await stateOf());if(overflow.size>PAIR_OVERFLOW_KEPT)overflow.delete(overflow.keys().next().value);return null;}}
   return {current:current.rows(),previous:previous.rows()};}
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
@@ -435,10 +436,10 @@ class DataViews{
   const at=latest?.get('updatedAt');return [count,at instanceof Date?at.toISOString():at??null];}
  // Each source's days are summed by nrPageDays (page-days.ts) in the database, the days it does not hold yet from their
  // partitions: summing every partition of a long range parsed some 1.3 MB of JSON a day on 252 (2026-11-07). Rows are
- // then named as the partitions' rows were: Search Console by host without www and path, GA4 by its host without www and
+ // then named as the partitions' rows were: Search Console by host without www or a port (the URL's hostname) and path, GA4 by its host without www and
  // its path without the query, fragment or a trailing slash, leaving out paths that do not start with `/`.
  async buildPageFigures(id,w,link){
-  const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'');
+  const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'').replace(/:\d+$/,'');
   const periods=[{start:w.start,end:w.end},{start:w.previousStart,end:w.previousEnd}],names=['current','previous'];
   const days={gsc:{current:0,previous:0},ga4:{current:0,previous:0}},search=new Map(),web=new Map();
   const entry=(m,host,path,zero)=>{const k=`${host}|${path}`;let o=m.get(k);if(!o){o={host,path,current:{...zero},previous:{...zero}};m.set(k,o);}return o;};
