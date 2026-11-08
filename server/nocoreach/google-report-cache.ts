@@ -17,6 +17,11 @@ type Entry = {
   expiresAt: number;
   value: unknown;
 };
+// What the project's index row (`<namespace>:<project>`) holds of a saved report: its value is kept in a row of its own
+// (`<namespace>:<project>:<key>`), so saving one report writes that report and the small index rather than every report
+// of the project again (up to MAX_SAVED_BYTES, 8 MB, read, parsed and written back for each one before 2026-11-08).
+// An index written before then holds the values themselves (`value`); it is read as it is until the next save moves them.
+type Saved = Omit<Entry, 'value'> & { bytes: number; value?: unknown };
 // Traffic keeps two parts per view (website-report.ts, `period` and `periodTables`), besides the rows people opened, so
 // both counts are half as large again as before; the byte limits, which the two parts share, stay as they were.
 const MAX_SAVED = 48;
@@ -26,20 +31,39 @@ const MAX_SAVED_BYTES = 8 * 1024 * 1024;
 const MAX_MEMORY_BYTES = 16 * 1024 * 1024;
 const bytes = (value: unknown) =>
   Buffer.byteLength(JSON.stringify(value), 'utf8');
-function bounded(list: Entry[]): Entry[] {
+function bounded(list: Saved[]): Saved[] {
   let size = 0;
   return list
     .filter((entry) => {
-      const length = bytes(entry);
-      if (length > MAX_ENTRY_BYTES || size + length > MAX_SAVED_BYTES)
+      if (entry.bytes > MAX_ENTRY_BYTES || size + entry.bytes > MAX_SAVED_BYTES)
         return false;
-      size += length;
+      size += entry.bytes;
       return true;
     })
     .slice(0, MAX_SAVED);
 }
 
-function entries(payload: unknown): Entry[] {
+// Whether a saved report may still be answered: within its lifetime, or a copy young enough to show while a new one is
+// read. Past both it only takes room.
+function current(entry: unknown): entry is Omit<Entry, 'value'> {
+  if (!entry || typeof entry !== 'object') return false;
+  return (
+    'key' in entry &&
+    typeof entry.key === 'string' &&
+    'at' in entry &&
+    typeof entry.at === 'number' &&
+    Number.isFinite(entry.at) &&
+    'expiresAt' in entry &&
+    typeof entry.expiresAt === 'number' &&
+    Number.isFinite(entry.expiresAt) &&
+    entry.at <= Date.now() &&
+    (entry.expiresAt > Date.now() ||
+      entry.at > Date.now() - GOOGLE_SAVED_COPY_MAX_AGE_MS) &&
+    entry.expiresAt <= entry.at + GOOGLE_SAVED_REPORT_MS
+  );
+}
+
+function entries(payload: unknown): Saved[] {
   if (
     !payload ||
     typeof payload !== 'object' ||
@@ -47,28 +71,15 @@ function entries(payload: unknown): Entry[] {
     !Array.isArray(payload.entries)
   )
     return [];
-  return bounded(
-    payload.entries.filter((entry: unknown): entry is Entry => {
-      if (!entry || typeof entry !== 'object') return false;
-      return (
-        'key' in entry &&
-        typeof entry.key === 'string' &&
-        'at' in entry &&
-        typeof entry.at === 'number' &&
-        Number.isFinite(entry.at) &&
-        'expiresAt' in entry &&
-        typeof entry.expiresAt === 'number' &&
-        Number.isFinite(entry.expiresAt) &&
-        entry.at <= Date.now() &&
-        // Past its lifetime a report is still the copy answered while a new one is read, for as long as a copy may be
-        // shown; after that it only takes room.
-        (entry.expiresAt > Date.now() ||
-          entry.at > Date.now() - GOOGLE_SAVED_COPY_MAX_AGE_MS) &&
-        entry.expiresAt <= entry.at + GOOGLE_SAVED_REPORT_MS &&
-        'value' in entry
-      );
-    }),
-  );
+  const out: Saved[] = [];
+  for (const entry of payload.entries as unknown[]) {
+    if (!current(entry)) continue;
+    // An index entry names its size; one holding its value (written before 2026-11-08) is measured.
+    if ('value' in entry) out.push({ ...entry, bytes: bytes(entry) });
+    else if ('bytes' in entry && typeof entry.bytes === 'number')
+      out.push({ ...entry, bytes: entry.bytes });
+  }
+  return bounded(out);
 }
 
 // Reads inside this scope wait for a new report instead of answering from a saved copy: what a background build reads
@@ -101,7 +112,7 @@ export class GoogleReportCache {
   private memorySizes = new Map<string, number>();
   private memoryBytes = 0;
   private pending = new Map<string, Promise<Entry>>();
-  private reads = new Map<string, Promise<Entry[]>>();
+  private reads = new Map<string, Promise<Saved[]>>();
   private failures = new Map<string, { at: number; reason?: string }>();
   private writes = new Map<string, Promise<void>>();
 
@@ -232,22 +243,59 @@ export class GoogleReportCache {
       this.reads.set(projectId, reading);
     }
     const saved = await reading;
-    const exact = this.memory.get(key) ?? saved.find((e) => e.key === key);
+    const exact =
+      this.memory.get(key) ??
+      (await this.value(
+        projectId,
+        saved.find((e) => e.key === key),
+      ));
     if (exact) {
       this.remember(exact);
       return exact;
     }
     if (!family) return undefined;
-    return (
-      [...saved, ...this.memory.values()]
-        // Another window's report is only ever a copy here, so its age decides, however long it lives for its own window.
-        .filter(
-          (entry) =>
-            entry.family === family &&
-            Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS,
-        )
-        .sort((a, b) => b.at - a.at)[0]
-    );
+    // Another window's report is only ever a copy here, so its age decides, however long it lives for its own window.
+    const copies = [...saved, ...this.memory.values()]
+      .filter(
+        (entry) =>
+          entry.family === family &&
+          Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS,
+      )
+      .sort((a, b) => b.at - a.at);
+    for (const copy of copies) {
+      const entry = await this.value(projectId, copy);
+      if (entry) return entry;
+    }
+    return undefined;
+  }
+
+  // A saved report with its value: held in the index (written before 2026-11-08) or read from its own row.
+  private async value(
+    projectId: string,
+    saved: Saved | Entry | undefined,
+  ): Promise<Entry | undefined> {
+    if (!saved) return undefined;
+    if ('value' in saved) {
+      const { bytes: _bytes, ...entry } = saved as Saved & Entry;
+      return entry;
+    }
+    if (!this.database) return undefined;
+    try {
+      const payload: unknown = (
+        await this.database.getRepository('nrSnapshots').findOne({
+          filter: { key: `${this.namespace}:${projectId}:${saved.key}` },
+        })
+      )?.get('payload');
+      if (
+        !current(payload) ||
+        payload.key !== saved.key ||
+        !('value' in payload)
+      )
+        return undefined;
+      return payload;
+    } catch {
+      return undefined;
+    }
   }
 
   private async build<T>(
@@ -307,7 +355,7 @@ export class GoogleReportCache {
       this.forget(this.memory.keys().next().value!);
   }
 
-  private async read(projectId: string): Promise<Entry[]> {
+  private async read(projectId: string): Promise<Saved[]> {
     if (!this.database) return [];
     try {
       const row = await this.database
@@ -320,6 +368,8 @@ export class GoogleReportCache {
     }
   }
 
+  // Values first, then the index naming them, then the values it no longer names: a save that stops halfway leaves an
+  // index whose values all exist, and the next save removes what it left behind.
   private async save(
     projectId: string,
     key: string,
@@ -332,23 +382,48 @@ export class GoogleReportCache {
       async () => {
         try {
           const snapshot = `${this.namespace}:${projectId}`;
-          const row = await repository.findOne({ filter: { key: snapshot } });
-          const old = entries(row?.get('payload'));
+          const own = (k: string) => `${snapshot}:${k}`;
+          const put = async (rowKey: string, payload: unknown) => {
+            const row = await repository.findOne({
+              filter: { key: rowKey },
+              fields: ['id'],
+            });
+            if (row)
+              await repository.update({
+                filterByTk: row.get('id'),
+                values: { payload },
+              });
+            else await repository.create({ values: { key: rowKey, payload } });
+          };
+          const index = await repository.findOne({ filter: { key: snapshot } });
+          const old = entries(index?.get('payload'));
           // The same view's earlier window is never asked for again, so it gives its room to the new one.
           const others = old.filter(
             (saved) =>
               saved.key !== key && !(family && saved.family === family),
           );
-          if (!entry && others.length === old.length) return;
-          const payload = {
-            entries: bounded(entry ? [entry, ...others] : others),
-          };
-          if (row)
-            await repository.update({
-              filter: { key: snapshot },
-              values: { payload },
-            });
-          else await repository.create({ values: { key: snapshot, payload } });
+          const legacy = old.some((saved) => 'value' in saved);
+          if (!entry && others.length === old.length && !legacy) return;
+          const kept = bounded(
+            entry ? [{ ...entry, bytes: bytes(entry) }, ...others] : others,
+          );
+          for (const saved of kept)
+            if ('value' in saved) {
+              const { bytes: _bytes, ...value } = saved;
+              await put(own(saved.key), value);
+            }
+          await put(snapshot, {
+            entries: kept.map(({ value: _value, ...meta }) => meta),
+          });
+          const named = new Set(kept.map((saved) => own(saved.key)));
+          for (const row of await repository.find({
+            filter: { key: { $startsWith: `${snapshot}:` } },
+            fields: ['id', 'key'],
+          }))
+            if (!named.has(String(row.get('key'))))
+              await repository.destroy({
+                filter: { key: String(row.get('key')) },
+              });
         } catch {
           // The in-memory cache still works if durable storage is unavailable.
         }

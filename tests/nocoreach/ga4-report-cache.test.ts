@@ -809,16 +809,24 @@ it("keeps Traffic's two parts apart: a new day answers each from its own copy, a
   await restarted.history.settled();
   expect(first).toHaveBeenCalledTimes(2);
   expect(others).toHaveBeenCalledTimes(2);
-  // Each new window replaced its own part's old one, and only that.
+  // Each new window replaced its own part's old one, and only that: the index names two reports, each in a row of its
+  // own, and the old windows' rows are gone.
+  const snapshots = db.getRepository('nrSnapshots');
   const payload = (
-    await db
-      .getRepository('nrSnapshots')
-      .findOne({ filter: { key: 'ga4-reports:1' } })
-  )?.get('payload') as { entries: { value: { window: W } }[] };
-  expect(payload.entries.map((e) => e.value.window.end)).toEqual([
-    '2026-10-16',
-    '2026-10-16',
-  ]);
+    await snapshots.findOne({ filter: { key: 'ga4-reports:1' } })
+  )?.get('payload') as { entries: { key: string; value?: unknown }[] };
+  expect(payload.entries.every((e) => !('value' in e))).toBe(true);
+  const rows = await snapshots.find({
+    filter: { key: { $startsWith: 'ga4-reports:1:' } },
+  });
+  expect(rows.map((r) => r.get('key')).sort()).toEqual(
+    payload.entries.map((e) => `ga4-reports:1:${e.key}`).sort(),
+  );
+  expect(
+    rows.map(
+      (r) => (r.get('payload') as { value: { window: W } }).value.window.end,
+    ),
+  ).toEqual(['2026-10-16', '2026-10-16']);
   const later = open(new WebsiteReport({ db }));
   expect(
     (await later.period('1', '123', day('2026-10-16'), view)).tables,
