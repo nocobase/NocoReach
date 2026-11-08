@@ -12,7 +12,7 @@ import { isNetworkError, NETWORK_TEXT } from './sync-policy.js';
 import { due, record } from './sync-policy.js';
 import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.js';
 import { siteListRow, wantsPageView } from './page-views.js';
-import { snapshotCovers } from './sync-data.js';
+import { snapshotCovers, SNAPSHOT_PAGE_DAYS } from './sync-data.js';
 // Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5,REREAD_MS=7*86400000,OUTSIDE_KEEP_MS=60*86400000,OUTSIDE_KEEP=1000;
@@ -119,12 +119,12 @@ class SiteContent{
  async summary(id,state=undefined){const s=state===undefined?await this.state(id):state;if(!s||!s.sites.length)return {pages:0,sites:[]};return {pages:s.pages.length,refresh:s.refresh||null,lastConfirmedAt:s.sites.map(x=>x.confirmedAt).sort().at(-1)||null,origin:s.sites.map(x=>x.origin).join('、'),sites:s.sites.map(x=>{const own=s.pages.filter(p=>p.origin===x.origin);return {origin:x.origin,pages:own.length,types:counts(own),confirmedAt:x.confirmedAt,warnings:x.warnings||[]};}),types:counts(s.pages),enriched:s.pages.filter(p=>p.fetchedAt).length};}
  // Page metrics come from the live Google snapshots for the chosen period (the same source the analysis uses).
  async list(id,range='28',from,to,view){const rows=view==='page'?pages=>listed(pages).map(siteListRow):listed;if(range==='custom'&&(!/^\d{4}-\d{2}-\d{2}$/.test(String(from||''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(to||''))||from>to||!Number.isFinite(Date.parse(from))||!Number.isFinite(Date.parse(to))||new Date(from).toISOString().slice(0,10)!==from||new Date(to).toISOString().slice(0,10)!==to||(Date.parse(to)-Date.parse(from))/86400000>=490))fail(systemMessageText('dataViews.pickValidStartEndDates')); const s=await this.state(id);if(!s)return {pages:[],summary:{pages:0,sites:[]}};const key=['7','28','90','3m','6m','12m','16m','all','custom'].includes(String(range))?String(range):'28';let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(r=>r.key===k)?.payload||[];const label={all:systemMessageText('rangePicker.allTime'),custom:systemMessageText('rangePicker.custom'),7:systemMessageText('common.last7Days'),28:systemMessageText('common.last28Days'),90:systemMessageText('rangePicker.last90Days'),'3m':systemMessageText('rangePicker.last3Months'),'6m':systemMessageText('rangePicker.last6Months'),'12m':systemMessageText('rangePicker.last12Months'),'16m':systemMessageText('rangePicker.last16Months')}[key];// Every synced day when it can be read; the snapshots' top-page samples otherwise.
-  // The snapshots' samples stand in only for a range they cover whole: a longer one's holds its last 180 days.
-  let figures=null;try{figures=await this.p.dataViews?.pageFigures(id,key,from,to);}catch(e){const end=get('project')?.end;if(e.status===400||key==='custom'||key==='all'||(end&&!snapshotCovers(end,key)))throw e;figures=null;}
+    let figures=null;try{figures=await this.p.dataViews?.pageFigures(id,key,from,to);}catch(e){if(e.status===400||key==='custom'||key==='all')throw e;figures=null;}
   const identity=pageIdentity(s);
   if(figures){figures=foldFigures(figures,identity);const [ga4,gsc]=figureRows(figures),outside=outsideSitemap(s,ga4,gsc,Infinity),shown=outside.slice(0,OUTSIDE_SITEMAP_MAX);return {range:key,window:figures.window,cutoff:get('project')?.end||null,complete:true,pages:rows(joinFigures([...s.pages,...shown],figures)),outsideSitemap:{shown:shown.length,total:outside.length},identity,summary:await this.summary(id,s),limitations:[systemMessageText('messages.pageFiguresFromSyncedData', { 0: label })]};}
-  const [ga4,gsc]=foldRows(get(`pages-${key}`),get(`queries-${key}`),identity);
-  return {range:key,cutoff:get('project')?.end||null,pages:rows(joinMetrics([...s.pages,...outsideSitemap(s,ga4,gsc)],ga4,gsc)),identity,summary:await this.summary(id,s),limitations:[systemMessageText('messages.trafficSearchDataComeTop', { 0: label })]};}
+  // The snapshots' samples otherwise; a range longer than they cover (6, 12, 16 months) says it holds its last 180 days.
+  const [ga4,gsc]=foldRows(get(`pages-${key}`),get(`queries-${key}`),identity),end=get('project')?.end,partial=Boolean(end)&&!snapshotCovers(end,key);
+  return {range:key,cutoff:end||null,pages:rows(joinMetrics([...s.pages,...outsideSitemap(s,ga4,gsc)],ga4,gsc)),identity,summary:await this.summary(id,s),limitations:[partial?systemMessageText('messages.trafficSearchSampleLastDays', { 0: SNAPSHOT_PAGE_DAYS, 1: label }):systemMessageText('messages.trafficSearchDataComeTop', { 0: label })]};}
  // Background enrichment: a few pages per tick, oldest first, so a large site never floods the target server.
  // Never-read pages first, then the addresses outside the sitemap that people reach, read for their canonical only
  // (shared/page-identity.ts), then whatever was read more than a week ago, so Site audit and the page identity stay

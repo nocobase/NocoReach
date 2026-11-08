@@ -3788,6 +3788,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "Visitors are deduplicated per day and can't be added across days{0}.",
   "dataWebsite.traffic": "Traffic",
   "messages.trafficSearchDataComeTop": "Traffic and search data come from the top 60 synced pages and query samples of {0}; pages not in the samples show \"—\", which doesn't mean zero.",
+  "messages.trafficSearchSampleLastDays": "Traffic and search data come from the top 60 synced pages and query samples of the last {0} days, not the whole of {1}; pages not in the samples show \"—\", which doesn't mean zero.",
   "messages.pageFiguresFromSyncedData": "Visits, search clicks and impressions come from all synced data ({0}). Pages with no data show 0; search figures leave out queries Google anonymises, so they run a little below Search Console’s page report.",
   "dataSources.whereTrafficComesWhichPages": "Where traffic comes from, which pages grow or decline, and conversion from docs to download or sign-up",
   "analysisRules.manyVisitsFewKeyEvents": "Many visits but few key events",

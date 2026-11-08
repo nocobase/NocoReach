@@ -3760,6 +3760,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "Besucher werden pro Tag nur einmal gezählt und können nicht über mehrere Tage hinweg addiert werden{0}.",
   "dataWebsite.traffic": "Traffic",
   "messages.trafficSearchDataComeTop": "Traffic- und Suchdaten stammen aus den 60 führenden synchronisierten Seiten und Suchanfragenstichproben von {0}; Seiten außerhalb der Stichproben zeigen \"—\", was nicht null bedeutet.",
+  "messages.trafficSearchSampleLastDays": "Traffic- und Suchdaten stammen aus den 60 führenden synchronisierten Seiten und Suchanfragenstichproben der letzten {0} Tage, nicht des gesamten Zeitraums {1}; Seiten außerhalb der Stichproben zeigen \"—\", was nicht null bedeutet.",
   "messages.pageFiguresFromSyncedData": "Besuche, Suchklicks und Impressionen stammen aus allen synchronisierten Daten ({0}). Seiten ohne Daten zeigen 0; die Suchdaten schließen von Google anonymisierte Suchanfragen aus und liegen daher etwas unter den Werten im Seitenbericht der Search Console.",
   "dataSources.whereTrafficComesWhichPages": "Woher der Traffic kommt, welche Seiten zulegen oder nachlassen und wie häufig Dokumentationsbesuche zu Downloads oder Registrierungen führen",
   "analysisRules.manyVisitsFewKeyEvents": "Viele Besuche, aber wenige Schlüsselereignisse",

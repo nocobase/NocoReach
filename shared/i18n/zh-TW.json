@@ -3760,6 +3760,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "訪客是每天的去重人數，不能跨天相加{0}。",
   "dataWebsite.traffic": "流量",
   "messages.trafficSearchDataComeTop": "流量與搜尋資料來自{0}已同步的頁面前 60 名與查詢樣本；不在樣本中的頁面顯示為「—」，不代表為零。",
+  "messages.trafficSearchSampleLastDays": "流量與搜尋資料來自最近 {0} 天（並非完整的{1}）已同步的頁面前 60 名與查詢樣本；不在樣本中的頁面顯示為「—」，不代表為零。",
   "messages.pageFiguresFromSyncedData": "造訪、搜尋點擊和曝光來自已同步的全部資料（{0}）。沒有資料的頁面顯示 0；搜尋資料不含 Google 匿名處理的搜尋詞，會比 Search Console 的頁面報告略少。",
   "dataSources.whereTrafficComesWhichPages": "流量從哪裡來、哪些頁面在增長或下滑、文件到下載或註冊的轉換",
   "analysisRules.manyVisitsFewKeyEvents": "造訪多但關鍵事件少",

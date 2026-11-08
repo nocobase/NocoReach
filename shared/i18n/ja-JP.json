@@ -3760,6 +3760,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "訪問者数は日ごとに重複を除外しているため、日をまたいで合算できません{0}。",
   "dataWebsite.traffic": "トラフィック",
   "messages.trafficSearchDataComeTop": "トラフィックと検索データは、{0} の同期済み上位 60 ページとクエリのサンプルに基づきます。サンプルに含まれないページは「—」と表示されますが、ゼロを意味するものではありません。",
+  "messages.trafficSearchSampleLastDays": "トラフィックと検索データは、{1} 全体ではなく直近 {0} 日間の同期済み上位 60 ページとクエリのサンプルに基づきます。サンプルに含まれないページは「—」と表示されますが、ゼロを意味するものではありません。",
   "messages.pageFiguresFromSyncedData": "アクセス数、検索クリック数、表示回数は、同期済みの全データ ({0}) に基づきます。データがないページは 0 と表示されます。検索データには Google が匿名化したクエリが含まれないため、Search Console のページレポートよりやや少なくなります。",
   "dataSources.whereTrafficComesWhichPages": "トラフィックの流入元、伸びているページと減少しているページ、ドキュメントからダウンロードや登録へのコンバージョン",
   "analysisRules.manyVisitsFewKeyEvents": "アクセス数は多いがキーイベントが少ない",

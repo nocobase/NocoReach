@@ -32,7 +32,7 @@ const isPageDay=p=>(p.source==='ga4'&&p.grain==='page')||(p.source==='gsc'&&p.gr
 function snapshotBuilder(base,project,{limit=true}={}){
  const select=(source,grain)=>base.filter(p=>p.source===source&&p.grain===grain);
  const web=select('ga4','overview').flatMap(p=>p.payload),search=select('gsc','overview').flatMap(p=>p.payload);
- const webEnd=web.map(r=>r.date).sort().at(-1),searchEnd=search.map(r=>r.date).sort().at(-1);if(!webEnd&&!searchEnd)return {add(){},finish:()=>[]};
+ const webEnd=web.map(r=>r.date).sort().at(-1),searchEnd=search.map(r=>r.date).sort().at(-1);if(!webEnd&&!searchEnd)return {end:null,add(){},finish:()=>[]};
  const end=webEnd&&searchEnd?(webEnd<searchEnd?webEnd:searchEnd):(webEnd||searchEnd);
  const windows=RANGES.map(key=>periodWindow(end,key)),R=windows.length,pages=windows.map(()=>new Map()),from=limit?snapshotPageStart(end):'';
  // Every (keyword, page) seen, by index; for each range, its sums and the order it first appeared in (-1: not in it).
@@ -42,6 +42,7 @@ function snapshotBuilder(base,project,{limit=true}={}){
   if(j%PAIR_BLOCK===0){sums.push(new Float64Array(PAIR_BLOCK*R*PAIR_FIELDS));firsts.push(new Int32Array(PAIR_BLOCK*R).fill(-1));}return j;};
  const slot=(j,i)=>(j%PAIR_BLOCK)*R+i;
  return {
+  end,
   add(p){if(p.date<from)return;
    if(p.source==='ga4'&&p.grain==='page'){for(let i=0;i<R;i++){if(p.date<windows[i].start||p.date>end)continue;const m=pages[i];for(const r of p.payload){const k=JSON.stringify([r.host||'',r.page]);const o=m.get(k)||{...r,views:0,sessions:0,conversions:0};o.views+=r.views;o.sessions+=r.sessions||0;o.conversions+=r.conversions;m.set(k,o);}}return;}
    if(p.source!=='gsc'||p.grain!=='query_page')return;

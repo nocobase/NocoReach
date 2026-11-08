@@ -703,8 +703,9 @@ function candidatePaths(path: string, identity?: PageIdentity | null) {
 }
 
 const PAGE_READ_HASHES = 200;
-// Up to this many addresses a sum reads by id (10 reads), more and it reads every address of the source.
+// Up to this many addresses a sum reads by id (10 reads); more, by spans of this many ids.
 const ADDRESS_READ_BY_ID = 2000;
+const ADDRESS_READ_SPAN = 5000;
 const MISSING_READ_DAYS = 4;
 
 /**
@@ -914,24 +915,38 @@ export async function sumPageDays(
       }
       await giveWay();
     }
-    // The addresses summed, by id, when they are few (a short range); every address of the source otherwise, as a range
-    // that touches most of them would take hundreds of reads by id.
-    const ids = [...byPage.keys()];
-    const addresses =
-      ids.length > ADDRESS_READ_BY_ID
-        ? await db.getRepository('nrPageAddresses').find({
-            filter: { scopeId },
-            fields: ['id', 'host', 'path'],
-          })
-        : [];
+    // The addresses summed, by id: 200 a read when they are few (a short range); otherwise by spans of ids, each read
+    // bounded by ADDRESS_READ_SPAN rows and skipping spans with none summed, as a range touching most of a large site's
+    // addresses would take hundreds of reads by id. A read gives way to other requests before the next.
+    const ids = [...byPage.keys()].sort((a, b) => a - b);
+    const addressRepo = db.getRepository('nrPageAddresses');
+    const addresses: Awaited<ReturnType<typeof addressRepo.find>> = [];
+    const fields = ['id', 'host', 'path'];
     if (ids.length <= ADDRESS_READ_BY_ID)
-      for (let i = 0; i < ids.length; i += PAGE_READ_HASHES)
+      for (let i = 0; i < ids.length; i += PAGE_READ_HASHES) {
+        if (i) await giveWay();
         addresses.push(
-          ...(await db.getRepository('nrPageAddresses').find({
+          ...(await addressRepo.find({
             filter: { id: { $in: ids.slice(i, i + PAGE_READ_HASHES) } },
-            fields: ['id', 'host', 'path'],
+            fields,
           })),
         );
+      }
+    else
+      for (let i = 0; i < ids.length;) {
+        if (i) await giveWay();
+        const from = ids[i];
+        addresses.push(
+          ...(await addressRepo.find({
+            filter: {
+              scopeId,
+              id: { $gte: from, $lt: from + ADDRESS_READ_SPAN },
+            },
+            fields,
+          })),
+        );
+        while (i < ids.length && ids[i] < from + ADDRESS_READ_SPAN) i++;
+      }
     if (byPage.size)
       for (const a of addresses) {
         const list = byPage.get(Number(a.get('id')));

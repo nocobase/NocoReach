@@ -3788,6 +3788,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "방문자 수는 일별로 중복을 제거하므로 여러 날짜의 값을 합산할 수 없습니다{0}.",
   "dataWebsite.traffic": "트래픽",
   "messages.trafficSearchDataComeTop": "트래픽 및 검색 데이터는 {0}의 상위 60개 동기화 페이지와 쿼리 샘플에서 가져옵니다. 샘플에 없는 페이지에는 \"—\"가 표시되는데 이는 0을 의미하지 않습니다.",
+  "messages.trafficSearchSampleLastDays": "트래픽 및 검색 데이터는 {1} 전체가 아닌 최근 {0}일의 상위 60개 동기화 페이지와 쿼리 샘플에서 가져옵니다. 샘플에 없는 페이지에는 \"—\"가 표시되는데 이는 0을 의미하지 않습니다.",
   "messages.pageFiguresFromSyncedData": "방문수, 검색 클릭수와 노출수는 동기화된 전체 데이터({0})를 기준으로 합니다. 데이터가 없는 페이지는 0으로 표시합니다. Google이 익명 처리한 검색어는 제외하므로 검색 수치가 Search Console 페이지 보고서보다 약간 작습니다.",
   "dataSources.whereTrafficComesWhichPages": "트래픽이 발생하는 위치, 증가하거나 감소하는 페이지, 문서에서 다운로드 또는 가입으로의 전환",
   "analysisRules.manyVisitsFewKeyEvents": "방문수는 많지만 주요 이벤트 수는 적음",

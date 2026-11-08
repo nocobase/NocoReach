@@ -8,7 +8,7 @@ import { GoogleDailySync, calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
-import { shift, compact, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS } from './sync-data.js';
+import { shift, compact, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart } from './sync-data.js';
 import { PAGE_GRAINS, fillPageDaysInBackground, pageDayMarks, pageDaysFilled, releasePageDays } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
@@ -36,6 +36,10 @@ const PAGE_HISTORY='page-history',PAGE_HISTORY_EVERY_MS=3600000,PAGE_HISTORY_REC
 // query × page rows in memory (about 1.3 MB of JSON a day on 252), and each page history step would have rebuilt it.
 export { SNAPSHOT_PAGE_DAYS };
 const SNAPSHOT_PAGE_MARGIN=30,SNAPSHOT_PAGE_READ=7,PAGE_GRAIN_LIST=['query_page','page'],OTHER_GRAINS=['overview','source'];
+// The page days the snapshots' key counts (`snapshotPageDates`), from the project's partitions (overview ones read).
+const pageWindow=(rows,link)=>{const last=new Map();
+ for(const p of rows){if(p.grain!=='overview')continue;const source=String(p.source),date=String(p.date).slice(0,10);if(p.resource===link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl')&&date>(last.get(source)||''))last.set(source,date);}
+ const end=[...last.values()].sort()[0];return end?datesBetween(shift(end,1-SNAPSHOT_PAGE_DAYS-SNAPSHOT_PAGE_MARGIN),end):[];};
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
 const safeError=e=>['network_timeout','network_unreachable','response_too_large','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
@@ -78,10 +82,14 @@ class SyncService{
  // without anyone noticing it. A succeeded one holds nothing: its days are stored, and if they are removed (an import,
  // the resource switched away and back) they are queued again.
  async enqueuePageHistory(id: string | number){
-  id=String(id);const link=await this.link(id),{earliest,cutoff}=historyBounds(this.p,id),end=shift(cutoff,-PAGE_HISTORY_RECENT);if(earliest>end)return {jobs:[]};
+  // Nothing while Google refuses the project's authorization (`authFailedAt`, cleared when it is given again): each job
+  // would fail on the token and be queued again the next day.
+  id=String(id);const link=await this.link(id),{earliest,cutoff}=historyBounds(this.p,id),end=shift(cutoff,-PAGE_HISTORY_RECENT);if(earliest>end||link.get('authFailedAt'))return {jobs:[],retried:0};
+  const selected=(j: {get(k: string): unknown})=>j.get('resource')===link.get(j.get('source')==='ga4'?'ga4PropertyId':'gscSiteUrl');
   const plugin=this.p as {db: LegacyDatabase;mock?: Connections['mock']};
   const stale=(j: {get(k: string): unknown})=>Date.now()-Date.parse(String(j.get('updatedAt')))>=PAGE_HISTORY_RETRY_MS;
-  const failed=async(transaction?: LegacyTransaction)=>(await this.repo('nrSyncJobs').find({filter:{projectId:id,trigger:PAGE_HISTORY,status:'failed'},fields:['id','updatedAt'],transaction})).filter(stale);
+  // A failed job of a resource no longer selected stays failed: it would only fail again on the resource.
+  const failed=async(transaction?: LegacyTransaction)=>(await this.repo('nrSyncJobs').find({filter:{projectId:id,trigger:PAGE_HISTORY,status:'failed'},fields:['id','source','resource','updatedAt'],transaction})).filter(j=>stale(j)&&selected(j));
   const gaps=async(transaction?: LegacyTransaction)=>{const out=[];
    for(const source of ['gsc','ga4']){const resource=String(link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl')||'');if(!resource)continue;
     const stored=await this.pageDates(id,source,resource,earliest,end,transaction);
@@ -231,7 +239,8 @@ class SyncService{
    const covered=pageOnly?await this.pageDates(id,source,String(job.get('resource')),cursor,end):new Set(stored.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
    const missing=intervals(datesBetween(cursor,end).filter(d=>!covered.has(d)));
    const token=missing.length?await this.p.token(id,signal):null;
-   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberProperty(id,job.get('resource'),property);}
+   // A step whose days are all stored already (a page history week a sync filled) asks Google nothing: there is no token.
+   let propertyTimeZone='UTC';if(source==='ga4'&&missing.length){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberProperty(id,job.get('resource'),property);}
    const fetcher=this.p.googleFetch?.(id)||fetch;
    const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:grains,searchTypes:['web'],dataState:'final'});
    for(const range of missing)await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:range.start,endDate:range.end});
@@ -383,12 +392,17 @@ class SyncService{
  // What the built snapshots depend on; cheap, so views can key their own saved results by it without building.
  // Page days older than the snapshots read (`snapshotPageDates`) are not part of it, so a page history fill leaves it.
  async snapshotKey(id,link,project){id=String(id);link=link||await this.link(id);project=project||await this.p.project(id);const r=this.repo('nrSyncPartitions');
-  const parts=[{projectId:id,grain:{$in:OTHER_GRAINS}},{projectId:id,grain:{$in:PAGE_GRAIN_LIST},date:{$in:this.snapshotPageDates(id)}}];
+  const parts=[{projectId:id,grain:{$in:OTHER_GRAINS}},{projectId:id,grain:{$in:PAGE_GRAIN_LIST},date:{$in:await this.snapshotPageDates(id,link)}}];
   const read=await Promise.all(parts.map(filter=>Promise.all([r.count({filter}),r.findOne({filter,sort:['-updatedAt'],fields:['updatedAt']})])));
   const count=read.reduce((n,[c])=>n+c,0),latest=read.map(([,l])=>l?.get('updatedAt')??null);
   return {count,key:JSON.stringify([link.get('ga4PropertyId'),link.get('gscSiteUrl'),count,latest,project])};}
- // The page days the snapshots read: SNAPSHOT_PAGE_DAYS and a margin back from the last final day.
- snapshotPageDates(id){const {cutoff}=historyBounds(this.p,id);return datesBetween(shift(cutoff,1-SNAPSHOT_PAGE_DAYS-SNAPSHOT_PAGE_MARGIN),cutoff);}
+ // The page days the key counts: SNAPSHOT_PAGE_DAYS and a margin back from the last overview day stored (the earlier
+ // source's), which moves only when a sync writes one, so the key holds while no partition is written. The snapshots end
+ // on the last overview day with figures, a few days before it at most (the days Google has not published are stored
+ // empty); the margin covers that. A source whose overview days stay empty for longer (a property with no traffic) has
+ // the snapshots end earlier still: their page days are then read all the same (`build`), but a page history step
+ // writing among the oldest of them does not move the key.
+ async snapshotPageDates(id,link){return pageWindow((await this.repo('nrSyncPartitions').find({filter:{projectId:id,grain:'overview'},fields:['source','resource','grain','date']})).map(p=>p.toJSON()),link);}
  async snapshots(id){id=String(id);const link=await this.link(id),project=await this.p.project(id),{count,key}=await this.snapshotKey(id,link,project);
   // A build outside this transaction may be waiting for its connection. Sharing that promise
   // would deadlock; sharing results from inside it would also expose data that can roll back.
@@ -424,14 +438,17 @@ class SyncService{
  // Project and resource are checked again on the rows read: filtering on the project as well would make the database
  // search the project's index instead of looking up the keys. The days other than page days come first, 200 at a time;
  // then the page days, a week at a time (50,000 rows on 252), each summed into the snapshots and dropped (`snapshotBuilder`).
- async build(id,link,project){const r=this.repo('nrSyncPartitions'),linked=p=>p.resource===(p.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl')),wanted=[];
-  const pageDates=new Set(this.snapshotPageDates(id)),read=p=>linked(p)&&(!PAGE_GRAIN_LIST.includes(p.grain)||pageDates.has(String(p.date).slice(0,10)));
-  const listed=(await r.find({filter:{projectId:id},fields:['id','source','resource','grain','date'],sort:['id']})).map(p=>p.toJSON());
-  // The same limit, counted page by page as before, now reached before any stored day is read.
-  for(let offset=0;;offset+=200){const page=listed.slice(offset,offset+200);wanted.push(...page.filter(read));if(page.length<200)break;if(wanted.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}
+ async build(id,link,project){const r=this.repo('nrSyncPartitions'),linked=p=>p.resource===(p.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'));
+  const listed=(await r.find({filter:{projectId:id},fields:['id','source','resource','grain','date'],sort:['id']})).map(p=>p.toJSON()).filter(linked);
+  const tooLarge=n=>{if(n>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});};
   const each=async(ids,size,fn)=>{for(let i=0;i<ids.length;i+=size){await new Promise(resolve=>setImmediate(resolve));for(const p of (await r.find({filter:{id:{$in:ids.slice(i,i+size)}},sort:['id']})).map(p=>p.toJSON()))if(String(p.projectId)===String(id)&&linked(p))fn(p);}};
-  const base=[];await each(wanted.filter(p=>!isPageDay(p)).map(p=>p.id),200,p=>base.push(p));
-  const builder=snapshotBuilder(base,project);await each(wanted.filter(isPageDay).map(p=>p.id),SNAPSHOT_PAGE_READ,p=>builder.add(p));
+  // Refused before any stored day is read: the page days the key counts bound the ones read.
+  const other=listed.filter(p=>!isPageDay(p)),window=new Set(pageWindow(listed,link));tooLarge(other.length+listed.filter(p=>isPageDay(p)&&window.has(String(p.date).slice(0,10))).length);
+  const base=[];await each(other.map(p=>p.id),200,p=>base.push(p));
+  // The page days from the snapshots' end back SNAPSHOT_PAGE_DAYS, known once the overview days are read.
+  const builder=snapshotBuilder(base,project);if(!builder.end)return builder.finish();
+  const from=snapshotPageStart(builder.end),pages=listed.filter(p=>{const date=String(p.date).slice(0,10);return isPageDay(p)&&date>=from&&date<=builder.end;});tooLarge(other.length+pages.length);
+  await each(pages.map(p=>p.id),SNAPSHOT_PAGE_READ,p=>builder.add(p));
   return builder.finish();}
 }
 export { SyncService, StagedSync };

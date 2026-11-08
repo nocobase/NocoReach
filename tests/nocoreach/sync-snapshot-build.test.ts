@@ -25,6 +25,7 @@ vi.mock('../../server/nocoreach/sync-data.js', async (importOriginal) => {
           builder = actual.snapshotBuilder(base, project);
         received.push(rows);
         return {
+          end: builder.end,
           add(p: Record<string, unknown>) {
             rows.push(p);
             builder.add(p);
@@ -290,11 +291,16 @@ it("reads the latest write for the snapshots' key from the (project, updatedAt) 
   const statements = await partitionReads(client, () =>
     sync.snapshotKey(projectId, link, project),
   );
-  // The count, then the latest write, of the days other than page days and of the page days the snapshots read. The
-  // nulls-last `case` order still sorts in a temporary B-tree, but updated_at now comes from the index: stored after the
-  // payload, it was read through every payload of the project. Grain and date are stored before it.
-  expect(statements).toHaveLength(4);
-  const latest = statements.filter((sql) => /order by/i.test(sql));
+  // The last overview day stored of each source (which places the page days the key counts), then the count and the
+  // latest write of the days other than page days and of those page days. The nulls-last `case` order still sorts in a
+  // temporary B-tree, but updated_at now comes from the index: stored after the payload, it was read through every
+  // payload of the project. Grain and date are stored before it.
+  expect(statements).toHaveLength(5);
+  for (const sql of statements) expect(sql).not.toMatch(/payload/);
+  expect(await planOf(client, statements[0]!)).toMatch(
+    /SEARCH .* USING INDEX ix_nr_sync_partitions_project_(source_date|updated_at) \(project_id=\?\)/,
+  );
+  const latest = statements.filter((sql) => /order by.*updated_at/is.test(sql));
   expect(latest).toHaveLength(2);
   for (const sql of latest) {
     expect(sql).toMatch(/updated_at/);

@@ -18,7 +18,7 @@ function setup(){
  const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};
  const repo={
   // A build lists the project's ids once, counted in calls.find, then reads the linked days by key.
-  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys)calls.find++;await new Promise(r=>setTimeout(r,5));return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>fields?Object.fromEntries(fields.map(k=>[k,p[k]])):{...p,payload:p.payload.map(r=>({...r}))}}));},
+  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys&&filter.grain!=='overview')calls.find++;await new Promise(r=>setTimeout(r,5));return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>fields?Object.fromEntries(fields.map(k=>[k,p[k]])):{...p,payload:p.payload.map(r=>({...r}))}}));},
   count:async()=>parts.length,
   findOne:async()=>{const p=[...parts].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];return p&&{get:k=>p[k]};}
  };
@@ -41,7 +41,8 @@ test('a project over the size limit is refused before any stored day is read',as
  repo.find=async o=>{reads.push(o);return find(o);};
  while(parts.length<12201)add('gsc','query_page','2026-09-01',[]);
  await assert.rejects(sync.snapshots('1'),e=>e.status===409);
- assert.equal(reads.length,1);assert.deepEqual(reads[0].fields,['id','source','resource','grain','date']);
+ // The key's overview dates, then the listing: no stored day is read by key.
+ assert.deepEqual(reads.map(o=>o.fields),[['source','resource','grain','date'],['id','source','resource','grain','date']]);
 });
 
 function tickFixture(opened={lately:false}){
@@ -165,7 +166,7 @@ function durableSetup(){
  for(const date of ['2026-09-25','2026-09-26','2026-09-27']){add('ga4','overview',date,[{date,views:10,sessions:5,conversions:1}]);add('gsc','overview',date,[{date,clicks:3,impressions:90}]);}
  const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};
  const partitions={
-  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys)calls.find++;return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>JSON.parse(JSON.stringify(fields?Object.fromEntries(fields.map(k=>[k,p[k]])):p))}));},
+  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys&&filter.grain!=='overview')calls.find++;return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>JSON.parse(JSON.stringify(fields?Object.fromEntries(fields.map(k=>[k,p[k]])):p))}));},
   count:async()=>parts.length,
   findOne:async()=>{const p=[...parts].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];return p&&{get:k=>p[k]};}
  };

@@ -3842,6 +3842,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "Số khách truy cập được loại trùng theo từng ngày và không thể cộng dồn giữa các ngày{0}.",
   "dataWebsite.traffic": "Lưu lượng truy cập",
   "messages.trafficSearchDataComeTop": "Dữ liệu truy cập và tìm kiếm lấy từ 60 trang hàng đầu đã đồng bộ và các mẫu truy vấn của {0}; trang không có trong mẫu hiển thị \"—\", không có nghĩa là bằng không.",
+  "messages.trafficSearchSampleLastDays": "Dữ liệu truy cập và tìm kiếm lấy từ 60 trang hàng đầu đã đồng bộ và các mẫu truy vấn của {0} ngày gần nhất, không phải toàn bộ {1}; trang không có trong mẫu hiển thị \"—\", không có nghĩa là bằng không.",
   "messages.pageFiguresFromSyncedData": "Lượt truy cập, lượt nhấp và lượt hiển thị từ tìm kiếm lấy từ toàn bộ dữ liệu đã đồng bộ ({0}). Trang không có dữ liệu hiển thị 0; số liệu tìm kiếm không bao gồm truy vấn được Google ẩn danh nên thấp hơn đôi chút so với báo cáo trang trong Search Console.",
   "dataSources.whereTrafficComesWhichPages": "Nguồn truy cập, trang nào đang tăng trưởng hoặc suy giảm, và chuyển đổi từ tài liệu sang tải xuống hoặc đăng ký",
   "analysisRules.manyVisitsFewKeyEvents": "Nhiều lượt truy cập nhưng ít sự kiện chính",

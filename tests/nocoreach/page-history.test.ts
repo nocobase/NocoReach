@@ -329,3 +329,102 @@ it('keeps the snapshots and their key through page days older than the snapshots
   await store('gsc', 'query_page', day(cutoff, -10));
   expect((await sync.snapshotKey(projectId)).key).not.toBe(key);
 });
+
+it('moves past a GA4 week the sync stored meanwhile without asking Google anything', async () => {
+  const { sync, store, jobs, db, asked } = await fixture();
+  const { earliest } = historyBounds({}, projectId);
+  const google = vi.fn(async () => ({ timeZone: 'UTC' }));
+  sync.p.googleJson = google;
+  const token = vi.fn(async () => 'token');
+  sync.p.token = token;
+  await sync.enqueuePageHistory(projectId);
+  await db.getRepository('nrSyncJobs').update({
+    filter: { projectId, source: 'gsc' },
+    values: { status: 'succeeded' },
+  });
+  for (let d = earliest; d <= day(earliest, 6); d = day(d, 1))
+    await store('ga4', 'page', d);
+  expect(await sync.step()).toBe(true);
+  expect(asked).toEqual([]);
+  expect(google).not.toHaveBeenCalled();
+  expect(token).not.toHaveBeenCalled();
+  const ga4 = (await jobs()).find((j) => j.get('source') === 'ga4')!;
+  expect([ga4.get('status'), ga4.get('cursor')]).toEqual([
+    'running',
+    day(earliest, 7),
+  ]);
+});
+
+it('retries only the failed jobs of the selected resources, and queues nothing while Google refuses the authorization', async () => {
+  const { sync, jobs, db } = await fixture();
+  const repo = db.getRepository('nrSyncJobs');
+  await repo.create({
+    values: {
+      projectId,
+      source: 'gsc',
+      resource: 'sc-domain:old.test',
+      status: 'failed',
+      startDate: '2025-08-01',
+      endDate: '2025-08-07',
+      cursor: '2025-08-01',
+      attempts: 3,
+      recordCount: 0,
+      trigger: 'page-history',
+    },
+  });
+  vi.setSystemTime(Date.now() + 86400000 + 1000);
+  const queued = await sync.enqueuePageHistory(projectId);
+  expect(queued.retried).toBe(0);
+  expect(queued.jobs.length).toBe(2);
+  expect(
+    (await jobs())
+      .find((j) => j.get('resource') === 'sc-domain:old.test')!
+      .get('status'),
+  ).toBe('failed');
+  // Google refuses the authorization: the failed job of the site is left, and no day is queued.
+  await repo.update({
+    filter: { projectId, resource: site },
+    values: { status: 'failed' },
+  });
+  await db
+    .getRepository('nrGoogleLinks')
+    .update({
+      filter: { projectId },
+      values: { authFailedAt: new Date().toISOString() },
+    });
+  vi.setSystemTime(Date.now() + 2 * 86400000);
+  expect(await sync.enqueuePageHistory(projectId)).toEqual({
+    jobs: [],
+    retried: 0,
+  });
+});
+
+it('keeps the key when the day moves on with nothing written, and reads the page days back from the snapshots end', async () => {
+  const { sync, store } = await fixture();
+  const { cutoff } = historyBounds({}, projectId);
+  // The overview stops 40 days before the cutoff, as when the sync has been failing.
+  const end = day(cutoff, -40);
+  await store('ga4', 'overview', end, [
+    { date: end, views: 1, sessions: 1, conversions: 0 },
+  ]);
+  await store('gsc', 'overview', end, [
+    { date: end, clicks: 1, impressions: 1 },
+  ]);
+  // The first day of the 90-day range's previous period, 219 days before the cutoff.
+  await store('gsc', 'query_page', day(end, -179), [
+    {
+      keyword: 'crm',
+      page: 'https://example.test/a',
+      clicks: 9,
+      impressions: 100,
+      position: 2,
+    },
+  ]);
+  const key = (await sync.snapshotKey(projectId)).key;
+  const built = await sync.snapshots(projectId);
+  expect(
+    built.find((s: { key: string }) => s.key === 'queries-90').payload,
+  ).toEqual([expect.objectContaining({ keyword: 'crm', previous: 9 })]);
+  vi.setSystemTime(Date.now() + 86400000);
+  expect((await sync.snapshotKey(projectId)).key).toBe(key);
+});

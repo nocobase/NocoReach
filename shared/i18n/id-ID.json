@@ -3842,6 +3842,7 @@
   "dataWebsite.visitorsDeduplicatedPerDayCannot": "Pengunjung dihitung tanpa duplikasi per hari dan tidak dapat dijumlahkan antarhari{0}.",
   "dataWebsite.traffic": "Trafik",
   "messages.trafficSearchDataComeTop": "Data trafik dan pencarian berasal dari 60 halaman teratas yang disinkronkan dan sampel kueri {0}; halaman di luar sampel menampilkan \"—\", yang bukan berarti nol.",
+  "messages.trafficSearchSampleLastDays": "Data trafik dan pencarian berasal dari 60 halaman teratas yang disinkronkan dan sampel kueri {0} hari terakhir, bukan seluruh {1}; halaman di luar sampel menampilkan \"—\", yang bukan berarti nol.",
   "messages.pageFiguresFromSyncedData": "Kunjungan, klik pencarian, dan tayangan berasal dari seluruh data yang disinkronkan ({0}). Halaman tanpa data menampilkan 0; angka pencarian tidak mencakup kueri yang dianonimkan Google, sehingga sedikit lebih rendah dari laporan halaman Search Console.",
   "dataSources.whereTrafficComesWhichPages": "Asal trafik, halaman yang tumbuh atau menurun, serta konversi dari dokumentasi ke unduhan atau pendaftaran",
   "analysisRules.manyVisitsFewKeyEvents": "Banyak kunjungan tetapi sedikit peristiwa utama",
