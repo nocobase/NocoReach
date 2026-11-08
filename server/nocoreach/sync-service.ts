@@ -8,7 +8,7 @@ import { GoogleDailySync, calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
-import { shift, compact, buildSnapshots } from './sync-data.js';
+import { shift, compact, snapshotBuilder, isPageDay } from './sync-data.js';
 import { PAGE_GRAINS, fillPageDaysInBackground, pageDayMarks, pageDaysFilled, releasePageDays } from './page-days.js';
 import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
@@ -36,7 +36,7 @@ const PAGE_HISTORY='page-history',PAGE_HISTORY_EVERY_MS=3600000,PAGE_HISTORY_REC
 // history's query × page rows in memory (about 1.3 MB of JSON a day on 252), and each page history step would have
 // rebuilt it.
 export const SNAPSHOT_PAGE_DAYS=180;
-const SNAPSHOT_PAGE_MARGIN=30,PAGE_GRAIN_LIST=['query_page','page'],OTHER_GRAINS=['overview','source'];
+const SNAPSHOT_PAGE_MARGIN=30,SNAPSHOT_PAGE_READ=7,PAGE_GRAIN_LIST=['query_page','page'],OTHER_GRAINS=['overview','source'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
 const safeError=e=>['network_timeout','network_unreachable','response_too_large','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
@@ -410,15 +410,18 @@ class SyncService{
   keeping.set(id,write);try{await write;}finally{if(keeping.get(id)===write)keeping.delete(id);}}
  // Pages of 200 with an offset made the database read every stored day, payloads included, and sort them again for each
  // page (the id order is a nulls-last `case` no index serves), while the whole process waited. The ids are read once,
- // then the linked days by key, 200 at a time in id order, giving way to other requests between reads (SQLite answers
- // synchronously). Project and resource are checked again on the rows read: filtering on the project as well would make
- // the database search the project's index instead of looking up the keys.
- async build(id,link,project){const r=this.repo('nrSyncPartitions'),linked=p=>p.resource===(p.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl')),wanted=[],rows=[];
+ // then the linked days by key in id order, giving way to other requests between reads (SQLite answers synchronously).
+ // Project and resource are checked again on the rows read: filtering on the project as well would make the database
+ // search the project's index instead of looking up the keys. The days other than page days come first, 200 at a time;
+ // then the page days, a week at a time (50,000 rows on 252), each summed into the snapshots and dropped (`snapshotBuilder`).
+ async build(id,link,project){const r=this.repo('nrSyncPartitions'),linked=p=>p.resource===(p.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl')),wanted=[];
   const pageDates=new Set(this.snapshotPageDates(id)),read=p=>linked(p)&&(!PAGE_GRAIN_LIST.includes(p.grain)||pageDates.has(String(p.date).slice(0,10)));
   const listed=(await r.find({filter:{projectId:id},fields:['id','source','resource','grain','date'],sort:['id']})).map(p=>p.toJSON());
   // The same limit, counted page by page as before, now reached before any stored day is read.
-  for(let offset=0;;offset+=200){const page=listed.slice(offset,offset+200);wanted.push(...page.filter(read).map(p=>p.id));if(page.length<200)break;if(wanted.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}
-  for(let i=0;i<wanted.length;i+=200){await new Promise(resolve=>setImmediate(resolve));for(const p of (await r.find({filter:{id:{$in:wanted.slice(i,i+200)}},sort:['id']})).map(p=>p.toJSON()))if(String(p.projectId)===String(id)&&linked(p))rows.push(p);}
-  return buildSnapshots(rows,project);}
+  for(let offset=0;;offset+=200){const page=listed.slice(offset,offset+200);wanted.push(...page.filter(read));if(page.length<200)break;if(wanted.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}
+  const each=async(ids,size,fn)=>{for(let i=0;i<ids.length;i+=size){await new Promise(resolve=>setImmediate(resolve));for(const p of (await r.find({filter:{id:{$in:ids.slice(i,i+size)}},sort:['id']})).map(p=>p.toJSON()))if(String(p.projectId)===String(id)&&linked(p))fn(p);}};
+  const base=[];await each(wanted.filter(p=>!isPageDay(p)).map(p=>p.id),200,p=>base.push(p));
+  const builder=snapshotBuilder(base,project);await each(wanted.filter(isPageDay).map(p=>p.id),SNAPSHOT_PAGE_READ,p=>builder.add(p));
+  return builder.finish();}
 }
 export { SyncService, StagedSync };

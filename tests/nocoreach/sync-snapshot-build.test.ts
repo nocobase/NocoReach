@@ -9,13 +9,31 @@ import {
 import { SyncService } from '../../server/nocoreach/sync-service.js';
 import { buildSnapshots } from '../../server/nocoreach/sync-data.js';
 
-// The rows build() hands to buildSnapshots, so they can be compared with the paged read's.
+// The rows build() hands to the snapshot builder (the days other than page days, then each page day), so they can be
+// compared with the paged read's.
+const received: Record<string, unknown>[][] = [];
 vi.mock('../../server/nocoreach/sync-data.js', async (importOriginal) => {
   const actual =
     await importOriginal<
       typeof import('../../server/nocoreach/sync-data.js')
     >();
-  return { ...actual, buildSnapshots: vi.fn(actual.buildSnapshots) };
+  return {
+    ...actual,
+    snapshotBuilder: vi.fn(
+      (base: Record<string, unknown>[], project: unknown) => {
+        const rows = [...base],
+          builder = actual.snapshotBuilder(base, project);
+        received.push(rows);
+        return {
+          add(p: Record<string, unknown>) {
+            rows.push(p);
+            builder.add(p);
+          },
+          finish: () => builder.finish(),
+        };
+      },
+    ),
+  };
 });
 
 type Knex = {
@@ -26,7 +44,7 @@ type Knex = {
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.mocked(buildSnapshots).mockClear();
+  received.length = 0;
 });
 
 const projectId = '901';
@@ -181,7 +199,11 @@ async function fixture() {
   return { db, sync, client: await testDb.connection.client<Knex>() };
 }
 
-const handed = () => vi.mocked(buildSnapshots).mock.calls.at(-1)![0];
+// In id order, as the paged read gave them.
+const handed = () =>
+  [...received.at(-1)!].sort((a, b) =>
+    BigInt(a.id as string) < BigInt(b.id as string) ? -1 : 1,
+  );
 
 // SQLite's plan for a statement Knex emitted, its placeholders bound to '1'.
 const planOf = async (client: Knex, sql: string) => {
@@ -245,9 +267,10 @@ it('sorts only the ids of every stored day, and reads the days by key without an
   const statements = await partitionReads(client, () =>
     sync.build(projectId, link, project),
   );
-  // The ids, then two reads of up to 200 rows by key. NocoBase 3 still sorts each read in a temporary B-tree (its id
-  // order is a nulls-last `case`), but only the ids of every stored day, and the payloads 200 at a time.
-  expect(statements).toHaveLength(3);
+  // The ids, then the 180 days other than page days in one read by key, then the 120 page days 7 at a time. NocoBase 3
+  // still sorts each read in a temporary B-tree (its id order is a nulls-last `case`), but only the ids of every stored
+  // day, and the payloads a read at a time.
+  expect(statements).toHaveLength(2 + Math.ceil(120 / 7));
   for (const sql of statements) expect(sql).not.toMatch(/offset/i);
   const [listing, ...byKey] = statements as [string, ...string[]];
   expect(listing).not.toMatch(/payload/);
