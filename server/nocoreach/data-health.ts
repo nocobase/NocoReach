@@ -9,6 +9,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { projectId, requireAccess } from './policy.js';
 import { nextAt, lastSuccess } from './sync-policy.js';
 import { nextScheduled } from './schedule-time.js';
+import { SiteContent } from './site-content.js';
 import * as __policy from './policy.js';
 // Data health (SPEC §11): one view of every connected source's last success, data cutoff, next sync and failure.
 const H=3600000;
@@ -40,6 +41,9 @@ const on=x=>x&&x.status!=='disconnected';
 // Collector sources keep showing their saved data after a disconnect, until it is cleared, so they count until then.
 const collected=async(source,id)=>{const s=await source?.status(id);return s?.connected||s?.total>0;};
 // Reads more than one check needs, made once per call.
+// The site state's sites, last refresh and page counts (`SiteContent.brief`), without parsing the whole state on each
+// poll; a host whose site content has no brief gives its state's, in the same shape.
+const siteBrief=async(p,id)=>p.siteContent?.brief?p.siteContent.brief(id):SiteContent.briefOf(await p.siteContent?.state(id));
 function sharedReads(p,id){let google,chat;return {
  // Traffic and Search performance read the one Google sync, which needs both the GA4 property and the Search Console
  // site (sync-service.ts `link`); with one chosen, both pages still ask to finish connecting.
@@ -48,7 +52,7 @@ function sharedReads(p,id){let google,chat;return {
 const CONNECTED_CHECKS={
  ga4:(p,id,ctx)=>ctx.google(),
  gsc:(p,id,ctx)=>ctx.google(),
- site:async(p,id)=>(await p.siteContent?.state(id))?.sites?.length,
+ site:async(p,id)=>(await siteBrief(p,id))?.sites?.length,
  github:async(p,id)=>{const g=await p.github?.state(id);return g?.repo&&on(g);},
  packages:async(p,id)=>(await p.packages?.state(id))?.packages?.length,
  discourse:async(p,id)=>{const c=await p.community?.state(id);return c?.origin&&on(c);},
@@ -76,7 +80,7 @@ class DataHealth{
    out.push({id:source,...text('name',name),...h,lastSuccessAt:status.lastSyncAt,dataThrough:through,nextSyncAt:status.scheduleEnabled?status.nextSyncAt:null,...(status.scheduleEnabled?{}:{cadence:'manual'}),...text('note','dataHealth.googleDataAbout3Days'),retry:failed?{resource:'nrGoogle',action:'syncControl',body:{command:'retry'}}:h.state!=='healthy'&&!h.fix?{resource:'nrGoogle',action:'syncNow',body:{}}:null});}
   return out;}
  async list(id){const now=Date.now(),items=[...await this.google(id,now)];
-  const site=await this.p.siteContent?.state(id);if(site?.sites?.length){const last=site.refresh||{at:site.sites.map(x=>x.confirmedAt).sort().at(-1),ok:true,lastSuccessAt:site.sites.map(x=>x.confirmedAt).sort().at(-1)};items.push({id:'site',...text('name','common.websiteContent'),...assess({lastSuccessAt:last.lastSuccessAt,attempt:last,now}),lastSuccessAt:last.lastSuccessAt,dataThrough:null,nextSyncAt:nextAt(site.refresh,now),...text('note','dataHealth.pagesDetailsRead',{0:site.pages.length,1:site.pages.filter(p=>p.fetchedAt).length}),retry:{resource:'nrSiteContent',action:'refresh',body:{}}});}
+  const site=await siteBrief(this.p,id);if(site?.sites?.length){const last=site.refresh||{at:site.sites.map(x=>x.confirmedAt).sort().at(-1),ok:true,lastSuccessAt:site.sites.map(x=>x.confirmedAt).sort().at(-1)};items.push({id:'site',...text('name','common.websiteContent'),...assess({lastSuccessAt:last.lastSuccessAt,attempt:last,now}),lastSuccessAt:last.lastSuccessAt,dataThrough:null,nextSyncAt:nextAt(site.refresh,now),...text('note','dataHealth.pagesDetailsRead',{0:site.pages,1:site.fetched}),retry:{resource:'nrSiteContent',action:'refresh',body:{}}});}
   const gh=await this.p.github?.state(id);if(gh?.repo&&gh.status!=='disconnected'){const last=gh.lastSync;items.push({id:'github',name:`GitHub ${gh.repo}`,...assess({lastSuccessAt:lastSuccess(last),attempt:last,now}),lastSuccessAt:lastSuccess(last),dataThrough:Object.keys(gh.daily||{}).sort().at(-1)||null,nextSyncAt:nextAt(last,now),retry:{resource:'nrGitHub',action:'sync',body:{}}});
    if(gh.token){const t=gh.token.error?{state:'failing',...text('message','{0}',{0:errorValue(gh.token.error)}),fix:'settings'}:assess({lastSuccessAt:lastSuccess(last),attempt:last&&{...last,errors:(last.errors||[]).filter(e=>e.startsWith('Traffic'))},now});items.push({id:'github-traffic',...text('name','GitHub Traffic'),...t,lastSuccessAt:lastSuccess(last),dataThrough:Object.keys(gh.traffic?.views||{}).sort().at(-1)||null,nextSyncAt:nextAt(last,now),...(gh.traffic?.since?text('note','dataHealth.archivingSince',{0:gh.traffic.since}):{note:''}),retry:{resource:'nrGitHub',action:'sync',body:{}}});}}
   // Website source repositories (2026-10-29) are not synced; a check that found a base branch missing waits for a person

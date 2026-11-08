@@ -69,4 +69,7 @@ function snapshotBuilder(base,project,{limit=true}={}){
 }
 // Every row at once and every page day given, for callers that hold them (tests, imports).
 function buildSnapshots(partitions,project){const builder=snapshotBuilder(partitions.filter(p=>!isPageDay(p)),project,{limit:false});for(const p of partitions)if(isPageDay(p))builder.add(p);return builder.finish();}
-export { shift, compact, periodWindow, buildSnapshots, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart, snapshotCovers };
+// Frozen through, for a value shared between readers (the sync snapshots, the site brief): a change to it fails loudly
+// instead of reaching the next reader.
+const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
+export { shift, compact, periodWindow, buildSnapshots, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart, snapshotCovers, deepFreeze };

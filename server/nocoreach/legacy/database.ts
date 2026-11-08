@@ -341,6 +341,8 @@ export class LegacyDatabase {
         delete values.id;
         validateStringLengths(await collectionFor(options), values);
         await target(options).updateMany({ filter, values });
+        // `returning: false` skips reading the rows back, for a caller that writes a large value and does not use them.
+        if (options.returning === false) return [];
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
       },
       groupBy: async (options: Values & { by: string[]; sum: string[] }) => {

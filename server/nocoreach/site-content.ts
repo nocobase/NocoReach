@@ -12,10 +12,10 @@ import { isNetworkError, NETWORK_TEXT } from './sync-policy.js';
 import { due, record } from './sync-policy.js';
 import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.js';
 import { siteListRow, wantsPageView } from './page-views.js';
-import { snapshotCovers, SNAPSHOT_PAGE_DAYS } from './sync-data.js';
+import { snapshotCovers, SNAPSHOT_PAGE_DAYS, deepFreeze } from './sync-data.js';
 // Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
-const MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5,REREAD_MS=7*86400000,OUTSIDE_KEEP_MS=60*86400000,OUTSIDE_KEEP=1000;
+const BRIEF_MAX_MS=5*60000,MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5,REREAD_MS=7*86400000,OUTSIDE_KEEP_MS=60*86400000,OUTSIDE_KEEP=1000;
 // Numeric references too: sites write the apostrophe as &#x27; or &#39; (UI review 2026-10-21 found them shown raw).
 const decode=v=>v.replace(/&#x([0-9a-f]+);/gi,(whole:string,h:string)=>decodeHtmlNumericReference(whole,h,16)).replace(/&#(\d+);/g,(whole:string,d:string)=>decodeHtmlNumericReference(whole,d,10)).replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&').trim();
 const FALLBACK_SITEMAPS=['/sitemap.xml','/sitemap_index.xml','/sitemap-index.xml','/wp-sitemap.xml'];
@@ -96,7 +96,19 @@ class SiteContent{
  // Older records held one site at the top level; they are read as a single-entry site list.
  static upgrade(state){if(!state)return null;if(state.sites)return state;const origin=state.origin;return {...state,sites:origin?[{origin,sitemaps:state.sitemaps||[],types:state.types||[],warnings:state.warnings||[],confirmedAt:state.confirmedAt}]:[],pages:(state.pages||[]).map(p=>({origin,...p}))};}
  async state(id){return SiteContent.upgrade((await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null);}
- async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(SiteContent.upgrade(row?.get('payload')||null));if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
+ // What the menu (`nrHealth/connected`) and Data health read of the state: the sites, the last refresh, how many pages
+ // and how many were read (`briefOf`). Both are asked on every poll, and parsing the whole state for them took seconds on
+ // the Hong Kong instance (4.5 and 10 MB, 2026-11-08), so it is kept per project while the row's id and updatedAt stay the
+ // same, for BRIEF_MAX_MS at most; a write through `mutate` drops it at once. A write with `silent` keeps updatedAt, so
+ // one that rewrites this row must go through `mutate` or wait out BRIEF_MAX_MS. Frozen, and no reader of `state` shares it.
+ static briefOf(s){return s?Object.freeze({sites:Object.freeze((s.sites||[]).map(x=>Object.freeze({origin:x.origin,confirmedAt:x.confirmedAt}))),refresh:s.refresh?deepFreeze(structuredClone(s.refresh)):null,pages:s.pages?.length||0,fetched:(s.pages||[]).filter(p=>p.fetchedAt).length}):null;}
+ async brief(id){const key=String(id),row=await this.repo().findOne({filter:{key:this.key(id)},fields:['id','updatedAt']});
+  const briefs=this.briefs??=new Map();if(!row){briefs.delete(key);return null;}
+  const at=row.get('updatedAt'),stamp=at?`${String(row.get('id'))}|${at instanceof Date?at.toISOString():String(at)}`:null,held=briefs.get(key);
+  if(stamp&&held?.stamp===stamp&&Date.now()-held.at<BRIEF_MAX_MS)return held.value;
+  const value=SiteContent.briefOf(await this.state(id));
+  if(stamp)briefs.set(key,{stamp,at:Date.now(),value});else briefs.delete(key);return value;}
+ async mutate(id,fn){this.briefs?.delete(String(id));return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(SiteContent.upgrade(row?.get('payload')||null));if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction,returning:false});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;}).finally(()=>this.briefs?.delete(String(id)));}
  async discover(input){const origin=new URL(normalize('website',input)).origin;const warnings=[];let queue=[],offline=false;try{queue=robotsSitemaps((await this.read(origin+'/robots.txt')).text);}catch(e){if(e instanceof ProxyConfigurationError||e instanceof NetworkProfileError||e?.code==='mock_unsupported_operation')throw e;if(isNetworkError(e))offline=offline||e;warnings.push(systemMessageText('siteContent.robotsTxtNotReadTrying'));}if(!queue.length)queue=[origin+'/sitemap.xml',origin+'/sitemap_index.xml'];
   const seen=new Set(),pages=new Map(),read=[];let truncated=false;
   const drain=async()=>{while(queue.length&&read.length<MAX_SITEMAPS){const next=queue.shift();if(seen.has(next)||!sameSite(next,origin))continue;seen.add(next);let r;try{r=await this.read(next);}catch(e){if(e instanceof ProxyConfigurationError||e instanceof NetworkProfileError||e?.code==='mock_unsupported_operation')throw e;if(isNetworkError(e))offline=offline||e;continue;}read.push(next);const parsed=parseSitemap(r.text);queue.push(...parsed.sitemaps);for(const u of parsed.urls){if(!sameSite(u.loc,origin))continue;if(pages.size>=MAX_PAGES){truncated=true;break;}if(!pages.has(u.loc))pages.set(u.loc,{url:u.loc,type:classify(u.loc),lastmod:u.lastmod});}}};
