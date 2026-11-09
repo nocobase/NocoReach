@@ -17,6 +17,7 @@ import {
   ChartNoAxesCombined,
   ClipboardCheck,
   Earth,
+  Link2,
   Files,
   Github,
   Globe,
@@ -172,6 +173,8 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('search-growth', '/seo-opportunities', () => import('./pages/search-performance/index.js'), { title: nav('searchPerformance'), icon: Search, order: 3 }),
     page('data-trends', '/trends', () => import('./pages/data-trends.js'), { title: nav('trends'), icon: TrendingUp, order: 4 }),
     page('domain-overview', '/research/domain', () => import('./pages/competitors-page.js'), { title: nav('competitors'), icon: Earth, order: 5 }),
+    // Backlinks (2026-11-09 user request: a menu entry of its own): link profiles and the link gap through DataForSEO.
+    page('backlinks', '/backlinks', () => import('./pages/backlinks.js'), { title: nav('backlinks'), icon: Link2, order: 6 }),
   ]),
   group('nav-community', nav('community'), MessagesSquare, 6, [
     page('data-community', '/data/community', () => import('./pages/data-community.js'), { title: nav('forum'), icon: MessagesSquare, order: 1 }),

@@ -70,6 +70,7 @@ const zhCN: AppResource = {
   'nocoreach.nav.keywords': '关键词',
   'nocoreach.nav.trends': '趋势',
   'nocoreach.nav.competitors': '竞品',
+  'nocoreach.nav.backlinks': '外链',
   'nocoreach.nav.aiSearch': 'AI 搜索',
   'nocoreach.nav.seoTag': 'SEO',
   'nocoreach.nav.geoTag': 'GEO',

@@ -1,16 +1,17 @@
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // 域名概览: ported from every-app/open-seo db8bde1 src/client/features/domain/ (DomainOverviewPage, DomainSearchCard,
-// KeywordsTab, PagesTab, DomainKeywordsTable, DomainPagesTable; MIT). Changes: backlinks left out (user decision), one
+// KeywordsTab, PagesTab, DomainKeywordsTable, DomainPagesTable; MIT). Changes: backlinks on a page of their own (Search &
+// market › Backlinks, opened from View backlinks), one
 // paid query per tab through NocoReach's DataForSEO layer (查询 reads the ranking keywords, which also carry the
 // traffic and position counts; pages only on request), 本站点击 next to an estimate when the site is your own,
 // saving keywords to 关键词, Chinese copy, CSV export only.
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { HandOffBar } from "./hand-off-bar";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { Download, Globe, History, Save, Search } from "lucide-react";
+import { Download, Globe, History, Link2, Save, Search } from "lucide-react";
 import { toast } from "#lib/toast";
 import { PageContainer, PageHeader } from "#components/reach/page";
 import { EmptyState, ListSkeleton } from "#components/reach/states";
@@ -57,6 +58,7 @@ const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\/
 export default function DomainOverview({ embedded = false }: { embedded?: boolean } = {}) {
   const { project } = useProject();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const own = (project?.domains ?? []).map(bare);
   const [connection, setConnection] = useState<KeywordConnectionState>();
   const [recent, setRecent] = useState<Recent[]>();
@@ -125,7 +127,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
             {visible?.reused && visible.status === "completed" ? (
               <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-domain-reused="">{$tj('keywordResearch.resultNoNewCharge', { 0: fmtTime(visible.completedAt || visible.createdAt) })}<InfoTip>{$t('domainOverview.sameLookupLast30')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={Boolean(busy)} onClick={() => void query(visible.spec.view, visible.spec.target, marketOf(visible.spec), true)}>{$t('common.queryAgain')}</Button></p>
             ) : null}
-            <Summary run={shown} />
+            <Summary run={shown} onBacklinks={() => navigate(`/backlinks?t=${encodeURIComponent(shown.spec.target)}`)} />
             <Card className="gap-0 py-0">
               <DataTableTabs value={tab} onValueChange={setTab}>
                 <TabsTrigger value="keywords">{$tj('domainOverview.keywords',{0:shown.result?.items.length ?? 0})}</TabsTrigger>
@@ -160,7 +162,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
   );
 }
 
-function Summary({ run }: { run: Run }) {
+function Summary({ run, onBacklinks }: { run: Run; onBacklinks?: () => void }) {
   const s = run.result?.summary;
   return (
     <div className="space-y-2">
@@ -169,7 +171,7 @@ function Summary({ run }: { run: Run }) {
           <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : formatCount(Math.round(Number(v)))} /></Card>
         ))}
       </div>
-      <p className="nr-footnote">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</p>
+      <p className="nr-footnote flex flex-wrap items-center gap-x-2">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}{onBacklinks ? <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={onBacklinks}><Link2 data-icon="inline-start" />{$t('domainOverview.viewBacklinks')}</Button> : null}</p>
     </div>
   );
 }
