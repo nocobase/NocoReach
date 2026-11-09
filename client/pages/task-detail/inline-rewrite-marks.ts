@@ -4,8 +4,8 @@ import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 // What a rewrite with AI shows in the article body (inline-rewrite.tsx): the selection while it is being asked about,
-// then the old text struck through and the answer after it, drawn as decorations so the document itself is unchanged
-// until Accept.
+// then the old text struck through and the answer after it, and room under them for the bar, drawn as decorations so
+// the document itself is unchanged until Accept.
 
 /** What the editor asks of the page for a rewrite: the model's answer as it streams, and word of an accepted one. */
 export type RewriteHost = {
@@ -101,7 +101,35 @@ function decorations(editor: Editor, state: EditorState, marks: Marks) {
         ignoreSelection: true,
       }),
     );
+  list.push(boxRoom(state, to, 'rewrite', marks.block));
   return DecorationSet.create(state.doc, list);
+}
+
+/**
+ * Room in the article for a box over the editor (the rewrite bar, the link box), so the text after it moves down
+ * instead of being covered: after the block ending at `to` when `block`, else after the paragraph holding `to`. It is
+ * as tall as `--nr-<name>-room`, which the box sets on the editor's frame from its own height.
+ */
+export function boxRoom(
+  state: EditorState,
+  to: number,
+  name: string,
+  block = false,
+) {
+  const $to = state.doc.resolve(to);
+  return Decoration.widget(
+    block || !$to.depth ? to : $to.after(),
+    () => {
+      const element = document.createElement('div');
+      element.className = 'nr-box-room';
+      element.dataset.room = name;
+      element.style.height = `var(--nr-${name}-room, 2.875rem)`;
+      element.contentEditable = 'false';
+      element.setAttribute('aria-hidden', 'true');
+      return element;
+    },
+    { side: 2, key: `${name}-room`, ignoreSelection: true },
+  );
 }
 
 /** The decorations, and ⌘J to start a rewrite of the selection. */

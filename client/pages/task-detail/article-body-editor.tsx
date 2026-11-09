@@ -8,6 +8,8 @@ import {
 } from 'react';
 import { Extension, mergeAttributes, type Editor } from '@tiptap/core';
 import { Image, type ImageOptions } from '@tiptap/extension-image';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import {
   Bold,
@@ -44,6 +46,7 @@ import {
 } from './faithful-markdown.js';
 import { InlineRewrite } from './inline-rewrite.js';
 import {
+  boxRoom,
   InlineRewriteMarks,
   type RewriteHost,
 } from './inline-rewrite-marks.js';
@@ -103,7 +106,14 @@ const ArticleImage = Image.extend<ArticleImageOptions>({
   },
 });
 
-/** ⌘K (Ctrl elsewhere) opens the link box, as in the Markdown editor. */
+/** The text the open link box links, marked while the box has focus, and where it keeps its room; or none. */
+type LinkMarks = { from: number; to: number } | null;
+const linkBoxKey = new PluginKey<LinkMarks>('nrLinkBox');
+
+/**
+ * ⌘K (Ctrl elsewhere) opens the link box, as in the Markdown editor. While it is open, the text it links stays marked
+ * and the box keeps room under its paragraph (`boxRoom`), so it covers none of the article.
+ */
 const LinkKey = Extension.create<{ open: () => void }>({
   name: 'nrLinkKey',
   addOptions: () => ({ open: () => {} }),
@@ -114,6 +124,43 @@ const LinkKey = Extension.create<{ open: () => void }>({
         return true;
       },
     };
+  },
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<LinkMarks>({
+        key: linkBoxKey,
+        state: {
+          init: () => null,
+          apply(tr, marks) {
+            const meta = tr.getMeta(linkBoxKey) as
+              { set: LinkMarks } | undefined;
+            if (meta) return meta.set;
+            if (!marks || !tr.docChanged) return marks;
+            return {
+              from: tr.mapping.map(marks.from, 1),
+              to: tr.mapping.map(marks.to, -1),
+            };
+          },
+        },
+        props: {
+          decorations(state) {
+            const marks = linkBoxKey.getState(state);
+            if (!marks) return DecorationSet.empty;
+            const to = Math.min(marks.to, state.doc.content.size);
+            return DecorationSet.create(state.doc, [
+              ...(marks.from < to
+                ? [
+                    Decoration.inline(marks.from, to, {
+                      class: 'nr-link-picked',
+                    }),
+                  ]
+                : []),
+              boxRoom(state, to, 'link'),
+            ]);
+          },
+        },
+      }),
+    ];
   },
 });
 
@@ -241,6 +288,7 @@ export function ArticleBodyEditor({
   const frameRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
   const linkRef = useRef<HTMLInputElement>(null);
+  const linkBoxRef = useRef<HTMLDivElement>(null);
   const startRewriteRef = useRef<() => void>(() => {});
   const sourceRef = useRef<MarkdownSource | null>(null);
   const emittedRef = useRef(value);
@@ -435,26 +483,79 @@ export function ArticleBodyEditor({
         : {},
   });
 
-  // The link box goes under the text it links.
+  // The link box goes under the paragraph of the text it links, in room the article keeps for it as tall as the box,
+  // so the text after it moves down instead of being covered (2026-11-09, as the rewrite bar does).
   const [linkSpot, setLinkSpot] = useState<{
     top: number;
     left: number;
   } | null>(null);
   useLayoutEffect(() => {
     const box = frameRef.current;
-    if (!link || !editor || !box) {
+    if (!editor || editor.isDestroyed) return;
+    const marks = link && !readOnly ? { from: link.from, to: link.to } : null;
+    const now = linkBoxKey.getState(editor.state);
+    if (now?.from !== marks?.from || now?.to !== marks?.to)
+      editor.view.dispatch(editor.state.tr.setMeta(linkBoxKey, { set: marks }));
+    if (!link || !box) {
       setLinkSpot(null);
       return;
     }
-    const origin = box.getBoundingClientRect();
-    const at = editor.view.coordsAtPos(
-      Math.min(link.to, editor.state.doc.content.size),
-    );
-    setLinkSpot({ top: at.bottom - origin.top + 8, left: 12 });
-  }, [link, editor]);
+    const place = () => {
+      const origin = box.getBoundingClientRect();
+      const room = box.querySelector('[data-room="link"]');
+      const top = room
+        ? room.getBoundingClientRect().top
+        : editor.view.coordsAtPos(
+            Math.min(link.to, editor.state.doc.content.size),
+          ).bottom + 8;
+      setLinkSpot({ top: top - origin.top, left: 12 });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [link, editor, readOnly]);
+  useLayoutEffect(() => {
+    if (linkBoxRef.current)
+      frameRef.current?.style.setProperty(
+        '--nr-link-room',
+        `${linkBoxRef.current.offsetHeight}px`,
+      );
+  });
+  // Once the box is drawn, which is a render after it opens, where its room is known.
+  const linkShown = Boolean(link && linkSpot);
   useEffect(() => {
-    if (link) linkRef.current?.focus();
-  }, [link]);
+    if (link && linkShown) linkRef.current?.focus();
+  }, [link, linkShown]);
+
+  // While the link box is open, Esc closes it wherever focus is (left alone when a menu or dialog took it, or while an
+  // IME is composing), and a press outside it closes it with the selection kept, the click then doing what it would
+  // have done.
+  const linkOpen = Boolean(link);
+  useEffect(() => {
+    if (!linkOpen) return;
+    const keydown = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.keyCode === 229
+      )
+        return;
+      event.preventDefault();
+      setLink(null);
+      editor?.commands.focus();
+    };
+    const pointerdown = (event: PointerEvent) => {
+      if (!linkBoxRef.current?.contains(event.target as Node | null))
+        setLink(null);
+    };
+    document.addEventListener('keydown', keydown);
+    document.addEventListener('pointerdown', pointerdown, true);
+    return () => {
+      document.removeEventListener('keydown', keydown);
+      document.removeEventListener('pointerdown', pointerdown, true);
+    };
+  }, [linkOpen, editor]);
 
   const applyLink = (remove = false) => {
     if (!editor || !link) return;
@@ -480,10 +581,6 @@ export function ArticleBodyEditor({
     if (event.key === 'Enter') {
       event.preventDefault();
       applyLink();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      setLink(null);
-      editor?.commands.focus();
     }
   };
 
@@ -565,11 +662,13 @@ export function ArticleBodyEditor({
             editor={editor}
             host={rewrite}
             frame={frameRef}
+            blocked={Boolean(link)}
             startRef={startRewriteRef}
           />
         )}
         {link && linkSpot && !readOnly && (
           <div
+            ref={linkBoxRef}
             role='group'
             aria-label={$t('markdownEditor.link')}
             className='absolute z-20 flex w-[min(28rem,calc(100%-1.5rem))] items-center gap-1.5 rounded-xl border bg-background p-1.5 shadow-md'
@@ -598,6 +697,18 @@ export function ArticleBodyEditor({
                 {$t('articleEdit.linkRemove')}
               </Button>
             )}
+            <Button
+              type='button'
+              size='sm'
+              variant='ghost'
+              onClick={() => {
+                setLink(null);
+                editor?.commands.focus();
+              }}
+            >
+              {$t('articleEdit.cancel')}
+              <Kbd>Esc</Kbd>
+            </Button>
           </div>
         )}
       </div>
