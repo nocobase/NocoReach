@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/core';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -209,4 +216,190 @@ test('a rewrite that fails says why and keeps what was asked, to send again', as
   expect(
     screen.getByRole('textbox', { name: /Say how to change it/ }),
   ).toHaveValue('shorter');
+});
+
+const selectionOf = () => {
+  const { from, to } = editorOf().state.selection;
+  return { from, to };
+};
+
+test('Cancel closes the box before anything is asked, keeping the selection', async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(
+    <ArticleBodyEditor
+      aria-label='Body'
+      value={BODY}
+      onChange={onChange}
+      rewrite={host([]).value}
+    />,
+  );
+  select('lets AI build');
+  const picked = selectionOf();
+  await user.click(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  );
+  await user.click(screen.getByRole('button', { name: /Cancel/ }));
+  expect(screen.queryByRole('group', { name: 'Rewrite with AI' })).toBeNull();
+  expect(editorOf().isEditable).toBe(true);
+  expect(selectionOf()).toEqual(picked);
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+test('Esc closes the box from anywhere on the page, but not while choosing an IME candidate', async () => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <ArticleBodyEditor
+        aria-label='Body'
+        value={BODY}
+        onChange={vi.fn()}
+        rewrite={host([]).value}
+      />
+      <button type='button'>Elsewhere</button>
+    </>,
+  );
+  select('lets AI build');
+  await user.click(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  );
+  const ask = screen.getByRole('textbox', { name: /Say how to change it/ });
+  fireEvent.keyDown(ask, { key: 'Escape', isComposing: true });
+  expect(screen.getByRole('group', { name: 'Rewrite with AI' })).toBeVisible();
+  const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+  act(() => {
+    elsewhere.focus();
+  });
+  expect(ask).not.toHaveFocus();
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('group', { name: 'Rewrite with AI' })).toBeNull();
+  expect(editorOf().isEditable).toBe(true);
+});
+
+test('a press outside closes the box before anything is asked, but not once there is a rewrite', async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(
+    <>
+      <ArticleBodyEditor
+        aria-label='Body'
+        value={BODY}
+        onChange={onChange}
+        rewrite={host(['lets AI run apps']).value}
+      />
+      <button type='button'>Elsewhere</button>
+    </>,
+  );
+  select('lets AI build');
+  const picked = selectionOf();
+  await user.click(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  );
+  // Inside the bar it stays open.
+  await user.click(
+    screen.getByRole('textbox', { name: /Say how to change it/ }),
+  );
+  expect(screen.getByRole('group', { name: 'Rewrite with AI' })).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+  expect(screen.queryByRole('group', { name: 'Rewrite with AI' })).toBeNull();
+  expect(editorOf().isEditable).toBe(true);
+  expect(selectionOf()).toEqual(picked);
+
+  select('lets AI build');
+  await user.click(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: /Say how to change it/ }),
+    'shorter{Enter}',
+  );
+  await screen.findByRole('button', { name: /Accept/ });
+  await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+  expect(screen.getByRole('button', { name: /Accept/ })).toBeVisible();
+  const body = screen.getByRole('textbox', { name: 'Body' });
+  expect(body.querySelector('[data-rewrite-new]')).toHaveTextContent(
+    'lets AI run apps',
+  );
+  expect(editorOf().isEditable).toBe(false);
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+test('Esc stops a rewrite being written and keeps what came so far', async () => {
+  const user = userEvent.setup();
+  const rewrite: RewriteHost = {
+    async *stream(_request, signal) {
+      yield 'lets AI';
+      await new Promise((_resolve, reject) =>
+        signal.addEventListener('abort', () =>
+          reject(new DOMException('Stopped', 'AbortError')),
+        ),
+      );
+    },
+    onAccepted: vi.fn(),
+  };
+  render(
+    <ArticleBodyEditor
+      aria-label='Body'
+      value={BODY}
+      onChange={vi.fn()}
+      rewrite={rewrite}
+    />,
+  );
+  select('lets AI build');
+  await user.click(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: /Say how to change it/ }),
+    'shorter{Enter}',
+  );
+  await screen.findByRole('status');
+  const body = screen.getByRole('textbox', { name: 'Body' });
+  await waitFor(() =>
+    expect(body.querySelector('[data-rewrite-new]')).toHaveTextContent(
+      'lets AI',
+    ),
+  );
+  await user.keyboard('{Escape}');
+  // Stopped, not closed: what came is there to accept, discard or ask again.
+  expect(await screen.findByRole('button', { name: /Accept/ })).toBeVisible();
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(body.querySelector('[data-rewrite-new]')).toHaveTextContent('lets AI');
+});
+
+test('the bar has room of its own under the paragraph, so the text after it moves down', async () => {
+  const user = userEvent.setup();
+  render(
+    <ArticleBodyEditor
+      aria-label='Body'
+      value={BODY}
+      onChange={vi.fn()}
+      rewrite={host(['NocoBase 3 is new.']).value}
+    />,
+  );
+  select('is the new');
+  await user.click(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  );
+  const body = screen.getByRole('textbox', { name: 'Body' });
+  const [first, second] = body.querySelectorAll('p');
+  const room = body.querySelector('[data-rewrite-room]');
+  expect(room?.previousElementSibling).toBe(first);
+  expect(room?.nextElementSibling).toBe(second);
+
+  // A whole paragraph's rewrite: after the new block.
+  await user.click(screen.getByRole('button', { name: /Cancel/ }));
+  expect(body.querySelector('[data-rewrite-room]')).toBeNull();
+  select('NocoBase 3 is the new generation.');
+  act(() => {
+    editorOf().commands.keyboardShortcut('Mod-j');
+  });
+  await user.type(
+    await screen.findByRole('textbox', { name: /Say how to change it/ }),
+    'shorter{Enter}',
+  );
+  await screen.findByRole('button', { name: /Accept/ });
+  expect(
+    body.querySelector('[data-rewrite-room]')?.previousElementSibling,
+  ).toBe(body.querySelector('.nr-rewrite-new-block'));
 });

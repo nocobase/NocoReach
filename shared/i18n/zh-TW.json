@@ -5296,6 +5296,7 @@
   "articleEdit.afterApproval": "{0} · 通過後更新",
   "articleEdit.allVersions": "查看所有版本",
   "articleEdit.attemptOf": "{0} / {1}",
+  "articleEdit.cancel": "取消",
   "articleEdit.compare": "對比原文",
   "articleEdit.discard": "放棄",
   "articleEdit.discardAction": "放棄修改",

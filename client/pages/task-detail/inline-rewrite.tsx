@@ -118,6 +118,7 @@ export function InlineRewrite({
   });
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const wasEditableRef = useRef(true);
   const selection = useEditorState({
     editor,
@@ -178,6 +179,10 @@ export function InlineRewrite({
     if (focus && s)
       editor.chain().focus().setTextSelection({ from: s.from, to: s.to }).run();
   }
+  const closeRef = useRef(close);
+  useLayoutEffect(() => {
+    closeRef.current = close;
+  });
 
   async function send(instruction: string) {
     const s = sessionRef.current;
@@ -322,7 +327,8 @@ export function InlineRewrite({
   // Closed when the editor goes away or turns read-only from outside (someone else took the article).
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // Where the button and the bar go: the button above the selection's first line, the bar under the new text.
+  // Where the button and the bar go: the button above the selection's first line, the bar in the room the decorations
+  // keep for it under the paragraph or the new text, as tall as the bar, so it covers none of the article.
   useLayoutEffect(() => {
     const box = frame.current;
     if (!box) return;
@@ -336,14 +342,20 @@ export function InlineRewrite({
         next.button = { top: at.top - origin.top - 36, left };
       }
       if (s) {
+        if (barRef.current)
+          box.style.setProperty(
+            '--nr-rewrite-room',
+            `${barRef.current.offsetHeight}px`,
+          );
+        const room = box.querySelector('[data-rewrite-room]');
         const widget = box.querySelector('[data-rewrite-new]');
         const end = editor.view.coordsAtPos(
           Math.min(s.to, editor.state.doc.content.size),
         );
-        const bottom = widget
-          ? widget.getBoundingClientRect().bottom
-          : end.bottom;
-        next.bar = { top: bottom - origin.top + 8, left };
+        const top = room
+          ? room.getBoundingClientRect().top
+          : (widget?.getBoundingClientRect().bottom ?? end.bottom) + 8;
+        next.bar = { top: top - origin.top, left };
       }
       setSpot((old) =>
         JSON.stringify(old) === JSON.stringify(next) ? old : next,
@@ -359,13 +371,48 @@ export function InlineRewrite({
       inputRef.current?.focus();
   }, [session?.phase, session?.index]);
 
+  // Esc backs out wherever focus is, not only in the box (2026-11-09 user report: once the box lost focus nothing
+  // closed it): it closes the box before anything is asked, stops a rewrite being written and discards one shown. Before
+  // anything is asked, a press outside the bar closes it too, the click then doing what it would have done; once there
+  // is a rewrite, only the bar's buttons and Esc close it, so a stray click does not lose it.
+  const phase = session?.phase;
+  useEffect(() => {
+    if (!phase) return;
+    const keydown = (event: globalThis.KeyboardEvent) => {
+      // Left alone: an Esc a menu or dialog over the page took, or one that leaves an IME candidate list.
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.keyCode === 229
+      )
+        return;
+      event.preventDefault();
+      if (phase === 'stream') abortRef.current?.abort();
+      else closeRef.current();
+    };
+    const pointerdown = (event: PointerEvent) => {
+      if (
+        phase === 'ask' &&
+        !barRef.current?.contains(event.target as Node | null)
+      )
+        closeRef.current(false);
+    };
+    document.addEventListener('keydown', keydown);
+    document.addEventListener('pointerdown', pointerdown, true);
+    return () => {
+      document.removeEventListener('keydown', keydown);
+      document.removeEventListener('pointerdown', pointerdown, true);
+    };
+  }, [phase]);
+
   const mod = apple() ? '⌘' : 'Ctrl';
+  const hint = $t(
+    phase === 'ask' ? 'articleEdit.rewriteAsk' : 'articleEdit.rewriteAgain',
+  );
   const keys = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-    } else if (event.key === 'Enter') {
+    if (event.key === 'Enter') {
       event.preventDefault();
       if (input.trim()) void send(input.trim());
       else if (session?.phase === 'result') accept();
@@ -391,6 +438,7 @@ export function InlineRewrite({
       )}
       {session && spot.bar && (
         <div
+          ref={barRef}
           role='group'
           aria-label={$t('articleEdit.rewrite')}
           className='absolute z-20 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-xl border bg-background p-1.5 shadow-md'
@@ -438,23 +486,25 @@ export function InlineRewrite({
               {session.phase === 'ask' && (
                 <Sparkles className='size-4 shrink-0 text-[color:var(--nr-ink-violet)]' />
               )}
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={keys}
-                aria-label={$t(
-                  session.phase === 'ask'
-                    ? 'articleEdit.rewriteAsk'
-                    : 'articleEdit.rewriteAgain',
-                )}
-                placeholder={$t(
-                  session.phase === 'ask'
-                    ? 'articleEdit.rewriteAsk'
-                    : 'articleEdit.rewriteAgain',
-                )}
-                className='h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground'
-              />
+              {/* As wide as its hint, laid under it unseen, so the whole hint shows where the editor has the room. */}
+              <div className='grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)]'>
+                <span
+                  aria-hidden='true'
+                  className='invisible col-start-1 row-start-1 overflow-hidden text-sm whitespace-pre'
+                >
+                  {hint}
+                </span>
+                <input
+                  ref={inputRef}
+                  size={1}
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={keys}
+                  aria-label={hint}
+                  placeholder={hint}
+                  className='col-start-1 row-start-1 h-8 w-full min-w-0 bg-transparent text-sm text-ellipsis outline-none placeholder:text-muted-foreground'
+                />
+              </div>
               <Button
                 type='button'
                 size='icon-sm'
@@ -467,6 +517,17 @@ export function InlineRewrite({
                 <ArrowUp />
               </Button>
             </div>
+          )}
+          {session.phase === 'ask' && (
+            <Button
+              type='button'
+              size='sm'
+              variant='ghost'
+              onClick={() => close()}
+            >
+              {$t('articleEdit.cancel')}
+              <Kbd>Esc</Kbd>
+            </Button>
           )}
           {session.phase === 'result' && session.attempts.length > 0 && (
             <div className='flex items-center text-xs text-muted-foreground tabular-nums'>

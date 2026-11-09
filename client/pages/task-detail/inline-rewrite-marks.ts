@@ -4,8 +4,8 @@ import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 // What a rewrite with AI shows in the article body (inline-rewrite.tsx): the selection while it is being asked about,
-// then the old text struck through and the answer after it, drawn as decorations so the document itself is unchanged
-// until Accept.
+// then the old text struck through and the answer after it, and room under them for the bar, drawn as decorations so
+// the document itself is unchanged until Accept.
 
 /** What the editor asks of the page for a rewrite: the model's answer as it streams, and word of an accepted one. */
 export type RewriteHost = {
@@ -101,7 +101,26 @@ function decorations(editor: Editor, state: EditorState, marks: Marks) {
         ignoreSelection: true,
       }),
     );
+  // The bar's room, after the new block or the paragraph the words are in, so the text after them moves down.
+  const $to = state.doc.resolve(to);
+  list.push(
+    Decoration.widget(marks.block || !$to.depth ? to : $to.after(), room, {
+      side: 2,
+      key: 'rewrite-room',
+      ignoreSelection: true,
+    }),
+  );
   return DecorationSet.create(state.doc, list);
+}
+
+/** As tall as the bar (inline-rewrite.tsx sets `--nr-rewrite-room` on the editor's frame). */
+function room() {
+  const element = document.createElement('div');
+  element.className = 'nr-rewrite-room';
+  element.dataset.rewriteRoom = '';
+  element.contentEditable = 'false';
+  element.setAttribute('aria-hidden', 'true');
+  return element;
 }
 
 /** The decorations, and ⌘J to start a rewrite of the selection. */

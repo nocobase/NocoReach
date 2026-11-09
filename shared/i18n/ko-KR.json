@@ -5323,6 +5323,7 @@
   "articleEdit.afterApproval": "{0} · 승인 후 업데이트",
   "articleEdit.allVersions": "모든 버전 보기",
   "articleEdit.attemptOf": "{0} / {1}",
+  "articleEdit.cancel": "취소",
   "articleEdit.compare": "원문과 비교",
   "articleEdit.discard": "버리기",
   "articleEdit.discardAction": "변경 사항 버리기",

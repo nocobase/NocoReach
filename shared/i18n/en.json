@@ -5324,6 +5324,7 @@
   "articleEdit.afterApproval": "{0} · updated after approval",
   "articleEdit.allVersions": "View all versions",
   "articleEdit.attemptOf": "{0} / {1}",
+  "articleEdit.cancel": "Cancel",
   "articleEdit.compare": "Compare with original",
   "articleEdit.discard": "Discard",
   "articleEdit.discardAction": "Discard changes",
