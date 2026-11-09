@@ -347,7 +347,7 @@ export function InlineRewrite({
             '--nr-rewrite-room',
             `${barRef.current.offsetHeight}px`,
           );
-        const room = box.querySelector('[data-rewrite-room]');
+        const room = box.querySelector('[data-room="rewrite"]');
         const widget = box.querySelector('[data-rewrite-new]');
         const end = editor.view.coordsAtPos(
           Math.min(s.to, editor.state.doc.content.size),

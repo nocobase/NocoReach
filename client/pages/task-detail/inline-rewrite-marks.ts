@@ -101,26 +101,35 @@ function decorations(editor: Editor, state: EditorState, marks: Marks) {
         ignoreSelection: true,
       }),
     );
-  // The bar's room, after the new block or the paragraph the words are in, so the text after them moves down.
-  const $to = state.doc.resolve(to);
-  list.push(
-    Decoration.widget(marks.block || !$to.depth ? to : $to.after(), room, {
-      side: 2,
-      key: 'rewrite-room',
-      ignoreSelection: true,
-    }),
-  );
+  list.push(boxRoom(state, to, 'rewrite', marks.block));
   return DecorationSet.create(state.doc, list);
 }
 
-/** As tall as the bar (inline-rewrite.tsx sets `--nr-rewrite-room` on the editor's frame). */
-function room() {
-  const element = document.createElement('div');
-  element.className = 'nr-rewrite-room';
-  element.dataset.rewriteRoom = '';
-  element.contentEditable = 'false';
-  element.setAttribute('aria-hidden', 'true');
-  return element;
+/**
+ * Room in the article for a box over the editor (the rewrite bar, the link box), so the text after it moves down
+ * instead of being covered: after the block ending at `to` when `block`, else after the paragraph holding `to`. It is
+ * as tall as `--nr-<name>-room`, which the box sets on the editor's frame from its own height.
+ */
+export function boxRoom(
+  state: EditorState,
+  to: number,
+  name: string,
+  block = false,
+) {
+  const $to = state.doc.resolve(to);
+  return Decoration.widget(
+    block || !$to.depth ? to : $to.after(),
+    () => {
+      const element = document.createElement('div');
+      element.className = 'nr-box-room';
+      element.dataset.room = name;
+      element.style.height = `var(--nr-${name}-room, 2.875rem)`;
+      element.contentEditable = 'false';
+      element.setAttribute('aria-hidden', 'true');
+      return element;
+    },
+    { side: 2, key: `${name}-room`, ignoreSelection: true },
+  );
 }
 
 /** The decorations, and ⌘J to start a rewrite of the selection. */

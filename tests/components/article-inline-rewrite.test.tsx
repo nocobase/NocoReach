@@ -383,13 +383,13 @@ test('the bar has room of its own under the paragraph, so the text after it move
   );
   const body = screen.getByRole('textbox', { name: 'Body' });
   const [first, second] = body.querySelectorAll('p');
-  const room = body.querySelector('[data-rewrite-room]');
+  const room = body.querySelector('[data-room="rewrite"]');
   expect(room?.previousElementSibling).toBe(first);
   expect(room?.nextElementSibling).toBe(second);
 
   // A whole paragraph's rewrite: after the new block.
   await user.click(screen.getByRole('button', { name: /Cancel/ }));
-  expect(body.querySelector('[data-rewrite-room]')).toBeNull();
+  expect(body.querySelector('[data-room="rewrite"]')).toBeNull();
   select('NocoBase 3 is the new generation.');
   act(() => {
     editorOf().commands.keyboardShortcut('Mod-j');
@@ -400,6 +400,6 @@ test('the bar has room of its own under the paragraph, so the text after it move
   );
   await screen.findByRole('button', { name: /Accept/ });
   expect(
-    body.querySelector('[data-rewrite-room]')?.previousElementSibling,
+    body.querySelector('[data-room="rewrite"]')?.previousElementSibling,
   ).toBe(body.querySelector('.nr-rewrite-new-block'));
 });

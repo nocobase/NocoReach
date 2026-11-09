@@ -1,6 +1,6 @@
 /* The article body as it is edited (article-body-editor.tsx): the reading typography of article-preview.css, and the
    marks of a rewrite with AI (inline-rewrite.tsx), the old text struck through on red and the new text on green, and the
-   room kept for its bar. */
+   room kept for a box over the text (the rewrite bar, the link box). */
 .nr-article-editor {
   max-width: none;
   min-height: 20rem;
@@ -59,8 +59,7 @@
 .nr-rewrite-new-block > :last-child {
   margin-bottom: 0;
 }
-.nr-article-editor .nr-rewrite-room {
-  height: var(--nr-rewrite-room, 2.875rem);
+.nr-article-editor .nr-box-room {
   margin: 0.5rem 0 1.25rem;
 }
 .nr-rewrite-caret {
