@@ -10,6 +10,7 @@ import type { Editor } from '@tiptap/core';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import { ArticleBodyEditor } from '../../client/pages/task-detail/article-body-editor';
+import type { RewriteHost } from '../../client/pages/task-detail/inline-rewrite-marks';
 import english from '../../shared/i18n/en.json';
 
 // The article editor's link box (⌘K) can always be closed and covers no text (2026-11-09, as the Rewrite with AI bar):
@@ -45,8 +46,8 @@ const selectionOf = () => {
   const { from, to } = editorOf().state.selection;
   return { from, to };
 };
-/** Selects `text` in the body and opens the link box with ⌘K. */
-function openLink(text: string) {
+/** Selects `text` in the body, as dragging over it would. */
+function select(text: string) {
   const editor = editorOf();
   let from = -1;
   editor.state.doc.descendants((node, pos) => {
@@ -61,17 +62,32 @@ function openLink(text: string) {
       .setTextSelection({ from, to: from + text.length })
       .run();
   });
-  const picked = selectionOf();
+  return selectionOf();
+}
+/** Selects `text` in the body and opens the link box with ⌘K. */
+function openLink(text: string) {
+  const picked = select(text);
   act(() => {
-    editor.commands.keyboardShortcut('Mod-k');
+    editorOf().commands.keyboardShortcut('Mod-k');
   });
   return picked;
 }
 const box = () => screen.queryByRole('group', { name: 'Link' });
+const rewrite: RewriteHost = {
+  async *stream() {
+    yield 'lets AI run apps';
+  },
+  onAccepted: vi.fn(),
+};
 function renderEditor(onChange = vi.fn()) {
   render(
     <>
-      <ArticleBodyEditor aria-label='Body' value={BODY} onChange={onChange} />
+      <ArticleBodyEditor
+        aria-label='Body'
+        value={BODY}
+        onChange={onChange}
+        rewrite={rewrite}
+      />
       <button type='button'>Elsewhere</button>
     </>,
   );
@@ -145,4 +161,31 @@ test('the link box has room of its own under the paragraph, so the text after it
     screen.getByRole('button', { name: /Cancel/ }).click();
   });
   expect(body.querySelector('[data-room="link"]')).toBeNull();
+});
+
+test('while the link box is open the linked words stay marked, and Rewrite with AI is out of the way', async () => {
+  const user = userEvent.setup();
+  renderEditor();
+  const body = screen.getByRole('textbox', { name: 'Body' });
+  select('lets AI build');
+  expect(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  ).toBeVisible();
+  openLink('lets AI build');
+  expect(body.querySelector('.nr-link-picked')).toHaveTextContent(
+    'lets AI build',
+  );
+  expect(screen.queryByRole('button', { name: /Rewrite with AI/ })).toBeNull();
+  act(() => {
+    editorOf().commands.keyboardShortcut('Mod-j');
+  });
+  expect(screen.queryByRole('group', { name: 'Rewrite with AI' })).toBeNull();
+  expect(box()).toBeVisible();
+
+  // Back once the box closes, the selection still there.
+  await user.click(screen.getByRole('button', { name: /Cancel/ }));
+  expect(body.querySelector('.nr-link-picked')).toBeNull();
+  expect(
+    await screen.findByRole('button', { name: /Rewrite with AI/ }),
+  ).toBeVisible();
 });

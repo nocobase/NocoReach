@@ -9,7 +9,7 @@ import {
 import { Extension, mergeAttributes, type Editor } from '@tiptap/core';
 import { Image, type ImageOptions } from '@tiptap/extension-image';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { DecorationSet } from '@tiptap/pm/view';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import {
   Bold,
@@ -106,11 +106,14 @@ const ArticleImage = Image.extend<ArticleImageOptions>({
   },
 });
 
-/** ⌘K (Ctrl elsewhere) opens the link box, as in the Markdown editor. */
-/** Where the open link box keeps its room in the article (`boxRoom`): the end of the text it links, or none. */
-const linkRoomKey = new PluginKey<number | null>('nrLinkRoom');
+/** The text the open link box links, marked while the box has focus, and where it keeps its room; or none. */
+type LinkMarks = { from: number; to: number } | null;
+const linkBoxKey = new PluginKey<LinkMarks>('nrLinkBox');
 
-/** ⌘K for the link box, and the room the box keeps under the paragraph while it is open. */
+/**
+ * ⌘K (Ctrl elsewhere) opens the link box, as in the Markdown editor. While it is open, the text it links stays marked
+ * and the box keeps room under its paragraph (`boxRoom`), so it covers none of the article.
+ */
 const LinkKey = Extension.create<{ open: () => void }>({
   name: 'nrLinkKey',
   addOptions: () => ({ open: () => {} }),
@@ -124,25 +127,36 @@ const LinkKey = Extension.create<{ open: () => void }>({
   },
   addProseMirrorPlugins() {
     return [
-      new Plugin<number | null>({
-        key: linkRoomKey,
+      new Plugin<LinkMarks>({
+        key: linkBoxKey,
         state: {
           init: () => null,
-          apply(tr, at) {
-            const meta = tr.getMeta(linkRoomKey) as
-              { at: number | null } | undefined;
-            if (meta) return meta.at;
-            return at === null || !tr.docChanged ? at : tr.mapping.map(at, -1);
+          apply(tr, marks) {
+            const meta = tr.getMeta(linkBoxKey) as
+              { set: LinkMarks } | undefined;
+            if (meta) return meta.set;
+            if (!marks || !tr.docChanged) return marks;
+            return {
+              from: tr.mapping.map(marks.from, 1),
+              to: tr.mapping.map(marks.to, -1),
+            };
           },
         },
         props: {
           decorations(state) {
-            const at = linkRoomKey.getState(state);
-            return at === null || at === undefined
-              ? DecorationSet.empty
-              : DecorationSet.create(state.doc, [
-                  boxRoom(state, Math.min(at, state.doc.content.size), 'link'),
-                ]);
+            const marks = linkBoxKey.getState(state);
+            if (!marks) return DecorationSet.empty;
+            const to = Math.min(marks.to, state.doc.content.size);
+            return DecorationSet.create(state.doc, [
+              ...(marks.from < to
+                ? [
+                    Decoration.inline(marks.from, to, {
+                      class: 'nr-link-picked',
+                    }),
+                  ]
+                : []),
+              boxRoom(state, to, 'link'),
+            ]);
           },
         },
       }),
@@ -478,9 +492,10 @@ export function ArticleBodyEditor({
   useLayoutEffect(() => {
     const box = frameRef.current;
     if (!editor || editor.isDestroyed) return;
-    const at = link && !readOnly ? link.to : null;
-    if (linkRoomKey.getState(editor.state) !== at)
-      editor.view.dispatch(editor.state.tr.setMeta(linkRoomKey, { at }));
+    const marks = link && !readOnly ? { from: link.from, to: link.to } : null;
+    const now = linkBoxKey.getState(editor.state);
+    if (now?.from !== marks?.from || now?.to !== marks?.to)
+      editor.view.dispatch(editor.state.tr.setMeta(linkBoxKey, { set: marks }));
     if (!link || !box) {
       setLinkSpot(null);
       return;
@@ -647,6 +662,7 @@ export function ArticleBodyEditor({
             editor={editor}
             host={rewrite}
             frame={frameRef}
+            blocked={Boolean(link)}
             startRef={startRewriteRef}
           />
         )}

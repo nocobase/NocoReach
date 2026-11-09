@@ -103,12 +103,15 @@ export function InlineRewrite({
   host,
   frame,
   startRef,
+  blocked = false,
 }: {
   editor: Editor;
   host: RewriteHost;
   frame: RefObject<HTMLDivElement | null>;
   /** Set to the function ⌘J calls. */
   startRef: RefObject<() => void>;
+  /** Another box over the editor is open (the link box): no button by the selection, and ⌘J does nothing. */
+  blocked?: boolean;
 }) {
   const [session, setSession] = useState<Session | null>(null);
   const [input, setInput] = useState('');
@@ -141,7 +144,7 @@ export function InlineRewrite({
     editor.view.dispatch(editor.state.tr.setMeta(rewriteKey, { set: marks }));
 
   function start() {
-    if (sessionRef.current || !editor.isEditable) return;
+    if (sessionRef.current || blocked || !editor.isEditable) return;
     const picked = pick(editor);
     if (!picked) return;
     wasEditableRef.current = editor.isEditable;
@@ -337,7 +340,7 @@ export function InlineRewrite({
       const left = 12;
       const next: typeof spot = {};
       const s = sessionRef.current;
-      if (!s && !selection.empty && selection.editable) {
+      if (!s && !blocked && !selection.empty && selection.editable) {
         const at = editor.view.coordsAtPos(selection.from);
         next.button = { top: at.top - origin.top - 36, left };
       }
