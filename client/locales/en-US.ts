@@ -7,6 +7,15 @@ import { agentsOverridesEnUS } from './overrides/agents.js';
 
 const enUS = {
   'nocoreach.nav.apiKeys': 'API keys',
+  'aiSearch.trendTitle': 'AI mention gains and losses',
+  'aiSearch.trendHelp': 'Optional paid DataForSEO LLM Mentions history for the brand and market above. Each platform is queried separately; results cover up to the last 12 completed months.',
+  'aiSearch.trendCheck': 'View history',
+  'aiSearch.trendRefresh': 'Check again',
+  'aiSearch.trendNew': 'New mentions',
+  'aiSearch.trendLost': 'Lost mentions',
+  'aiSearch.trendReused': 'Showing a saved result — no new provider charge.',
+  'aiSearch.trendMonthlyNote': 'DataForSEO estimates of mentions gained and lost in each period, not visits or the brand’s total mentions.',
+  'aiSearch.trendNoData': 'No mention history was returned for this target.',
   ...businessMessages,
   schedules,
   ...systemEnUS,
