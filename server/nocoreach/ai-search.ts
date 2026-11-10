@@ -124,7 +124,7 @@ function trendResult(raw){
  const result=Array.isArray(task.result)?task.result[0]:null;
  if(!result||!Array.isArray(result.items))return {costUsd,status:'failed',errorCode:'research_schema_invalid',result:null};
  const months=result.items.map(i=>({date:str(i?.date,10),newMentions:num(i?.new_mentions),lostMentions:num(i?.lost_mentions),newAiSearchVolume:num(i?.new_ai_search_volume),lostAiSearchVolume:num(i?.lost_ai_search_volume)}))
-  .filter(i=>/^\\d{4}-\\d{2}-\\d{2}$/.test(i.date)).sort((a,b)=>a.date.localeCompare(b.date)).slice(-12);
+  .filter(i=>/^\d{4}-\d{2}-\d{2}$/.test(i.date)).sort((a,b)=>a.date.localeCompare(b.date)).slice(-12);
  return {costUsd,status:'completed',errorCode:null,result:{months}};
 }
 const kinds={'ai-mentions-trend':{specification:trendSpec,result:trendResult},'ai-competitor-gap':{specification:v=>gapSpec(v),result:gapResult},'ai-brand':{specification:v=>brandSpec(v),result:brandResult},'ai-answer':{specification:v=>answerSpec(v),result:answerResult}};
