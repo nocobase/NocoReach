@@ -841,6 +841,21 @@ export function dataforseo(
   if (operation.startsWith('ai_optimization/llm_mentions/')) {
     const platform = text(b.platform, 'google');
     const found = mentions(world, b);
+    if (operation === 'ai_optimization/llm_mentions/timeseries_new_lost/live') {
+      const from = new Date(`${text(b.date_from, '2025-08-01')}T00:00:00Z`);
+      const until = text(b.date_to, '2026-10-31').slice(0, 7);
+      const rows: Array<Record<string, unknown>> = [];
+      if (!Number.isNaN(from.getTime())) {
+        for (let offset = 0; offset < 12; offset++) {
+          const day = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + offset, 1));
+          const ym = day.toISOString().slice(0, 7);
+          if (ym > until) break;
+          const n = world.seeded.int(`ai-history:${platform}:${ym}`, 20);
+          rows.push({ date: day.toISOString().slice(0, 10), new_mentions: 10 + n, lost_mentions: 3 + Math.floor(n / 3), new_ai_search_volume: 120 + n * 11, lost_ai_search_volume: 40 + n * 4 });
+        }
+      }
+      return wrap([{ items_count: rows.length, items: rows }], 0.101);
+    }
     if (operation === 'ai_optimization/llm_mentions/aggregated_metrics/live')
       return wrap(
         [
