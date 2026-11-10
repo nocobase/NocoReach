@@ -12,6 +12,7 @@ export function fakeAgents() {
     tx: { read: () => ({}) }, events: { emit() {} },
     agents: { setDefaults: () => () => {}, listActive: async () => [...definitions.values()].filter(a => a.status === 'enabled'), get: async id => definitions.get(id), findWorkable: async (_conn, id) => { const a = definitions.get(id); return a?.status === 'enabled' ? a : undefined; }, mayInvoke: a => a.status === 'enabled' },
     availability: async (_conn, choices) => new Map(choices.map(a => [a.id, { online: a.online !== false }])),
+    runners: { all: async () => [], online: async () => [] },
     runs: {
       enqueue: async (input, outer) => {
         if (!outer?.conn || typeof outer.emit !== 'function') throw Error('Task enqueue must join the business transaction');

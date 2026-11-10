@@ -74,7 +74,7 @@ export function agentBlocker(
     };
   }
   const found: AgentBlocker[] = [];
-  for (const entry of agent.modelEntries)
+  for (const entry of agent.modelEntries ?? [])
     for (const r of online) {
       const runtime = nameFor(r, viewer),
         tool = entry.tool;
