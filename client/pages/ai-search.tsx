@@ -187,7 +187,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
             </div>
           ) : null}
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
-          {shown ? <MentionTrend spec={shown} /> : null}
+          {shown ? <MentionTrend spec={{ ...shown, locationCode: runs.google?.spec.locationCode ?? form.market.locationCode, language: runs.google?.spec.language ?? form.market.language }} /> : null}
           {shown && shown.competitors.length ? <CompetitorGaps spec={shown} projectId={projectId} /> : null}
         </>
       ) : null}
