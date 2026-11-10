@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "Cerca de {0} · este mês ${1} de ${2} gastos",
   "backlinks.proposalOverBudget": "Esta consulta passaria do orçamento da DataForSEO do mês; aumente-o primeiro em Fontes de dados.",
   "backlinks.proposalDone": "Consultado em {0}",
-  "onlineAgent.readBacklinks": "Ler backlinks"
+  "onlineAgent.readBacklinks": "Ler backlinks",
+  "backlinks.brokenPages": "Páginas quebradas",
+  "backlinks.askBroken": "Veja quais páginas de {0} não abrem mais, mas ainda recebem links de outros sites. Redirecioná-las recupera esses links. É uma consulta separada que só roda quando você clica.",
+  "backlinks.lookUpBroken": "Consultar páginas quebradas",
+  "backlinks.statusCode": "Status",
+  "backlinks.noBroken": "Nenhuma página quebrada com links",
+  "backlinks.noBrokenHelp": "Todas as páginas com links de outros sites ainda abrem.",
+  "backlinks.brokenOwnHint": "Selecione páginas e entregue ao agente para redirecionar cada endereço para a página ativa mais próxima; assim os links voltam a contar.",
+  "backlinks.brokenHandOffDescription": "As {0} páginas selecionadas viram uma tarefa de correção técnica: o agente planeja um redirecionamento (ou restaura a página) para cada uma, e você aprova antes de o site mudar. Inicie-a na página da tarefa.",
+  "backlinks.openBroken": "Ver as páginas quebradas para as quais esses links apontam",
+  "backlinks.brokenPagesNeedSite": "As páginas quebradas são de um site inteiro; consulte um domínio em vez de uma página",
+  "seoHandOff.brokenPageLine": "- {0}: status {1}, {2} backlinks de {3} sites",
+  "seoHandOff.brokenPageTitle": "Recuperar os links de {0}",
+  "seoHandOff.brokenPagesTitle": "Recuperar os links de {0} páginas quebradas de {1}",
+  "seoHandOff.brokenPagesObjective": "Fazer os links para estas páginas quebradas voltarem a contar: {0}",
+  "seoHandOff.brokenPagesIntro": "Páginas de {0} que não abrem mais, mas ainda recebem links de outros sites (índice de links da DataForSEO, consultado em {1}):",
+  "seoHandOff.brokenPagesAdvice": "Sugestão: redirecione (301) cada endereço quebrado para a página ativa de conteúdo mais próximo; se o conteúdo ainda for necessário, restaure a página. Corrija também os links internos para esses endereços. Quando abrirem, os links para eles voltam a contar para o site."
 }

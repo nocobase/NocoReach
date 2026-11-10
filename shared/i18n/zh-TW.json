@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "預計約 {0} · 本月已用 ${1} / ${2}",
   "backlinks.proposalOverBudget": "這次查詢會超出本月 DataForSEO 預算，請先在資料接入裡調高預算。",
   "backlinks.proposalDone": "已於 {0} 查詢",
-  "onlineAgent.readBacklinks": "讀取外部連結"
+  "onlineAgent.readBacklinks": "讀取外部連結",
+  "backlinks.brokenPages": "失效頁面",
+  "backlinks.askBroken": "看看 {0} 哪些頁面已經打不開、卻仍有其他網站連結過來。把它們重新導向就能找回這些外部連結。這是另一次查詢，點了才查。",
+  "backlinks.lookUpBroken": "查詢失效頁面",
+  "backlinks.statusCode": "狀態碼",
+  "backlinks.noBroken": "沒有仍有外部連結的失效頁面",
+  "backlinks.noBrokenHelp": "其他網站連結的頁面都還能正常打開。",
+  "backlinks.brokenOwnHint": "勾選頁面交給 Agent，把每個失效網址重新導向到最接近的現有頁面，這些外部連結就能重新生效。",
+  "backlinks.brokenHandOffDescription": "選中的 {0} 個頁面合成一個技術修復任務：Agent 先為每個頁面規劃重新導向（或恢復頁面），你確認後才會改網站。在任務頁開始執行。",
+  "backlinks.openBroken": "查看這些外部連結指向的失效頁面",
+  "backlinks.brokenPagesNeedSite": "失效頁面只能按整個網站查，請填網域而不是頁面網址",
+  "seoHandOff.brokenPageLine": "- {0}：狀態碼 {1}，{2} 條外部連結，來自 {3} 個網站",
+  "seoHandOff.brokenPageTitle": "找回 {0} 的外部連結",
+  "seoHandOff.brokenPagesTitle": "找回 {1} 上 {0} 個失效頁面的外部連結",
+  "seoHandOff.brokenPagesObjective": "讓指向這些失效頁面的外部連結重新生效：{0}",
+  "seoHandOff.brokenPagesIntro": "{0} 上已經打不開、但仍有其他網站連結的頁面（DataForSEO 外部連結索引，查詢於 {1}）：",
+  "seoHandOff.brokenPagesAdvice": "建議：把每個失效網址 301 重新導向到內容最接近的現有頁面；如果內容仍然需要，就恢復這個頁面。順便修好站內指向這些網址的連結。頁面能打開後，這些外部連結會重新為網站加分。"
 }

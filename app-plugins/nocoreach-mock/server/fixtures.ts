@@ -83,6 +83,7 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'backlinks/backlinks',
       'backlinks/referring_domains',
       'backlinks/domain_pages_summary',
+      'backlinks/domain_pages',
       'backlinks/domain_intersection',
       'backlinks/history',
       'serp/google/organic/live/advanced',
@@ -1935,7 +1936,7 @@ function dataforseo(
     );
   }
   const backlink = operation.match(
-    /^backlinks\/(summary|backlinks|referring_domains|domain_pages_summary|domain_intersection|history)\/live$/,
+    /^backlinks\/(summary|backlinks|referring_domains|domain_pages_summary|domain_pages|domain_intersection|history)\/live$/,
   );
   if (backlink) {
     const op = backlink[1],
@@ -1964,6 +1965,10 @@ function dataforseo(
         url_from: `https://journal-${i + 1}.example/${fixtureSlug(c)}-workspaces`,
         url_to: `https://${target}${PAGE_DEFINITIONS[i % 8][0]}`,
         page_address: `https://${target}${PAGE_DEFINITIONS[i % 8][0]}`,
+        // domain_pages: the page itself, gone, with its own link counts.
+        page: `https://${target}${PAGE_DEFINITIONS[i % 8][0]}`,
+        status_code: 404,
+        page_summary: { backlinks: 18 + i, referring_domains: 4 + i },
         title: projectText(c, 'A fictional NocoBloom workspace review'),
         anchor:
           i % 2

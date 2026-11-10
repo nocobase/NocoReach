@@ -1209,6 +1209,50 @@ export function dataforseo(
         })),
       );
     }
+    // The site's pages with their own link counts: the linked live pages, and two gone addresses other sites still link
+    // to, so Backlinks › Broken pages has rows. A status filter (status_code >= 400) keeps only the gone ones.
+    if (op === 'domain_pages') {
+      const linked = new Map<string, number>();
+      for (const l of live)
+        linked.set(l.url_to, (linked.get(l.url_to) ?? 0) + 1);
+      const rows = [
+        ...[...linked.entries()].map(([url, count]) => ({
+          url,
+          status: 200,
+          backlinks: count * 140,
+          domains: count * 12,
+        })),
+        {
+          url: `${world.origin}/blog/2024-roadmap`,
+          status: 404,
+          backlinks: 37,
+          domains: 9,
+        },
+        {
+          url: `${world.origin}/docs/v1/install`,
+          status: 410,
+          backlinks: 12,
+          domains: 4,
+        },
+      ].map((r) => ({
+        type: 'backlinks_domain_pages',
+        page: r.url,
+        status_code: r.status,
+        meta: { title: null },
+        page_summary: {
+          backlinks: r.backlinks,
+          referring_domains: r.domains,
+          rank: 10 + world.seeded.int(`dp:${r.url}`, 30),
+          first_seen: dfsTime(world.now - 400 * DAY),
+        },
+      }));
+      const broken = JSON.stringify(b.filters ?? '').includes('status_code');
+      return page(
+        rows
+          .filter((r) => !broken || r.status_code >= 400)
+          .sort((a, b) => b.page_summary.backlinks - a.page_summary.backlinks),
+      );
+    }
     throw new WorldUnsupported(`backlinks ${op}`);
   }
   return undefined;

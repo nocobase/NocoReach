@@ -577,7 +577,7 @@ async function connectSources(
             requestKey: randomUUID(),
           });
         // Backlinks › Link profile: the site's overview and each of its tabs, already looked up.
-        for (const view of ['overview', 'links', 'domains', 'pages'])
+        for (const view of ['overview', 'links', 'domains', 'pages', 'broken'])
           await p.backlinks.run(id, {
             target: spec.domain,
             view,

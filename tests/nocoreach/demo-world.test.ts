@@ -156,7 +156,7 @@ describe.each(['zh-CN', 'en-US'])(
         ).json();
       const target = new URL(new World(project, now).origin).hostname;
       const runs: Record<string, any> = {};
-      for (const view of ['overview', 'links', 'domains', 'pages']) {
+      for (const view of ['overview', 'links', 'domains', 'pages', 'broken']) {
         const spec = backlinksSpec({ view, target });
         const raw = spec.requests
           ? await Promise.all(
@@ -199,6 +199,13 @@ describe.each(['zh-CN', 'en-US'])(
         gap.result.items.some((r: any) => r.competitors.length === 1),
       ).toBe(true);
       expect(runs.pages.result.items.length).toBeGreaterThan(0);
+      // Broken pages honour the status filter: only the gone addresses, each still linked.
+      expect(runs.broken.result.items.map((r: any) => r.status).sort()).toEqual(
+        [404, 410],
+      );
+      expect(runs.broken.result.items.every((r: any) => r.backlinks > 0)).toBe(
+        true,
+      );
     });
 
     it('keeps CRM sources and GitHub scoped to CRM, offline and in the imported language', async () => {

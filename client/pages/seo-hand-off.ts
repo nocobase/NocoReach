@@ -105,6 +105,21 @@ export function linkProspectsDraft(own: string, competitors: string[], rows: Lin
   };
 }
 
+// Backlinks › Broken pages: our pages that no longer open while other sites still link to them, to redirect or restore
+// with the Technical fix playbook so the links count again.
+export type BrokenPage = { url: string; status: number | null; backlinks: number | null; referringDomains: number | null };
+export function brokenPagesDraft(site: string, rows: BrokenPage[], at: string): TaskDraft {
+  const head = pathOf(rows[0].url);
+  const lines = rows.slice(0, 60).map((r) => $t('seoHandOff.brokenPageLine', { 0: r.url, 1: r.status ?? "—", 2: n(r.backlinks), 3: n(r.referringDomains) }));
+  return {
+    pages: pagesOf(rows.map((r) => r.url)),
+    title: clip(rows.length === 1 ? $t('seoHandOff.brokenPageTitle', { 0: head }) : $t('seoHandOff.brokenPagesTitle', { 0: rows.length, 1: site }), 200),
+    subject: clip(subjectOf(head, rows.length, 'pages'), 160),
+    objective: clip($t('seoHandOff.brokenPagesObjective', { 0: joinList(rows.map((r) => pathOf(r.url))) }), 1000),
+    brief: clip([$t('seoHandOff.brokenPagesIntro', { 0: site, 1: formatDate(at) }), ...lines, ...(rows.length > 60 ? [$t('seoHandOff.linkProspectsMore', { 0: rows.length - 60 })] : []), "", $t('seoHandOff.brokenPagesAdvice')].join("\n"), 20000),
+  };
+}
+
 // 页面: one page of 网站内容 with its recent numbers.
 export type ContentPage = { url: string; title?: string; views?: number | null; clicks?: number | null; impressions?: number | null; position?: number | null; words?: number | null };
 export function contentPageDraft(p: ContentPage, rangeLabel: string): TaskDraft {

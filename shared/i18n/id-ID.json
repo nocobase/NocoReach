@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "Sekitar {0} · bulan ini terpakai ${1} dari ${2}",
   "backlinks.proposalOverBudget": "Pencarian ini akan melebihi anggaran DataForSEO bulan ini; naikkan dulu di Sumber data.",
   "backlinks.proposalDone": "Dicari pada {0}",
-  "onlineAgent.readBacklinks": "Baca backlink"
+  "onlineAgent.readBacklinks": "Baca backlink",
+  "backlinks.brokenPages": "Halaman rusak",
+  "backlinks.askBroken": "Lihat halaman {0} mana yang sudah tidak bisa dibuka tetapi masih ditautkan situs lain. Mengalihkannya akan memulihkan tautan itu. Ini pencarian terpisah yang hanya berjalan saat Anda klik.",
+  "backlinks.lookUpBroken": "Cari halaman rusak",
+  "backlinks.statusCode": "Status",
+  "backlinks.noBroken": "Tidak ada halaman rusak yang masih ditautkan",
+  "backlinks.noBrokenHelp": "Semua halaman yang ditautkan situs lain masih bisa dibuka.",
+  "backlinks.brokenOwnHint": "Pilih halaman dan serahkan ke agen untuk mengalihkan setiap alamat ke halaman aktif terdekat; tautannya pun kembali dihitung.",
+  "backlinks.brokenHandOffDescription": "{0} halaman terpilih menjadi satu tugas perbaikan teknis: agen merencanakan pengalihan (atau memulihkan halaman) untuk masing-masing, dan Anda menyetujui sebelum situs diubah. Mulai di halaman tugas.",
+  "backlinks.openBroken": "Lihat halaman rusak yang dituju tautan ini",
+  "backlinks.brokenPagesNeedSite": "Halaman rusak untuk seluruh situs; cari domain, bukan halaman",
+  "seoHandOff.brokenPageLine": "- {0}: status {1}, {2} backlink dari {3} situs",
+  "seoHandOff.brokenPageTitle": "Pulihkan tautan {0}",
+  "seoHandOff.brokenPagesTitle": "Pulihkan tautan {0} halaman rusak di {1}",
+  "seoHandOff.brokenPagesObjective": "Tautan ke halaman rusak ini kembali dihitung: {0}",
+  "seoHandOff.brokenPagesIntro": "Halaman {0} yang sudah tidak bisa dibuka tetapi masih ditautkan situs lain (indeks tautan DataForSEO, dicari {1}):",
+  "seoHandOff.brokenPagesAdvice": "Saran: alihkan (301) setiap alamat rusak ke halaman aktif dengan konten paling mirip; jika kontennya masih diperlukan, pulihkan halamannya. Perbaiki juga tautan internal ke alamat ini. Setelah bisa dibuka, tautan ke sana kembali berarti bagi situs."
 }

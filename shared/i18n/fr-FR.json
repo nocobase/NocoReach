@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "Environ {0} · ce mois-ci ${1} sur ${2} dépensés",
   "backlinks.proposalOverBudget": "Cette recherche dépasserait le budget DataForSEO du mois ; augmentez-le d’abord dans Sources de données.",
   "backlinks.proposalDone": "Recherché le {0}",
-  "onlineAgent.readBacklinks": "Lire les backlinks"
+  "onlineAgent.readBacklinks": "Lire les backlinks",
+  "backlinks.brokenPages": "Pages cassées",
+  "backlinks.askBroken": "Voyez quelles pages de {0} ne s’ouvrent plus alors que d’autres sites y pointent encore. Les rediriger récupère ces liens. C’est une recherche distincte, lancée seulement au clic.",
+  "backlinks.lookUpBroken": "Rechercher les pages cassées",
+  "backlinks.statusCode": "Statut",
+  "backlinks.noBroken": "Aucune page cassée avec des liens",
+  "backlinks.noBrokenHelp": "Toutes les pages vers lesquelles d’autres sites pointent s’ouvrent encore.",
+  "backlinks.brokenOwnHint": "Sélectionnez des pages et confiez-les à l’agent pour rediriger chaque adresse vers la page active la plus proche ; leurs liens comptent alors de nouveau.",
+  "backlinks.brokenHandOffDescription": "Les {0} pages sélectionnées deviennent une tâche de correction technique : l’agent prévoit une redirection (ou la restauration) pour chacune, et vous validez avant toute modification du site. Lancez-la depuis la page de la tâche.",
+  "backlinks.openBroken": "Voir les pages cassées visées par ces liens",
+  "backlinks.brokenPagesNeedSite": "Les pages cassées concernent un site entier ; recherchez un domaine plutôt qu’une page",
+  "seoHandOff.brokenPageLine": "- {0} : statut {1}, {2} backlinks depuis {3} sites",
+  "seoHandOff.brokenPageTitle": "Récupérer les liens de {0}",
+  "seoHandOff.brokenPagesTitle": "Récupérer les liens de {0} pages cassées de {1}",
+  "seoHandOff.brokenPagesObjective": "Les liens vers ces pages cassées comptent de nouveau : {0}",
+  "seoHandOff.brokenPagesIntro": "Pages de {0} qui ne s’ouvrent plus alors que d’autres sites y pointent encore (index de liens DataForSEO, recherche du {1}) :",
+  "seoHandOff.brokenPagesAdvice": "Suggestion : redirigez (301) chaque adresse cassée vers la page active au contenu le plus proche ; si le contenu est encore utile, restaurez plutôt la page. Corrigez aussi les liens internes vers ces adresses. Une fois accessibles, les liens vers elles comptent de nouveau pour le site."
 }

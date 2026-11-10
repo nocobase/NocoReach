@@ -18,7 +18,7 @@ import { GAP_COMPETITORS } from '../../shared/backlinks.js';
 const error = (message, status = 400) => {
   throw new VisibilityError(message, status);
 };
-const VIEWS = ['overview', 'links', 'domains', 'pages', 'gap'];
+const VIEWS = ['overview', 'links', 'domains', 'pages', 'broken', 'gap'];
 const LIMIT = 100;
 // dataforseo.com/pricing/backlinks, as OpenSEO's src/server/lib/dataforseo/pricing.ts charges it: per task plus per
 // returned row, uniform across endpoints.
@@ -106,8 +106,14 @@ function specification(v) {
       schemaVersion: 'backlinks-2026-11-09',
     };
   }
-  if (view === 'pages' && t.scope === 'page')
-    error(systemMessageText('backlinks.topPagesNeedSite'));
+  if ((view === 'pages' || view === 'broken') && t.scope === 'page')
+    error(
+      systemMessageText(
+        view === 'broken'
+          ? 'backlinks.brokenPagesNeedSite'
+          : 'backlinks.topPagesNeedSite',
+      ),
+    );
   const base = {
     kind: 'backlinks',
     view,
@@ -143,14 +149,30 @@ function specification(v) {
     links: 'backlinks/backlinks/live',
     domains: 'backlinks/referring_domains/live',
     pages: 'backlinks/domain_pages_summary/live',
+    broken: 'backlinks/domain_pages/live',
   }[view];
-  const request = {
-    ...common(t.target),
-    limit: LIMIT,
-    offset: 0,
-    order_by: [view === 'links' ? 'rank,desc' : 'backlinks,desc'],
-    ...(view === 'links' ? { mode: 'one_per_domain' } : {}),
-  };
+  // Broken pages: the site's pages that answer 4xx or 5xx yet still have live links pointing at them, most linked first;
+  // one row per page, with its own link counts.
+  const request =
+    view === 'broken'
+      ? {
+          ...common(t.target),
+          limit: LIMIT,
+          offset: 0,
+          filters: [
+            ['status_code', '>=', 400],
+            'and',
+            ['page_summary.backlinks', '>', 0],
+          ],
+          order_by: ['page_summary.backlinks,desc'],
+        }
+      : {
+          ...common(t.target),
+          limit: LIMIT,
+          offset: 0,
+          order_by: [view === 'links' ? 'rank,desc' : 'backlinks,desc'],
+          ...(view === 'links' ? { mode: 'one_per_domain' } : {}),
+        };
   return {
     ...base,
     path,
@@ -250,6 +272,16 @@ const rows = {
     spam: num(i.backlinks_spam_score),
     firstSeen: day(i.first_seen),
     brokenBacklinks: num(i.broken_backlinks),
+  }),
+  broken: (i, n) => ({
+    id: String(n),
+    url: str(i.page),
+    status: num(i.status_code),
+    title: str(i.meta?.title),
+    backlinks: num(i.page_summary?.backlinks),
+    referringDomains: num(i.page_summary?.referring_domains),
+    rank: num(i.page_summary?.rank),
+    firstSeen: day(i.page_summary?.first_seen),
   }),
   pages: (i, n) => ({
     id: String(n),

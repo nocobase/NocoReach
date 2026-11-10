@@ -6,7 +6,8 @@ export const GAP_COMPETITORS = 3;
 /** OpenSEO's DEFAULT_BACKLINKS_SPAM_THRESHOLD: rows scoring this or more count as spam. */
 export const SPAM_THRESHOLD = 40;
 
-export type BacklinksView = 'overview' | 'links' | 'domains' | 'pages' | 'gap';
+export type BacklinksView =
+  'overview' | 'links' | 'domains' | 'pages' | 'broken' | 'gap';
 
 /**
  * A backlinks lookup the online agent proposed (tool `backlinks`, when nothing is saved) and the user confirms on the
@@ -33,7 +34,9 @@ export const isBacklinksLookupProposal = (
     p &&
     typeof p.projectId === 'string' &&
     typeof p.target === 'string' &&
-    ['overview', 'links', 'domains', 'pages', 'gap'].includes(String(p.view)) &&
+    ['overview', 'links', 'domains', 'pages', 'broken', 'gap'].includes(
+      String(p.view),
+    ) &&
     typeof p.estimatedUsd === 'number',
   );
 };
@@ -51,7 +54,13 @@ export function backlinksPath(
     if (runId != null) params.set('gap', String(runId));
   } else {
     params.set('t', target);
-    const key = { overview: 'o', links: 'l', domains: 'r', pages: 'g' }[view];
+    const key = {
+      overview: 'o',
+      links: 'l',
+      domains: 'r',
+      pages: 'g',
+      broken: 'b',
+    }[view];
     if (runId != null) params.set(key, String(runId));
     if (view !== 'overview') {
       params.set('bt', view);

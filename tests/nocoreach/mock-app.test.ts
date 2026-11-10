@@ -546,7 +546,7 @@ test('DataForSEO verifies fake credentials, persists keyword/domain/Lighthouse r
       ).toEqual(domain.result.summary);
     }
   }
-  for (const view of ['overview', 'links', 'domains', 'pages']) {
+  for (const view of ['overview', 'links', 'domains', 'pages', 'broken']) {
     const backlinks = await data(
       call('nrBacklinks', 'run', {
         target: FIXTURE_PRODUCT.domain,

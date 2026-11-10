@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "約 {0} · 今月の利用 ${1} / ${2}",
   "backlinks.proposalOverBudget": "この調査は今月の DataForSEO 予算を超えます。先にデータソースで予算を引き上げてください。",
   "backlinks.proposalDone": "{0} に調査済み",
-  "onlineAgent.readBacklinks": "被リンクを読む"
+  "onlineAgent.readBacklinks": "被リンクを読む",
+  "backlinks.brokenPages": "リンク切れページ",
+  "backlinks.askBroken": "{0} のページのうち、もう開けないのに他サイトからリンクされているものを確認します。リダイレクトすればそのリンクを取り戻せます。クリックしたときだけ実行される別の調査です。",
+  "backlinks.lookUpBroken": "リンク切れページを調べる",
+  "backlinks.statusCode": "ステータス",
+  "backlinks.noBroken": "リンクされているリンク切れページはありません",
+  "backlinks.noBrokenHelp": "他サイトからリンクされているページはすべて開けます。",
+  "backlinks.brokenOwnHint": "ページを選んでエージェントに渡すと、各アドレスを最も近い既存ページへリダイレクトし、リンクが再び有効になります。",
+  "backlinks.brokenHandOffDescription": "選択した {0} ページを 1 つの技術修正タスクにまとめます。エージェントが各ページのリダイレクト（またはページの復元）を計画し、承認後にサイトを変更します。タスクページで開始してください。",
+  "backlinks.openBroken": "これらのリンク先のリンク切れページを見る",
+  "backlinks.brokenPagesNeedSite": "リンク切れページはサイト全体が対象です。ページではなくドメインで調べてください",
+  "seoHandOff.brokenPageLine": "- {0}：ステータス {1}、被リンク {2} 件（{3} サイトから）",
+  "seoHandOff.brokenPageTitle": "{0} のリンクを取り戻す",
+  "seoHandOff.brokenPagesTitle": "{1} のリンク切れ {0} ページのリンクを取り戻す",
+  "seoHandOff.brokenPagesObjective": "これらのリンク切れページへのリンクを再び有効にする：{0}",
+  "seoHandOff.brokenPagesIntro": "{0} のうち、もう開けないのに他サイトからリンクされているページ（DataForSEO リンクインデックス、{1} に調査）：",
+  "seoHandOff.brokenPagesAdvice": "提案：リンク切れの各アドレスを、内容が最も近い既存ページへ 301 リダイレクトしてください。内容がまだ必要ならページを復元してください。これらのアドレスへの内部リンクも修正します。開けるようになれば、これらのリンクは再びサイトの評価に寄与します。"
 }

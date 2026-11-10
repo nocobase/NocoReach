@@ -4,7 +4,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { linkProspectsDraft } from '#pages/seo-hand-off';
+import { brokenPagesDraft, linkProspectsDraft } from '#pages/seo-hand-off';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 import BacklinksPage, {
@@ -441,4 +441,76 @@ it('Query again on the same overview keeps the tabs already looked up', async ()
   expect(router.state.location.search).toContain('l=2');
   await userEvent.click(screen.getByRole('tab', { name: /外链 3/ }));
   expect(await screen.findByText('good.example')).toBeTruthy();
+});
+
+it('the Broken backlinks tile opens Broken pages, whose pages on our site go to the agent as a Technical fix', async () => {
+  const broken = {
+    id: 20,
+    status: 'completed',
+    spec: spec('broken'),
+    createdAt: '2026-11-01T00:00:00Z',
+    completedAt: '2026-11-01T00:00:00Z',
+    result: {
+      items: [
+        {
+          id: '0',
+          url: 'https://acme.example/blog/old',
+          status: 404,
+          title: 'Old post',
+          backlinks: 37,
+          referringDomains: 9,
+          rank: 12,
+          firstSeen: null,
+        },
+      ],
+      totalCount: 1,
+    },
+  };
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { runId?: string } },
+    ) =>
+      resource === 'nrBacklinks' &&
+      act === 'getRun' &&
+      options.body.runId === '20'
+        ? broken
+        : base(resource, act, options),
+  );
+  const router = createMemoryRouter(
+    [{ path: '/backlinks', element: <BacklinksPage /> }],
+    { initialEntries: ['/backlinks?t=acme.example&o=1&b=20'] },
+  );
+  render(<RouterProvider router={router} />);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '查看这些外链指向的失效页面' }),
+  );
+  expect(router.state.location.search).toContain('bt=broken');
+  expect(await screen.findByText('/blog/old')).toBeTruthy();
+  expect(screen.getByText('404')).toBeTruthy();
+  await userEvent.click(screen.getByRole('checkbox', { name: '选择这一行' }));
+  expect(
+    await screen.findByRole('button', { name: /交给 Agent/ }),
+  ).toBeTruthy();
+});
+
+it('a broken-pages brief lists each address with its links and says how to win them back', () => {
+  const draft = brokenPagesDraft(
+    'acme.example',
+    [
+      {
+        url: 'https://acme.example/blog/old',
+        status: 404,
+        backlinks: 37,
+        referringDomains: 9,
+      },
+    ],
+    '2026-11-01T00:00:00Z',
+  );
+  expect(draft.pages).toEqual(['https://acme.example/blog/old']);
+  expect(draft.title).toContain('/blog/old');
+  expect(draft.brief).toContain('状态码 404');
+  expect(draft.brief).toContain('301');
 });

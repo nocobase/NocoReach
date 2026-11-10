@@ -8082,5 +8082,21 @@
   "backlinks.proposalCost": "약 {0} · 이번 달 사용 ${1} / ${2}",
   "backlinks.proposalOverBudget": "이번 조회는 이번 달 DataForSEO 예산을 넘습니다. 먼저 데이터 소스에서 예산을 올리세요.",
   "backlinks.proposalDone": "{0}에 조회함",
-  "onlineAgent.readBacklinks": "백링크 읽기"
+  "onlineAgent.readBacklinks": "백링크 읽기",
+  "backlinks.brokenPages": "깨진 페이지",
+  "backlinks.askBroken": "{0}의 페이지 중 더 이상 열리지 않지만 다른 사이트에서 링크하고 있는 페이지를 확인합니다. 리디렉션하면 그 링크를 되찾을 수 있습니다. 클릭할 때만 실행되는 별도 조회입니다.",
+  "backlinks.lookUpBroken": "깨진 페이지 조회",
+  "backlinks.statusCode": "상태 코드",
+  "backlinks.noBroken": "링크가 있는 깨진 페이지가 없습니다",
+  "backlinks.noBrokenHelp": "다른 사이트가 링크하는 페이지가 모두 열립니다.",
+  "backlinks.brokenOwnHint": "페이지를 선택해 에이전트에게 넘기면 각 주소를 가장 가까운 기존 페이지로 리디렉션해 링크가 다시 효력을 갖습니다.",
+  "backlinks.brokenHandOffDescription": "선택한 페이지 {0}개를 하나의 기술 수정 작업으로 만듭니다. 에이전트가 페이지마다 리디렉션(또는 페이지 복원)을 계획하고, 승인 후에 사이트를 변경합니다. 작업 페이지에서 시작하세요.",
+  "backlinks.openBroken": "이 링크가 가리키는 깨진 페이지 보기",
+  "backlinks.brokenPagesNeedSite": "깨진 페이지는 사이트 전체 대상입니다. 페이지 대신 도메인으로 조회하세요",
+  "seoHandOff.brokenPageLine": "- {0}: 상태 {1}, 백링크 {2}개({3}개 사이트)",
+  "seoHandOff.brokenPageTitle": "{0}의 링크 되찾기",
+  "seoHandOff.brokenPagesTitle": "{1}의 깨진 페이지 {0}개 링크 되찾기",
+  "seoHandOff.brokenPagesObjective": "이 깨진 페이지로의 링크가 다시 효력을 갖게 하기: {0}",
+  "seoHandOff.brokenPagesIntro": "{0}에서 더 이상 열리지 않지만 다른 사이트가 여전히 링크하는 페이지(DataForSEO 링크 색인, {1} 조회):",
+  "seoHandOff.brokenPagesAdvice": "제안: 깨진 주소마다 내용이 가장 가까운 기존 페이지로 301 리디렉션하세요. 내용이 아직 필요하면 페이지를 복원하세요. 이 주소로 향하는 내부 링크도 고치세요. 페이지가 열리면 이 링크들이 다시 사이트에 도움이 됩니다."
 }

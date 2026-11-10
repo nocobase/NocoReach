@@ -498,3 +498,51 @@ describe('link gap prospects', () => {
     ]);
   });
 });
+
+describe('broken pages', () => {
+  it('asks for the site pages that answer 4xx/5xx and still have links, most linked first', () => {
+    const spec = specification({ view: 'broken', target: 'example.com' });
+    expect(spec.path).toBe('backlinks/domain_pages/live');
+    expect(spec.request).toMatchObject({
+      target: 'example.com',
+      limit: 100,
+      filters: [
+        ['status_code', '>=', 400],
+        'and',
+        ['page_summary.backlinks', '>', 0],
+      ],
+      order_by: ['page_summary.backlinks,desc'],
+    });
+    expect(() =>
+      specification({ view: 'broken', target: 'example.com/a' }),
+    ).toThrow(/失效页面/);
+    const parsed = result(
+      ok([
+        {
+          page: 'https://example.com/old',
+          status_code: 404,
+          meta: { title: 'Old' },
+          page_summary: {
+            backlinks: 37,
+            referring_domains: 9,
+            rank: 12,
+            first_seen: '2025-01-02 00:00:00 +00:00',
+          },
+        },
+      ]),
+      spec,
+    );
+    expect(parsed.result.items).toEqual([
+      {
+        id: '0',
+        url: 'https://example.com/old',
+        status: 404,
+        title: 'Old',
+        backlinks: 37,
+        referringDomains: 9,
+        rank: 12,
+        firstSeen: '2025-01-02',
+      },
+    ]);
+  });
+});

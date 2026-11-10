@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "Khoảng {0} · tháng này đã dùng ${1} / ${2}",
   "backlinks.proposalOverBudget": "Lần tra này sẽ vượt ngân sách DataForSEO tháng này; hãy tăng ngân sách trong Nguồn dữ liệu trước.",
   "backlinks.proposalDone": "Đã tra lúc {0}",
-  "onlineAgent.readBacklinks": "Đọc backlink"
+  "onlineAgent.readBacklinks": "Đọc backlink",
+  "backlinks.brokenPages": "Trang hỏng",
+  "backlinks.askBroken": "Xem những trang nào của {0} không còn mở được nhưng vẫn có trang web khác liên kết đến. Chuyển hướng chúng sẽ lấy lại các liên kết đó. Đây là một lần tra riêng, chỉ chạy khi bạn nhấp.",
+  "backlinks.lookUpBroken": "Tra trang hỏng",
+  "backlinks.statusCode": "Mã trạng thái",
+  "backlinks.noBroken": "Không có trang hỏng nào còn liên kết",
+  "backlinks.noBrokenHelp": "Mọi trang được trang web khác liên kết đều vẫn mở được.",
+  "backlinks.brokenOwnHint": "Chọn trang và giao cho tác nhân để chuyển hướng từng địa chỉ sang trang còn hoạt động gần nhất; khi đó liên kết sẽ có giá trị trở lại.",
+  "backlinks.brokenHandOffDescription": "{0} trang đã chọn trở thành một nhiệm vụ sửa lỗi kỹ thuật: tác nhân lên kế hoạch chuyển hướng (hoặc khôi phục) cho từng trang, và bạn duyệt trước khi trang web bị thay đổi. Bắt đầu trên trang nhiệm vụ.",
+  "backlinks.openBroken": "Xem các trang hỏng mà liên kết này trỏ đến",
+  "backlinks.brokenPagesNeedSite": "Trang hỏng tính cho cả trang web; hãy tra tên miền thay vì một trang",
+  "seoHandOff.brokenPageLine": "- {0}: trạng thái {1}, {2} backlink từ {3} trang web",
+  "seoHandOff.brokenPageTitle": "Lấy lại liên kết của {0}",
+  "seoHandOff.brokenPagesTitle": "Lấy lại liên kết của {0} trang hỏng trên {1}",
+  "seoHandOff.brokenPagesObjective": "Liên kết đến các trang hỏng này có giá trị trở lại: {0}",
+  "seoHandOff.brokenPagesIntro": "Các trang của {0} không còn mở được nhưng vẫn được trang web khác liên kết (chỉ mục liên kết DataForSEO, tra ngày {1}):",
+  "seoHandOff.brokenPagesAdvice": "Gợi ý: chuyển hướng (301) từng địa chỉ hỏng sang trang còn hoạt động có nội dung gần nhất; nếu nội dung vẫn cần, hãy khôi phục trang. Sửa cả liên kết nội bộ trỏ đến các địa chỉ này. Khi mở được, các liên kết đến chúng sẽ lại có giá trị cho trang web."
 }

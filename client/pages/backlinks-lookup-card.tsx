@@ -35,6 +35,7 @@ const viewLabel = (view: BacklinksView) =>
     links: $t('backlinks.backlinks'),
     domains: $t('backlinks.referringDomains'),
     pages: $t('backlinks.topPages'),
+    broken: $t('backlinks.brokenPages'),
     gap: $t('backlinks.gapTab'),
   })[view];
 const usd = (n: number) => `$${n.toFixed(n < 0.1 ? 3 : 2)}`;

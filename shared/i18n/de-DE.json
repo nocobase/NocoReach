@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "Etwa {0} · diesen Monat ${1} von ${2} verbraucht",
   "backlinks.proposalOverBudget": "Diese Abfrage würde das DataForSEO-Budget dieses Monats überschreiten; erhöhen Sie es zuerst unter Datenquellen.",
   "backlinks.proposalDone": "Abgefragt am {0}",
-  "onlineAgent.readBacklinks": "Backlinks lesen"
+  "onlineAgent.readBacklinks": "Backlinks lesen",
+  "backlinks.brokenPages": "Defekte Seiten",
+  "backlinks.askBroken": "Sehen Sie, welche Seiten von {0} nicht mehr erreichbar sind, aber noch Links von anderen Websites haben. Eine Weiterleitung holt diese Links zurück. Das ist eine eigene Abfrage, die nur auf Klick läuft.",
+  "backlinks.lookUpBroken": "Defekte Seiten abfragen",
+  "backlinks.statusCode": "Status",
+  "backlinks.noBroken": "Keine defekten Seiten mit Links",
+  "backlinks.noBrokenHelp": "Alle Seiten, auf die andere Websites verlinken, sind erreichbar.",
+  "backlinks.brokenOwnHint": "Wählen Sie Seiten aus und übergeben Sie sie dem Agenten, der jede Adresse auf die nächstliegende aktive Seite umleitet; dann zählen ihre Links wieder.",
+  "backlinks.brokenHandOffDescription": "Die {0} ausgewählten Seiten werden zu einer Aufgabe „Technische Korrektur“: Der Agent plant für jede eine Weiterleitung (oder stellt die Seite wieder her), und Sie genehmigen, bevor die Website geändert wird. Starten Sie sie auf der Aufgabenseite.",
+  "backlinks.openBroken": "Defekte Seiten anzeigen, auf die diese Links zeigen",
+  "backlinks.brokenPagesNeedSite": "Defekte Seiten gelten für eine ganze Website; fragen Sie eine Domain statt einer Seite ab",
+  "seoHandOff.brokenPageLine": "- {0}: Status {1}, {2} Backlinks von {3} Websites",
+  "seoHandOff.brokenPageTitle": "Die Links von {0} zurückgewinnen",
+  "seoHandOff.brokenPagesTitle": "Die Links von {0} defekten Seiten auf {1} zurückgewinnen",
+  "seoHandOff.brokenPagesObjective": "Links auf diese defekten Seiten zählen wieder: {0}",
+  "seoHandOff.brokenPagesIntro": "Seiten von {0}, die nicht mehr erreichbar sind, auf die andere Websites aber noch verlinken (DataForSEO-Linkindex, abgefragt am {1}):",
+  "seoHandOff.brokenPagesAdvice": "Vorschlag: Leiten Sie jede defekte Adresse (301) auf die aktive Seite mit dem ähnlichsten Inhalt um; wird der Inhalt noch gebraucht, stellen Sie die Seite stattdessen wieder her. Korrigieren Sie auch interne Links auf diese Adressen. Sobald sie erreichbar sind, zählen die Links wieder für die Website."
 }

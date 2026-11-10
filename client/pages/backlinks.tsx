@@ -59,7 +59,7 @@ import { usePageTab } from '#hooks/use-page-tab';
 import { HandOffBar } from './hand-off-bar';
 import { DraftHandOffDialog, type TaskDraft } from './keyword-hand-off';
 import { HandOffNotice, type HandOffResult } from './strategy/hand-off';
-import { linkProspectsDraft } from './seo-hand-off';
+import { brokenPagesDraft, linkProspectsDraft } from './seo-hand-off';
 import { formatCount, formatDateTime } from '#lib/format';
 import { useProject } from './reach-data';
 import { bare } from './domain-overview';
@@ -74,7 +74,7 @@ import {
   type KeywordConnectionState,
 } from './keyword-api';
 
-type View = 'overview' | 'links' | 'domains' | 'pages';
+type View = 'overview' | 'links' | 'domains' | 'pages' | 'broken';
 type Tab = Exclude<View, 'overview'>;
 type Spec = {
   kind: 'backlinks';
@@ -141,6 +141,16 @@ type PageRow = {
   rank: number | null;
   brokenBacklinks: number | null;
 };
+type BrokenRow = {
+  id: string;
+  url: string;
+  status: number | null;
+  title: string;
+  backlinks: number | null;
+  referringDomains: number | null;
+  rank: number | null;
+  firstSeen: string | null;
+};
 type Run<T = unknown> = {
   id: number | string;
   status: string;
@@ -194,15 +204,18 @@ const pathOf = (u: string) => {
 };
 // Rows scoring SPAM_THRESHOLD or more are hidden while Hide spam is on.
 export { SPAM_THRESHOLD };
-// The URL keeps the opened runs (o overview, l links, r referring domains, g top pages), so a reload reopens them
-// without a new query; bt is the open tab and t the looked-up target.
+// The URL keeps the opened runs (o overview, l links, r referring domains, g top pages, b broken pages), so a reload
+// reopens them without a new query; bt is the open tab and t the looked-up target.
 const RUN_PARAMS: Record<View, string> = {
   overview: 'o',
   links: 'l',
   domains: 'r',
   pages: 'g',
+  broken: 'b',
 };
-const TABS: Tab[] = ['links', 'domains', 'pages'];
+const TABS: Tab[] = ['links', 'domains', 'pages', 'broken'];
+// Tabs that read a whole site, not one page.
+const SITE_ONLY: Tab[] = ['pages', 'broken'];
 const tabText = (tab: Tab, target: string) =>
   ({
     links: {
@@ -219,6 +232,11 @@ const tabText = (tab: Tab, target: string) =>
       label: $t('backlinks.topPages'),
       ask: $t('backlinks.askPages', { 0: target }),
       button: $t('backlinks.lookUpPages'),
+    },
+    broken: {
+      label: $t('backlinks.brokenPages'),
+      ask: $t('backlinks.askBroken', { 0: target }),
+      button: $t('backlinks.lookUpBroken'),
     },
   })[tab];
 
@@ -341,7 +359,13 @@ export function Backlinks() {
           .catch(() => undefined);
       if (!id && runs[view]) setRuns((s) => ({ ...s, [view]: undefined }));
     }
-  }, [params.get('o'), params.get('l'), params.get('r'), params.get('g')]);
+  }, [
+    params.get('o'),
+    params.get('l'),
+    params.get('r'),
+    params.get('g'),
+    params.get('b'),
+  ]);
   // Arriving with a target but no run (Domain lookup's View backlinks): the latest saved overview of that target opens
   // on its own; a new lookup, which is charged, waits for Look up.
   useEffect(() => {
@@ -507,14 +531,24 @@ export function Backlinks() {
                 </Button>
               </p>
             ) : null}
-            <Overview run={shown} own={isOwn} />
+            <Overview
+              run={shown}
+              own={isOwn}
+              onBroken={
+                shown.spec.scope === 'domain'
+                  ? () => setTab('broken')
+                  : undefined
+              }
+            />
             <Card className='gap-0 py-0'>
               <DataTableTabs value={tab} onValueChange={setTab}>
                 {TABS.map((v) => (
                   <TabsTrigger
                     key={v}
                     value={v}
-                    disabled={v === 'pages' && shown.spec.scope === 'page'}
+                    disabled={
+                      SITE_ONLY.includes(v) && shown.spec.scope === 'page'
+                    }
                   >
                     {tabText(v, shown.spec.target).label}
                     {runs[v]?.result &&
@@ -535,6 +569,8 @@ export function Backlinks() {
                   <LinksTable run={tabRun as Run<LinkRow>} own={isOwn} />
                 ) : tab === 'domains' ? (
                   <DomainsTable run={tabRun as Run<DomainRow>} own={isOwn} />
+                ) : tab === 'broken' ? (
+                  <BrokenTable run={tabRun as Run<BrokenRow>} own={isOwn} />
                 ) : (
                   <PagesTable run={tabRun as Run<PageRow>} />
                 )
@@ -585,7 +621,16 @@ export function Backlinks() {
 
 const count = (v: number | null | undefined) =>
   v == null ? '—' : formatCount(Math.round(v));
-function Overview({ run, own }: { run: Run<never>; own: boolean }) {
+function Overview({
+  run,
+  own,
+  onBroken,
+}: {
+  run: Run<never>;
+  own: boolean;
+  /** Opens Broken pages: the Broken backlinks tile leads to the pages they point at. */
+  onBroken?: () => void;
+}) {
   const s = run.result?.summary;
   const history = run.result?.history ?? [];
   const last = history[history.length - 1];
@@ -623,11 +668,27 @@ function Overview({ run, own }: { run: Run<never>; own: boolean }) {
   return (
     <div className='space-y-3'>
       <div className='grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6'>
-        {tiles.map(([label, value, help, tone]) => (
-          <Card key={label} className='gap-0 p-4' data-metric={label}>
-            <StatTile label={label} value={value} help={help} tone={tone} />
-          </Card>
-        ))}
+        {tiles.map(([label, value, help, tone]) => {
+          const tile = (
+            <Card className='h-full gap-0 p-4' data-metric={label}>
+              <StatTile label={label} value={value} help={help} tone={tone} />
+            </Card>
+          );
+          return label === $t('backlinks.brokenBacklinks') && onBroken ? (
+            <button
+              key={label}
+              type='button'
+              className='rounded-xl text-left transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none'
+              title={$t('backlinks.openBroken')}
+              aria-label={$t('backlinks.openBroken')}
+              onClick={onBroken}
+            >
+              {tile}
+            </button>
+          ) : (
+            <div key={label}>{tile}</div>
+          );
+        })}
       </div>
       <p className='nr-footnote'>
         {run.spec.target}
@@ -1974,5 +2035,156 @@ function RecentGaps({
         ))}
       </Card>
     </section>
+  );
+}
+
+const bHelper = createColumnHelper<BrokenRow>();
+/**
+ * Broken pages: the site's pages that no longer open (4xx or 5xx) while other sites still link to them, most linked
+ * first. On our own site they can be handed to the agent as one Technical fix task: redirect each address to the
+ * closest live page or bring it back, so its links count again.
+ */
+function BrokenTable({ run, own }: { run: Run<BrokenRow>; own: boolean }) {
+  const { project } = useProject();
+  const items = run.result?.items ?? [];
+  const anchorRef = useSelectionAnchor();
+  const [handing, setHanding] = useState<TaskDraft>();
+  const [handed, setHanded] = useState<HandOffResult>();
+  const columns = useMemo<ColumnDef<BrokenRow>[]>(
+    () => [
+      ...(own ? [makeSelectionColumn<BrokenRow>(anchorRef)] : []),
+      bHelper.accessor('url', {
+        enableSorting: false,
+        header: () => $t('common.page'),
+        cell: ({ row }) => (
+          <div className='min-w-0'>
+            {link(row.original.url, pathOf(row.original.url), 'max-w-xl')}
+            {row.original.title ? (
+              <span className='block max-w-xl truncate text-xs text-muted-foreground'>
+                {row.original.title}
+              </span>
+            ) : null}
+          </div>
+        ),
+      }) as ColumnDef<BrokenRow>,
+      bHelper.accessor('status', {
+        enableSorting: false,
+        header: () => $t('backlinks.statusCode'),
+        cell: ({ getValue }) => (
+          <Badge variant='destructive'>{getValue() ?? '—'}</Badge>
+        ),
+      }) as ColumnDef<BrokenRow>,
+      bHelper.accessor('backlinks', {
+        sortUndefined: 'last',
+        header: ({ column }) => (
+          <SortableHeader
+            column={column}
+            label={$t('backlinks.backlinks')}
+            align='right'
+          />
+        ),
+        cell: ({ getValue }) => metric(getValue()),
+        meta: right,
+      }) as ColumnDef<BrokenRow>,
+      bHelper.accessor('referringDomains', {
+        sortUndefined: 'last',
+        header: ({ column }) => (
+          <SortableHeader
+            column={column}
+            label={$t('backlinks.referringDomains')}
+            align='right'
+          />
+        ),
+        cell: ({ getValue }) => metric(getValue()),
+        meta: right,
+      }) as ColumnDef<BrokenRow>,
+    ],
+    [anchorRef, own],
+  );
+  const t = useTable(
+    items,
+    columns,
+    (r) => `${r.url} ${r.title}`,
+    'backlinks',
+    { select: own, run: run.id },
+  );
+  const at = run.completedAt || run.createdAt;
+  useHandOffSource(
+    'backlinks-broken',
+    project && own
+      ? {
+          count: t.selected.length,
+          open: () =>
+            setHanding(
+              brokenPagesDraft(
+                bare(run.spec.target),
+                t.selected.map((r) => ({
+                  url: r.url,
+                  status: r.status,
+                  backlinks: r.backlinks,
+                  referringDomains: r.referringDomains,
+                })),
+                at,
+              ),
+            ),
+          noun: $t('common.pagesSelected'),
+          clear: t.clearSelection,
+        }
+      : null,
+  );
+  const exportRows = () =>
+    downloadCsv(
+      fileName(run, 'broken'),
+      [
+        $t('common.page'),
+        $t('backlinks.statusCode'),
+        $t('backlinks.backlinks'),
+        $t('backlinks.referringDomains'),
+      ],
+      t.rows.map((r): CsvValue[] => [
+        r.url,
+        r.status,
+        r.backlinks,
+        r.referringDomains,
+      ]),
+    ) || toast.error(() => $t('backlinks.nothingToExport'));
+  return (
+    <DataTable
+      table={t.table}
+      isFiltered={t.filtered}
+      onClearFilters={t.clear}
+      empty={{
+        title: $t('backlinks.noBroken'),
+        description: $t('backlinks.noBrokenHelp'),
+      }}
+      toolbar={t.toolbar(exportRows, listed(run))}
+      footer={
+        <>
+          {t.footer}
+          {own ? (
+            <p className='px-4 pb-3 text-xs text-muted-foreground'>
+              {$t('backlinks.brokenOwnHint')}
+            </p>
+          ) : null}
+          <HandOffNotice result={handed} />
+          {handing && project ? (
+            <DraftHandOffDialog
+              projectId={project.id}
+              draft={handing}
+              playbookId='tech-fix'
+              description={$t('backlinks.brokenHandOffDescription', {
+                0: t.selected.length,
+              })}
+              onClose={() => setHanding(undefined)}
+              onDone={(r) => {
+                setHanding(undefined);
+                t.clearSelection();
+                setHanded(r);
+              }}
+            />
+          ) : null}
+        </>
+      }
+    />
   );
 }

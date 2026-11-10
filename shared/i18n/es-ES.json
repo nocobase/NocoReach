@@ -8080,5 +8080,21 @@
   "backlinks.proposalCost": "Unos {0} · este mes ${1} de ${2} gastados",
   "backlinks.proposalOverBudget": "Esta consulta superaría el presupuesto de DataForSEO del mes; súbelo primero en Fuentes de datos.",
   "backlinks.proposalDone": "Consultado el {0}",
-  "onlineAgent.readBacklinks": "Leer backlinks"
+  "onlineAgent.readBacklinks": "Leer backlinks",
+  "backlinks.brokenPages": "Páginas rotas",
+  "backlinks.askBroken": "Mira qué páginas de {0} ya no abren pero siguen recibiendo enlaces de otros sitios. Redirigirlas recupera esos enlaces. Es una consulta aparte que solo se ejecuta al hacer clic.",
+  "backlinks.lookUpBroken": "Consultar páginas rotas",
+  "backlinks.statusCode": "Estado",
+  "backlinks.noBroken": "No hay páginas rotas con enlaces",
+  "backlinks.noBrokenHelp": "Todas las páginas que enlazan otros sitios siguen abriendo.",
+  "backlinks.brokenOwnHint": "Selecciona páginas y entrégalas al agente para redirigir cada dirección a la página activa más cercana; así sus enlaces vuelven a contar.",
+  "backlinks.brokenHandOffDescription": "Las {0} páginas seleccionadas se convierten en una tarea de corrección técnica: el agente planifica una redirección (o restaura la página) para cada una y tú apruebas antes de que cambie el sitio. Iníciala en la página de la tarea.",
+  "backlinks.openBroken": "Ver las páginas rotas a las que apuntan estos enlaces",
+  "backlinks.brokenPagesNeedSite": "Las páginas rotas son de un sitio completo; consulta un dominio en lugar de una página",
+  "seoHandOff.brokenPageLine": "- {0}: estado {1}, {2} backlinks de {3} sitios",
+  "seoHandOff.brokenPageTitle": "Recuperar los enlaces de {0}",
+  "seoHandOff.brokenPagesTitle": "Recuperar los enlaces de {0} páginas rotas de {1}",
+  "seoHandOff.brokenPagesObjective": "Que los enlaces a estas páginas rotas vuelvan a contar: {0}",
+  "seoHandOff.brokenPagesIntro": "Páginas de {0} que ya no abren pero siguen recibiendo enlaces de otros sitios (índice de enlaces de DataForSEO, consultado el {1}):",
+  "seoHandOff.brokenPagesAdvice": "Sugerencia: redirige (301) cada dirección rota a la página activa con el contenido más parecido; si el contenido aún hace falta, restaura la página. Corrige también los enlaces internos a esas direcciones. Cuando vuelvan a abrir, sus enlaces contarán de nuevo para el sitio."
 }

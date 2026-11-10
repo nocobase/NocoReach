@@ -56,6 +56,7 @@ const currentSystemText = new Map<string, MessageKey>(
     'backlinks.pageAddressNoQuery',
     'backlinks.topPagesNeedSite',
     'backlinks.gapNeedsSite',
+    'backlinks.brokenPagesNeedSite',
     'backlinks.lookupNotComplete',
     'playbooks.linkBuilding',
     'playbooks.linkBuildingDescription',
