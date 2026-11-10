@@ -61,6 +61,22 @@ test('Current situation adds what the listed analysis rules find, counting what 
  const off=new InsightSummary({signals:{inputs:async()=>({inputs,coverage:{}})},analysisRules:{config:async()=>({rules:{'x-hot':{enabled:false}}})}});off.views={search:async()=>({connected:false})};
  const keys=(await off.summary('1')).areas.flatMap(a=>a.items.map(i=>i.key));assert.equal(keys.includes('rule-x-hot'),false);assert.equal(keys.includes('rule-github-release'),true,'the other rules still add their lines');
 });
+// Opportunities list growth only (2026-11-10): the changes that fix a problem stay in Needs attention, each with its own
+// line that hands the ticked items off, so nothing that was an opportunity before disappears.
+test('Needs attention lists the star spike, unsolved community topics and audit warnings that are no longer opportunities',async()=>{
+ const now=Date.now(),daily={};for(let i=0;i<9;i++)daily[new Date(now-(8-i)*DAY).toISOString().slice(0,10)]={stars:1000+i*5+(i===8?95:0)};
+ const topics={};for(let i=0;i<8;i++)topics[i]={id:i,title:`Webhook question ${i}`,slug:'s',createdAt:at(3),replies:i,views:100+i,solved:false,categoryId:1};
+ const page=i=>({url:`https://ex.com/docs/p${i}`,type:'docs',fetchedAt:at(1),words:900,h1:['Heading'],links:[]});
+ const inputs={now,gh:{repo:'o/r',daily,releases:[]},cm:{origin:'https://forum.ex.com',topics,categories:{1:'Q'}},site:{sites:[{origin:'https://ex.com'}],pages:[page(1),page(2),page(3)]}};
+ const s=new InsightSummary({signals:{inputs:async()=>({inputs,coverage:{}})}});s.views={search:async()=>({connected:false})};
+ const r=await s.summary('1'),items=Object.fromEntries(r.areas.flatMap(a=>a.items.map(i=>[i.key,{...i,area:a.id}])));
+ assert.deepEqual([items['rule-github-star-spike'].group,items['rule-github-star-spike'].area,items['rule-github-star-spike'].handOff.playbookId],['chance','site','change-research']);
+ // The digest line counts and lists the topics themselves, most discussed first, each linking to its thread.
+ const digest=items['rule-community-digest'];assert.equal(digest.values[0],'8');assert.equal(digest.rows.length,8);assert.equal(digest.rows[0].title,'Webhook question 7');assert.equal(digest.handOff.playbookId,'content-outline');
+ // Warnings only: the critical issues have the audit line of their own.
+ const audit=items['rule-audit'];assert.ok(audit,'audit warnings line');assert.equal(audit.group,'handle');
+ assert.ok(audit.rows.every(row=>!['audit-broken','audit-noindex'].includes(row.key)));assert.ok(audit.rows.some(row=>row.key==='audit-noTitle'));
+});
 test('Reddit tile for 洞察: threads first seen per day, counted like the Reddit page, compared with the previous period',()=>{
  const posts={a:{firstSeenAt:at(2)},b:{firstSeenAt:at(3)},c:{firstSeenAt:at(10)},first:{firstSeenAt:at(60)}};
  const card=redditCard({terms:['x'],status:'active',retainedFrom:d(60),dataThrough:d(1),posts},windowFor(d(1),'7'));

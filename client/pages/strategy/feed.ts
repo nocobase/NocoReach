@@ -1,5 +1,5 @@
 import { localDateKey } from '#lib/format';
-import { opportunityState, priorityRank, type Row } from './board';
+import { opportunityState, pendingOrder, type Row } from './board';
 import type { StrategyState, WatchRecord } from './model';
 import type { TaskWork } from '../../../shared/task-pending.js';
 import { taskStanding, type TaskStanding } from './task-standing';
@@ -111,11 +111,7 @@ export function feedOf(
     const day = dayOf(w.ended?.at);
     if (day && (!today || day < today)) at(day).ended.push(w);
   }
-  pending.sort(
-    (a, b) =>
-      (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) ||
-      String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)),
-  );
+  pending.sort(pendingOrder);
   return {
     pending,
     decided,

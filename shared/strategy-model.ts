@@ -1,5 +1,6 @@
 import type { TaskPart } from './opportunity-parts.js';
 import type { ResultSource } from './result-source.js';
+import type { Growth, NewPage } from './growth.js';
 export type GoalFields = {
   intent: string;
   audience: string;
@@ -61,6 +62,8 @@ export type Signal = {
   action: string | null;
   isNew?: boolean;
   topics?: { title: string; url: string | null }[];
+  /** A growth point's size and the rows behind it (shared/growth.ts); only growth points are actionable. */
+  growth?: Growth;
 };
 export type Evidence = {
   signals?: {
@@ -113,6 +116,8 @@ export type Opportunity = {
   no?: number;
   reason?: string;
   signalIds?: string[];
+  /** The growth of the first growth point it cites, as the server computed it. */
+  growth?: Growth;
   lifecycle?: string;
   reviewAt?: string;
   category?: string;
@@ -120,7 +125,12 @@ export type Opportunity = {
   priorityReason?: string;
   confidence?: string;
   effort?: string;
+  /** The existing page to change; empty when the opportunity writes a new page (`newPage`). */
   target?: string;
+  /** A page that does not exist yet: the section it would go under and existing pages to link to it from (paths). */
+  newPage?: NewPage;
+  /** Where the change is made off the site (a list, a review, a community), when neither `target` nor `newPage`. */
+  offsite?: string;
   audience?: string;
   sources?: string[];
   firstSeenAt?: string;
@@ -170,6 +180,8 @@ export type WatchRecord = {
   };
 };
 export type InsightBatch = {
+  /** The first observation is the finding most worth seeing today; this is the opportunity it is about, if any. */
+  leadId?: string;
   observations?: string[];
   sourceReviews?: SourceReview[];
   signalReviews?: Record<string, SignalReview>;

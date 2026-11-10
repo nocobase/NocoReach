@@ -28,6 +28,9 @@ class RankTracking{
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `rank-tracking:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
+ // The latest results of each keyword that fell since its check before, by keyword id: the sites now above the project.
+ async serps(id,s){const fell=(s?.keywords||[]).map(k=>[k.id,s.checks?.[k.id]||[]]).filter(([,l])=>l.length>1&&l.at(-1).runId&&(l.at(-1).position?l.at(-2).position&&l.at(-1).position>l.at(-2).position:l.at(-2).position)).map(([k,l])=>[k,String(l.at(-1).runId)]);if(!fell.length)return {};
+  const runs=await this.p.db.getRepository('nrKeywordRuns').find({filter:{id:{$in:fell.map(([,r])=>r)},projectId:id}}),items=new Map(runs.map(r=>[String(r.get('id')),r.get('result')?.items||[]]));return Object.fromEntries(fell.map(([k,r])=>[k,items.get(r)||[]]));}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||{keywords:[],checks:{}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  async add(id,v){const list=(Array.isArray(v.keywords)?v.keywords:[]).slice(0,MAX_TRACKED).map(k=>({keyword:String(k.keyword||'').trim().replace(/\s+/g,' '),locationCode:Number(k.locationCode),language:String(k.language||'')}));
   for(const k of list)specification({target:k.keyword,locationCode:k.locationCode,language:k.language});if(!list.length)fail(systemMessageText('rankTracking.pickKeywordsTrack'));
