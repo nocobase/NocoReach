@@ -7,7 +7,9 @@ import { fail, text } from './model';
 import { TASK_SUBJECT } from './agents-runtime';
 import { AGENT_FAILURE_GROUP } from '../../../shared/run-failure.js';
 import { repoUrlKey, repoUrlsInput } from '../../../shared/repo-routing.js';
+import { agentBlocker, runtimeReadiness } from './agent-readiness';
 import { randomUUID } from 'node:crypto';
+import type { AgentBlocker } from '../../../shared/agent-readiness.js';
 
 type Attention = 'toolLogin' | 'quota' | 'model' | 'setup' | 'missingTool' | 'toolSignIn';
 // Failures that last until someone acts: signs the coding tool in, tops up its quota, picks a model the account has or
@@ -97,8 +99,14 @@ export class AgentStore {
 
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
-    const choices: { id: string; name: string; type: string; tool: string | null; online: boolean; busy: number }[] = options.map(a => ({ id: a.id, name: a.name, type: 'runner', tool: a.modelEntries?.[0]?.tool ?? null, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
-    const status = { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
+    // What the runtimes report now says why an agent that is not online cannot start (agent-readiness.ts; 2026-11-10
+    // user report: a runtime was online with its coding tools signed out, and every page said it was offline).
+    const reported = await agents.runners.all(conn), now = Date.now(), seen = { actor, seesMachines: Boolean(viewer?.seesMachines) };
+    const choices: { id: string; name: string; type: string; tool: string | null; online: boolean; busy: number; blocker?: AgentBlocker }[] = options.map(a => {
+      const online = Boolean(availability.get(a.id)?.online);
+      return { id: a.id, name: a.name, type: 'runner', tool: a.modelEntries?.[0]?.tool ?? null, online, busy: availability.get(a.id)?.busy || 0, ...(online ? {} : { blocker: agentBlocker(a, reported, seen, now) }) };
+    });
+    const status = { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online), runtimes: runtimeReadiness(reported, seen) };
     if (!viewer || !actor) return status;
     // The Agent page also asks how each agent's latest tasks ended and where the chosen one runs (2026-10-21 user report:
     // the page said Available while every task failed because the coding tool was not signed in).

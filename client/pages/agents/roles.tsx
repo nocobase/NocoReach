@@ -39,6 +39,7 @@ import {
   useOnlineResource,
   type Agent as OnlineAgent,
 } from '../../online-agent/api.js';
+import { TOOL_NAMES } from '../../../shared/agent-readiness.js';
 import type { OnlineAgentDefinition } from '../../../shared/online-agent.js';
 import { useProject } from '../reach-data.js';
 import { routeAccess } from './access.js';
@@ -101,13 +102,6 @@ type Row = {
   state: 'loading' | 'ready' | 'attention';
   detail?: string;
   action?: Action;
-};
-
-const TOOL_NAMES: Record<string, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-  pi: 'Pi',
 };
 
 // Why the agent's latest tasks failed and what to do, naming the computer and the tool when the run says which.
