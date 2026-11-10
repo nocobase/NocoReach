@@ -9,6 +9,7 @@ import {
 } from '../../server/nocoreach/signals.js';
 import { sourceStatuses } from '../../server/nocoreach/rule-source-status.js';
 import { RULES } from '../../server/nocoreach/analysis-rules.js';
+import { pagePlace } from '../../shared/backlinks.js';
 
 const month = (date: string, over: Partial<Record<string, number>> = {}) => ({
   date,
@@ -381,6 +382,47 @@ describe('monthly check failures and state', () => {
     expect(s.run).toHaveBeenCalledTimes(2);
   });
 
+  it('clears an earlier failure once both lookups are saved, without asking for one', async () => {
+    const { s } = service({
+      watch: {
+        enabled: true,
+        lastCheck: {
+          at: new Date().toISOString(),
+          error: { view: 'broken', code: 'backlinks_balance' },
+        },
+      },
+      saved: ['overview', 'broken'],
+    });
+    expect(await s.check('1')).toEqual({ checked: 0 });
+    expect(s.run).not.toHaveBeenCalled();
+    const w = await s.watch('1');
+    expect(w.lastCheck.error).toBeNull();
+    expect(w.retryAt).toBeNull();
+    expect((await s.analysisData('1')).failed).toBe(false);
+  });
+
+  it('treats a run left running for over an hour (a restart mid-request) like an uncertain one', async () => {
+    const { s } = service({ watch: { enabled: true }, saved: ['overview'] });
+    (s.run as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 13,
+      status: 'running',
+      createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+      reused: true,
+    });
+    expect((await s.check('1')).uncertain).toMatchObject({ view: 'broken' });
+    expect((await s.watch('1')).lastCheck.uncertain.view).toBe('broken');
+  });
+
+  it('counts a first domain the lookups refuse as no site', async () => {
+    const { s } = service({ watch: { enabled: true } });
+    (s as unknown as { p: { project: unknown } }).p.project = async () => ({
+      domains: ['https://exa mple.com'],
+    });
+    expect(await s.ownTarget('1')).toBeNull();
+    expect((await s.watch('1')).target).toBeNull();
+    expect(await s.check('1')).toEqual({ checked: 0 });
+  });
+
   it('reads nothing for the analysis while the check is off', async () => {
     const { s } = service({ watch: { enabled: false } });
     expect(await s.analysisData('1')).toEqual({
@@ -417,5 +459,35 @@ describe('monthly check failures and state', () => {
     expect((await sourceStatuses(host, '1', snapshot)).backlinks).toEqual({
       state: 'error',
     });
+  });
+});
+
+describe('a month with a missing count', () => {
+  it('reads no net loss when the new referring domains are not known', () => {
+    expect(
+      backlinksSignals({
+        bl: data([
+          month('2026-09-30'),
+          month('2026-10-31', {
+            newReferringDomains: null as unknown as number,
+            lostReferringDomains: 15,
+          }),
+        ]),
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('page names', () => {
+  it('keeps the query string and the trailing slash, so different pages keep different names', () => {
+    expect(
+      pagePlace('https://www.acme.example/index.php?p=12', 'acme.example'),
+    ).toBe('/index.php?p=12');
+    expect(pagePlace('https://acme.example/a/', 'acme.example')).toBe('/a/');
+    expect(pagePlace('https://acme.example/a', 'acme.example')).toBe('/a');
+    expect(pagePlace('https://acme.example', 'acme.example')).toBe('/');
+    expect(pagePlace('https://docs.acme.example/x', 'acme.example')).toBe(
+      'docs.acme.example/x',
+    );
   });
 });

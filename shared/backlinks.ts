@@ -79,7 +79,8 @@ export function pagePlace(url: string, site: string): string {
   try {
     const u = new URL(url);
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    const path = u.pathname.replace(/\/$/, '') || '/';
+    // The query string stays: /index.php?p=12 and ?p=34 are different pages, and so are /a and /a/.
+    const path = `${u.pathname}${u.search}`;
     return host !== site.toLowerCase().replace(/^www\./, '')
       ? `${host}${path}`
       : path;

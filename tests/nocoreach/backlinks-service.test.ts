@@ -540,8 +540,6 @@ describe('broken pages', () => {
         title: 'Old',
         backlinks: 37,
         referringDomains: 9,
-        rank: 12,
-        firstSeen: '2025-01-02',
       },
     ]);
   });

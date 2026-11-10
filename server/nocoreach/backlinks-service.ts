@@ -33,6 +33,7 @@ const usd = (n) => Number(n.toFixed(6));
 const DAY_MS = 86400000;
 // A failed monthly check (a refusal, the month's budget, an unreadable reply) is tried again a day later.
 const CHECK_RETRY_MS = DAY_MS;
+const STALE_RUN_MS = 3600000;
 const bareDomain = (d) =>
   String(d || '')
     .toLowerCase()
@@ -290,8 +291,6 @@ const rows = {
     title: str(i.meta?.title),
     backlinks: num(i.page_summary?.backlinks),
     referringDomains: num(i.page_summary?.referring_domains),
-    rank: num(i.page_summary?.rank),
-    firstSeen: day(i.page_summary?.first_seen),
   }),
   pages: (i, n) => ({
     id: String(n),
@@ -506,9 +505,17 @@ class BacklinksService {
     return this.p.db.getRepository('nrSnapshots');
   }
   /** Our own site: the project's first domain, bare. */
+  /** Our site as a lookup target; a first domain the lookups refuse (localhost, a bad name) counts as none. */
   async ownTarget(id) {
     const project = await this.p.project(id);
-    return bareDomain((project?.domains || [])[0]) || null;
+    const t = bareDomain((project?.domains || [])[0]) || null;
+    if (!t) return null;
+    try {
+      specification({ view: 'overview', target: t });
+      return t;
+    } catch {
+      return null;
+    }
   }
   async watchSaved(id) {
     const row = await this.snapshots().findOne({
@@ -583,17 +590,29 @@ class BacklinksService {
     };
     const state = await on();
     if (!state || !this.d4s.config(id)?.verifiedAt) return { checked: 0 };
-    const last = state.lastCheck;
-    if (last?.error && Date.now() - Date.parse(last.at) < CHECK_RETRY_MS)
-      return { checked: 0, waiting: true };
     const target = await this.ownTarget(id);
     if (!target) return { checked: 0 };
+    const missing = [];
+    for (const view of ['overview', 'broken'])
+      if (!(await this.saved(id, { view, target }))) missing.push(view);
+    const last = state.lastCheck;
+    // Both lookups saved (a later check, or someone looked them up on the page): an earlier failure or uncertain lookup
+    // no longer stands, so the switch and Analysis rules stop showing it.
+    if (!missing.length) {
+      if (last?.error || last?.uncertain)
+        await this.writeWatch(id, {
+          ...state,
+          lastCheck: { at: new Date().toISOString(), error: null },
+        });
+      return { checked: 0 };
+    }
+    if (last?.error && Date.now() - Date.parse(last.at) < CHECK_RETRY_MS)
+      return { checked: 0, waiting: true };
     let checked = 0,
       error = null,
       uncertain = null,
       asked = false;
-    for (const view of ['overview', 'broken']) {
-      if (await this.saved(id, { view, target })) continue;
+    for (const view of missing) {
       if (asked && !(await on())) break;
       asked = true;
       try {
@@ -605,8 +624,12 @@ class BacklinksService {
         // A run still going (another lookup of the same query) or whose outcome is uncertain (it may have been billed)
         // is no failure: the uncertain one blocks the same query until the reuse time is over, and asking again until
         // then returns it without a request, so the check says when it can look up again instead of failing daily.
-        if (run.status === 'running') continue;
-        if (run.status === 'unknown') {
+        // A running one older than an hour was cut off (the server restarted mid-request) and blocks the query the same.
+        const stale =
+          run.status === 'running' &&
+          Date.now() - Date.parse(run.createdAt || '') > STALE_RUN_MS;
+        if (run.status === 'running' && !stale) continue;
+        if (run.status === 'unknown' || stale) {
           uncertain = {
             view,
             until: new Date(

@@ -153,8 +153,6 @@ type BrokenRow = {
   title: string;
   backlinks: number | null;
   referringDomains: number | null;
-  rank: number | null;
-  firstSeen: string | null;
 };
 type Run<T = unknown> = {
   id: number | string;
