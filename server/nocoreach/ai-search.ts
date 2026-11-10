@@ -107,7 +107,28 @@ function gapResult(raws,spec){const raw=raws[0],task=(Array.isArray(raw?.tasks)?
   return [{question:str(i.question,500),volume:num(i.ai_search_volume),sources,brands:brands.slice(0,10),excerpt:at<0?'':answer.slice(Math.max(0,at-120),at+200).replace(/\s+/g,' ').trim(),at:str(i.last_response_at,40)||null}];
  }).filter(q=>q.question).sort((a,b)=>(b.volume||0)-(a.volume||0));
  return {costUsd,status:'completed',errorCode:null,result:{platform:spec.platform,competitor:spec.competitor,totalCount:num(res.total_count),questions,removed}};}
-const kinds={'ai-competitor-gap':{specification:v=>gapSpec(v),result:gapResult},'ai-brand':{specification:v=>brandSpec(v),result:brandResult},'ai-answer':{specification:v=>answerSpec(v),result:answerResult}};
+// Historical AI mention gains and losses are read only when someone requests them.
+// A completed calendar month is a stable DataForSEO query key, so a revisit is cached.
+function trendSpec(v){
+ const now=new Date(),year=now.getUTCFullYear(),month=now.getUTCMonth();
+ const from=new Date(Date.UTC(year,month-12,1)).toISOString().slice(0,10);
+ const dateFrom=from<'2025-08-01'?'2025-08-01':from;
+ const dateTo=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
+ return {kind:'ai-mentions-trend',platform:v.platform,target:v.value,locationCode:v.locationCode,language:v.language,dateFrom,dateTo,
+  path:'ai_optimization/llm_mentions/timeseries_new_lost/live',
+  request:{target:[target(v.value)],platform:v.platform,location_code:v.locationCode,language_code:v.language,date_from:dateFrom,date_to:dateTo,group_range:'month'},
+  estimatedUsd:0.12,reservationUsd:0.25,timeoutMs:120000,priceVersion:'llm-mentions-2026-11'};}
+function trendResult(raw){
+ const task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},c=num(raw?.cost)??num(task.cost),costUsd=c!==null&&c>=0?c:null;
+ if(raw?.status_code!==20000||task.status_code!==20000)return {costUsd,status:'failed',errorCode:`provider_status_${task.status_code||raw?.status_code||'unknown'}`,result:null};
+ const result=Array.isArray(task.result)?task.result[0]:null;
+ const rows=Array.isArray(result?.items)?result.items:result?.items_count===0?[]:null;
+ if(!rows)return {costUsd,status:'failed',errorCode:'research_schema_invalid',result:null};
+ const months=rows.map(i=>({date:str(i?.date,10),newMentions:num(i?.new_mentions),lostMentions:num(i?.lost_mentions),newAiSearchVolume:num(i?.new_ai_search_volume),lostAiSearchVolume:num(i?.lost_ai_search_volume)}))
+  .filter(i=>/^\d{4}-\d{2}-\d{2}$/.test(i.date)).sort((a,b)=>a.date.localeCompare(b.date)).slice(-12);
+ return {costUsd,status:'completed',errorCode:null,result:{months}};
+}
+const kinds={'ai-mentions-trend':{specification:trendSpec,result:trendResult},'ai-competitor-gap':{specification:v=>gapSpec(v),result:gapResult},'ai-brand':{specification:v=>brandSpec(v),result:brandResult},'ai-answer':{specification:v=>answerSpec(v),result:answerResult}};
 class AiSearch{
  constructor(p){this.p=p;this.d4s=new DataForSeo(p,kinds);this.catalog=new Map();}
  // The model to ask for a provider, read from DataForSEO's free catalog (an unknown name is a billed failure).
@@ -122,6 +143,7 @@ class AiSearch{
   for(const r of await this.d4s.repo().find({filter:{projectId:id,status:'completed'},sort:'-createdAt',limit:300})){const s=r.get('spec');if(s?.kind!=='ai-competitor-gap'||s.target.toLowerCase()!==brand||!wanted.has(s.competitor.toLowerCase())||Date.now()-Date.parse(r.get('createdAt'))>30*86400000)continue;
    const k=`${s.competitor.toLowerCase()}:${s.platform}`;if(!out[k])out[k]=r.toJSON();}
   return {runs:Object.values(out)};}
+ async trend(id,v){const project=await this.p.project(id),input=brandInput({...v,competitors:[]},project);return this.d4s.run(id,'ai-mentions-trend',{...v,...input});}
  async brand(id,v){const project=await this.p.project(id),input=brandInput(v,project);return this.d4s.run(id,'ai-brand',{...v,...input});}
  async ask(id,v){const question=str(v.question,500);if(question.length<5)error(systemMessageText('aiSearch.enterQuestion'));if(!MODELS.includes(v.model))error(systemMessageText('aiSearch.unsupportedModel'));
   const c=this.d4s.config(id);if(!c?.verifiedAt)error(systemMessageText('aiSearch.saveVerifyDataforseoDataSources'));
@@ -144,7 +166,7 @@ class AiSearch{
    if(s.kind==='ai-answer'&&age<30*86400000){const e=answers.get(s.group)||{question:s.question,models:{}};if(!e.models[s.model])e.models[s.model]={...r.get('result'),at:r.get('createdAt')};answers.set(s.group,e);}}
   return {brands:[...brands.values()],answers:[...answers.values()].slice(0,10)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error(systemMessageText('aiSearch.usePost'),405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach AI search local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:systemMessageText('aiSearch.aiSearchNotCompleteTry'));}};
-  const actions={brand:wrap((id,v)=>this.brand(id,v)),gap:wrap((id,v)=>this.gap(id,v)),gaps:wrap((id,v)=>this.gaps(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
+  const actions={brand:wrap((id,v)=>this.brand(id,v)),trend:wrap((id,v)=>this.trend(id,v)),gap:wrap((id,v)=>this.gap(id,v)),gaps:wrap((id,v)=>this.gaps(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
   this.p.app.resourceManager.define({name:'nrAiSearch',actions});this.p.app.acl.allow('nrAiSearch',Object.keys(actions),'loggedIn');}
 }
-export { AiSearch, brandSpec, brandResult, brandInput, answerSpec, answerResult, gapSpec, gapResult, pickModel, target, domainOf, citedSite };
+export { AiSearch, brandSpec, brandResult, brandInput, answerSpec, answerResult, gapSpec, gapResult, trendSpec, trendResult, pickModel, target, domainOf, citedSite };
