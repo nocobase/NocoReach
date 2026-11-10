@@ -418,6 +418,9 @@ describe('NocoReach semantic-key translations', () => {
         'Google 未批准本次授权。请确认应用已在“受众”里发布为正式版，并检查账号策略后重试。',
       '配置 Google Auth Platform 的品牌信息、受众和测试用户；测试用户填写你将用于授权的 Google 邮箱。':
         '配置 Google Auth Platform 的品牌信息，再在“受众”里把应用发布为正式版。应用处于测试状态时，Google 会让授权每 7 天失效一次。',
+      // Average position's ⓘ follows the arrow on Search performance, where ↑ is a ranking that rose (2026-11-07).
+      '本站在 Google 搜索结果里的平均位置，按曝光加权。数字越小越靠前，所以下降算变好。':
+        '本站在 Google 搜索结果里的平均位置，按曝光加权。数字越小越靠前，所以 ↑ 表示排名上升（平均排名数字变小），↓ 表示排名下降。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(
@@ -447,7 +450,7 @@ describe('NocoReach semantic-key translations', () => {
         ...stagesFor(playbook).map((stage) => stage.name),
       ]),
     );
-    expect(SYSTEM_PLAYBOOKS).toHaveLength(12);
+    expect(SYSTEM_PLAYBOOKS).toHaveLength(13);
     expect(
       [...copy].filter(
         (text) =>

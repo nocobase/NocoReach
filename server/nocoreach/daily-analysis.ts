@@ -8,6 +8,7 @@ import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
 import { record, lastSuccess } from './sync-policy.js';
 import * as watch from './watch.js';
+import { growthForModel } from './growth-signals.js';
 import { languageOf, forLanguage, LANGUAGE_NAMES } from './language.js';
 import zhTW from '../../shared/i18n/zh-TW.json' with { type: 'json' };
 import jaJP from '../../shared/i18n/ja-JP.json' with { type: 'json' };
@@ -50,10 +51,11 @@ const SYSTEM=`你是 NocoReach 的市场洞察分析助手，使用中文。输�
 只根据 evidence.signals 中的信号写结论，不得使用或编造信号之外的数字，不调用工具、不联网、不保存、不发布。
 evidence.quietSources 是这次没有交给你变化的已接入数据源的背景数字，只用来理解整体情况（比如访问下降而搜索平稳），observations 可以引用；它不能单独作为 insight 的依据，也不写进 signalReviews。evidence.knowledge 是项目知识库的目录（标题和一句话摘要，不是全文）；某条建议需要参考其中的资料时，在 suggestion 里写“参考知识库《标题》”，执行时由 Agent 去读全文。
 evidence.recentTasks 是最近 30 天的任务（标题、页面、到了哪一步、第 7 和 28 天效果）：刚做完或正在观察效果的同一页面、同一主题不要再推荐（signalReviews 里给 skip，理由写“已有任务 T-12 在处理”之类）；observations 可以引用它们的效果；已撤回或效果下降的可以再提，但要说明。
-先写 observations：2–4 条，每条一句话，概括本期最重要的变化或判断并引用具体数字；没有可行动信号时也要写。
-再写 insights：只针对 actionable 为 true 的信号，每条必须填写 signalIds（取自 signals.items 的 key，可合并几个相关信号）。同一问题即使已在 existingOpportunities 中，只要信号仍在就照常输出并填写 existingId，保持原 objective、target、audience；已忽略、暂缓或已转任务的不要换标题重新推荐。community-digest 信号的 topics 需要你按主题归类，只能引用其中列出的主题，把真正反映文档或内容缺口的主题写成建议。
-title 写成“动作 + 对象”，说清对哪个页面或主题做什么，不超过 18 个字（英文字母按半个字算），不用“优化”“提升”“改善”“加强”“完善”“提高”这类空泛的词，例如“给商业页加试用入口”；reason 用一句话说明为什么值得做，带一个关键数字，不超过 30 个字，例如“曝光 5,848，点击率只有 0.4%”；observation 第一句写出关键数字和时间窗口；meaning 写可能含义并注明推测；evidenceText 引用信号里的数字与来源；limitation 写限制（signals.missing 中是未接入或无数据的来源）；suggestion 最多两句，写具体做法；objective 写希望改善什么。
-每条还需 category（optimize/create/conversion/market）、priority（high/medium/low）、priorityReason、confidence（supported/verify）、effort（small/medium/large/unknown）、lifecycle（window/persistent/watch）、target、audience、sources（信号的 source，如 gsc、ga4、site、github、github-traffic、discourse、packages、hackernews、reddit、x、discord、slack、trends、competitors、rank、ai-search）、source（website/search/market/mixed）。
+先写 observations：3–5 条，每条一句话并引用具体数字，按这个顺序：第一条写今天最值得看的一个新发现：当下热点（growth.category 为 trending）里排在最前面的那条 insight——priority 最高的，同样高时选增长空间最大的，它的 priority 不低于其他当下热点；没有当下热点时写排在最前面的那条 insight。写清发现了什么、为什么说发现得早（比如搜索量刚开始涨、竞品还没写）；接着写其他机会；最后写下降和风险，包括变化最大的指标（比如整站点击、访问的变化）。没有可写成 insight 的信号时，第一条说明今天为什么没有新机会。第一条说的是某条 insight 时，在那条 insight 上写 "lead":true，只能有一条。
+再写 insights：每条 insight 就是一个增长点——有人在搜、在问、在看，而我们还没拿到的需求。只针对 actionable 为 true 的信号，它们都带 growth（增长空间的数字，由系统根据数据算好，页面会直接显示）；actionable 为 false 的是没人回复、访问多转化少、新版本、Star 这类变化，留在洞察的“当前状况”里，不写成 insight。growth.category 是系统分好的四类：trending（当下热点：最近明显变多的）、new-content（新内容机会：一直有人搜、我们还没有的）、competitor-gaps（竞品差距）、optimize（内容优化：已有内容还能多拿或找回的），照用，不要改。每条 insight 都要对应产品的某个功能或页面（看 project 里的产品介绍），meaning 第一句写明是哪个；对应不上的不写成 insight。每条必须填写 signalIds（取自 signals.items 的 key，可合并几个相关信号，增长空间最大的放第一个）。同一问题即使已在 existingOpportunities 中，只要信号仍在就照常输出并填写 existingId，保持原 objective、target、audience；已忽略、暂缓或已转任务的不要换标题重新推荐。
+写不出增长空间的不要写成 insight。insights 四类混排，按增长空间的大小、和产品的相关度、投入从大到小排，priority 也按这三点定；当下热点有时效，同样大小时排在前面。只引用 growth 和 facts 里的数字，不要自己估算或改写；估算出来的数字（growth 里写着“预计”的）一律写“预计”。
+title 写成“动作 + 对象”，说清对哪个页面或主题做什么，不超过 18 个字（英文字母按半个字算），不用“优化”“提升”“改善”“加强”“完善”“提高”这类空泛的词，例如“写一篇审批流指南”；排名下降、点击下降、AI 不再提到这几种，title 写能找回多少，例如“找回权限文档每月 860 次点击”；内容过时、内容太短、页面技术问题这几种，title 写要做什么和涉及多少，例如“更新每月约 1,800 次访问的迁移文档”“改掉模板页的重复标题，涉及每月约 1,500 次点击”；都不写“保住”“守住”，也不写“下降了 31%”；reason 用一句话写出增长空间有多大，必须带 growth 里的数字，不超过 30 个字，例如“14 个词每月搜索 8,900 次，本站都没排上”或“进前 3 预计每月多 1,100 次访问”；observation 第一句写出关键数字和时间窗口；meaning 写可能含义并注明推测；evidenceText 引用信号里的数字与来源；limitation 写限制（signals.missing 中是未接入或无数据的来源）；suggestion 最多两句，写具体做法；objective 写希望改善什么。
+每条还需 category（optimize/create/conversion/market）、priority（high/medium/low）、priorityReason、confidence（supported/verify）、effort（small/medium/large/unknown）、lifecycle（window/persistent/watch）、target、audience、sources（信号的 source，如 gsc、keywords、ai-search、github、competitors、trends、ga4、site、github-traffic、discourse、packages、hackernews、reddit、x、discord、slack、rank）、source（website/search/market/mixed）。target 写要改的已有页面地址；要新写页面时 target 留空，改写 newPage：{"section":"建议放在站内哪个目录，如 /blog/","linkFrom":["从哪些已有页面加链接过来，最多 3 个路径，没有就给空数组"]}，目录和页面都从 evidence.pages 已有的地址里选，不要编新地址；要改的在站外（别人的榜单、评测、社区）时，target 留空、不写 newPage，改写 offsite：一句话写在哪里改，不超过 60 字，例如“联系《2026 最佳项目管理工具》的作者补上我们”。
 sourceReviews 对每个有数据的来源写一两句判断：[{"sourceId":"gsc","result":"opportunity 或 no_signal 或 insufficient","reason":"…"}]。
 signalReviews 对 evidence.signals.items 里的每一条信号都要给结论：[{"key":"信号的 key","verdict":"do 或 watch 或 skip","reason":"一句中文理由，不超过 30 字","waitingFor":"watch 时必填","decideBy":"watch 时必填"}]。do 表示值得做，必须有一条 insight 的 signalIds 引用它；skip 表示不用做（比如是好消息、已经在处理、影响很小），理由写清楚——已有机会或任务覆盖、相关机会已被忽略的给 skip，不要给 watch；watch 表示先观察，只用于变化刚出现、数据还少或方向不明的，必须写 waitingFor（在等什么、看到什么就做或不做，不超过 30 字，例如“再看一周，点击率仍低于 1.5% 就改标题”）和 decideBy（最晚哪天给结论，YYYY-MM-DD，从 today 起不超过 {watchDays} 天）。actionable 为 false 的只能是 watch 或 skip。
 带 watch 字段的信号是之前判断先观察、正在跟进的：对照 watch.startFacts（开始观察时的数字）和现在的 facts，看 watch.waitingFor 是否已经满足——满足就给 do 或 skip；还没到可以继续 watch（可以更新 waitingFor，decideBy 不能晚于 watch.decideBy）；watch.mustDecide 为 true 的已经到期，只能给 do 或 skip。
@@ -127,8 +129,10 @@ async function rewriteStyle(insights,signals,model,language='zh-CN'){
 function withRules(prompt,rules){const r=rules||{watchDays:watch.MAX_DAYS,focus:''};return prompt.replaceAll('{watchDays}',String(r.watchDays||watch.MAX_DAYS))+(r.focus?`\n团队写的侧重点（判断值得做、先观察、不用做和排优先级时参考）：${r.focus}`:'');}
 // A watched change carries its record (watch.js) so the model follows it instead of judging it afresh.
 const withWatch=(signals,state,now)=>signals.map(s=>{const w=watch.watchInput(state,s.key,now);return w?{...s,watch:w}:s;});
+// A growth point reaches the model as its figures in words ("about 1,100 more visits a month in the top 3"); the rows behind them
+// stay with the page, which shows them under the opportunity.
 function buildInput(context,state,now=new Date().toISOString(),asOf=now){const ev={...context.evidence,publicSources:(context.evidence.publicSources||[]).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt}))};
- if(ev.signals)ev.signals={...ev.signals,items:withWatch(ev.signals.items||[],state,now)};
+ if(ev.signals)ev.signals={...ev.signals,items:withWatch((ev.signals.items||[]).map(s=>s.growth?{...s,growth:growthForModel(s.growth)}:s),state,now)};
  const existing=[state.insights,...(state.insightHistory||[])].flatMap(b=>b?.items||[]).filter((c,i,all)=>all.findIndex(x=>x.id===c.id)===i).slice(0,40).map(c=>({id:c.id,title:c.title,objective:c.objective,target:c.target,audience:c.audience,review:state.opportunityMeta?.[c.id],hasTask:(state.proposals||[]).some(p=>p.taskId&&p.insight?.id===c.id)}));
  const today=asOf.slice(0,10);let input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing});
  if(input.length>MAX_INPUT){ev.searchQueries=[];ev.pages=[];input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing.slice(0,15)});}
@@ -141,7 +145,7 @@ const QUIET={ga4:{name:'访问（GA4）',cards:['ga4'],pages:['/website']},gsc:{
  github:{name:'GitHub',cards:['github'],pages:['/data/github']},discourse:{name:systemMessageText('common.forum'),cards:['discourse'],pages:['/data/community']},packages:{name:systemMessageText('common.downloads'),cards:['packages'],pages:['/data/downloads']},
  hackernews:{name:'Hacker News',cards:['mentions'],pages:['/data/hackernews']},reddit:{name:'Reddit',cards:['reddit'],pages:['/data/reddit']},x:{name:'X',cards:[],pages:['/data/x']},discord:{name:'Discord',cards:[],pages:['/data/discord']},
  slack:{name:'Slack',cards:[],pages:['/data/slack']},trends:{name:systemMessageText('dataTrends.trends'),cards:[],pages:['/trends']},dataforseo:{name:'关键词、竞品与 AI 搜索（DataForSEO）',cards:[],pages:['/keywords','/research/domain','/ai-search']}};
-const SOURCE_OF={'github-traffic':'github',competitors:'dataforseo',rank:'dataforseo','ai-search':'dataforseo'};
+const SOURCE_OF={'github-traffic':'github',competitors:'dataforseo',rank:'dataforseo','ai-search':'dataforseo',keywords:'dataforseo'};
 const num=v=>typeof v==='number'?v.toLocaleString('en-US',{maximumFractionDigits:1}):String(v);
 function quietSources(connected,signals,cards,areas){
  const busy=new Set((signals||[]).map(x=>SOURCE_OF[x.source]||x.source)),items=(areas||[]).flatMap(a=>a.items||[]);

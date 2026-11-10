@@ -4,6 +4,7 @@ import type {
   ArticleSummary,
   ArticleTargetCheck,
   ArticleTargetView,
+  CoverSettings,
   PublishedArticle,
 } from '../../shared/article-publishing.js';
 
@@ -20,7 +21,12 @@ export type TargetList = {
 export type TestResult = (
   | { ok: true; sample: { id: string; title: string } | null }
   | { ok: false; code: string }
-) & { check: ArticleTargetCheck };
+) & {
+  check: ArticleTargetCheck;
+  /** When the check found other covers (2026-11-05): the settings' new revision and the covers now kept. */
+  revision?: number;
+  cover?: CoverSettings | null;
+};
 
 /** Article publishing targets (server/nocoreach/articles/targets.ts). Writes need the browser's session id. */
 export const articleRequest = <T>(

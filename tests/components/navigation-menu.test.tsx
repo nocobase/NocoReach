@@ -419,6 +419,77 @@ describe('collapsed navigation', () => {
   );
 });
 
+describe('tagged entries', () => {
+  const tagged: AppClientRegisteredRoute = {
+    ...page('keywords'),
+    navigation: { title: 'keywords', tag: 'SEO' },
+  };
+  const plain = page('trends');
+  const group: RouteNavigationItem = {
+    route: { ...page('Search'), componentLoader: undefined },
+    children: [
+      { route: tagged, children: [] },
+      { route: plain, children: [] },
+    ],
+  };
+  // The tag follows the label, hidden from screen readers, which read it in the entry's name.
+  function expectTagged(menu: HTMLElement) {
+    const link = within(menu).getByRole('link', { name: 'keywords · SEO' });
+    const tag = within(link).getByText('SEO');
+    expect(tag).toHaveAttribute('aria-hidden', 'true');
+    expect(tag).toHaveClass('bg-nr-tint-violet', 'text-nr-ink-violet');
+    const other = within(menu).getByRole('link', { name: 'trends' });
+    expect(other.querySelectorAll('span')).toHaveLength(1);
+    return { link, tag };
+  }
+
+  it('takes the selected colors with its entry', () => {
+    render(shell([group], routeKey(tagged), false), { wrapper: I18n });
+    const { link, tag } = expectTagged(document.body);
+    expect(link).toHaveAttribute('data-active');
+    expect(link).toHaveClass(
+      'data-active:bg-sidebar-primary',
+      'data-active:text-sidebar-primary-foreground',
+    );
+    expect(tag).toHaveClass(
+      'in-data-active:bg-sidebar-primary-foreground/10',
+      'in-data-active:text-sidebar-primary-foreground',
+    );
+  });
+
+  it('shows the tag while another page is selected', () => {
+    render(shell([group], routeKey(plain), false), { wrapper: I18n });
+    expect(expectTagged(document.body).link).not.toHaveAttribute('data-active');
+  });
+
+  it('shows the tag in the collapsed sidebar popup', async () => {
+    setCollapsed(true);
+    render(shell([group], routeKey(plain), false), { wrapper: I18n });
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Search' }));
+    expectTagged(await screen.findByRole('dialog', { name: 'Search' }));
+  });
+
+  it('shows the tag in the phone sheet', async () => {
+    vi.stubGlobal('innerWidth', 390);
+    const user = userEvent.setup();
+    render(shell([group], routeKey(plain), false), { wrapper: I18n });
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }));
+    expectTagged(await screen.findByRole('dialog'));
+  });
+
+  it('hides the tag beside an icon alone and names it in the tooltip', async () => {
+    setCollapsed(true);
+    const user = userEvent.setup();
+    render(shell([{ route: tagged, children: [] }]), { wrapper: I18n });
+    const link = screen.getByRole('link', { name: 'keywords · SEO' });
+    expect(within(link).getByText('SEO')).toHaveClass(
+      'group-data-[collapsible=icon]:hidden',
+    );
+    await user.hover(link);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('keywords · SEO');
+  });
+});
+
 describe('sidebar shell', () => {
   it('collapses from the header toggle into the shared preference', async () => {
     const user = userEvent.setup();

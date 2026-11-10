@@ -6,7 +6,7 @@ import { VisibilityError } from './research-helpers.js';
 import { markets, languages } from './keyword-policy.js';
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
-// 域名概览 (OpenSEO Domain Overview, batch 3 without backlinks): any site's ranking keywords and top pages from
+// 域名概览 (OpenSEO Domain Overview, batch 3; backlinks are backlinks-service.ts): any site's ranking keywords and top pages from
 // DataForSEO Labs, on the shared DataForSEO layer (runs only when asked, monthly budget, 30-day reuse, uncertain
 // results not retried). One query per tab: 查询 reads the ranking keywords, whose reply also carries the site's
 // estimated traffic and position counts; the pages tab is read only when the person asks for it.

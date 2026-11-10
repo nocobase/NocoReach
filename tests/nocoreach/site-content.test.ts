@@ -121,6 +121,10 @@ test('content list uses the live snapshots for the chosen period and falls back 
  const a=await sc.list('1','90');assert.equal(a.pages[0].views,900);assert.equal(a.range,'90');assert.equal(a.cutoff,'2026-09-27');assert.match(a.limitations[0],/近 90 天/);
  assert.equal(a.pages[0].internalLinks,1);assert.equal('links' in a.pages[0],false,'outgoing links stay with the stored pages, for Site audit');assert.deepEqual(payload.pages[0].links,['https://ex.com/docs/b']);
  await assert.rejects(sc.list('1','custom'),e=>e.status===400);const b=await sc.list('1','unsupported');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
+ // A range longer than the samples cover (180 days) shows them, saying they hold its last 180 days only.
+ snaps.push({key:'pages-12m',payload:[{page:'/docs/a',views:1800}]},{key:'queries-12m',payload:[]});
+ const c=await sc.list('1','12m');assert.equal(c.pages[0].views,1800);assert.match(c.limitations[0],/最近 180 天/);assert.match(c.limitations[0],/12 个月/);
+ assert.doesNotMatch(a.limitations[0],/180/);
 });
 
 test('daily refresh dates pages that appear after the first read (for the weekly 记忆 check)',async()=>{
@@ -151,4 +155,14 @@ test.each([
   assert.deepEqual(sitemap.urls, [
     { loc: `https://ex.com/${expected}`, lastmod: expected },
   ]);
+});
+test('content list for the page: what the table and drawer show, read once',async()=>{
+ const payload={sites:[{origin:'https://ex.com',confirmedAt:'t'}],pages:[{url:'https://ex.com/docs/a',type:'docs',origin:'https://ex.com',title:'A',words:120,description:'d'.repeat(400),canonical:'https://ex.com/docs/a',h1:1,imagesNoAlt:2,noindex:false,fetchedAt:'t',firstSeenAt:'t',lastmod:'2026-09-01',links:['https://ex.com/docs/b']}]};
+ let reads=0;const repo={findOne:async()=>{reads++;return {get:()=>payload};}};
+ const snaps=[{key:'project',payload:{end:'2026-09-27'}},{key:'pages-28',payload:[{page:'/docs/a',views:280}]},{key:'queries-28',payload:[]}];
+ const sc=new SiteContent({db:{getRepository:()=>repo},sync:{snapshots:async()=>snaps}});
+ const r=await sc.list('1','28',undefined,undefined,'page');
+ assert.deepEqual(r.pages[0],{url:'https://ex.com/docs/a',type:'docs',title:'A',words:120,lastmod:'2026-09-01',views:280,sessions:null,clicks:null,impressions:null});
+ assert.equal(reads,1,'the summary reuses the state read');assert.equal(r.summary.pages,1);
+ assert.equal((await sc.list('1','28')).pages[0].description.length,400,'other callers keep every field');
 });

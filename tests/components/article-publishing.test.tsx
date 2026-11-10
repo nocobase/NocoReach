@@ -29,11 +29,17 @@ import { ArticleReview } from '../../client/pages/task-detail/article-review';
 import { ArticleEditFields } from '../../client/pages/task-detail/article-edit';
 import { ArticleBodyEditor } from '../../client/pages/task-detail/article-body-editor';
 import {
+  editsLine,
   formDraft,
   initialForm,
   keptForm,
   sameForm,
 } from '../../client/pages/task-detail/article-edit-model';
+import {
+  coverSrc,
+  cropArea,
+  needsCrop,
+} from '../../client/pages/task-detail/article-cover-model';
 import {
   useArticleSubmit,
   type ArticleEditSession,
@@ -412,22 +418,27 @@ function Editing({
   };
   const submit = useArticleSubmit({ data: d, article, session, onTab: setTab });
   return (
-    <TaskDraftProvider>
-      <TaskDraftScope scope='1:1'>
-        <ArticleEditFields
-          data={d}
-          article={article}
-          session={session}
-          tab={tab}
-          onTab={setTab}
-          id={submit.id}
-          errors={submit.errors}
-        />
-        <button type='button' onClick={() => void submit.prepare()}>
-          Save
-        </button>
-      </TaskDraftScope>
-    </TaskDraftProvider>
+    <TaskImageContext.Provider value={{ projectId: 1, taskId: '1' }}>
+      <TaskDraftProvider>
+        <TaskDraftScope scope='1:1'>
+          <ArticleEditFields
+            data={d}
+            article={article}
+            session={session}
+            tab={tab}
+            onTab={setTab}
+            id={submit.id}
+            errors={submit.errors}
+          />
+          <button type='button' onClick={() => void submit.prepare()}>
+            Save
+          </button>
+          <button type='button' onClick={() => void submit.prepare(true)}>
+            Approve
+          </button>
+        </TaskDraftScope>
+      </TaskDraftProvider>
+    </TaskImageContext.Provider>
   );
 }
 // The body is a rich editor: its Markdown is replaced through the editor, as typing would.
@@ -2451,4 +2462,439 @@ it('offers the repositories and targets where a change goes, picking the reposit
     also: [],
     repoId: 'site',
   });
+});
+
+// Covers (2026-11-05, ui-references/article-cover-2026-11-05): images in jsdom neither load nor draw, so an image's size
+// comes from a stand-in and the canvas hands back a blob.
+function fakeImages(sizes: Record<string, [number, number]>) {
+  const Original = globalThis.Image;
+  class SizedImage {
+    naturalWidth = 0;
+    naturalHeight = 0;
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+    #src = '';
+    get src() {
+      return this.#src;
+    }
+    set src(value: string) {
+      this.#src = value;
+      const size = Object.entries(sizes).find(([k]) => value.includes(k))?.[1];
+      setTimeout(() => {
+        if (!size) return this.onerror?.();
+        [this.naturalWidth, this.naturalHeight] = size;
+        this.onload?.();
+      }, 0);
+    }
+  }
+  globalThis.Image = SizedImage as unknown as typeof Image;
+  const drawn = vi.fn();
+  const canvas = HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>;
+  const getContext = canvas.getContext,
+    toBlob = canvas.toBlob;
+  Object.assign(canvas, {
+    getContext: () => ({ drawImage: drawn }),
+    toBlob(this: HTMLCanvasElement, done: (b: Blob) => void, type: string) {
+      done(new Blob([`${this.width}x${this.height}`], { type }));
+    },
+  });
+  return {
+    drawn,
+    restore() {
+      globalThis.Image = Original;
+      Object.assign(canvas, { getContext, toBlob });
+    },
+  };
+}
+const uploaded = (id: string, name: string) =>
+  new Response(
+    JSON.stringify({
+      data: {
+        id,
+        filename: name,
+        mimeType: 'image/png',
+        size: 3,
+        contentUrl: `/uploads/task-media/${id}.png`,
+      },
+    }),
+    { status: 201 },
+  );
+const COVER_ID = '2b1f0c8e-5d3a-4c7b-9e21-7f6a0d4c9b13';
+const BODY_IMAGE = '6c0e9d2a-1b4f-4a8e-b3d7-2e5f8a9c1d40';
+
+it('takes a cover on a new article: Add cover, a crop to the site ratio, and approval needs one when the site requires it', async () => {
+  const images = fakeImages({ 'blob:shot': [2880, 1800] });
+  Object.assign(URL, {
+    createObjectURL: vi.fn(() => 'blob:shot'),
+    revokeObjectURL: vi.fn(),
+  });
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async () => uploaded(COVER_ID, 'shot-cover.png'));
+  const onVersion = vi.fn();
+  const user = userEvent.setup();
+  try {
+    render(
+      <Editing
+        data={
+          {
+            ...data,
+            articleTargets: [
+              {
+                ...target,
+                status: true,
+                cover: {
+                  field: 'cover',
+                  ratio: '3:1',
+                  minWidth: 3000,
+                  required: true,
+                },
+              },
+            ],
+          } as unknown as TaskData
+        }
+        article={{
+          ...proposal,
+          articleId: null,
+          baseKey: null,
+          baseVersion: null,
+          draft: {
+            slug: 'new-post',
+            status: 'published',
+            locales: { en: { title: 'New', body: 'Body' } },
+          },
+        }}
+        onVersion={onVersion}
+      />,
+    );
+    const row = within(
+      document.querySelector('[data-cover-row]') as HTMLElement,
+    );
+    expect(row.getByText('Cover')).toBeInTheDocument();
+    expect(row.getByText('Shared by all languages')).toBeInTheDocument();
+    // Published without a cover: not approved, the row says why. Request changes is not held up by it.
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(onVersion).not.toHaveBeenCalled();
+    expect(
+      row.getByText('This site requires a cover for new articles.'),
+    ).toBeInTheDocument();
+    expect(row.getByRole('button', { name: 'Add cover' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onVersion).toHaveBeenCalledTimes(1);
+    expect(onVersion.mock.calls[0][0]).not.toHaveProperty('cover');
+    // An image of 16:10 is cut to 3:1 first, across its whole width.
+    await user.click(row.getByRole('button', { name: 'Add cover' }));
+    expect(
+      screen.queryByText("From the article and the task's images"),
+    ).toBeNull();
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: {
+        files: [new File(['png'], 'shot.png', { type: 'image/png' })],
+      },
+    });
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(dialog.getByText('Adjust cover')).toBeInTheDocument();
+    expect(dialog.getByText("This site's covers are 3:1")).toBeInTheDocument();
+    expect(
+      dialog.getByText(
+        'Original 2880 × 1800, cropped to 2880 × 960 · narrower than 3000 px, may look blurry',
+      ),
+    ).toBeInTheDocument();
+    const slider = dialog.getByRole('slider');
+    expect(slider).toHaveAttribute('aria-valuenow', '50');
+    fireEvent.keyDown(slider, { key: 'ArrowUp' });
+    expect(slider).toHaveAttribute('aria-valuenow', '45');
+    await user.click(dialog.getByRole('button', { name: 'Use' }));
+    // The part kept is drawn at full size and uploaded as a task image.
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(images.drawn).toHaveBeenCalledWith(
+      expect.anything(),
+      0,
+      378,
+      2880,
+      960,
+      0,
+      0,
+      2880,
+      960,
+    );
+    const file = (fetch.mock.calls[0][1]!.body as FormData).get('file') as File;
+    expect(file.name).toBe('shot-cover.png');
+    const thumb = await row.findByRole('button', { name: 'View the cover' });
+    expect(thumb).toHaveStyle({ width: '90px', height: '30px' });
+    const img = thumb.querySelector('img')!;
+    expect(img).toHaveAttribute(
+      'src',
+      expect.stringContaining(`/uploads/task-media/${COVER_ID}.png`),
+    );
+    Object.defineProperty(img, 'naturalWidth', { value: 2880 });
+    Object.defineProperty(img, 'naturalHeight', { value: 960 });
+    fireEvent.load(img);
+    expect(row.getByText('2880 × 960')).toBeInTheDocument();
+    expect(
+      row.getByText('narrower than 3000 px, may look blurry'),
+    ).toBeInTheDocument();
+    expect(row.getByRole('button', { name: 'Replace' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(onVersion).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        cover: { '*': `/uploads/task-media/${COVER_ID}.png` },
+      }),
+    );
+    // Remove takes it back on a new article.
+    await user.click(row.getByRole('button', { name: 'Remove' }));
+    expect(row.getByRole('button', { name: 'Add cover' })).toBeInTheDocument();
+  } finally {
+    fetch.mockRestore();
+    images.restore();
+  }
+});
+
+it("keeps an existing article's cover until it is replaced, picks a body image, and compares the two", async () => {
+  const images = fakeImages({ [BODY_IMAGE]: [1200, 400] });
+  const site =
+    'https://cms.example.com/storage/uploads/500-a.png#attachment=500';
+  const onVersion = vi.fn();
+  const user = userEvent.setup();
+  try {
+    render(
+      <Editing
+        data={
+          {
+            ...data,
+            articleTargets: [
+              { ...target, cover: { field: 'cover', ratio: '3:1' } },
+            ],
+            articleBases: { 'base-1': { ...base, cover: { '*': site } } },
+          } as unknown as TaskData
+        }
+        article={{
+          ...proposal,
+          draft: {
+            locales: {
+              zh: {
+                body: `新的中文正文\n\n![截图](/uploads/task-media/${BODY_IMAGE}.png)`,
+              },
+            },
+          },
+        }}
+        tab='zh'
+        onVersion={onVersion}
+      />,
+    );
+    const row = within(
+      document.querySelector('[data-cover-row]') as HTMLElement,
+    );
+    expect(row.getByText("Using the site's cover")).toBeInTheDocument();
+    expect(
+      row.getByRole('button', { name: 'View the cover' }).querySelector('img'),
+    ).toHaveAttribute('src', site);
+    expect(row.queryByRole('button', { name: 'Remove' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onVersion.mock.calls[0][0]).not.toHaveProperty('cover');
+    // A body image already at 3:1 is used as it is.
+    await user.click(row.getByRole('button', { name: 'Replace' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Use 截图 as the cover' }),
+    );
+    await waitFor(() =>
+      expect(row.getByRole('button', { name: 'Remove' })).toBeInTheDocument(),
+    );
+    expect(row.queryByText("Using the site's cover")).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onVersion).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        cover: { '*': `/uploads/task-media/${BODY_IMAGE}.png` },
+      }),
+    );
+    // Compare with original shows the site's cover and the new one.
+    await user.click(
+      screen.getByRole('switch', { name: 'Compare with original' }),
+    );
+    const change = within(
+      document.querySelector('[data-cover-change]') as HTMLElement,
+    );
+    expect(change.getByAltText('Cover before')).toHaveAttribute('src', site);
+    expect(change.getByAltText('Cover after')).toHaveAttribute(
+      'src',
+      expect.stringContaining(`/uploads/task-media/${BODY_IMAGE}.png`),
+    );
+    await user.click(
+      screen.getByRole('switch', { name: 'Compare with original' }),
+    );
+    // Remove goes back to the site's cover rather than deleting it.
+    const again = within(
+      document.querySelector('[data-cover-row]') as HTMLElement,
+    );
+    await user.click(again.getByRole('button', { name: 'Remove' }));
+    expect(again.getByText("Using the site's cover")).toBeInTheDocument();
+  } finally {
+    images.restore();
+  }
+});
+
+it('shows no cover row for a target without covers, and notes a cover change in Activity', () => {
+  render(
+    <Editing data={data} article={proposal} tab='zh' onVersion={vi.fn()} />,
+  );
+  expect(document.querySelector('[data-cover-row]')).toBeNull();
+  expect(screen.queryByText('Add cover')).toBeNull();
+  expect(
+    editsLine('Edited the article draft, version 3', {
+      ai: 0,
+      hand: 2,
+      cover: 'replaced',
+    }),
+  ).toBe('Edited the article draft, version 3 (hand edits: 2, cover replaced)');
+});
+
+it('crops to the largest part at the ratio and loads a site path from the site', () => {
+  expect(cropArea(2880, 1800, 3, 0.5)).toEqual({
+    x: 0,
+    y: 420,
+    width: 2880,
+    height: 960,
+  });
+  expect(cropArea(1000, 1000, 16 / 9, 0)).toEqual({
+    x: 0,
+    y: 0,
+    width: 1000,
+    height: 563,
+  });
+  expect(cropArea(4000, 1000, 2, 1)).toEqual({
+    x: 2000,
+    y: 0,
+    width: 2000,
+    height: 1000,
+  });
+  // nocobase.com's covers are 3302 × 1068: as near 3:1 as detection counts them, so used as they are.
+  expect(needsCrop(3302, 1068, 3)).toBe(false);
+  expect(needsCrop(3000, 1000, 3)).toBe(false);
+  expect(needsCrop(2880, 1800, 3)).toBe(true);
+  expect(needsCrop(1600, 1000, 16 / 9)).toBe(true);
+  expect(needsCrop(3000, 1000, null)).toBe(false);
+  expect(
+    coverSrc('/images/blog/alpha.png', {
+      pages: { en: 'https://acme.example.com/blog/{slug}' },
+    }),
+  ).toBe('https://acme.example.com/images/blog/alpha.png');
+  expect(coverSrc('./cover.png', {})).toBe('');
+});
+
+it("shows a target's covers on its card, edits them under it, and takes what a check found", async () => {
+  const at = new Date().toISOString();
+  const cover = {
+    field: 'cover',
+    ratio: '3:1',
+    minWidth: 1116,
+    required: true,
+    detected: { at, articles: 20, covers: 20, fields: ['cover', 'files'] },
+  };
+  const cms = {
+    ...panelTarget('cms', 'nocobase.com blog'),
+    cover,
+  };
+  const bare = panelTarget('plain', 'Plain site');
+  const saved = { ...cover, minWidth: 1200, edited: true };
+  vi.mocked(articleRequest).mockImplementation(
+    async (action: string, _project: number, body?: object) => {
+      if (action === 'targets')
+        return { revision: 3, targets: [cms, bare], published: {} };
+      if (action === 'detectCover')
+        return { ...cover, ratio: '16:9', minWidth: 1280 };
+      if (action === 'saveCover')
+        return {
+          revision: 4,
+          targets: [{ ...cms, cover: (body as { cover: object }).cover }, bare],
+        };
+      if (action === 'testTarget')
+        return {
+          ok: true,
+          sample: null,
+          check: { at, ok: true },
+          revision: 5,
+          cover: { ...saved, required: false },
+        };
+      throw new Error(action);
+    },
+  );
+  const user = userEvent.setup();
+  render(
+    <ArticleTargetsConnect
+      projectId={1}
+      onChange={vi.fn()}
+      onSavingChange={vi.fn()}
+    />,
+  );
+  const card = within(
+    (await screen.findByText('nocobase.com blog')).closest(
+      '[data-target]',
+    ) as HTMLElement,
+  );
+  expect(card.getByText('Cover')).toBeInTheDocument();
+  expect(
+    card.getByText(
+      'cover field · 3:1, at least 1116 px wide · required for new articles',
+    ),
+  ).toBeInTheDocument();
+  // A site without a cover field has no row.
+  const plain = within(
+    screen.getByText('Plain site').closest('[data-target]') as HTMLElement,
+  );
+  expect(plain.queryByText('Cover')).toBeNull();
+  await user.click(
+    card.getByRole('button', { name: 'Cover settings for nocobase.com blog' }),
+  );
+  const panel = within(
+    document.querySelector('[data-cover-edit="cms"]') as HTMLElement,
+  );
+  expect(panel.getByLabelText('Min width')).toHaveValue('1116');
+  expect(
+    panel.getByRole('checkbox', { name: 'New articles must have a cover' }),
+  ).toBeChecked();
+  // Detect again fills the form without saving it.
+  await user.click(
+    panel.getByRole('button', {
+      name: 'Detect again from the latest 20 articles',
+    }),
+  );
+  await waitFor(() =>
+    expect(panel.getByLabelText('Min width')).toHaveValue('1280'),
+  );
+  expect(panel.getByText('16:9')).toBeInTheDocument();
+  await user.clear(panel.getByLabelText('Min width'));
+  await user.type(panel.getByLabelText('Min width'), '1200');
+  await user.click(panel.getByRole('button', { name: 'Save' }));
+  expect(articleRequest).toHaveBeenCalledWith(
+    'saveCover',
+    1,
+    {
+      revision: 3,
+      targetId: 'cms',
+      cover: {
+        field: 'cover',
+        ratio: '16:9',
+        minWidth: 1200,
+        required: true,
+        detected: cover.detected,
+      },
+    },
+    'session-a',
+  );
+  expect(
+    await card.findByText(
+      'cover field · 16:9, at least 1200 px wide · required for new articles',
+    ),
+  ).toBeInTheDocument();
+  expect(document.querySelector('[data-cover-edit]')).toBeNull();
+  // A check that found other covers brings them with the new revision.
+  await user.click(card.getByRole('button', { name: 'Check' }));
+  expect(
+    await card.findByText(
+      'cover field · 3:1, at least 1200 px wide · optional',
+    ),
+  ).toBeInTheDocument();
 });

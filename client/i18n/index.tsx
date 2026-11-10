@@ -414,6 +414,84 @@ export function translateSourceError(
   return sourceSystemErrors.has(key) ? $t(key) : translateSystemError(message);
 }
 
+// Server sentences a rank check stores with a value inside; {0} of the uncertain one is empty or a system fragment.
+const rankReasonTemplates = [
+  'messages.monthDataforseoBudgetUsedUp',
+  'messages.resultUncertainMayChargedNot',
+].flatMap((key) =>
+  [
+    chinese[key as keyof typeof chinese],
+    ...Object.entries(legacyKeys)
+      .filter(([, value]) => value === key)
+      .map(([zh]) => zh),
+  ]
+    .filter((zh, i, all) => zh && all.indexOf(zh) === i)
+    .map((zh) => ({
+      key,
+      re: new RegExp(
+        `^${zh
+          .split(/\{\d+\}/)
+          .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('([\\s\\S]*?)')}$`,
+      ),
+      order: [...zh.matchAll(/\{(\d+)\}/g)].map((m) => m[1]),
+    })),
+);
+
+function rankReason(reason: string): string | undefined {
+  const key = systemMessageKey(reason);
+  if (key) return $t(key);
+  for (const t of rankReasonTemplates) {
+    const m = reason.match(t.re);
+    if (!m) continue;
+    const vars: Record<string, string> = {};
+    let known = true;
+    t.order.forEach((slot, i) => {
+      const value = m[i + 1];
+      if (t.key !== 'messages.resultUncertainMayChargedNot') vars[slot] = value;
+      else if (!value) vars[slot] = '';
+      else {
+        const part = systemMessageKey(value);
+        if (part) vars[slot] = $t(part);
+        else known = false;
+      }
+    });
+    if (known) return $t(t.key, vars);
+  }
+  return undefined;
+}
+
+/** Read a DataForSEO run's stored failure text (a system sentence, possibly with a value inside) in the reader's language. */
+export function translateDataForSeoReason(
+  reason: string | null | undefined,
+): string {
+  return reason ? (rankReason(reason) ?? $legacyText(reason)) : '';
+}
+
+/** Read a rank check failure, stored as "<keyword>：<reason>" (server/nocoreach/rank-tracking.ts). The keyword is the
+ * person's own text, kept as it is, and may hold a full-width colon itself, so each colon is tried in turn until the
+ * rest is a known reason; a reason the service did not write stays as it was. */
+export function translateRankCheckError(
+  text: string | null | undefined,
+): string {
+  if (!text) return text ?? '';
+  // A keyword is never empty but may begin with a colon, so a colon at the very start only separates nothing.
+  const first = text.indexOf('：', 1);
+  for (let i = first; i > 0; i = text.indexOf('：', i + 1)) {
+    const reason = rankReason(text.slice(i + 1));
+    if (reason !== undefined)
+      return $t('common.labelValue', { 0: text.slice(0, i), 1: reason });
+  }
+  const whole = rankReason(text);
+  if (whole !== undefined) return whole;
+  return first > 0
+    ? $t('common.labelValue', {
+        0: text.slice(0, first),
+        1: text.slice(first + 1),
+      })
+    : text;
+}
+
 /** Translate current application copy. Unknown text is left intact; Chinese aliases are
  * intentionally NOT resolved here, so new callers cannot depend on the retired key format. */
 export function $t(key: string | null | undefined, vars?: Vars): string {

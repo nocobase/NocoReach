@@ -48,6 +48,19 @@ const currentSystemText = new Map<string, MessageKey>(
     // A refused Bilibili read no longer adds that it stopped (2026-11-02); the old wording stays as their aliases.
     'bilibili.bilibiliRequiresVerificationDeniedAccess',
     'bilibili.bilibiliRequiresLoginCollectionStopped',
+    // Range labels the server puts into the Pages column notes (site-content.ts list); the other ranges' labels
+    // already have aliases.
+    'rangePicker.allTime',
+    'rangePicker.last6Months',
+    // Backlinks' refusals and the Link building playbook (2026-11-09), new server-owned copy.
+    'backlinks.pageAddressNoQuery',
+    'backlinks.topPagesNeedSite',
+    'backlinks.gapNeedsSite',
+    'backlinks.lookupNotComplete',
+    'playbooks.linkBuilding',
+    'playbooks.linkBuildingDescription',
+    'playbooks.linkBuildingInstruction',
+    'playbooks.linkBuildingStep',
   ].map((key) => [chinese[key as MessageKey], key as MessageKey]),
 );
 

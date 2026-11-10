@@ -17,7 +17,9 @@ import { GoogleReportCache, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_MS, reportView } from '../../shared/google-cache.js';
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
-import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { readPageDays, sumPageDays } from './page-days.js';
+import { snapshotPageStart } from './sync-data.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -30,7 +32,7 @@ const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice
 // naming no view, such as the online agent's, has no family and never gets another window's copy.
 const viewFamily=(kind,parts,v,w)=>typeof v.view==='string'&&v.view?[kind,...parts,v.view.slice(0,200),days(w.start,w.end),w.all===true]:undefined;
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
-const MAX_STORED_PAIR_DAYS=200;
+const MAX_STORED_PAIR_DAYS=200,PAIR_OVERFLOW_KEPT=64;
 // GA4 goes on processing a day for about two days after it ends; a report over later days is not kept as settled, and
 // Traffic marks those days as still changing. The page notes and the chart tip say "two days" in every locale
 // (dataWebsite.latestDaysPreliminary).
@@ -38,6 +40,8 @@ const GA4_PROCESSING_DAYS=2;
 // The most query × page rows a report holds per period, read from Search Console or summed from the synced days: a long
 // tail that differs by day would otherwise grow the sums well past a gigabyte.
 const MAX_PAIR_ROWS=100000;
+// Search Console query × page days read per query by `pairRows`, and the projects whose summed rows stay in memory.
+const PAIR_READ_DAYS=4,PAIR_HOLD_PROJECTS=6,MAX_HELD_PAIRS=300000;
 // How far a report's window may run ahead of the synced days and still have its tables built from them: the daily sync
 // runs every 24 hours from when it last ran, so it lands up to a day after the final cutoff moves.
 const PENDING_SYNC_DAYS=2;
@@ -45,6 +49,15 @@ const PENDING_SYNC_DAYS=2;
 const SYNC_REREAD_DAYS=6;
 // A project nobody opened for this long is not read ahead of time; its saved reports still answer when someone returns.
 const WARM_READ_WINDOW_MS=3*DAY;
+// Ranges other than the default a page's person chose (`noteView`), read ahead by the tick while chosen within this, a
+// day inside the age a saved copy may be shown, at most VIEWS_READ_AHEAD a page and project: each Traffic range costs up to
+// 16 GA4 reports a day and each Search performance range up to three Search Console queries and six for its breakdown.
+// Each page's own ranges, as its action reads them (Traffic: WEB_RANGES; Search performance: RANGES and all time; Pages: its
+// list's), without the default the tick reads anyway. Pages' default and Keywords' site ranks are kept too, as nothing
+// else reads them ahead.
+const VIEW_RANGES={website:['7','90','3m','12m','all'],search:['7','90','3m','6m','12m','16m','all'],pages:['7','28','90','3m','6m','12m','16m','all'],ranks:['28']};
+const VIEW_KINDS=Object.keys(VIEW_RANGES),VIEW_KEY=new RegExp(`^(${VIEW_KINDS.map(k=>`${k}:(${VIEW_RANGES[k].join('|')})`).join('|')})$`);
+const VIEW_READ_WINDOW_MS=6*DAY,VIEWS_READ_AHEAD=2;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 // Same page identity as task effects: host without www, path without a trailing slash.
 const RANGES=['7','28','90','3m','6m','12m','16m'],WEB_RANGES=['7','28','90','3m','12m','all','custom'];
@@ -66,6 +79,10 @@ function packFigures(f:PageFigures|null):PackedFigures|null{if(!f)return null;co
 function unpackFigures(f:PackedFigures|null):PageFigures|null{if(!f)return null;
  const unpack=(rows:(string|number)[][],fields:string[])=>rows.map(([h,path,...n])=>({host:f.hosts[Number(h)],path:String(path),current:Object.fromEntries(fields.map((k,i)=>[k,Number(n[i])])),previous:Object.fromEntries(fields.map((k,i)=>[k,Number(n[fields.length+i])]))}));
  return {window:f.window,days:f.days,search:unpack(f.search,SEARCH_FIELDS),web:unpack(f.web,WEB_FIELDS)};}
+// Stored days read `size` at a time, each row handed to `each` as it is read, giving way to other requests between reads:
+// a large site's days are megabytes each, and summing them as they come keeps only the sums.
+async function eachPartitionDays(repo,filter,dates,size,fields,each){for(let i=0;i<dates.length;i+=size){if(i)await new Promise(r=>setImmediate(r));
+ for(const r of await repo.find({filter:{...filter,date:{$in:dates.slice(i,i+size)}},fields}))each(r);}}
 function partitionDates(start:unknown,end:unknown,all=false){if(!calendarDate(start)||!calendarDate(end))fail(systemMessageText('dataViews.pickValidStartEndDates'));if(days(start,end)>(all?36600:980))fail(systemMessageText('dataViews.customRangesUp16Months'));const dates:string[]=[];for(let d=start;d<=end;d=add(d,1))dates.push(d);return {$in:dates};}
 // Same window rules as the Portal period helper: N days ending at the cutoff, or calendar months back from it.
 function windowFor(end,range,from,to,first){if(range==='all'){const start=calendarDate(first)&&first<=end?first:end;return {start,end,days:days(start,end),previousStart:add(start,-1),previousEnd:add(start,-1),all:true};}if(range==='custom'){if(!calendarDate(from)||!calendarDate(to)||from>to)fail(systemMessageText('dataViews.pickValidStartEndDates'));const n=days(from,to);if(from>end)fail(systemMessageText('dataViews.pickValidStartEndDates'));if(n>490)fail(systemMessageText('dataViews.customRangesUp16Months'));const e=to<end?to:end;const count=days(from,e);return {start:from,end:e,days:count,previousStart:add(from,-count),previousEnd:add(from,-1)};}
@@ -88,7 +105,7 @@ async function websiteView(snaps,range,period,from,to,yesterdayOf){const get=k=>
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
  const searched=get(`queries-${range}`)||[],queries=new Map();for(const q of searched){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
- return {connected:true,cutoff:end,settledThrough:settled,queriesWindow:searched.length?{start:windowFor(synced,range).start,end:synced}:null,from:firstDate(web),window:w,...report};}
+ return {connected:true,cutoff:end,settledThrough:settled,queriesWindow:searched.length?{start:[windowFor(synced,range).start,snapshotPageStart(synced)].sort().at(-1),end:synced}:null,from:firstDate(web),window:w,...report};}
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Search Console filters for a country and the query and page filters. Search performance reads web search only
 // (2026-10-22: the other search types were dropped from the page; the sync reads web search only too).
@@ -148,7 +165,7 @@ class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.tokens=new Map();this.readAt=new Map();this.viewReads=new Map();this.pairHold=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
  // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
@@ -273,14 +290,20 @@ class DataViews{
  // a table ending on it needs totals on it. A quiet day further back in the window, or older than that, is a real one.
  async publishedDays(id: string | number,site: string,dates: string[]){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'overview',resource:site,date:{$in:dates}},fields:['date','payload']});
   return new Set(parts.filter(p=>{const payload=p.get('payload');return Array.isArray(payload)&&payload.length>0;}).map(p=>dayOf(p.get('date'))));}
+ // A window whose days held more pairs than MAX_PAIR_ROWS is read from Search Console while its stored pairs stay as they
+ // were (`storedDays`), without reading its days again: with a site's page history stored, a 90-day range of a large site
+ // reads up to 180 days of pairs before it gives up. Each window is remembered on its own (the last PAIR_OVERFLOW_KEPT),
+ // so two ranges over the limit do not undo each other, and the stored days are counted only for a window remembered.
  async storedPairs(id: string | number,site: string,w: SearchWindow){if(w.all||days(w.previousStart,w.end)>MAX_STORED_PAIR_DAYS)return null;
+  const overflow=this.pairOverflow=this.pairOverflow||new Map(),at=`${id}|${site}|${w.previousStart}|${w.end}`,stateOf=async()=>JSON.stringify(await this.storedDays(id,'gsc','query_page',site,partitionDates(w.previousStart,w.end)));
+  if(overflow.has(at)&&overflow.get(at)===await stateOf())return null;
   const repo=this.p.db.getRepository('nrSyncPartitions'),scope={projectId:id,source:'gsc',grain:'query_page',resource:site},wanted=partitionDates(w.previousStart,w.end).$in;
   const held=new Set((await repo.find({filter:{...scope,date:{$in:wanted}},fields:['date']})).map(p=>dayOf(p.get('date'))));if(wanted.some(d=>!held.has(d)))return null;
   if(String(w.end)>=add(historyBounds(this.p,id).cutoff,-SYNC_REREAD_DAYS)&&!(await this.publishedDays(id,site,[String(w.end)])).has(String(w.end)))return null;
   const current=sp.pairSum(),previous=sp.pairSum();
   for(const date of wanted){await new Promise(resolve=>setImmediate(resolve));const [part]=await repo.find({filter:{...scope,date:{$in:[date]}},fields:['date','payload']}),sum=date>=w.start?current:previous;sum.add(part?.get('payload'));
    // Too many for one report: Search Console answers it with its own limit, as it did before these tables were summed.
-   if(sum.size()>MAX_PAIR_ROWS)return null;}
+   if(sum.size()>MAX_PAIR_ROWS){overflow.delete(at);overflow.set(at,await stateOf());if(overflow.size>PAIR_OVERFLOW_KEPT)overflow.delete(overflow.keys().next().value);return null;}}
   return {current:current.rows(),previous:previous.rows()};}
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
@@ -340,70 +363,116 @@ class DataViews{
    related:related.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,ctr:r.impressions?(Number(r.clicks)||0)/Number(r.impressions):0,position:Number(r.position)||0})).filter(r=>r.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,100)};
   return value;},w,viewFamily('row',[...scope,dimension,k,country,filters,v.compare!==false],v,w));}
  // What Search performance reads when it opens on its default range, ready before anyone asks (the sync's tick calls this).
- async warm(id){const report=await this.search(id,{range:'28'});if(!report?.connected||!report.cutoff||!report.window)return;
-  await this.search(id,{range:'28',details:true});
-  return {partial:Boolean((await this.searchBreakdown(id,{...report.window,view:reportView({range:'28'})}))?.partial)};}
+ async warm(id,range='28'){const report=await this.search(id,{range});if(!report?.connected||!report.cutoff||!report.window)return;
+  await this.search(id,{range,details:true});
+  return {partial:Boolean((await this.searchBreakdown(id,{...report.window,view:reportView({range})}))?.partial)};}
  // D: who has opened this project's reports lately decides whether they are read ahead of time. Kept in memory and saved
  // at most hourly, as a restart must not forget it; a demo's refused write leaves the memory copy working.
- noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.saveRead(key,now);}
- async saveRead(id,at){try{const repo=this.p.db.getRepository('nrSnapshots'),key=`report-reads:${id}`,row=await repo.findOne({filter:{key}}),payload={at:new Date(at).toISOString()};if(row)await repo.update({filter:{key},values:{payload}});else await repo.create({values:{key,payload}});}catch{/* the memory copy still works */}}
- // A project connected in the same days counts as read, so its first open does not have to wait either. `within` narrows
- // the days (the tick's morning read of Traffic asks about the last one).
- async recentlyRead(id,authorizedAt,within=WARM_READ_WINDOW_MS){const key=String(id);if(!this.readAt.has(key)){let at=0;try{at=Date.parse((await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload')?.at||'')||0;}catch{at=0;}if(!this.readAt.has(key))this.readAt.set(key,at);}
-  return Date.now()-Math.max(this.readAt.get(key)||0,Date.parse(authorizedAt||'')||0)<within;}
- // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名
- // and 关键词 详情 read them.
+ noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.readsOf(key).then(()=>this.saveRead(key));}
+ // The ranges saved before are read first (`readsOf`), so writing the read time never drops them.
+ async saveRead(id){const saving=this.saving=this.saving||new Map(),write=(saving.get(id)||Promise.resolve()).then(()=>this.writeRead(id));
+  saving.set(id,write);try{await write;}finally{if(saving.get(id)===write)saving.delete(id);}}
+ // One write at a time a project (`saveRead`), so the read time and a range saved together never create two rows.
+ async writeRead(id){try{const repo=this.p.db.getRepository('nrSnapshots'),key=`report-reads:${id}`,row=await repo.findOne({filter:{key}}),at=this.readAt.get(id),views=this.viewReads.get(id);
+  const payload={...(at?{at:new Date(at).toISOString()}:{}),...(views&&Object.keys(views).length?{views:Object.fromEntries(Object.entries(views).map(([k,t])=>[k,new Date(t).toISOString()]))}:{})};
+  if(row)await repo.update({filter:{key},values:{payload}});else await repo.create({values:{key,payload}});}catch{/* the memory copy still works */}}
+ async readsOf(id){const key=String(id);if(!this.readAt.has(key)||!this.viewReads.has(key)){let saved;try{saved=(await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload');}catch{saved=null;}
+   if(!this.readAt.has(key))this.readAt.set(key,Date.parse(saved?.at||'')||0);
+   if(!this.viewReads.has(key))this.viewReads.set(key,Object.fromEntries(Object.entries(saved?.views||{}).map(([k,t])=>[k,Date.parse(String(t))||0]).filter(([k,t])=>t&&VIEW_KEY.test(k))));}
+  return {at:this.readAt.get(key)||0,views:this.viewReads.get(key)};}
+ async recentlyRead(id,authorizedAt,within=WARM_READ_WINDOW_MS){const {at}=await this.readsOf(id);return Date.now()-Math.max(at,Date.parse(authorizedAt||'')||0)<within;}
+ // The ranges a person chose on a page other than its default, so the tick reads them ahead too (sync-service.ts):
+ // Traffic's, Search performance's and Pages' (`kind`), each when it was last chosen, and Keywords' site ranks (`ranks`). Saved with the read time, at once
+ // for a range not chosen before and at most hourly after, so a restart keeps them. Custom ranges are not kept.
+ noteView(id,kind,range='28'){const key=String(id),r=String(range||'28');if(!VIEW_RANGES[kind]?.includes(r))return;void this.readsOf(key).then(({views})=>{
+  const k=`${kind}:${r}`,now=Date.now(),last=views[k]||0;views[k]=now;if(now-last<3600000||this.p.db?.transactionContext?.())return;return this.saveRead(key);}).catch(()=>{});}
+ // The ranges of `kind` chosen in the last VIEW_READ_WINDOW_MS, most recent first, at most VIEWS_READ_AHEAD.
+ async recentViews(id,kind){const {views}=await this.readsOf(id),now=Date.now();
+  return Object.entries(views).filter(([k,t])=>k.startsWith(kind+':')&&now-t<VIEW_READ_WINDOW_MS).sort((a,b)=>b[1]-a[1]).slice(0,VIEWS_READ_AHEAD).map(([k])=>k.slice(kind.length+1));}
+ // The last 28 synced days of Search Console query × page rows, one row per pair; Keywords' site ranks and keyword detail
+ // read them. A large site's pairs pass the report cache's 2 MB entry limit, so they were summed again from the stored
+ // days on every read (one to five seconds on 2026-11-06, the whole process waiting). They are held here in memory for
+ // the last few projects read, under what they depend on: the window's own partitions, so a history fill writing older
+ // days keeps them. Days are read a few at a time, giving way to other requests between reads.
  async pairRows(id){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,cutoff:null,window:null,rows:[]};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,window:null,rows:[]};
-  const w=windowFor(cutoff,'28'),site=link.get('gscSiteUrl');
-  const {key:snapKey}=await this.p.sync.snapshotKey(id);
-  const rows=await this.localReports.load(String(id),['ranks',...this.scope(id,link),snapKey,w.start,w.end],async()=>{const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});return sp.pairs(parts.map(r=>r.get('payload')||[]));});
-  return {connected:true,cutoff,window:{start:w.start,end:w.end},rows};}
+  const w=windowFor(cutoff,'28'),held=await this.heldPairs(id,link,w);
+  return {connected:true,cutoff,window:{start:w.start,end:w.end},rows:held.rows,index:held.index};}
+ async heldPairs(id,link,w){const repo=this.p.db.getRepository('nrSyncPartitions'),site=link.get('gscSiteUrl'),filter={projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.start,w.end)};
+  const read=async()=>{const sum=sp.pairSum();await eachPartitionDays(repo,{...filter,date:undefined},filter.date.$in,PAIR_READ_DAYS,['payload'],r=>sum.add(r.get('payload')||[]));
+   const rows=sum.rows();return {rows,index:sp.queryIndex(rows)};};
+  // Inside a transaction the rows read may still roll back, so they are neither shared nor kept.
+  if(this.p.db?.transactionContext?.())return read();
+  const key=JSON.stringify([...this.scope(id,link),w.start,w.end,...await this.storedDays(id,'gsc','query_page',site,filter.date)]),pid=String(id),hit=this.pairHold.get(pid);
+  if(hit?.key===key){this.pairHold.delete(pid);this.pairHold.set(pid,hit);return hit.value;}
+  const started=Date.now(),value=read().then(v=>{this.p.app?.logger?.info?.('NocoReach search pairs read',{projectId:pid,days:filter.date.$in.length,pairs:v.rows.length,ms:Date.now()-started});return v;});
+  const entry={key,value,pairs:0};this.pairHold.delete(pid);this.pairHold.set(pid,entry);
+  // At most PAIR_HOLD_PROJECTS projects and MAX_HELD_PAIRS pairs in all, the least recently read let go first; the one
+  // just read stays whatever its size.
+  void value.then(v=>{entry.pairs=v.rows.length;let total=0;for(const e of this.pairHold.values())total+=e.pairs;
+   for(const [k,e] of this.pairHold){if(this.pairHold.size<=PAIR_HOLD_PROJECTS&&total<=MAX_HELD_PAIRS)break;if(e===entry)continue;this.pairHold.delete(k);total-=e.pairs;}},()=>{});
+  value.catch(()=>{if(this.pairHold.get(pid)?.value===value)this.pairHold.delete(pid);});
+  return value;}
  // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
  async ranks(id,v){const r=await this.pairRows(id);if(!r.connected)return {connected:false,ranks:{}};if(!r.cutoff)return {connected:true,cutoff:null,ranks:{}};
   const keywords=(Array.isArray(v.keywords)?v.keywords:[]).map(String).slice(0,1000);
-  return {connected:true,cutoff:r.cutoff,window:r.window,ranks:sp.ranks(r.rows,keywords)};}
+  return {connected:true,cutoff:r.cutoff,window:r.window,ranks:sp.indexedRanks(r.index,keywords)};}
  // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
  // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
  // 页面: every page's visits (GA4 page partitions) and search clicks and impressions (Search Console query × page
  // partitions) for the period and the one before it, summed from every synced day rather than the snapshots' top-page
  // samples. Pages are host and path; GA4 rows synced before hosts were kept have host ''. Search Console counts leave out
  // anonymised queries. Built once per synced data and range, and saved like 搜索表现.
- async pageFigures(id,range,from,to){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
-  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,String(range),from||null,to||null,4],async()=>packFigures(await this.buildPageFigures(id,String(range),link,from,to)),value=>value?GOOGLE_HISTORY_CACHE_MS:0,unpackFigures);}
- async buildPageFigures(id,range,link,from,to){const snaps=await this.p.sync.snapshots(id),end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
-  const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,range,from,to,first),repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
-  const read=(source,grain,resource)=>resource?repo.find({filter:{projectId:id,source,grain,resource,date:dates},fields:['date','payload']}):Promise.resolve([]);
-  const [gscParts,ga4Parts]=await Promise.all([read('gsc','query_page',link.get('gscSiteUrl')),read('ga4','page',link.get('ga4PropertyId'))]);
-  const period=d=>d>=w.start&&d<=w.end?'current':d>=w.previousStart&&d<=w.previousEnd?'previous':null;
-  const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'');
+ // Pages' figures are kept under the stored days they sum, not every synced day, so a history fill writing older days or
+ // the other source's days do not make the next range change sum them again.
+ async pageFigures(id,range,from,to){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
+  const end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
+  const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,String(range),from,to,first),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
+  const sources=[['gsc','query_page',link.get('gscSiteUrl')],['ga4','page',link.get('ga4PropertyId')]],stored=await Promise.all(sources.map(([source,grain,resource])=>resource?this.storedDays(id,source,grain,resource,dates):null));
+  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),w.start,w.end,w.previousStart,Boolean(w.all),stored,6],async()=>packFigures(await this.buildPageFigures(id,w,link)),value=>value?GOOGLE_HISTORY_CACHE_MS:0,unpackFigures);}
+ // What a source's stored days of a window are, cheaply: how many and the last write, so a kept sum knows it is current.
+ async storedDays(id,source,grain,resource,dates){const repo=this.p.db.getRepository('nrSyncPartitions'),filter={projectId:id,source,grain,resource,date:dates};
+  const [count,latest]=await Promise.all([repo.count({filter}),repo.findOne({filter,sort:['-updatedAt'],fields:['updatedAt']})]);
+  const at=latest?.get('updatedAt');return [count,at instanceof Date?at.toISOString():at??null];}
+ // Each source's days are summed by nrPageDays (page-days.ts) in the database, the days it does not hold yet from their
+ // partitions: summing every partition of a long range parsed some 1.3 MB of JSON a day on 252 (2026-11-07). Rows are
+ // then named as the partitions' rows were: Search Console by host without www or a port (the URL's hostname) and path, GA4 by its host without www and
+ // its path without the query, fragment or a trailing slash, leaving out paths that do not start with `/`.
+ async buildPageFigures(id,w,link){
+  const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'').replace(/:\d+$/,'');
+  const periods=[{start:w.start,end:w.end},{start:w.previousStart,end:w.previousEnd}],names=['current','previous'];
   const days={gsc:{current:0,previous:0},ga4:{current:0,previous:0}},search=new Map(),web=new Map();
   const entry=(m,host,path,zero)=>{const k=`${host}|${path}`;let o=m.get(k);if(!o){o={host,path,current:{...zero},previous:{...zero}};m.set(k,o);}return o;};
-  for(const r of gscParts){const p=period(dayOf(r.get('date')));if(!p)continue;days.gsc[p]++;
-   for(const x of r.get('payload')||[]){let u;try{u=new URL(x.page);}catch{continue;}const o=entry(search,hostOf(u.hostname),pathOf(u.pathname),{clicks:0,impressions:0})[p];o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
-  for(const r of ga4Parts){const p=period(dayOf(r.get('date')));if(!p)continue;days.ga4[p]++;
-   for(const x of r.get('payload')||[]){if(!String(x.page||'').startsWith('/'))continue;entry(web,hostOf(x.host),pathOf(x.page),{views:0})[p].views+=Number(x.views)||0;}}
-  return {window:w,days,search:[...search.values()],web:[...web.values()]};}
+  const options={logger:this.p.app?.logger,stopped:()=>Boolean(this.p.sync?.stopped)};
+  const site=link.get('gscSiteUrl'),property=link.get('ga4PropertyId');
+  if(site){const sum=await sumPageDays(this.p.db,String(id),'gsc',site,periods,options);sum.days.forEach((n,i)=>{days.gsc[names[i]]=n;});
+   for(const r of sum.rows){const o=entry(search,hostOf(r.host),pathOf(r.path),{clicks:0,impressions:0})[names[r.period]];o.clicks+=r.clicks||0;o.impressions+=r.impressions||0;}}
+  if(property){const sum=await sumPageDays(this.p.db,String(id),'ga4',property,periods,options);sum.days.forEach((n,i)=>{days.ga4[names[i]]=n;});
+   for(const r of sum.rows){if(!r.path.startsWith('/'))continue;entry(web,hostOf(r.host),pathOf(r.path),{views:0})[names[r.period]].views+=r.views||0;}}
+  // In address order, so pages with equal figures keep their order from one build to the next.
+  const sorted=m=>[...m.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,v])=>v);
+  return {window:w,days,search:sorted(search),web:sorted(web)};}
  // A page's own figures (Website content's page drawer), counting every address the project's page identity gives it.
+ // The page's days are read from nrPageDays by key (page-days.ts): reading the window's partitions for each page opened
+ // took 3.7 to 5.8 s a page on 252 (2026-11-07). The answer is not saved: saving each page's answer rewrote the
+ // project's saved reports (up to 8 MB, about 300 ms a page on 252) and pushed Pages' and Search's copies out of them.
  async page(id,v){if(!pageKey(v.url))fail(systemMessageText('dataViews.providePageUrl'));const identity=pageIdentity(await this.p.siteContent?.state?.(id).catch(()=>null)),key=pageKey(v.url,identity);let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  // The addresses that read as this page, so a newly read canonical is not answered from an older cache entry.
-  const aliases=[...Object.entries(identity.canonical||{}).filter(([,u])=>pageKey(u)===key).map(([k])=>k),...(identity.dropped?.[key.slice(0,key.indexOf('/'))]||[])];
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
-  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');
-  const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,...(aliases.length?[aliases]:[]),w],async()=>{
-  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});
-  const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
+  const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]);
+  // Refuses a range past what the synced days may hold, as reading the partitions did (the 400 a custom range gets).
+  partitionDates(w.start,w.end,Boolean(w.all));
+  const held=await readPageDays(this.p.db,String(id),key,identity,{start:w.start,end:w.end},{gsc:gscEnd?link.get('gscSiteUrl'):null,ga4:ga4End?link.get('ga4PropertyId'):null},{logger:this.p.app?.logger,stopped:()=>Boolean(this.p.sync?.stopped)});
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
-  for(const r of gscParts){const o=day(r.get('date'));o.clicks=0;o.impressions=0;for(const x of r.get('payload')||[])if(pageKey(x.page,identity)===key){o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
-  const norm=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
-  const rowPath=x=>{if(!x.host)return norm(x.page);try{return norm(new URL(canonicalUrl(`https://${x.host}${String(x.page||'')}`,identity)).pathname);}catch{return norm(x.page);}};
-  for(const r of ga4Parts){const o=day(r.get('date'));o.views=0;for(const x of r.get('payload')||[])if(rowPath(x)===norm(path))o.views+=Number(x.views)||0;}
+  for(const d of [...(held.days.gsc||[])].sort()){const o=day(d);o.clicks=0;o.impressions=0;}
+  for(const r of held.search){const o=day(r.date);o.clicks+=r.clicks;o.impressions+=r.impressions;}
+  for(const d of [...(held.days.ga4||[])].sort())day(d).views=0;
+  for(const r of held.web)day(r.date).views+=r.views;
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
-  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
+  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
  register(){
   // Only a page that says it shows a saved copy (`acceptSaved`) gets one while a new report is read. API keys, scripts and
   // the command line wait for the new report and see its failure, as they did before saved copies.
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const read=()=>fn(id,v,ctx);ctx.body=v.acceptSaved===true?await read():await waitForFresh(read);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteTables:wrap((id,v)=>this.websiteTables(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap((id,v)=>this.websiteRealtime(id,v)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteTables','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);this.noteView(id,'search',v.range);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);this.noteView(id,'website',v.range);return this.website(id,v);}),websiteTables:wrap((id,v)=>this.websiteTables(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap((id,v)=>this.websiteRealtime(id,v)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>{this.noteView(id,'ranks');return this.ranks(id,v);}),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteTables','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 export { websiteView, withFresh, redditCard, DataViews, packagesCard, hackernewsCard, windowFor, metric, series, netChange, starRows, githubCard, communityCard, contentCard, gscCard };

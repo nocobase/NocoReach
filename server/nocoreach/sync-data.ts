@@ -13,18 +13,63 @@ function compact(rows,grain){
  return [...groups.values()].map(r=>{if('weight'in r){r.position=r.impressions?r.weight/r.impressions:0;delete r.weight;}return r;});
 }
 function periodWindow(end,key){let start=new Date(Date.parse(end+'T00:00:00Z')+day);if(key.endsWith('m')){const d=start.getUTCDate();start.setUTCDate(1);start.setUTCMonth(start.getUTCMonth()-parseInt(key));start.setUTCDate(Math.min(d,new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,0)).getUTCDate()));}else start=new Date(Date.parse(end)-(Number(key)-1)*day);const first=start.toISOString().slice(0,10),days=Math.round((Date.parse(end)-Date.parse(first))/day)+1;return {start:first,previousStart:shift(first,-days)};}
-function buildSnapshots(partitions,project){
- const select=(source,grain)=>partitions.filter(p=>p.source===source&&p.grain===grain);
+const RANGES=['7','28','90','3m','6m','12m','16m'];
+// The page days the snapshots' page samples (pages-<range>, queries-<range>) sum: the last SNAPSHOT_PAGE_DAYS through
+// the snapshots' end (the longest evidence period, 90 days, and the one before it). A longer range's sample covers
+// these days only (`snapshotCovers`), and its previous figures the part of its previous period within them.
+const SNAPSHOT_PAGE_DAYS=180;
+const snapshotPageStart=end=>shift(end,1-SNAPSHOT_PAGE_DAYS);
+// Whether a range's page samples cover its whole current period.
+const snapshotCovers=(end,key)=>periodWindow(end,key).start>=snapshotPageStart(end);
+// Each (keyword, page)'s sums for one range: clicks, impressions, previous clicks, previous impressions, position weight.
+const PAIR_FIELDS=5,PAIR_BLOCK=4096;
+const isPageDay=p=>(p.source==='ga4'&&p.grain==='page')||(p.source==='gsc'&&p.grain==='query_page');
+// The snapshots of a project's stored days, from its days other than page days (`base`), then its page days one at a
+// time (`add`): a day's rows are summed into each range they fall in and dropped, so a build holds the sums of every
+// (keyword, page) rather than every row of every day (1.5 million rows, 600 MB of heap for 210 days on 252). The
+// result matches summing every row at once, in the same order: rows within a range in the order their days were added,
+// ties kept in the order a (keyword, page) first appeared in that range.
+function snapshotBuilder(base,project,{limit=true}={}){
+ const select=(source,grain)=>base.filter(p=>p.source===source&&p.grain===grain);
  const web=select('ga4','overview').flatMap(p=>p.payload),search=select('gsc','overview').flatMap(p=>p.payload);
- const webEnd=web.map(r=>r.date).sort().at(-1),searchEnd=search.map(r=>r.date).sort().at(-1);if(!webEnd&&!searchEnd)return [];
+ const webEnd=web.map(r=>r.date).sort().at(-1),searchEnd=search.map(r=>r.date).sort().at(-1);if(!webEnd&&!searchEnd)return {end:null,add(){},finish:()=>[]};
  const end=webEnd&&searchEnd?(webEnd<searchEnd?webEnd:searchEnd):(webEnd||searchEnd);
- const out=[{key:'project',payload:{...project,end,mode:'google-live',importedAt:new Date().toISOString()}},{key:'history-web',payload:web},{key:'history-search',payload:search}];
- out.push({key:'history-github-referral',payload:select('ga4','source').map(p=>({date:p.date,...p.payload.filter(r=>/(^|\.)github\.com$/i.test(r.source||'')).reduce((a,r)=>({sessions:a.sessions+(r.sessions||0),views:a.views+(r.views||0),conversions:a.conversions+(r.conversions||0)}),{sessions:0,views:0,conversions:0})}))});
- out.push({key:'history-reddit-referral',payload:select('ga4','source').map(p=>({date:p.date,...p.payload.filter(r=>/(^|\.)reddit\.com$|^com\.reddit\./i.test(r.source||'')).reduce((a,r)=>({sessions:a.sessions+(r.sessions||0),views:a.views+(r.views||0),conversions:a.conversions+(r.conversions||0)}),{sessions:0,views:0,conversions:0})}))});
- for(const key of ['7','28','90','3m','6m','12m','16m']){const w=periodWindow(end,key);for(const [grain,limit] of [['source',40],['page',60]]){const rows=select('ga4',grain).filter(p=>p.date>=w.start&&p.date<=end).flatMap(p=>p.payload);const sums=new Map();for(const r of rows){const k=grain==='source'?JSON.stringify([r.source,r.medium]):JSON.stringify([r.host||'',r.page]);const o=sums.get(k)||{...r,views:0,sessions:0,conversions:0};o.views+=r.views;o.sessions+=r.sessions||0;o.conversions+=r.conversions;sums.set(k,o);}out.push({key:`${grain==='source'?'sources':'pages'}-${key}`,payload:[...sums.values()].sort((a,b)=>b.views-a.views).slice(0,limit)});}
- const sums=new Map();for(const p of select('gsc','query_page').filter(p=>p.date>=w.previousStart&&p.date<=end))for(const r of p.payload){const k=JSON.stringify([r.keyword,r.page]);const o=sums.get(k)||{keyword:r.keyword,page:r.page,clicks:0,impressions:0,previous:0,previousImpressions:0,weight:0};if(p.date>=w.start){o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;}else{o.previous+=r.clicks;o.previousImpressions+=r.impressions;}sums.set(k,o);}
- const keywords=new Map();for(const r of sums.values())keywords.set(r.keyword,(keywords.get(r.keyword)||0)+r.impressions);const top=new Set([...keywords].sort((a,b)=>b[1]-a[1]).slice(0,100).map(([k])=>k));out.push({key:`queries-${key}`,payload:[...sums.values()].filter(r=>top.has(r.keyword)&&(r.impressions>20||r.previous>5)).sort((a,b)=>b.impressions-a.impressions).slice(0,250).map(({weight,...r})=>({...r,position:r.impressions?weight/r.impressions:0}))});
- }
- return out;
+ const windows=RANGES.map(key=>periodWindow(end,key)),R=windows.length,pages=windows.map(()=>new Map()),from=limit?snapshotPageStart(end):'';
+ // Every (keyword, page) seen, by index; for each range, its sums and the order it first appeared in (-1: not in it).
+ const index=new Map(),keywords=[],addresses=[],seen=new Int32Array(R),sums=[],firsts=[];
+ const pairOf=(keyword,page)=>{const k=JSON.stringify([keyword,page]);let j=index.get(k);if(j!==undefined)return j;j=keywords.length;index.set(k,j);keywords.push(keyword);addresses.push(page);
+  // Blocks of PAIR_BLOCK pairs: growing one array would copy it, holding both for a moment.
+  if(j%PAIR_BLOCK===0){sums.push(new Float64Array(PAIR_BLOCK*R*PAIR_FIELDS));firsts.push(new Int32Array(PAIR_BLOCK*R).fill(-1));}return j;};
+ const slot=(j,i)=>(j%PAIR_BLOCK)*R+i;
+ return {
+  end,
+  add(p){if(p.date<from)return;
+   if(p.source==='ga4'&&p.grain==='page'){for(let i=0;i<R;i++){if(p.date<windows[i].start||p.date>end)continue;const m=pages[i];for(const r of p.payload){const k=JSON.stringify([r.host||'',r.page]);const o=m.get(k)||{...r,views:0,sessions:0,conversions:0};o.views+=r.views;o.sessions+=r.sessions||0;o.conversions+=r.conversions;m.set(k,o);}}return;}
+   if(p.source!=='gsc'||p.grain!=='query_page')return;
+   const ranges=windows.map((w,i)=>p.date>=w.previousStart&&p.date<=end?i:-1).filter(i=>i>=0);if(!ranges.length)return;
+   for(const r of p.payload){const j=pairOf(r.keyword,r.page);const b=Math.floor(j/PAIR_BLOCK),f=firsts[b],v=sums[b];for(const i of ranges){const at=slot(j,i),o=at*PAIR_FIELDS;if(f[at]<0)f[at]=seen[i]++;
+    if(p.date>=windows[i].start){v[o]+=r.clicks;v[o+1]+=r.impressions;v[o+4]+=r.position*r.impressions;}else{v[o+2]+=r.clicks;v[o+3]+=r.impressions;}}}
+  },
+  finish(){
+   const out=[{key:'project',payload:{...project,end,mode:'google-live',importedAt:new Date().toISOString()}},{key:'history-web',payload:web},{key:'history-search',payload:search}];
+   out.push({key:'history-github-referral',payload:select('ga4','source').map(p=>({date:p.date,...p.payload.filter(r=>/(^|\.)github\.com$/i.test(r.source||'')).reduce((a,r)=>({sessions:a.sessions+(r.sessions||0),views:a.views+(r.views||0),conversions:a.conversions+(r.conversions||0)}),{sessions:0,views:0,conversions:0})}))});
+   out.push({key:'history-reddit-referral',payload:select('ga4','source').map(p=>({date:p.date,...p.payload.filter(r=>/(^|\.)reddit\.com$|^com\.reddit\./i.test(r.source||'')).reduce((a,r)=>({sessions:a.sessions+(r.sessions||0),views:a.views+(r.views||0),conversions:a.conversions+(r.conversions||0)}),{sessions:0,views:0,conversions:0})}))});
+   RANGES.forEach((key,i)=>{const w=windows[i];
+    const rows=select('ga4','source').filter(p=>p.date>=w.start&&p.date<=end).flatMap(p=>p.payload);const sources=new Map();for(const r of rows){const k=JSON.stringify([r.source,r.medium]);const o=sources.get(k)||{...r,views:0,sessions:0,conversions:0};o.views+=r.views;o.sessions+=r.sessions||0;o.conversions+=r.conversions;sources.set(k,o);}
+    out.push({key:`sources-${key}`,payload:[...sources.values()].sort((a,b)=>b.views-a.views).slice(0,40)});
+    out.push({key:`pages-${key}`,payload:[...pages[i].values()].sort((a,b)=>b.views-a.views).slice(0,60)});
+    // The range's (keyword, page)s in the order they first appeared in it.
+    const order=new Int32Array(seen[i]);for(let j=0;j<keywords.length;j++){const f=firsts[Math.floor(j/PAIR_BLOCK)][slot(j,i)];if(f>=0)order[f]=j;}
+    const field=(j,n)=>sums[Math.floor(j/PAIR_BLOCK)][slot(j,i)*PAIR_FIELDS+n],totals=new Map();for(const j of order)totals.set(keywords[j],(totals.get(keywords[j])||0)+field(j,1));
+    const top=new Set([...totals].sort((a,b)=>b[1]-a[1]).slice(0,100).map(([k])=>k));
+    out.push({key:`queries-${key}`,payload:[...order].filter(j=>top.has(keywords[j])&&(field(j,1)>20||field(j,2)>5)).sort((a,b)=>field(b,1)-field(a,1)).slice(0,250).map(j=>({keyword:keywords[j],page:addresses[j],clicks:field(j,0),impressions:field(j,1),previous:field(j,2),previousImpressions:field(j,3),position:field(j,1)?field(j,4)/field(j,1):0}))});
+   });
+   return out;
+  }};
 }
-export { shift, compact, periodWindow, buildSnapshots };
+// Every row at once and every page day given, for callers that hold them (tests, imports).
+function buildSnapshots(partitions,project){const builder=snapshotBuilder(partitions.filter(p=>!isPageDay(p)),project,{limit:false});for(const p of partitions)if(isPageDay(p))builder.add(p);return builder.finish();}
+// Frozen through, for a value shared between readers (the sync snapshots, the site brief): a change to it fails loudly
+// instead of reaching the next reader.
+const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
+export { shift, compact, periodWindow, buildSnapshots, snapshotBuilder, isPageDay, SNAPSHOT_PAGE_DAYS, snapshotPageStart, snapshotCovers, deepFreeze };

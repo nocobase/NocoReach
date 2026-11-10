@@ -2199,7 +2199,9 @@ export function acmeOpportunities(
 ): DemoContent['opportunities'] {
   const lang = language === 'en-US' ? 'en' : 'zh';
   const copy = (value: L) => value[lang];
-  const selected = [0, 1, 2, 3, 4, 14, 16, 17, 20, 21, 22, 26, 5, 15, 24, 25];
+  // The handled opportunities: two handed off (dependencies, handover) and two ignored. The pending ones are growth
+  // points (growth-briefs.ts).
+  const selected = [5, 15, 24, 25];
   return {
     notice: copy(
       t(
@@ -2234,15 +2236,34 @@ export function acmeOpportunities(
     observations: [
       copy(
         t(
-          '本周优先解决 Excel 导入、首页搜索摘要与客户协作说明；负荷页继续积累样本。',
-          'Prioritize Excel imports, homepage snippets and client collaboration this week; collect more workload-page evidence.',
+          '“AI 專案管理”近 3 个月搜索量涨了 126%，现在每月 2,750 次；排在前面的多是新闻，竞品里只有 Nimbus 有对应页面，现在写能赶在多数竞品前面。',
+          'Searches for “ai project management” rose 126% over the last 3 months to 2,750 a month; the top results are mostly news and only Nimbus has a page, so writing one now gets ahead of most competitors.',
+        ),
+      ),
+      copy(
+        t(
+          '甘特图这组 12 个词每月搜索 9,750 次，本站都没排上；AI 推荐协作工具的 26 个问题里，19 个的回答提到 Nimbus 等产品，只有 3 个提到 Acme。',
+          'The 12 Gantt chart keywords are searched 9,750 times a month and we rank for none; of 26 questions where AI recommends collaboration tools, 19 answers name Nimbus and others and only 3 name Acme.',
+        ),
+      ),
+      copy(
+        t(
+          '已有内容里，Excel 导入指南进前 3 预计每月多 210 次点击；看板页近 28 天曝光 3,860 次、点击率只有 0.9%，改好标题和摘要预计每月多 280 次点击。',
+          'Among existing pages, the Excel import guide would bring an estimated 210 more clicks a month in the top 3; the kanban page had 3,860 impressions in 28 days at a 0.9% click-through rate, and a better title and description would bring an estimated 280 more clicks a month.',
+        ),
+      ),
+      copy(
+        t(
+          '要留意的下降：权限文档 5 个跟踪的关键词排名下降，近 28 天点击从 1,810 次降到 1,020 次；整站近 7 天的搜索点击和访问也都比前 7 天少。',
+          'Drops to watch: the permissions docs fell for 5 tracked keywords, with clicks down from 1,810 to 1,020 over 28 days; site-wide search clicks and sessions over the last 7 days are also below the 7 days before.',
         ),
       ),
     ],
+    lead: 'acme-growth-ai-pm',
     doReason: copy(
       t(
-        '样例搜索或社区反馈指向明确的协作问题。',
-        'Sample search or community evidence identifies a concrete collaboration issue.',
+        '增长空间明确，和产品相关，投入可控。',
+        'Clear growth potential, relevant to the product, with manageable effort.',
       ),
     ),
     skipReason: copy(
@@ -2261,8 +2282,8 @@ export function acmeOpportunities(
         copy(s.comments[1][1]),
         copy(ACME_DISCUSSIONS[index].title),
         s.path,
-        ['discourse', 'gsc', 'ga4', 'keywords'][order % 4],
-        order < 4 ? 'high' : 'medium',
+        ['discourse', 'gsc', 'ga4', 'keywords'][order],
+        'medium',
       ];
     }),
     watches: [

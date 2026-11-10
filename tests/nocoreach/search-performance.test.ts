@@ -39,8 +39,8 @@ function views({filtered=false}={}){
  const end='2026-09-27',daily=[];for(let i=59;i>=0;i--)daily.push({date:add(end,-i),clicks:10,impressions:100,position:8});
  const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
  const calls=[],saved=[];const snaps=[{key:'history-search',payload:daily}];let built=0;const state={snap:'s1'};
- const repo={find:async o=>{calls.push(o.filter);return (o.filter.grain==='overview'?daily.map(r=>({date:r.date,payload:[r]})):parts).filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
-  findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>o.filterByTk?x.id===o.filterByTk:x.key===o.filter.key).payload=o.values.payload;}};
+ const repo={count:async o=>parts.filter(r=>o.filter.date.$in.includes(r.date)).length,find:async o=>{if(o.filter.key?.$startsWith)return saved.filter(x=>x.key.startsWith(o.filter.key.$startsWith)).map(r=>({get:k=>r[k]}));calls.push(o.filter);return (o.filter.grain==='overview'?daily.map(r=>({date:r.date,payload:[r]})):parts).filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
+  findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>o.filterByTk?x.id===o.filterByTk:x.key===o.filter.key).payload=o.values.payload;},destroy:async o=>{for(let i=saved.length-1;i>=0;i--)if(o.filterByTk!=null?saved[i].id===o.filterByTk:saved[i].key===o.filter.key)saved.splice(i,1);}};
  const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>repo}};
  const dv=new DataViews(p);dv.gscQuery=async(_id,_site,body)=>body.dimensions[0]==='date'?parts.filter(r=>r.date>=body.startDate&&r.date<=body.endDate).map(r=>({keys:[r.date],clicks:2,impressions:20,position:9})):[];
  return {dv,p,calls,end,filtered,saved,state,built:()=>built};
@@ -54,10 +54,12 @@ test('search report: unfiltered totals from durable date rows, details are indep
  await dv.search('1',{range:'28'});assert.equal(calls.length,1);
 });
 test('search report: saved under the synced data, so a restart reads it back without building; new data builds again',async()=>{
- const {p,saved,state,built}=views();const first=await new DataViews(p).search('1',{range:'28'});assert.equal(built(),1);assert.equal(saved[0].key,'google-local-reports:1');
+ const {p,saved,state,built}=views();const first=await new DataViews(p).search('1',{range:'28'});assert.equal(built(),1);const index=()=>saved.find(s=>s.key==='google-local-reports:1');assert.ok(index(),'the index of the saved reports');assert.ok(saved.some(s=>s.key.startsWith('google-local-reports:1:')),'each report in a row of its own');
  const again=await new DataViews(p).search('1',{range:'28'});assert.equal(built(),1,'a fresh instance (a restart) reads the saved report');assert.deepEqual(again.totals,first.totals);
- await new DataViews(p).search('1',{range:'7'});assert.equal(saved[0].payload.entries.length,2);
- state.snap='s2';await new DataViews(p).search('1',{range:'28'});assert.equal(built(),3,'new synced data is built again');assert.equal(saved[0].payload.entries.length,3,'versioned reports remain bounded and cannot match the new sync key');
+ await new DataViews(p).search('1',{range:'7'});assert.equal(index().payload.entries.length,2);
+ state.snap='s2';await new DataViews(p).search('1',{range:'28'});assert.equal(built(),3,'new synced data is built again');assert.equal(index().payload.entries.length,3,'versioned reports remain bounded and cannot match the new sync key');
+ // Each report the index names has its row, and no other row is left.
+ assert.deepEqual(saved.filter(x=>x.key.startsWith('google-local-reports:1:')).map(x=>x.key).sort(),index().payload.entries.map(e=>`google-local-reports:1:${e.key}`).sort());
 });
 test('search report: a filter switches totals to the query × page rows and needs both windows covered to compare',async()=>{
  const {dv}=views();const r=await dv.search('1',{range:'7',queryFilter:{operator:'contains',expression:'crm'}});
@@ -83,6 +85,12 @@ test('search details: more pairs than a report holds reads Search Console, stopp
   const offset=reads*size,payload=Array.from({length:size},(_,i)=>({keyword:`q${offset+i}`,page:'https://x/a',clicks:1,impressions:1,position:1}));return [{get:k=>k==='payload'?payload:o.filter.date.$in[0]}];}});
  const w=__data_views.windowFor(end,'7');
  assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,1,'the first day over the limit ends the reading');
+ // While the stored days stay as they were, the span is not read again; once they change, it is.
+ reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,0);
+ // Another window over the limit is remembered beside it, not in its place.
+ const w28=__data_views.windowFor(end,'28');reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w28),null);assert.equal(reads,1);
+ reads=0;assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(await dv.storedPairs('1','sc-domain:x',w28),null);assert.equal(reads,0);
+ dv.pairOverflow.set(`1|sc-domain:x|${w.previousStart}|${w.end}`,'other');
  reads=0;size=Math.floor(LIMIT/7);const within=await dv.storedPairs('1','sc-domain:x',w);assert.equal(reads,14);assert.equal(within.current.length,size*7);assert.equal(within.previous.length,size*7);
  reads=0;size=LIMIT+1;const asked=[];dv.gscQuery=async(_id,_site,body)=>{asked.push(body);return [];};
  const r=await dv.search('1',{range:'7',details:true});assert.equal(r.live,true);assert.ok(asked.some(b=>b.dimensions.join()==='query,page'));
@@ -119,14 +127,18 @@ test('本站排名: queries match case-insensitively, position weighted over pag
 test('ranks view reads the last 28 synced days once per synced data',async()=>{
  const {dv,calls,end}=views();const r=await dv.ranks('1',{keywords:['CRM','none']});
  assert.equal(r.cutoff,end);assert.equal(r.ranks.crm.clicks,28);assert.equal(r.ranks.crm.position,9);assert.equal(r.ranks.none,undefined);
- await dv.ranks('1',{keywords:['erp']});assert.equal(calls.length,1);
+ const read=calls.length;assert.equal(read,7,'four days a query');
+ await dv.ranks('1',{keywords:['erp']});assert.equal(calls.length,read,'held, whatever the keywords');
+ assert.deepEqual((await dv.ranks('1',{keywords:['ERP']})).ranks,{erp:{clicks:14,impressions:420,position:3,page:'https://x/b'}});
 });
-test('page view: daily clicks, impressions and views of one page; www and trailing slash ignored; days without a partition stay empty',async()=>{
- const end='2026-09-27',daily=[{date:end,clicks:1,impressions:1}],parts={gsc:[{date:end,payload:[{page:'https://www.x.dev/docs/a/',clicks:3,impressions:40},{page:'https://x.dev/docs/b',clicks:9,impressions:9}]}],ga4:[{date:end,payload:[{page:'/docs/a',views:12},{page:'/docs/a?ref=1',views:3},{page:'/',views:99}]}]};
- const p={sync:{snapshotKey:async()=>({key:'page-fixture'}),snapshots:async()=>[{key:'history-search',payload:daily},{key:'history-web',payload:daily}],link:async()=>({get:k=>k})},db:{getRepository:()=>({find:async o=>parts[o.filter.source].map(r=>({get:k=>r[k]}))})}};
- const r=await new DataViews(p).page('1',{url:'https://x.dev/docs/a',range:'7'});
- assert.deepEqual(r.daily.at(-1),{date:end,clicks:3,impressions:40,views:15});assert.deepEqual(r.daily[0],{date:'2026-09-21'});
- await assert.rejects(new DataViews(p).page('1',{url:'nope'}),/网址/);
+test('ranks view: the held pairs stay through other writes and are read again when the window\'s own days change',async()=>{
+ const {dv,calls,state}=views();await dv.ranks('1',{keywords:['crm']});const read=calls.length;
+ state.snap='s2';await dv.ranks('1',{keywords:['crm']});assert.equal(calls.length,read,'a history fill writing older days');
+ calls.length=0;dv.pairHold.clear();await Promise.all([dv.ranks('1',{keywords:['crm']}),dv.ranks('1',{keywords:['erp']})]);assert.equal(calls.length,read,'callers at the same time share one read');
+});
+test('本站排名: the query index answers as the row scan does',()=>{
+ const rows=[{keyword:'open crm',page:'/a',clicks:2,impressions:100,position:12},{keyword:'Open CRM ',page:'/b',clicks:1,impressions:300,position:8},{keyword:'open crm',page:'/c',clicks:1,impressions:400,position:8},{keyword:'other',page:'/d',clicks:9,impressions:0,position:1}];
+ const keywords=['open crm','OTHER','missing'];assert.deepEqual(sp.indexedRanks(sp.queryIndex(rows),keywords),sp.ranks(rows,keywords));
 });
 test('search report by country: asks Search Console with the country (and text) filter, same window, coverage from the actual query',async()=>{
  const {dv,end}=views();const asked=[];
@@ -176,4 +188,10 @@ test('涨跌: queries and pages by clicks against the period before; new ones ha
  assert.deepEqual(q.rising[0],{key:'a',clicks:30,previousClicks:10,change:20,impressions:300,previousImpressions:200,position:4,previousPosition:6});
  assert.equal(q.falling[1].position,null);
  assert.deepEqual(sp.movers(cur,prev,'page').rising.map(r=>r.key),['/1','/3']);
+});
+test('ranks view: held pairs are let go, least recently read first, past the projects or pairs held',async()=>{
+ const {dv}=views();
+ for(const id of ['1','2','3','4','5','6','7'])await dv.ranks(id,{keywords:['crm']});
+ await new Promise(r=>setImmediate(r));
+ assert.deepEqual([...dv.pairHold.keys()],['2','3','4','5','6','7']);
 });

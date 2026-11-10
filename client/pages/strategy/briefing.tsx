@@ -16,13 +16,19 @@ import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
 import {
   Sparkline,
-  analysisMetrics,
   chipOf,
   percent,
   type MetricItem,
   type MetricWindow,
 } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
+import { CategoryTag } from './growth';
+import { CATEGORY } from './growth-category';
+import {
+  GROWTH_CATEGORIES,
+  categoryOf,
+  growthOf,
+} from '../../../shared/growth.js';
 import {
   conversationDayOf,
   conversationDaysByLocalDay,
@@ -279,48 +285,48 @@ function Bubble({
   );
 }
 
-/** The day's first message: how many decisions wait, the numbers that moved most, then the analysis notes, folded. */
+/**
+ * The day's first message: how many decisions wait and in which categories, each opening Opportunities on it; the
+ * finding most worth seeing today with the opportunity it is about; then the other analysis notes, folded (2026-11-10:
+ * the categories replace the two numbers that moved most, which the notes now end with).
+ */
 function Summary({
   batch,
   pending,
   watching,
+  lead,
 }: {
   batch?: InsightBatch;
-  pending: number;
+  pending: Row[];
   watching: number;
+  /** The opportunity the first note is about. */
+  lead?: Row;
 }) {
   const [open, setOpen] = useState(false);
-  // The key numbers that moved by 5% or more over the analysis's own period, the largest two first, from the figures
-  // it read (analysisMetrics), not the tiles; a number with a small base is left out, its percentage being noise.
-  const days = batch?.evidence?.periodDays,
-    notes = (batch?.observations || []).map((o) => $legacyText(o)),
-    moved = analysisMetrics(batch?.evidence)
-      .filter((i) => !smallBase(i) && Math.abs(i.change ?? 0) >= 0.05)
-      .sort((a, b) => Math.abs(b.change!) - Math.abs(a.change!))
-      .slice(0, 2);
+  const [first, ...notes] = (batch?.observations || []).map((o) =>
+      $legacyText(o),
+    ),
+    counts = GROWTH_CATEGORIES.map(
+      (c) =>
+        [c, pending.filter((r) => categoryOf(r.card) === c).length] as const,
+    ).filter(([, n]) => n > 0);
   return (
     <Bubble label={$t('strategy.todayBrief')}>
       <p className='text-lg leading-snug font-semibold'>
         {!batch
           ? $t('strategy.noAnalysisYetClickUpdate')
-          : pending
-            ? $t('strategy.briefHeadline', { 0: pending })
+          : pending.length
+            ? $t('strategy.briefHeadline', { 0: pending.length })
             : $t('strategy.briefHeadlineNone')}
       </p>
-      {(moved.length > 0 || watching > 0) && (
+      {(counts.length > 0 || watching > 0) && (
         <div className='mt-1.5 flex flex-wrap gap-1.5'>
-          {moved.map((i) => (
-            <PageLink
-              key={i.label}
-              to={i.to}
-              title={
-                days ? $t('strategy.metricWindow', { 0: days }) : undefined
-              }
-            >
-              <Tag tone={i.change! >= 0 ? 'green' : 'red'}>
-                {i.label} {changeText(i)}
+          {counts.map(([c, n]) => (
+            <Link key={c} to={`/opportunities?category=${c}`}>
+              <Tag tone={CATEGORY[c][0]} data-category-count={c}>
+                {CATEGORY[c][1]()} {n}
               </Tag>
-            </PageLink>
+            </Link>
           ))}
           {watching > 0 && (
             <Link to='/opportunities?tab=watch'>
@@ -331,6 +337,27 @@ function Summary({
           )}
         </div>
       )}
+      {first && (
+        <div className='mt-2 flex flex-col gap-0.5' data-lead-note=''>
+          {/* On a day with no opportunity to point to, the note only says why (2026-11-10 review). */}
+          {batch?.leadId ? (
+            <span className='text-xs text-muted-foreground'>
+              {$t('strategy.mostWorthSeeing')}
+            </span>
+          ) : null}
+          <p>
+            {first}
+            {lead?.card.no ? (
+              <Link
+                className='nr-link ml-1.5 whitespace-nowrap'
+                to={itemLink(lead)}
+              >
+                {$t('strategy.seeOpportunity', { 0: oppNo(lead.card) })}
+              </Link>
+            ) : null}
+          </p>
+        </div>
+      )}
       {notes.length > 0 && (
         <>
           <button
@@ -339,7 +366,7 @@ function Summary({
             className='mt-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground'
             onClick={() => setOpen((o) => !o)}
           >
-            {$t('strategy.analysisNotes', { 0: notes.length })}
+            {$t('strategy.otherAnalysisNotes', { 0: notes.length })}
             <Chevron open={open} />
           </button>
           {open && (
@@ -355,7 +382,7 @@ function Summary({
   );
 }
 
-const lead = (row: Row) =>
+const leadChip = (row: Row) =>
   [...citedSignals(row)]
     .sort((a, b) => b.strength - a.strength)
     .map(chipOf)
@@ -474,7 +501,8 @@ function Decisions({
           const { row: r, st } = line;
           if (st.state !== 'pending')
             return <DecidedLine key={r.card.id} {...line} />;
-          const c = lead(r);
+          const g = growthOf(r.card.growth),
+            c = g ? null : leadChip(r);
           return (
             <li
               key={r.card.id}
@@ -483,7 +511,12 @@ function Decisions({
               className='py-1.5'
             >
               <div className='flex items-center gap-2'>
-                {c && <Tag tone={c.tone}>{c.text}</Tag>}
+                {/* Its category, as on Opportunities; one older than the categories keeps its fact. */}
+                {g ? (
+                  <CategoryTag category={g.category} />
+                ) : (
+                  c && <Tag tone={c.tone}>{c.text}</Tag>
+                )}
                 <Link
                   to={itemLink(r)}
                   title={r.card.title}
@@ -723,8 +756,13 @@ export function Today({
       >
         <Summary
           batch={batch}
-          pending={feed.pending.length}
+          pending={feed.pending}
           watching={watching}
+          lead={
+            batch?.leadId
+              ? rows.find((r) => r.card.id === batch.leadId)
+              : undefined
+          }
         />
         {(feed.pending.length > 0 || feed.decided.length > 0) && (
           <Decisions

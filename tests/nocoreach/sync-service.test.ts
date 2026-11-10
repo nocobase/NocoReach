@@ -18,7 +18,7 @@ function setup(){
  const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};
  const repo={
   // A build lists the project's ids once, counted in calls.find, then reads the linked days by key.
-  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys)calls.find++;await new Promise(r=>setTimeout(r,5));return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>fields?Object.fromEntries(fields.map(k=>[k,p[k]])):{...p,payload:p.payload.map(r=>({...r}))}}));},
+  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys&&filter.grain!=='overview')calls.find++;await new Promise(r=>setTimeout(r,5));return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>fields?Object.fromEntries(fields.map(k=>[k,p[k]])):{...p,payload:p.payload.map(r=>({...r}))}}));},
   count:async()=>parts.length,
   findOne:async()=>{const p=[...parts].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];return p&&{get:k=>p[k]};}
  };
@@ -41,7 +41,8 @@ test('a project over the size limit is refused before any stored day is read',as
  repo.find=async o=>{reads.push(o);return find(o);};
  while(parts.length<12201)add('gsc','query_page','2026-09-01',[]);
  await assert.rejects(sync.snapshots('1'),e=>e.status===409);
- assert.equal(reads.length,1);assert.deepEqual(reads[0].fields,['id','source','resource']);
+ // The key's overview dates, then the listing: no stored day is read by key.
+ assert.deepEqual(reads.map(o=>o.fields),[['source','resource','grain','date'],['id','source','resource','grain','date']]);
 });
 
 function tickFixture(opened={lately:false}){
@@ -165,7 +166,7 @@ function durableSetup(){
  for(const date of ['2026-09-25','2026-09-26','2026-09-27']){add('ga4','overview',date,[{date,views:10,sessions:5,conversions:1}]);add('gsc','overview',date,[{date,clicks:3,impressions:90}]);}
  const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};
  const partitions={
-  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys)calls.find++;return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>JSON.parse(JSON.stringify(fields?Object.fromEntries(fields.map(k=>[k,p[k]])):p))}));},
+  find:async({filter={},fields})=>{const keys=filter.id?.$in;if(!keys&&filter.grain!=='overview')calls.find++;return parts.filter(p=>!keys||keys.includes(p.id)).map(p=>({toJSON:()=>JSON.parse(JSON.stringify(fields?Object.fromEntries(fields.map(k=>[k,p[k]])):p))}));},
   count:async()=>parts.length,
   findOne:async()=>{const p=[...parts].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];return p&&{get:k=>p[k]};}
  };
@@ -312,4 +313,24 @@ test('the GA4 property name and time zone are kept on the project, filled in by 
  await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai');
  await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');assert.equal(project().analyticsPropertyTimeZone,'','another property drops the old zone');
  await sync.select('1','789','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'');
+});
+test('tick: the other ranges chosen lately are read ahead too, Traffic\'s in the day and once a window, and the stored sums once a minute',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const opened={lately:true},{sync,website,warm,scopes}=tickFixture(opened);
+  const chosen={website:['all','90'],search:['90'],pages:['28','90'],ranks:['28']},tables=vi.fn(async()=>({complete:true,missing:[]})),pairRows=vi.fn(async()=>({})),pageFigures=vi.fn(async()=>null);
+  let day=false;
+  Object.assign(sync.p.dataViews,{recentViews:async(_id,kind)=>chosen[kind]||[],websiteDayRead:async()=>day,websiteTables:tables,pairRows,pageFigures});
+  await sync.tick();
+  assert.deepEqual(warm.mock.calls.map(c=>c[1]),[undefined,'90'],'the default and the range chosen');
+  assert.deepEqual(website.mock.calls.map(c=>c[1].range),['28'],'not in the night');
+  assert.equal(pairRows.mock.calls.length,1);assert.deepEqual(pageFigures.mock.calls.map(c=>c[1]),['28','90']);
+  day=true;scopes.length=0;await sync.tick();
+  assert.deepEqual(website.mock.calls.slice(1).map(c=>c[1].range),['28','all','90']);assert.deepEqual(scopes,['fresh','ahead','ahead'],'a chosen range once a window');
+  assert.deepEqual(tables.mock.calls.map(c=>c[1].range),['28','all','90']);
+  assert.equal(pairRows.mock.calls.length,1,'the sums are checked once a minute');
+  await sync.tick();assert.equal(website.mock.calls.length,5,'a chosen range is checked every 15 minutes');assert.equal(warm.mock.calls.length,2);assert.equal(tables.mock.calls.length,4);
+  vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,8);assert.equal(warm.mock.calls.length,4);assert.equal(pairRows.mock.calls.length,2);
+  opened.lately=false;chosen.website=[];vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(tables.mock.calls.length,7,'the other tables only for a project opened in the last day');
+ }finally{vi.useRealTimers();}
 });

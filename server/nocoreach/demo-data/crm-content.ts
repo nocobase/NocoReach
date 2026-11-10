@@ -848,40 +848,10 @@ export function crmOpportunities(
 ): DemoContent['opportunities'] {
   const lang = language === 'en-US' ? 'en' : 'zh';
   const copy = (value: L) => value[lang];
-  const selected = [0, 1, 2, 3, 12, 14, 15, 19, 8, 9, 17, 13];
+  // The handled opportunities: two handed off (search, forum hand-off) and two ignored. The pending ones are growth
+  // points (growth-briefs.ts).
+  const selected = [8, 9, 17, 13];
   const observations = [
-    t(
-      '导入相关搜索展示增加，社区仍反复询问重复联系人该如何合并。',
-      'Import impressions rose while the community keeps asking how to merge duplicate contacts.',
-    ),
-    t(
-      '无地区线索与请假分配的问题在样例讨论中同时出现。',
-      'Unknown territories and routing to absent reps appear together in sample discussions.',
-    ),
-    t(
-      '漏斗页有访问，但访谈中五名销售给同一商机选择了不同阶段。',
-      'The pipeline page receives visits, but five interviewed reps selected different stages for the same deal.',
-    ),
-    t(
-      '报价版本问题有两条未解决提问，错误附件会影响采购沟通。',
-      'Two unresolved quote-version questions highlight the risk of sending the wrong attachment.',
-    ),
-    t(
-      '报表页的说明偏短，主管无法核对“本月新增”的日期口径。',
-      'The report page is too brief to verify the date definition of new deals this month.',
-    ),
-    t(
-      '邮件接入讨论关注正文可见范围，现有说明没有撤销访问步骤。',
-      'Mailbox discussions focus on body visibility, but the guide lacks revocation steps.',
-    ),
-    t(
-      '预约页面移动访问增加，样例反馈集中在时区不清楚。',
-      'Mobile booking-page visits grew and sample feedback highlights unclear time zones.',
-    ),
-    t(
-      '集成问题开始出现重复回传，当前示例只演示成功一次。',
-      'Duplicate callback questions appeared while the current example covers one successful delivery only.',
-    ),
     t(
       '“免费 CRM”搜索同时包含托管、自建与替换表格三类需求。',
       'Free-CRM searches mix hosting, self-management and spreadsheet-replacement intents.',
@@ -933,15 +903,28 @@ export function crmOpportunities(
     observations: [
       copy(
         t(
-          '本周先解决导入、线索分配和报价版本；续约指南继续积累样本。',
-          'Prioritize imports, lead routing and quote versions this week; keep collecting renewal-guide samples.',
+          '“AI CRM”近 3 个月搜索量涨了 129%，现在每月 2,400 次；前 10 名里 6 个还是新闻和概念文章，竞品里只有 Example Sales 有对应页面，现在写更容易排上。',
+          'Searches for “ai crm” rose 129% over the last 3 months to 2,400 a month; 6 of the top 10 results are still news and explainers and only Example Sales has a page, so a page now ranks more easily.',
+        ),
+      ),
+      copy(
+        t(
+          '报价单这组 8 个词每月搜索 6,570 次，本站都没排上；小团队 CRM 文章进前 3 预计每月多 340 次点击。',
+          'The 8 quote keywords are searched 6,570 times a month and we rank for none; the small-team CRM article would bring an estimated 340 more clicks a month in the top 3.',
+        ),
+      ),
+      copy(
+        t(
+          '要留意的下降：销售阶段文章近 28 天点击从 610 次降到 380 次；邮件同步文档正文只有约 120 字，每月仍有约 830 次访问。',
+          'Drops to watch: the sales stages article fell from 610 to 380 clicks over 28 days; the email sync docs have about 120 words and still get about 830 visits a month.',
         ),
       ),
     ],
+    lead: 'crm-growth-ai-crm',
     doReason: copy(
       t(
-        '多个样例入口指向同一问题，交给负责人核实。',
-        'Several sample sources point to the issue; assign an owner to verify it.',
+        '增长空间明确，和产品相关，投入可控。',
+        'Clear growth potential, relevant to the product, with manageable effort.',
       ),
     ),
     skipReason: copy(
@@ -965,8 +948,8 @@ export function crmOpportunities(
           ),
         ),
         story.path,
-        i % 3 === 0 ? 'gsc' : i % 3 === 1 ? 'discourse' : 'site',
-        i < 4 ? 'high' : 'medium',
+        (['site', 'gsc', 'discourse', 'site'] as const)[i],
+        'medium',
       ];
     }),
     watches: [

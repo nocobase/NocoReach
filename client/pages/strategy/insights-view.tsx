@@ -11,7 +11,7 @@ import {useLinkInMenu} from '#components/app-shell/nav-sources';
 import {Section} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
 import {getSourceNames,type Row} from './board';
-import type {StrategyState,Signal,WatchRecord,Evidence,SourceSummary} from './model';
+import type {StrategyState,Signal,WatchRecord} from './model';
 import {type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
@@ -81,18 +81,6 @@ export function metricItems(cards?:SourceCard[],days?:number,window?:MetricWindo
  return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website'),
   ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
 }
-// The numbers a day's analysis read (its evidence: Search Console and GA4 over its own period against the period
-// before), for the chips of that day's message. They come from the analysis, not the tiles above, so the chips and the
-// notes the AI wrote from the same figures agree, and an earlier day keeps its own (2026-10-27 user report: the tiles
-// went to 7 days in #291 and the chips said "Search impressions ↑ 35%" beside notes reading -21.3% over 28 days). A
-// figure the evidence does not carry, or cannot compare, is left out rather than taken from another window.
-export function analysisMetrics(evidence?:Evidence):MetricItem[]{
- const days=evidence?.periodDays;
- const item=(label:string,source:SourceSummary|undefined,key:string,to:string):MetricItem=>{const m=source?.metrics?.[key],ok=Boolean(m?.comparable&&m.current!=null&&m.previous!=null);
-  return {label,value:ok?m!.current:null,previous:ok?m!.previous:null,change:ok&&m!.percent!=null?m!.percent/100:null,to:days?`${to}?days=${days}`:to};};
- const search=evidence?.summary?.search,web=evidence?.summary?.web;
- return [item($t('common.searchClicks'),search,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),search,'impressions','/seo-opportunities'),item($t('strategy.sessions'),web,'sessions','/website'),item($t('common.keyEvents'),web,'conversions','/website')].filter(i=>i.value!=null);
-}
 export const percent=pct;
 // 当前状况 (was 各方面一览, then 需要留意 — 2026-10-08 user: “留意” read like the AI's 先观察): how things stand now, as
 // against 今天的变化 (what changed) — no comparison and no AI, a problem stays here until it is fixed. The state of each connected source (server: nrInsights:summary), each opening its page.
@@ -107,7 +95,7 @@ export type Area={id:string;title:string;items:AreaItem[]};
 // design: no icons, no sentences with the number in the middle). The label goes by the line's stable key (server:
 // nrInsights:summary); a line without one, or without a value, keeps its sentence as the label.
 const SITUATION_LABEL:Record<string,string>={striking:'strategy.situationStriking',rank:'strategy.situationRank',trends:'strategy.situationTrends',answers:'strategy.situationAnswers',audit:'strategy.situationAudit',forum:'strategy.situationForum',discord:'strategy.situationDiscord',slack:'strategy.situationSlack',x:'strategy.situationX','brand-chat_gpt':'strategy.situationChatgpt','brand-google':'strategy.situationGoogleAi',hackernews:'strategy.situationHackerNews',reddit:'strategy.situationReddit',downloads:'strategy.situationDownloads',
- 'rule-gsc-click-drop':'strategy.situationClickDrop','rule-competitor-release':'strategy.situationCompetitorRelease','rule-competitor-pages':'strategy.situationCompetitorPages','rule-ai-share':'strategy.situationAiShare','rule-github-rival-stars':'strategy.situationRivalStars','rule-gsc-low-ctr':'strategy.situationLowCtr','rule-ga4-low-conversion':'strategy.situationLowConversion','rule-site-stale':'strategy.situationStale','rule-site-thin':'strategy.situationThin','rule-ai-uncited':'strategy.situationAiUncited','rule-trends-rising':'strategy.situationRising','rule-hn-story':'strategy.situationHnStory','rule-x-hot':'strategy.situationXHot','rule-community-theme':'strategy.situationThemes','rule-github-referrer':'strategy.situationReferrer','rule-github-release':'strategy.situationRelease'};
+ 'rule-gsc-click-drop':'strategy.situationClickDrop','rule-competitor-release':'strategy.situationCompetitorRelease','rule-competitor-pages':'strategy.situationCompetitorPages','rule-ai-share':'strategy.situationAiShare','rule-github-rival-stars':'strategy.situationRivalStars','rule-gsc-low-ctr':'strategy.situationLowCtr','rule-ga4-low-conversion':'strategy.situationLowConversion','rule-site-stale':'strategy.situationStale','rule-site-thin':'strategy.situationThin','rule-ai-uncited':'strategy.situationAiUncited','rule-trends-rising':'strategy.situationRising','rule-hn-story':'strategy.situationHnStory','rule-x-hot':'strategy.situationXHot','rule-community-theme':'strategy.situationThemes','rule-github-referrer':'strategy.situationReferrer','rule-github-release':'strategy.situationRelease','rule-github-star-spike':'strategy.situationStarSpike','rule-community-digest':'strategy.situationDigest','rule-audit':'strategy.situationAuditWarnings'};
 const situationValue=(i:{key:string;values:string[]})=>i.key==='rank'&&i.values.length===2?[`↑${i.values[0]}`,`↓${i.values[1]}`]:i.values;
 const NORMAL_SHOWN=6,SHOW_ALL_HEIGHT=24;
 // How many rows fit in the column beside the conversation. On wide screens it has the window's height and scrolls
@@ -200,7 +188,7 @@ function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:numbe
 // verdict can be judged on the spot.
 type Status={label:string;tone:Tone;verdict?:'do'|'watch'|'skip';next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;taskNo?:number;task?:TaskStanding;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'};ignored?:boolean;dismissed?:boolean};
 type ChangeTask={id:number;status:string;evidence?:{no?:number;work?:Work}};
-const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
+const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',keywords:'/keywords?tab=suggest',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
 const pageOf=(s:Signal)=>s.key.startsWith('audit-')?'/audit':SOURCE_PAGE[s.source];
 const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-page',create:'content-outline',reply:'community-reply'};
 // The AI's verdicts (2026-10-08 user: one set of words on 洞察 and 机会, less colloquial): 建议处理, 建议观察, 无需处理 —

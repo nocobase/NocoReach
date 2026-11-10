@@ -3,7 +3,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type RunEvent, type Artifact, type FileChange, type VisibleChange } from './model';
+import { fail, text, digest, boardState, waitsForReview, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type RunEvent, type Artifact, type FileChange, type VisibleChange } from './model';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
@@ -84,6 +84,8 @@ function cleanVisibleChanges(v: unknown): VisibleChange[] {
 // Page text for the live check: tags and entities removed, spaces collapsed.
 export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
 const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.replace(/\s+/g, ' ').trim().toLowerCase());
+// How long the start card's article lookup of a task's pages is reused (`TaskService.placesLookup`).
+const PLACES_MS = 2 * 60000;
 export class TaskService {
   private get simulated() { return (this.p as { mock?: MockEngine }).mock?.enabled === true; }
   private busy = false;
@@ -160,6 +162,11 @@ export class TaskService {
     if (events.length && this.p.notifications?.taskEvents) {
       const send = () => { void this.p.notifications.taskEvents({ ...task, evidence: { ...task.evidence, work: w } }, w, events).catch(() => undefined); };
       if (typeof tx?.afterCommit === 'function') tx.afterCommit(send); else send();
+    }
+    // Reviewed, cancelled or archived: the task's "Waiting for you" messages no longer hold, so they read as handled.
+    if (waitsForReview(was) && !waitsForReview(w) && this.p.notifications?.close) {
+      const close = () => { void this.p.notifications.close(task.id, 'read').catch(() => undefined); };
+      if (typeof tx?.afterCommit === 'function') tx.afterCommit(close); else close();
     }
   }
   async migrate(task: any, w: Work, tx: any) {
@@ -830,6 +837,8 @@ export class TaskService {
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
           // Files a publishing target exports would be rewritten by its exporter: they are published as articles instead.
           if (output.pr?.protected?.length) return fail(systemMessageText('articles.protectedPaths', { 0: output.pr.protected.join('、') }), 409);
+          // A site that requires covers does not publish a new article without one (2026-11-05); a draft may go without.
+          if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.coverMissing(project, w, output)) return fail(systemMessageText('articles.coverRequired'), 409);
           // The primary language approved while others are to follow: the Agent translates it before anything is published
           // (2026-10-24). The step goes back to the Agent; the translated version comes back here for one Publish of all.
           if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
@@ -1301,8 +1310,22 @@ export class TaskService {
     const task = await this.task(project, taskId), work = projectWork(task), urls = match ? pageUrlsOf({ task, work, pageIdentity: identity }) : startedPageUrls({ task, work, pageIdentity: identity });
     if (!urls.length) return { article: null, unchecked: false, pages: [] };
     const titles = new Map<string, string>((Array.isArray(s?.pages) ? s.pages : []).map((p: any) => [pageKey(p.url, identity), String(p.title || '').slice(0, 300)]));
-    const found = match ? await this.lookupPages(project, urls) : { article: null, unchecked: false, pages: urls.map(url => ({ url })) };
+    const found = match ? await this.placesLookup(project, urls) : { article: null, unchecked: false, pages: urls.map(url => ({ url })) };
     return { ...found, pages: found.pages.map(p => ({ ...p, ...(titles.get(pageKey(p.url, identity)) ? { title: titles.get(pageKey(p.url, identity)) } : {}) })) };
+  }
+  // The start card's lookup, asked of the publishing targets on every open of a task not started yet: a complete answer
+  // for the same pages and targets is reused for PLACES_MS, so opening the task again does not wait for the CMS. A start
+  // reads the targets itself (`lookupPages`), never this.
+  private placesCache = new Map<string, { at: number; value: { article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] } }>();
+  private async placesLookup(project: string, urls: string[]) {
+    // Targets that cannot be read are the lookup's to report (each page unchecked), so they are only not cached.
+    let key: string | undefined;
+    try { key = digest([project, urls, this.p.articleTargets?.targets?.(project) ?? null]); } catch { key = undefined; }
+    const hit = key ? this.placesCache.get(key) : undefined;
+    if (hit && Date.now() - hit.at < PLACES_MS) return hit.value;
+    const value = await this.lookupPages(project, urls);
+    if (key && !value.unchecked) { if (this.placesCache.size >= 200) this.placesCache.clear(); this.placesCache.set(key, { at: Date.now(), value }); }
+    return value;
   }
   // The article lookup of every page; a lookup that fails leaves each page unchecked.
   private async lookupPages(project: string, urls: string[]): Promise<{ article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] }> {

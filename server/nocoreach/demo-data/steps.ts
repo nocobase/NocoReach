@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { GAP_COMPETITORS } from '../../../shared/backlinks.js';
 
 import type {
   DemoImportContext,
@@ -575,6 +576,13 @@ async function connectSources(
             language: market.language,
             requestKey: randomUUID(),
           });
+        // Backlinks › Link profile: the site's overview and each of its tabs, already looked up.
+        for (const view of ['overview', 'links', 'domains', 'pages'])
+          await p.backlinks.run(id, {
+            target: spec.domain,
+            view,
+            requestKey: randomUUID(),
+          });
         for (const strategy of ['mobile', 'desktop'])
           await new Lighthouse(p).run(id, {
             url: origin,
@@ -662,6 +670,17 @@ async function connectSources(
             language: market.language,
           });
         await p.competitorResearch.refresh(id);
+        // Backlinks › Link gap against the competitors just listed.
+        const sites = await p.backlinks.sites(id);
+        await p.backlinks.run(id, {
+          view: 'gap',
+          target: spec.domain,
+          // The gap compares with up to GAP_COMPETITORS, as the page and the agent do.
+          competitors: sites.competitors
+            .map((c: { domain: string }) => c.domain)
+            .slice(0, GAP_COMPETITORS),
+          requestKey: randomUUID(),
+        });
       },
     ],
     [

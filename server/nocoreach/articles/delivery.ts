@@ -3,9 +3,11 @@ import type { z } from 'zod';
 import {
   articleDraftSchema,
   ARTICLE_FIELDS,
+  coverKeys,
   fill,
   pagePattern,
   LOCALE,
+  SHARED_COVER,
   SLUG,
   supportsStatus,
   type ArticleContent,
@@ -34,6 +36,7 @@ import {
 import {
   replaceTaskImages,
   taskImageIds,
+  taskImageOf,
 } from '../../../shared/task-images.js';
 import type { ArticleTargets } from './targets.js';
 import { bodyEdits } from './edits.js';
@@ -234,6 +237,12 @@ export function cleanDraft(
           f,
         );
   }
+  // A cover only where the target keeps one (2026-11-05); a person sets it, the Agent's is dropped before.
+  const keys = coverKeys(target);
+  for (const key of Object.keys(draft.cover || {}))
+    if (!keys.includes(key))
+      throw rejected(`cover:${key}`, 'coverUnsupported', target.name);
+  if (draft.cover && !Object.keys(draft.cover).length) delete draft.cover;
   if (create) {
     if (!draft.slug || !SLUG.test(draft.slug)) throw rejected('slug', 'slug');
     const first = primary ? draft.locales[primary] : undefined;
@@ -311,15 +320,41 @@ export function projectDraft(
   const status = draft.status ?? (whole ? source.status : undefined);
   if (status && !supportsStatus(target)) skipped.push('status');
   const slug = draft.slug || (whole ? source.slug : undefined);
+  const { cover: _, ...rest } = draft;
+  const cover = projectCover(target, draft.cover);
+  if (draft.cover && Object.keys(draft.cover).length && !cover)
+    skipped.push('cover');
   return {
     draft: {
-      ...draft,
+      ...rest,
       ...(slug ? { slug } : {}),
       ...(status ? { status } : {}),
       locales,
+      ...(cover ? { cover } : {}),
     },
     skipped,
   };
+}
+
+/**
+ * The covers another target gets from the primary's (2026-11-05): the same image, cropped to the primary's ratio. A
+ * shared cover goes to each of its languages, a language's to the shared one when that is the target's only cover (the
+ * first language that has one). Undefined when the target takes no covers or nothing changes.
+ */
+function projectCover(target: ArticleTarget, cover: ArticleDraft['cover']) {
+  const keys = coverKeys(target),
+    given = Object.entries(cover || {});
+  if (!keys.length || !given.length) return undefined;
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const value =
+      key === SHARED_COVER
+        ? (cover?.[SHARED_COVER] ??
+          target.locales.map((l) => cover?.[l]).find((v) => v !== undefined))
+        : (cover?.[key] ?? cover?.[SHARED_COVER]);
+    if (value !== undefined) out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** The task images a draft shows (2026-11-03), each once. */
@@ -327,6 +362,30 @@ export const draftImageIds = (draft: ArticleDraft) =>
   taskImageIds(
     Object.values(draft.locales).flatMap((fields) => Object.values(fields)),
   );
+/** The task images a draft sets as covers (2026-11-05), each once. */
+export const draftCoverIds = (draft: ArticleDraft) => [
+  ...new Set(
+    Object.values(draft.cover || {}).flatMap((v) => {
+      const image = taskImageOf(v);
+      return image ? [image.id] : [];
+    }),
+  ),
+];
+
+/** The proposal with each cover that is a task image at the value its target gave it when uploaded (`urls`, by id). */
+export function withCoverUrls<T extends { draft: ArticleDraft }>(
+  p: T,
+  urls: Record<string, string> | undefined,
+): T {
+  if (!urls || !p.draft.cover || !Object.keys(urls).length) return p;
+  const cover = Object.fromEntries(
+    Object.entries(p.draft.cover).map(([k, v]) => {
+      const image = taskImageOf(v);
+      return [k, (image && urls[image.id]) || v];
+    }),
+  );
+  return { ...p, draft: { ...p.draft, cover } };
+}
 
 /**
  * The proposal as a target publishes it: each task image the draft shows at the address it was uploaded to there
@@ -352,6 +411,7 @@ const asChanges = (d: ArticleDraft): ArticleChanges => ({
   ...(d.slug ? { slug: d.slug } : {}),
   ...(d.status ? { status: d.status } : {}),
   locales: d.locales,
+  ...(d.cover ? { cover: d.cover } : {}),
 });
 
 /** The pages to check after publishing: the configured page of every locale the draft changes. */
@@ -484,6 +544,18 @@ export class ArticleDelivery {
     if (!provider.capabilities.images || !provider.uploadImage)
       throw new ArticleError('invalid', 'images_unsupported');
     return provider.uploadImage(image);
+  }
+  /** Upload a cover an approved article sets to the target (provider `uploadCover`); the value its cover field takes. */
+  async uploadCover(
+    project: string,
+    targetId: string,
+    image: ArticleImageFile,
+    opts: { slug: string; key: string },
+  ): Promise<string> {
+    const provider = this.provider(project, targetId);
+    if (!provider.uploadCover)
+      throw new ArticleError('invalid', 'cover_unsupported');
+    return provider.uploadCover(image, opts);
   }
   /** What the draft changes against its base, field by field. Empty when the draft repeats the base. */
   proposal(
@@ -664,6 +736,7 @@ export class ArticleDelivery {
       slug: p.draft.slug!,
       ...(p.draft.status ? { status: p.draft.status } : {}),
       locales: p.draft.locales,
+      ...(p.draft.cover ? { cover: p.draft.cover } : {}),
     };
     const existing = await provider.findBySlug(content.slug);
     // An earlier attempt that created the article (its outcome was unknown) is adopted; anything else owns the slug.

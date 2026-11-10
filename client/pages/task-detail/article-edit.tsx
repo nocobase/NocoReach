@@ -31,7 +31,13 @@ import {
 import { TASK_IMAGES_PER_MESSAGE } from '../../../shared/task-images.js';
 import { localeName } from '../article-targets-api';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
-import { articleLanguages, joinNames, valueAt } from './article-model';
+import {
+  articleLanguages,
+  coverChanges,
+  joinNames,
+  valueAt,
+} from './article-model';
+import { ArticleCoverRow } from './article-cover.js';
 import {
   editableLocales,
   primaryOf,
@@ -167,15 +173,29 @@ function comparedArticle(
   base: ReturnType<typeof articleLanguages>['base'],
   form: EditForm,
 ): ArticleProposal {
-  const changes = Object.keys(form.locales).flatMap((l) =>
-    ARTICLE_FIELDS.flatMap((f) => {
-      const path = `${l}.${f}`;
-      return valueAt(base, path) !== form.locales[l][f] ? [path] : [];
-    }),
-  );
+  const changes = [
+    ...Object.keys(form.locales).flatMap((l) =>
+      ARTICLE_FIELDS.flatMap((f) => {
+        const path = `${l}.${f}`;
+        return valueAt(base, path) !== form.locales[l][f] ? [path] : [];
+      }),
+    ),
+    // A cover against the site's (2026-11-05), shown as the two thumbnails.
+    ...coverChanges(
+      Object.fromEntries(
+        Object.keys(form.cover || {}).map((k) => [k, base?.cover?.[k] ?? '']),
+      ),
+      form.cover,
+    ),
+  ];
   return {
     ...a,
-    draft: { ...a.draft, status: form.status, locales: form.locales },
+    draft: {
+      ...a.draft,
+      status: form.status,
+      locales: form.locales,
+      cover: form.cover,
+    },
     changes,
   };
 }
@@ -392,6 +412,14 @@ export function ArticleEditFields({
               </span>
             </div>
           )}
+          <ArticleCoverRow
+            data={data}
+            article={a}
+            session={session}
+            tab={tab}
+            id={id}
+            error={errors.cover}
+          />
           {ARTICLE_FIELDS.map((f) => {
             const key = `${tab}.${f}`,
               required = create && tab === primary && f !== 'description';

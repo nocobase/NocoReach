@@ -19,7 +19,12 @@ type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) 
 
 /** What a classic transaction object was to the ported code: something passed along in `{ transaction }`. */
 export interface LegacyTransaction {
-  readonly connection: { collections: Pick<ConnectionCollections, 'get'>; repository(name: string): any; afterCommit?(fn: () => unknown): void };
+  readonly connection: {
+    collections: Pick<ConnectionCollections, 'get'>;
+    repository(name: string): any;
+    afterCommit?(fn: () => unknown): void;
+    query?: { insertInto(table: string): { values(rows: readonly Values[]): { execute(): Promise<unknown> } } };
+  };
   readonly held: (() => void)[];
   afterCommit(fn: () => unknown): void;
 }
@@ -87,10 +92,21 @@ const OWN = new Set([
   'nrGoogleLinks',
   'nrSyncJobs',
   'nrSyncPartitions',
+  // Summed from nrSyncPartitions (page-days.ts), written in bulk through `insertMany` (database-generated ids, or none).
+  'nrPageDays',
+  'nrPageDayMarks',
+  'nrPageScopes',
+  'nrPageAddresses',
   'nrKeywordRuns',
   'nrKeywordCandidates',
   'nrVariables',
 ]);
+
+// Tables of the layer keyed by other fields than an id.
+const KEYS: Record<string, readonly string[]> = {
+  // One row an address a day (page-days.ts).
+  nrPageDays: ['pageId', 'day'],
+};
 
 export interface LegacyRepository {
   find(options?: Values): Promise<LegacyRecord[]>;
@@ -99,6 +115,11 @@ export interface LegacyRepository {
   create(options: Values): Promise<LegacyRecord>;
   update(options: Values): Promise<LegacyRecord[]>;
   destroy(options: Values): Promise<number>;
+  /**
+   * Sums of `sum`'s fields for each value of `by`, as numbers (Postgres answers a sum as text), with `null` where no
+   * row has the field. Only the tables of the layer offer it.
+   */
+  groupBy?(options: Values & { by: string[]; sum: string[] }): Promise<Values[]>;
 }
 
 export class LegacyDatabase {
@@ -157,6 +178,25 @@ export class LegacyDatabase {
     if (custom) return custom;
     if (!OWN.has(name)) throw new Error(`NocoReach has no table ${name} on NocoBase 3`);
     return this.repository(name);
+  }
+
+  /**
+   * Rows of a table whose ids the database generates, written one statement per chunk in the transaction the caller is
+   * in. No hooks, timestamps or string-length checks: for derived rows whose values the caller has already bounded.
+   */
+  async insertMany(name: string, rows: Values[], transaction?: unknown, chunk = 200) {
+    this.assertWritable();
+    if (!OWN.has(name)) throw new Error(`NocoReach has no table ${name} on NocoBase 3`);
+    const t = (transaction as LegacyTransaction) || this.current.getStore();
+    // The Query layer, not the Repository: a Repository create checks and decodes every row, about 0.6 s for one day's
+    // 4,000 page rows on SQLite.
+    const query = t ? t.connection.query : this.db.query();
+    for (let i = 0; i < rows.length; i += chunk) {
+      const part = rows.slice(i, i + chunk);
+      if (query) await query.insertInto(name).values(part).execute();
+      // A joined plugin transaction may not offer the Query layer; its Repository still writes in that transaction.
+      else await this.target(name, { transaction: t }).createMany({ values: part as unknown as [Values, ...Values[]] });
+    }
   }
 
   /** Scope derived-data caches to the connection whose uncommitted rows they may read. */
@@ -254,7 +294,7 @@ export class LegacyDatabase {
     };
     const read = async (options: Values) => {
       const filter = await filterFor(options);
-      const sort = toSort(options.sort);
+      const sort = toSort(options.sort, KEYS[name]);
       const fields = options.fields as string[] | undefined;
       return {
         ...(filter ? { filter } : {}),
@@ -301,7 +341,25 @@ export class LegacyDatabase {
         delete values.id;
         validateStringLengths(await collectionFor(options), values);
         await target(options).updateMany({ filter, values });
+        // `returning: false` skips reading the rows back, for a caller that writes a large value and does not use them.
+        if (options.returning === false) return [];
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
+      },
+      groupBy: async (options: Values & { by: string[]; sum: string[] }) => {
+        const filter = await filterFor(options);
+        // The NocoBase 3 Repository's typed groupBy, reached through the bridge's untyped target.
+        const repository = target(options) as { groupBy(options: Values): Promise<Values[]> };
+        const rows = await repository.groupBy({
+          by: options.by,
+          aggregate: (a: { sum(field: string): unknown }) =>
+            Object.fromEntries(options.sum.map((f) => [f, a.sum(f)])),
+          ...(filter ? { filter } : {}),
+        });
+        return rows.map((r) => {
+          const out: Values = { ...r };
+          for (const f of options.sum) out[f] = r[f] == null ? null : Number(r[f]);
+          return out;
+        });
       },
       destroy: async (options: Values) => {
         this.assertWritable();

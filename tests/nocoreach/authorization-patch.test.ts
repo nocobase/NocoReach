@@ -1,4 +1,4 @@
-// NocoReach's patch of the authorization plugin's client (patches/@nocobase__app-plugin-authorization@1.0.0-beta.33.patch):
+// NocoReach's patch of the authorization plugin's client (patches/@nocobase__app-plugin-authorization@1.0.0-beta.36.patch):
 // its topics becoming ready, after each connection, read the snapshot again once and invalidate only on a change; the
 // connection opening itself reads nothing; a permission event still invalidates at once.
 import { apiClientToken, realtimeClientToken } from '@nocobase/app-client';
@@ -75,6 +75,16 @@ async function boot(answers: unknown[]) {
 afterEach(() => vi.useRealTimers());
 
 describe('patched authorization client', () => {
+  it('reads the first snapshot without waiting for the realtime connection', async () => {
+    vi.useFakeTimers();
+    const { authz, request } = await boot([allowed]);
+    let settled: unknown;
+    void authz.snapshot().then((snapshot) => (settled = snapshot));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(settled).toEqual(allowed);
+  });
+
   it('reads the snapshot again once when the topics are ready and keeps the revision when it is unchanged', async () => {
     vi.useFakeTimers();
     const { authz, request, realtime } = await boot([allowed, allowed]);

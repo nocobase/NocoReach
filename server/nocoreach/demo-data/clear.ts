@@ -1,3 +1,4 @@
+import { clearPageDays } from '../page-days.js';
 import type { DemoHost } from './host.js';
 
 /** Tables of the classic layer that hold one project's rows in a `projectId` column. */
@@ -6,6 +7,10 @@ export const PROJECT_TABLES = [
   'nrGoogleLinks',
   'nrSyncJobs',
   'nrSyncPartitions',
+  // nrPageDays has no project column: its rows are deleted by their source (`clearPageDays`) before these.
+  'nrPageDayMarks',
+  'nrPageScopes',
+  'nrPageAddresses',
   'nrKeywordRuns',
   'nrKeywordCandidates',
   'nrYouTubeVideos',
@@ -129,6 +134,7 @@ export async function clearProjects(
   for (const id of ids) host.demoProjects.remove(id);
   const repo = host.db.getRepository('nrSnapshots');
   await host.db.sequelize.transaction(async (transaction: unknown) => {
+    await clearPageDays(host.db, [...ids], transaction as never);
     for (const table of PROJECT_TABLES)
       await host.db
         .getRepository(table)

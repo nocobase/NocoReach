@@ -42,6 +42,8 @@ const managementActions: Record<string, readonly string[]> = {
     'setDefaultTarget',
     'savePlaybookTargets',
     'testTarget',
+    'detectCover',
+    'saveCover',
   ]),
   keywords,
   'ai-visibility': keywords,

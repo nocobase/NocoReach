@@ -45,6 +45,45 @@ import {
 const SELECTED =
   'data-active:bg-sidebar-primary data-active:text-sidebar-primary-foreground data-active:hover:bg-sidebar-primary data-active:hover:text-sidebar-primary-foreground';
 
+// NocoReach: `navigation.tag` is a short word after an entry's label, a key translated like its title. Search & market
+// tags Keywords "SEO" and AI search "GEO", the hands-on tools among the pages that show data. The tag sits on a pale
+// violet ground, apart from the orange counts, and takes the selected colors with its entry. Where only the icon shows
+// (the collapsed sidebar) it is hidden, and the tooltip and the entry's name carry it ("Keywords · SEO"). The
+// template's navigation declares no such option, so it is added here rather than drawn for particular paths.
+declare module '@nocobase/app-client/plugins' {
+  interface AppClientRouteNavigation {
+    readonly tag?: string;
+  }
+}
+
+// The tag's 10.5px type is below the theme's text scale on purpose: it reads as a label, not as a count.
+const TAG =
+  'ml-auto shrink-0 rounded-sm bg-nr-tint-violet px-1.5 text-[10.5px] leading-4 font-semibold tracking-wide text-nr-ink-violet group-data-[collapsible=icon]:hidden in-data-active:bg-sidebar-primary-foreground/10 in-data-active:text-sidebar-primary-foreground';
+
+/** An entry's icon, label and tag, as every form of entry draws them. The tag's words are in the entry's name. */
+function EntryContent({
+  item,
+  label,
+  tag,
+}: {
+  readonly item: RouteNavigationItem;
+  readonly label: string;
+  readonly tag?: string;
+}): ReactElement {
+  const Icon = item.route.navigation?.icon;
+  return (
+    <>
+      {Icon ? <Icon /> : null}
+      <span className={tag ? 'min-w-0 truncate' : undefined}>{label}</span>
+      {tag ? (
+        <span aria-hidden className={TAG}>
+          {tag}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * A count beside a menu entry. A number is what waits on the viewer, such as unread messages or requests to decide;
  * `live` is work under way, such as runs in progress, with `hint` as its words for the tooltip and screen readers. Zero
@@ -213,6 +252,12 @@ function useItemLabel(item: RouteNavigationItem): string {
   return t(title, { defaultValue: title });
 }
 
+function useItemTag(item: RouteNavigationItem): string | undefined {
+  const { t } = useTranslation(item.route.packageName);
+  const tag = item.route.navigation?.tag;
+  return tag ? t(tag, { defaultValue: tag }) : undefined;
+}
+
 /** Closes the phone's sheet once an entry is chosen; the desktop sidebar stays as it is. */
 function useCloseOnNavigate(): () => void {
   const { isMobile, setOpenMobile } = useSidebar();
@@ -240,12 +285,14 @@ function NavigationItem({
   const closeSheet = useCloseOnNavigate();
   const navigate = onNavigate ?? closeSheet;
   const label = useItemLabel(item);
-  const Icon = item.route.navigation?.icon;
+  const tag = useItemTag(item);
   const isSelected = routeKey(item.route) === selectedKey;
   const children = item.children;
   const disclosure = useDisclosure(item, selectedKey);
   const badge = useNavigationBadge(item);
-  const counted = badge.count > 0 ? `${label} · ${badge.text}` : null;
+  const named = [label, tag, badge.count > 0 ? badge.text : undefined]
+    .filter(Boolean)
+    .join(' · ');
   const tooltip = inPopover
     ? undefined
     : { children: label, role: 'tooltip', sideOffset: 8 };
@@ -287,15 +334,12 @@ function NavigationItem({
         <SidebarMenuButton
           render={link}
           isActive={isSelected}
-          // A counted entry is named with its count, as its tooltip shows it.
-          aria-label={counted ?? undefined}
-          tooltip={
-            tooltip && counted ? { ...tooltip, children: counted } : tooltip
-          }
+          // A tagged or counted entry is named with its tag and count, as its tooltip shows them.
+          aria-label={named === label ? undefined : named}
+          tooltip={tooltip ? { ...tooltip, children: named } : tooltip}
           className={SELECTED}
         >
-          {Icon ? <Icon /> : null}
-          <span>{label}</span>
+          <EntryContent item={item} label={label} tag={tag} />
         </SidebarMenuButton>
         {badge.count > 0 && (
           <EntryBadge
@@ -320,8 +364,7 @@ function NavigationItem({
             tooltip={tooltip}
             className={SELECTED}
           >
-            {Icon ? <Icon /> : null}
-            <span>{label}</span>
+            <EntryContent item={item} label={label} />
           </SidebarMenuButton>
           <SidebarMenuAction
             render={<CollapsibleTrigger />}
@@ -333,8 +376,7 @@ function NavigationItem({
         </>
       ) : (
         <SidebarMenuButton render={<CollapsibleTrigger />} tooltip={tooltip}>
-          {Icon ? <Icon /> : null}
-          <span>{label}</span>
+          <EntryContent item={item} label={label} />
           <ChevronRight className='ml-auto transition-transform group-data-panel-open/menu-button:rotate-90' />
         </SidebarMenuButton>
       )}
@@ -405,7 +447,7 @@ function NavigationSubItem({
   onNavigate,
 }: ItemProps): ReactElement | null {
   const label = useItemLabel(item);
-  const Icon = item.route.navigation?.icon;
+  const tag = useItemTag(item);
   const isSelected = routeKey(item.route) === selectedKey;
   const disclosure = useDisclosure(item, selectedKey);
   const children = item.children;
@@ -426,12 +468,7 @@ function NavigationSubItem({
       aria-current={isSelected ? 'page' : undefined}
     />
   ) : undefined;
-  const content = (
-    <>
-      {Icon ? <Icon /> : null}
-      <span>{label}</span>
-    </>
-  );
+  const content = <EntryContent item={item} label={label} />;
 
   if (children.length === 0)
     return (
@@ -439,9 +476,10 @@ function NavigationSubItem({
         <SidebarMenuSubButton
           render={link}
           isActive={isSelected}
+          aria-label={tag ? `${label} · ${tag}` : undefined}
           className={SELECTED}
         >
-          {content}
+          <EntryContent item={item} label={label} tag={tag} />
         </SidebarMenuSubButton>
       </SidebarMenuSubItem>
     );
@@ -471,8 +509,7 @@ function NavigationSubItem({
         </>
       ) : (
         <SidebarMenuSubButton render={<CollapsibleTrigger />}>
-          {Icon ? <Icon /> : null}
-          <span>{label}</span>
+          {content}
           <ChevronRight className='ml-auto transition-transform in-data-panel-open:rotate-90' />
         </SidebarMenuSubButton>
       )}

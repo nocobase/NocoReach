@@ -15,7 +15,7 @@ const site = 'sc-domain:example.test';
 const link = legacyRecord({ ga4PropertyId: '123', gscSiteUrl: site });
 const project = { id: projectId, name: 'Example', domains: ['example.test'] };
 const latest = '2026-10-20T08:00:00.000Z';
-const expected = JSON.stringify(['123', site, 5, latest, project]);
+const expected = JSON.stringify(['123', site, 5, [latest, null], project]);
 
 // The key saved snapshots are restored by; the index must leave it byte for byte the same.
 const keyOf = (database: DatabaseManager) =>

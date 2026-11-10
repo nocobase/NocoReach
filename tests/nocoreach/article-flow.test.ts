@@ -33,6 +33,7 @@ async function fixture({
   downstream = false,
   news = null,
   language = '',
+  cover = null,
 } = {}) {
   const state = {
     nrTasks: [
@@ -127,6 +128,7 @@ async function fixture({
         en: 'https://www.example.com/en/blog/{slug}',
         zh: 'https://www.example.com/cn/blog/{slug}',
       },
+      ...(cover ? { cover } : {}),
       ...(downstream
         ? {
             downstream: {
@@ -1939,6 +1941,24 @@ test('task pages: the titles alone are read without asking the publishing target
   expect(match).not.toHaveBeenCalled();
 });
 
+test('task pages: the start card reuses a recent complete lookup, and unreadable targets leave the pages unchecked', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [hello] };
+  const match = vi.spyOn(f.s.p.articleTargets, 'match');
+  const first = await f.s.pagePlaces('1', '1');
+  expect(await f.s.pagePlaces('1', '1')).toEqual(first);
+  expect(match).toHaveBeenCalledTimes(1);
+  const unreadable = Object.assign(new Error('unreadable'), { status: 503 });
+  vi.spyOn(f.s.p.articleTargets, 'targets').mockImplementation(() => {
+    throw unreadable;
+  });
+  match.mockRejectedValueOnce(unreadable);
+  expect(await f.s.pagePlaces('1', '1')).toMatchObject({
+    unchecked: true,
+    pages: [{ url: hello, unchecked: true }],
+  });
+});
+
 test('task pages: the tasks split off a task are listed as its siblings, with their pages', async () => {
   const f = await fixture();
   f.state.nrTasks[0].evidence = { proposalId: 'p1', pages: [pricing, hello] };
@@ -2351,6 +2371,192 @@ test('Edit directly: an image pasted into the body is linked when the edit is sa
   await f.settle();
   expect((await f.view()).work.release.state).toBe('verifying');
   expect(f.cms.state.uploads.map((u) => u.name)).toEqual(['pasted.png']);
+});
+
+// Covers (2026-11-05): a person sets one on the review card; the Agent never does.
+test('covers: the Agent cover is dropped; one set on the card is linked, noted, kept for the next run and published once', async () => {
+  const f = await fixture({ cover: { field: 'cover', ratio: '3:1' } });
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  // The review card learns where covers go and their ratio.
+  expect((await f.view()).articleTargets[0].cover).toEqual({
+    field: 'cover',
+    ratio: '3:1',
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: {
+      locales: { zh: { body: '# 你好\n\n第一版正文。' } },
+      cover: { '*': 'https://agent.example.com/made-up.png' },
+      verifyText: '第一版正文',
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  expect(review(d).article.draft.cover).toBeUndefined();
+  const shot = images.add('cover.png');
+  const ref = `/uploads/task-media/${shot}.png`;
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: review(d).id,
+    article: {
+      locales: { zh: { body: '# 你好\n\n第一版正文。' } },
+      cover: { '*': ref },
+    },
+  });
+  expect(images.files.get(shot)!.taskId).toBe('1');
+  expect(review(d).article).toMatchObject({
+    draft: { cover: { '*': ref } },
+    changes: expect.arrayContaining(['cover']),
+  });
+  expect(review(d).edits).toMatchObject({ cover: 'added' });
+  // A change request: the next run sees the cover and cannot change it.
+  await f.command('requestStageChanges', {
+    stageKey,
+    artifactId: review(d).id,
+    comment: '正文再短一点。',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.previous.cover).toEqual({ '*': ref });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '缩短了。',
+    article: {
+      locales: { zh: { body: '# 你好\n\n这是缩短以后的中文正文。' } },
+      cover: { '*': '' },
+      verifyText: '这是缩短以后的中文正文',
+    },
+  });
+  d = await f.view();
+  expect(review(d).article.draft.cover).toEqual({ '*': ref });
+  await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  // Into the cover field's storage, once; the article relates to the record it made.
+  expect(
+    f.cms.state.uploads.map((u) => [u.name, u.params.get('attachmentField')]),
+  ).toEqual([['cover.png', 'articles.cover']]);
+  const write = f.cms.state.requests.filter((r) => r.action === 'update');
+  expect(write).toHaveLength(1);
+  expect(write[0].body).toEqual({
+    content_cn: '# 你好\n\n这是缩短以后的中文正文。',
+    cover: 1,
+  });
+  expect(d.work.coverUrls).toEqual({
+    cms: {
+      [shot]:
+        'https://cms.example.com/storage/uploads/1-cover.png#attachment=1',
+    },
+  });
+  // The published cover read back is not an overwrite.
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.article.drift).toBeUndefined();
+  // Someone replaces it in the CMS afterwards: the task shows it.
+  f.cms.edit(7, { cover: 999 });
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  expect(
+    (await f.view()).work.release.article.drift?.fields?.map((x) => x.field),
+  ).toEqual(['cover']);
+});
+
+test('covers: a site that requires one refuses to approve a new published article without it; with one it is created', async () => {
+  const f = await fixture({
+    cover: { field: 'cover', ratio: '3:1', required: true },
+  });
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  await f.command('startTask', { playbookId: 'blog-post' });
+  const { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'New post',
+    article: {
+      slug: 'new-post',
+      status: 'published',
+      locales: { en: { title: 'A new post', body: 'Body of the new post' } },
+      summary: 'New post',
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  await expect(
+    f.command('approveStage', {
+      stageKey,
+      artifactId: review(d).id,
+      checked: [],
+    }),
+  ).rejects.toMatchObject({
+    status: 409,
+    message: systemMessageText('articles.coverRequired'),
+  });
+  const shot = images.add('cover.png');
+  d = await f.command('editArticleDraft', {
+    stageKey,
+    artifactId: review(d).id,
+    article: {
+      slug: 'new-post',
+      status: 'published',
+      locales: { en: { title: 'A new post', body: 'Body of the new post' } },
+      cover: { '*': `/uploads/task-media/${shot}.png` },
+    },
+  });
+  await f.command('approveStage', {
+    stageKey,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  expect(f.cms.state.rows.find((r) => r.slug === 'new-post')).toMatchObject({
+    status: 'published',
+    cover: 1,
+  });
+});
+
+test('covers: a draft may go without one, and an existing article keeps the site cover unless it is replaced', async () => {
+  const f = await fixture({
+    cover: { field: 'cover', ratio: '3:1', required: true },
+  });
+  const site = f.cms.attach('old.png', Buffer.from('old cover'));
+  f.cms.state.rows[0].cover = site;
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  // The existing article: its cover is read with it and nothing about it is written.
+  await draftAndApprove(f);
+  expect(
+    f.cms.state.requests.find((r) => r.action === 'update').body,
+  ).not.toHaveProperty('cover');
+  expect(f.cms.state.rows[0].cover).toBe(site);
+
+  const g = await fixture({
+    cover: { field: 'cover', ratio: '3:1', required: true },
+  });
+  await g.command('startTask', { playbookId: 'blog-post' });
+  await draftAndApprove(g, {
+    slug: 'draft-post',
+    status: 'draft',
+    locales: { en: { title: 'A draft', body: 'Body of the draft' } },
+    summary: 'Draft',
+  });
+  expect(g.cms.state.rows.find((r) => r.slug === 'draft-post')).toMatchObject({
+    status: 'drafted',
+  });
 });
 
 // 2026-11-04 (T-62): Edit directly no longer has a page check phrase. A hand edit that drops the Agent's phrase from

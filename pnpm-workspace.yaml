@@ -317,5 +317,5 @@ minimumReleaseAgeExclude:
 # Scheduler: upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 # Authorization: its client is bundled into the page; a new version needs the patch re-applied and reviewed.
 patchedDependencies:
-  '@nocobase/app-plugin-authorization@1.0.0-beta.33': patches/@nocobase__app-plugin-authorization@1.0.0-beta.33.patch
-  '@nocobase/app-plugin-scheduler@1.0.0-beta.21': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.21.patch
+  '@nocobase/app-plugin-authorization@1.0.0-beta.36': patches/@nocobase__app-plugin-authorization@1.0.0-beta.36.patch
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.23': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.23.patch

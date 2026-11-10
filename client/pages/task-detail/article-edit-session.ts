@@ -332,19 +332,25 @@ export function useArticleSubmit({
   onTab: (tab: string) => void;
 }) {
   const id = useId();
-  const [submitted, setSubmitted] = useState(false);
+  // What was asked last: Approve also checks the cover a target requires (2026-11-05), Request changes does not.
+  const [submitted, setSubmitted] = useState<'' | 'approve' | 'request'>('');
   const errors =
-    submitted && a && session ? formProblems(data, a, session.form) : {};
+    submitted && a && session
+      ? formProblems(data, a, session.form, submitted === 'approve')
+      : {};
   return {
     id,
     errors,
-    prepare: async () => {
+    prepare: async (approving = false) => {
       if (!a || !session) return null;
-      setSubmitted(true);
-      const first = Object.keys(formProblems(data, a, session.form))[0];
+      setSubmitted(approving ? 'approve' : 'request');
+      const first = Object.keys(
+        formProblems(data, a, session.form, approving),
+      )[0];
       if (first) {
         const l = first.split('.')[0];
-        if (editableLocales(data, a).includes(l)) onTab(l);
+        if (first.includes('.') && editableLocales(data, a).includes(l))
+          onTab(l);
         focusSoon(`${id}-${first}`);
         return null;
       }

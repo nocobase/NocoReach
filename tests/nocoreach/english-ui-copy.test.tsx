@@ -150,6 +150,19 @@ describe('task brief from an opportunity', () => {
     );
   });
 
+  it('says where a new page goes after the suggestion', () => {
+    setDictionary(english);
+    expect(
+      draftFromOpportunity({
+        ...card,
+        newPage: { section: '/blog/', linkFrom: ['/', '/templates'] },
+      }).brief,
+    ).toBe(
+      'Suggestion: Rewrite the titles\n\nNew page · suggested under /blog/\nLink to it from: / · /templates\n\nObservation: 16 pages share a title\n\nEvidence: Site audit\n\nLimitation: Only read pages',
+    );
+    setDictionary(null);
+  });
+
   it.each([
     ['en-US', 'Goal: Ship it\n\nDetails'],
     [undefined, '行动目标：Ship it\n\nDetails'],

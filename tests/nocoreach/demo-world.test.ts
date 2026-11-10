@@ -1,8 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { demoContent } from '../../server/nocoreach/demo-data/content';
+import {
+  acmeGrowthBriefs,
+  crmGrowthBriefs,
+} from '../../server/nocoreach/demo-data/growth-briefs';
+import { GROWTH_CATEGORIES, GROWTH_KINDS } from '../../shared/growth';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
 import { World } from '../../server/nocoreach/demo-data/world/world';
+import {
+  result as backlinksResult,
+  specification as backlinksSpec,
+} from '../../server/nocoreach/backlinks-service';
 import {
   compare,
   type Partition,
@@ -75,10 +84,67 @@ describe.each(['zh-CN', 'en-US'])(
           }
         }
         expect(documents.length).toBeGreaterThanOrEqual(8);
-        expect(opportunities.briefs).toHaveLength(which === 'main' ? 16 : 12);
+        // Two handed off and two ignored; the pending ones are growth points of the four categories (2026-11-10).
+        expect(opportunities.briefs).toHaveLength(4);
         expect(opportunities.watches).toHaveLength(6);
         for (const brief of opportunities.briefs)
           expect(world.page(brief[6])).toBeDefined();
+        const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
+          new Date(now),
+        );
+        expect(growth).toHaveLength(which === 'main' ? 18 : 10);
+        const lang = language === 'en-US' ? 'en' : 'zh';
+        const kinds = growth.map((brief) => brief.growth(lang).kind);
+        // Acme has two or more of each category; with Acme CRM every kind is shown.
+        if (which === 'main') {
+          const categories = growth.map((brief) => brief.growth(lang).category);
+          for (const category of GROWTH_CATEGORIES)
+            expect(
+              categories.filter((c) => c === category).length,
+            ).toBeGreaterThanOrEqual(2);
+          // To do keeps about the proportion of the approved mockup, not mostly Content optimization; the rest are
+          // under Handled (2026-11-10 review).
+          const todo = growth.filter((brief) => !brief.ignored),
+            count = (category: string) =>
+              todo.filter((brief) => brief.growth(lang).category === category)
+                .length;
+          expect(count('trending')).toBeGreaterThanOrEqual(4);
+          expect(count('new-content')).toBe(3);
+          expect(count('competitor-gaps')).toBeGreaterThanOrEqual(3);
+          expect(count('competitor-gaps')).toBeLessThanOrEqual(4);
+          expect(count('optimize')).toBeLessThanOrEqual(3);
+          // Most worth a look today is a trending one of high priority, as is another, so both lead To do.
+          const leading = todo.filter(
+            (brief) =>
+              brief.priority === 'high' &&
+              brief.growth(lang).category === 'trending',
+          );
+          expect(leading.map((brief) => brief.key)).toContain(
+            opportunities.lead,
+          );
+          expect(leading.length).toBeGreaterThanOrEqual(2);
+          const crm = crmGrowthBriefs(new Date(now)).map(
+            (brief) => brief.growth(lang).kind,
+          );
+          expect([...new Set([...kinds, ...crm])].sort()).toEqual(
+            Object.keys(GROWTH_KINDS).sort(),
+          );
+        }
+        for (const brief of growth) {
+          const g = brief.growth(lang);
+          expect(g.figures.length).toBeGreaterThanOrEqual(1);
+          expect(g.figures.length).toBeLessThanOrEqual(4);
+          expect(g.evidence!.rows.length).toBeLessThanOrEqual(10);
+          expect(g.evidence!.total).toBeGreaterThanOrEqual(
+            g.evidence!.rows.length,
+          );
+          // The list's line states the size of the growth; a title never says to keep traffic (2026-11-10 review).
+          expect(brief.reason[lang]).toMatch(/\d/u);
+          expect(brief.title[lang]).not.toMatch(/保住|留住|守住|\bkeep\b/iu);
+        }
+        expect(JSON.stringify(growth.map((b) => b.growth(lang)))).not.toMatch(
+          /nocobase|nococrm/i,
+        );
         expect(world.queries.length).toBeGreaterThanOrEqual(50);
         expect(world.research.length).toBeGreaterThanOrEqual(40);
         for (const query of world.queries)
@@ -121,7 +187,9 @@ describe.each(['zh-CN', 'en-US'])(
       expect(imports.filter((topic) => topic.posts.length === 1)).toHaveLength(
         3,
       );
-      expect(content.opportunities.briefs[0][6]).toBe('/docs/import-excel');
+      expect(acmeGrowthBriefs(new Date(now))[0].path).toBe(
+        '/docs/import-excel',
+      );
       const query = world.queries.find(
         (q) =>
           q.q ===
@@ -137,6 +205,64 @@ describe.each(['zh-CN', 'en-US'])(
         'nimbus.example',
         'tasks.example',
       ]);
+    });
+
+    it('answers every Search & market › Backlinks lookup the way the service reads it', async () => {
+      const project = { id: 'main', ...content.projects.main, language };
+      const ask = async (path: string, body: unknown) =>
+        (
+          await worldResponse(
+            project,
+            `https://api.dataforseo.com/v3/${path}`,
+            { method: 'POST', body: JSON.stringify([body]) },
+            now,
+          )
+        ).json();
+      const target = new URL(new World(project, now).origin).hostname;
+      const runs: Record<string, any> = {};
+      for (const view of ['overview', 'links', 'domains', 'pages']) {
+        const spec = backlinksSpec({ view, target });
+        const raw = spec.requests
+          ? await Promise.all(
+              spec.requests.map((q: { path: string; body: unknown }) =>
+                ask(q.path, q.body),
+              ),
+            )
+          : await ask(spec.path, spec.request);
+        runs[view] = backlinksResult(raw, spec);
+        expect(runs[view].status, view).toBe('completed');
+      }
+      expect(runs.overview.result.summary.rank).toBeLessThanOrEqual(100);
+      expect(runs.overview.result.history.length).toBeGreaterThan(6);
+      expect(runs.links.result.items.some((r: any) => r.spam >= 40)).toBe(true);
+      expect(runs.links.result.items.some((r: any) => r.isLost)).toBe(false);
+      expect(
+        runs.links.result.items.some((r: any) => r.dofollow === false),
+      ).toBe(true);
+      expect(runs.domains.result.items.length).toBeGreaterThan(0);
+      // Link gap against the demo's competitors: each has its own sites, some shared.
+      const gapSpec = backlinksSpec({
+        view: 'gap',
+        target,
+        competitors: ['nimbus.example', 'tasks.example'],
+      });
+      const gap = backlinksResult(
+        await Promise.all(
+          gapSpec.requests.map((q: { path: string; body: unknown }) =>
+            ask(q.path, q.body),
+          ),
+        ),
+        gapSpec,
+      );
+      expect(gap.status).toBe('completed');
+      expect(gap.result.items.length).toBeGreaterThan(0);
+      expect(
+        gap.result.items.some((r: any) => r.competitors.length === 2),
+      ).toBe(true);
+      expect(
+        gap.result.items.some((r: any) => r.competitors.length === 1),
+      ).toBe(true);
+      expect(runs.pages.result.items.length).toBeGreaterThan(0);
     });
 
     it('keeps CRM sources and GitHub scoped to CRM, offline and in the imported language', async () => {
