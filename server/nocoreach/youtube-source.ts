@@ -8,6 +8,7 @@ import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
+import { TOPIC_PRICES, topicKey } from '../../shared/followed-topics.js';
 import {
   SEARCH_USD,
   VIDEO_USD,
@@ -64,6 +65,17 @@ export interface YouTubeState {
   pausedUntil?: string | null;
   /** Daily reads in a row that missed each search term; reading the term or changing the terms clears it. */
   missedRuns?: Record<string, number>;
+  /** Videos found on the followed topics, by id, kept apart from the ones the search terms find. */
+  topicVideos?: Record<string, TopicVideo>;
+  /** When each followed topic (by topicKey) was last searched; a topic is searched once a week. */
+  topicReads?: Record<string, string>;
+}
+/** A video found on followed topics, with the topics it came up under; likes and comments for the first few only. */
+export interface TopicVideo extends FoundVideo {
+  likes: number | null;
+  comments: number | null;
+  topics: string[];
+  firstSeenAt: string;
 }
 
 export type SearchResult =
@@ -160,6 +172,8 @@ interface Host {
   network: OutboundNetwork;
   project: (id: string) => Promise<unknown>;
   projectIds: () => Promise<(string | number)[]>;
+  /** The project's followed topics (Project knowledge › Memory); null before the lists were moved there. */
+  followedTopics?: { of(id: string): Promise<string[] | null> };
 }
 interface Running {
   id: string;
@@ -175,6 +189,13 @@ const DETAILS_PER_READ = 20;
  */
 export const REPEATED_MISSES = 3;
 const PENDING_LIMIT = 100;
+/**
+ * Followed topics (2026-11-10): each topic is searched once a week, beside the daily search of the product name, and
+ * the details of at most TOPIC_DETAILS of the videos new to it are read. TOPIC_PRICES on the Memory page counts this.
+ */
+const TOPIC_WEEK = 7 * 86400000 - 3600000;
+const TOPIC_DETAILS = TOPIC_PRICES.youtubeVideos;
+const TOPIC_VIDEOS_KEPT = 300;
 // Each DataForSEO request waits up to a minute; a read of five terms and twenty videos stays well inside this.
 const READ_MS = 10 * 60000;
 const DAY = 86400000;
@@ -474,6 +495,45 @@ export class YouTubeSource {
         if (!result.ok) waiting.push(videoId);
         else if (result.video) details.set(videoId, result.video);
       }
+      // The followed topics due this week: their videos, and the details of the first few new ones.
+      const topicFound = new Map<string, TopicVideo>(),
+        topicRead = new Map<string, string>();
+      const topics = budget ? [] : await this.dueTopics(id, state);
+      for (const topic of topics) {
+        stop();
+        const result = await guarded(() =>
+          this.reader.search(id, topic, manual),
+        );
+        if (!result) break;
+        costUsd += result.costUsd;
+        if (!result.ok) continue;
+        topicRead.set(topicKey(topic), at);
+        let detailed = 0;
+        for (const video of result.videos) {
+          const known =
+            topicFound.get(video.id) ?? state.topicVideos?.[video.id];
+          let more: VideoDetails | null = null;
+          if (!known && !budget && detailed < TOPIC_DETAILS) {
+            detailed++;
+            const read = await guarded(() =>
+              this.reader.details(id, video.id, manual),
+            );
+            if (read) {
+              costUsd += read.costUsd;
+              if (read.ok) more = read.video;
+            }
+          }
+          topicFound.set(video.id, {
+            ...video,
+            ...(more ?? {}),
+            views: more?.views ?? video.views ?? known?.views ?? null,
+            likes: more?.likes ?? known?.likes ?? null,
+            comments: more?.comments ?? known?.comments ?? null,
+            topics: [...new Set([...(known?.topics ?? []), topic])],
+            firstSeenAt: known?.firstSeenAt ?? at,
+          });
+        }
+      }
       stop();
       const fetchedAt = new Date().toISOString();
       const videos: Video[] = [];
@@ -516,8 +576,21 @@ export class YouTubeSource {
         running.committing = true;
         await this.library.save(id, videos);
         const tracked = new Set(current.videoIds);
+        const topicVideos = Object.fromEntries(
+          Object.entries({
+            ...(current.topicVideos ?? {}),
+            ...Object.fromEntries(topicFound),
+          })
+            .sort(([, a], [, b]) => b.firstSeenAt.localeCompare(a.firstSeenAt))
+            .slice(0, TOPIC_VIDEOS_KEPT),
+        );
         return {
           ...current,
+          topicVideos,
+          topicReads: {
+            ...(current.topicReads ?? {}),
+            ...Object.fromEntries(topicRead),
+          },
           analysisVideoIds: videos.slice(0, 15).map((video) => video.id),
           verifiedAt: current.verifiedAt || fetchedAt,
           fetchedAt,
@@ -642,6 +715,15 @@ export class YouTubeSource {
     }
     return this.status(id);
   }
+  /** The followed topics not searched in the last week. */
+  private async dueTopics(id: string, state: YouTubeState) {
+    const topics =
+      (await this.p.followedTopics?.of(id).catch(() => null)) ?? [];
+    return topics.filter((topic) => {
+      const at = state.topicReads?.[topicKey(topic)];
+      return !at || Date.now() - Date.parse(at) >= TOPIC_WEEK;
+    });
+  }
   async analysisData(id: string) {
     const state = await this.state(id);
     if (!state || state.configured === false || !state.verifiedAt) return [];
@@ -657,11 +739,13 @@ export class YouTubeSource {
   /**
    * What a month of daily reads costs at list prices: each term searched once a day, each tracked video read once a
    * day, and each newly found video read once. New videos are counted at the rate the project has been finding them
-   * (after its first day, which finds the backlog), or one a term a day before there is a week to go on.
+   * (after its first day, which finds the backlog), or one a term a day before there is a week to go on. Followed
+   * topics add their weekly search and the details of up to TOPIC_DETAILS new videos each.
    */
   private estimate(
     state: YouTubeState | null,
     overview: Awaited<ReturnType<YouTubeLibrary['overview']>>,
+    topics = 0,
   ) {
     const terms = state?.terms.length ?? 0,
       tracked = state?.videoIds.length ?? 0;
@@ -673,7 +757,8 @@ export class YouTubeSource {
     const monthlyUsd =
       terms * 30 * SEARCH_USD +
       tracked * 30 * VIDEO_USD +
-      newPerMonth * VIDEO_USD;
+      newPerMonth * VIDEO_USD +
+      ((topics * 30) / 7) * (SEARCH_USD + TOPIC_DETAILS * VIDEO_USD);
     return {
       monthlyUsd: Number(monthlyUsd.toFixed(2)),
       searchUsd: SEARCH_USD,
@@ -696,6 +781,8 @@ export class YouTubeSource {
     } while (version !== (this.versions.get(id) || 0));
     const running = this.running.get(id);
     const dataforseo = this.reader.ready(id);
+    const topics =
+      (await this.p.followedTopics?.of(id).catch(() => null)) ?? [];
     const spend = dataforseo
       ? await this.reader.spend(id).catch(() => null)
       : null;
@@ -742,7 +829,8 @@ export class YouTubeSource {
         (term) => (state?.missedRuns?.[term] ?? 0) >= REPEATED_MISSES,
       ),
       spend,
-      estimate: this.estimate(state, overview),
+      estimate: this.estimate(state, overview, topics.length),
+      topicCount: topics.length,
       lastSync: state?.lastSync || null,
       nextSyncAt:
         state?.autoSync && state.configured !== false
@@ -787,6 +875,35 @@ export class YouTubeSource {
         id,
         period.items.map((video) => video.id),
       ),
+      topic: await this.topicReport(id, period.window),
+    };
+  }
+  /** Videos on the followed topics published (or first found) in the range, the most viewed first. */
+  private async topicReport(
+    id: string,
+    window: { start: string; end: string },
+  ) {
+    const [state, topics] = await Promise.all([
+      this.state(id),
+      this.p.followedTopics?.of(id).catch(() => null) ?? null,
+    ]);
+    const keys = new Set((topics ?? []).map(topicKey));
+    const videos = Object.values(state?.topicVideos ?? {})
+      .map((video) => ({
+        ...video,
+        topics: video.topics.filter((topic) => keys.has(topicKey(topic))),
+      }))
+      .filter((video) => {
+        const day = (video.publishedAt || video.firstSeenAt).slice(0, 10);
+        return video.topics.length && day >= window.start && day <= window.end;
+      })
+      .sort((a, b) => (b.views ?? -1) - (a.views ?? -1));
+    const reads = Object.values(state?.topicReads ?? {}).sort();
+    return {
+      topics: topics ?? [],
+      readAt: reads.at(-1) ?? null,
+      count: videos.length,
+      videos: videos.slice(0, 50),
     };
   }
   async settled(id: string) {

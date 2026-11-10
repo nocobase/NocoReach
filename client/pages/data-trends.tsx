@@ -9,8 +9,8 @@ import { cn } from '#lib/utils';
 import { usePageTab } from '#hooks/use-page-tab';
 // 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
-// this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
-// this page, each on its own line (trends-keywords.tsx).
+// this week marked); picked searches go to the Agent as one content task. Followed topics (2026-11-10): the topics kept
+// in Project knowledge › Memory, each on its own line (trends-keywords.tsx).
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
@@ -65,7 +65,7 @@ export default function DataTrends() {
   useEffect(() => { if (!pending || !project) return; const t = setInterval(() => void load().then(setLive).catch(() => undefined), 4000); return () => clearInterval(t); }, [pending, project?.id]);
   const explicit = params.get("tab");
   const tab = explicit === "brand" || explicit === "keywords" ? explicit : view && !view.connected ? "keywords" : "brand";
-  usePageTab(tab === 'keywords' ? $t('dataTrends.keywordsFollow', { 0: '' }) : $t('dataTrends.productCompetitors'));
+  usePageTab(tab === 'keywords' ? $t('dataTrends.followedTopicsTab', { 0: '' }) : $t('dataTrends.productCompetitors'));
   const setTab = (t: string) => { const next = new URLSearchParams(params); next.set("tab", t); setParams(next, { replace: true }); };
   const check = async () => {
     setBusy(true);
@@ -92,18 +92,18 @@ export default function DataTrends() {
   useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t('common.selectedRelatedSearchesBecomeOne'), draft: () => trendsDraft(terms[0], view!.place || $t('common.worldwide'), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('common.querying') : $t('common.updateNow')} onClick={() => void check()} /> : undefined} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.interestProductCompetitorsTopics')} actions={view?.connected || view?.keywords?.length ? <RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('common.querying') : $t('common.updateNow')} onClick={() => void check()} /> : undefined} />
       {error ? <LoadError title={$t('dataTrends.notLoadTrends')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view ? (
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList variant="line" className="h-auto! justify-start">
             <TabsTrigger value="brand">{$t('dataTrends.productCompetitors')}</TabsTrigger>
-            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` ${view.keywords.length}` : ""})}</TabsTrigger>
+            <TabsTrigger value="keywords">{$tj('dataTrends.followedTopicsTab',{0:view.keywords?.length ? ` ${view.keywords.length}` : ""})}</TabsTrigger>
           </TabsList>
         </Tabs>
       ) : null}
-      {view && project && tab === "keywords" ? <TrendKeywords projectId={project.id} view={view} onView={(v) => setLive({ ...view, ...v })} onRetry={(id) => void retry(id)} /> : null}
+      {view && project && tab === "keywords" ? <TrendKeywords projectId={project.id} view={view} onRetry={(id) => void retry(id)} /> : null}
       {view && tab === "brand" && !view.connected ? <EmptyState icon={<TrendingUp />} title={$t('dataTrends.noProductCompetitorComparisonSet')} description={$t('dataTrends.enterProductNameUp4')} action={<Button onClick={() => navigate("/connections?source=trends")}>{$t('dataTrends.setUpComparison')}</Button>} /> : null}
       {view?.connected && tab === "brand" ? (
         <>

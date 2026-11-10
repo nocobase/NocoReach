@@ -199,15 +199,7 @@ const SITE_ACTIONS: Record<Site, { use: string[]; configure: string[] }> = {
     configure: list('nrX', ['connect', 'disconnect']),
   },
   trends: {
-    use: list('nrTrends', [
-      'status',
-      'check',
-      'retry',
-      'view',
-      'addKeyword',
-      'removeKeyword',
-      'pick',
-    ]),
+    use: list('nrTrends', ['status', 'check', 'retry', 'view', 'pick']),
     configure: list('nrTrends', ['connect', 'disconnect']),
   },
   chat: {
@@ -282,14 +274,13 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrArticles.targets',
   ],
   analyze: [
-    ...list('nrAiQuestions', ['suggest', 'topics']),
     'nrAiSearch.ask',
     ...list('nrAnalysis', ['run', 'judge', 'judgeMissing']),
     'nrAudit.recheck',
     'nrBacklinks.run',
     'nrCompetitorResearch.market',
     'nrDomains.run',
-    ...list('nrGitHubTrends', ['setTopics', 'refresh']),
+    'nrGitHubTrends.refresh',
     ...list('nrKeywordDetail', ['site', 'save', 'market', 'serp']),
     ...list('nrKeywordSuggest', [
       'suggest',

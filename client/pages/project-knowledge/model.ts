@@ -2,6 +2,7 @@ import { formatDate } from '#lib/format';
 import { $t, type Message } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Project } from '../reach-data';
+import { uniqueTopics } from '../../../shared/followed-topics';
 
 // 项目知识 (SPEC §6.0): what the AI team knows about this project — 记忆, read every time and kept short, in the sections
 // of a brand handbook; and 知识库, material the Agent looks up when it needs to. Shared by the page and its two tabs.
@@ -71,10 +72,16 @@ export type KnowledgeProject = Project;
 // Same reading as the server's memoryOf: saved sections, or a project's older fields read into them.
 export function memoryOf(p?: Partial<KnowledgeProject>): Memory {
   const s = (v?: string) => (v || '').trim();
-  if (p?.memory)
+  // Saved sections win; a memory holding only the followed topics still reads the older fields, as on the server.
+  if (p?.memory && getMemorySections().some(([k]) => k in p.memory!)) {
+    const saved = p.memory;
     return Object.fromEntries(
-      getMemorySections().map(([k]) => [k, s(p.memory?.[k])]),
+      getMemorySections().map(([k]) => {
+        const v = saved[k];
+        return [k, s(typeof v === 'string' ? v : '')];
+      }),
     ) as Memory;
+  }
   const join = (...xs: string[]) => xs.filter(Boolean).join('\n');
   return {
     brand: join(
@@ -97,6 +104,10 @@ export function memoryOf(p?: Partial<KnowledgeProject>): Memory {
     rules: s(p?.doNotChange),
   };
 }
+
+// Followed topics (2026-11-10): a list beside the sections, which the sources search besides the product name.
+export const topicsOf = (p?: Partial<KnowledgeProject>): string[] =>
+  Array.isArray(p?.memory?.topics) ? uniqueTopics(p.memory.topics) : [];
 
 export const getCategories = (): [string, string][] => [
   ['competitor', $t('common.competitor')],
@@ -130,13 +141,14 @@ export const kindName = (i: Item) =>
 // created, and the weekly suggestions from change requests, approved results and the website, accepted one by one.
 export type MemorySuggestion = {
   id: string;
-  section: MemoryKey;
+  /** `topics`: a topic to follow, from the draft or from what the sources found this week. */
+  section: MemoryKey | 'topics';
   label: string;
   text: string;
   replace?: string;
   reason?: string;
   examples?: string[];
-  source: 'reviews' | 'results' | 'site' | 'draft';
+  source: 'reviews' | 'results' | 'site' | 'draft' | 'signals';
   at: string;
 };
 // What Generate from the website and materials offers before it runs (nrMemory:sources): the pages and materials it will read, the person's

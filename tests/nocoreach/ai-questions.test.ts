@@ -12,25 +12,29 @@ test('DataForSEO LLM mentions: questions containing the topic, per platform (Cha
  assert.equal(r.costUsd,0.21);assert.deepEqual(r.result.items[0].sources,[{url:'https://www.reddit.com/r/x',title:'Reddit',domain:'reddit.com'}]);assert.deepEqual(r.result.items[0].brands,['Appsmith','ToolJet']);assert.equal(r.result.items.length,1);
  assert.equal(mentions('Try NocoBase today',[],'NocoBase'),true);assert.equal(mentions('nocobaser is not it',[],'nocobase'),false);assert.equal(mentions('',['Appsmith Inc'],'Appsmith'),true);
 });
-test('问题: topics suggested by the online AI, confirmed before paying; each question marked ours / gap / open with cited sites; monthly after',async()=>{
- const rows=[],runs=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
+test('Questions: the followed topics in Memory, looked up once DataForSEO is verified; each question marked ours / gap / open with cited sites; monthly after',async()=>{
+ const rows=[],runs=[];let followed=null;const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],
-  projects:{get:async()=>({id:1,name:'NocoBase',domains:['www.nocobase.com'],memory:{brand:'开源无代码'}})},siteContent:{state:async()=>({pages:[{title:'Build internal tools'}]})},keywordService:{saved:async()=>({items:[{keyword:'open source crm'}]})},
-  competitors:{state:async()=>({list:[{name:'Appsmith',site:'https://www.appsmith.com'},{name:'Retool',site:'https://retool.com'}]})},
-  taskExecution:{provider:{complete:async()=>'```json\n'+JSON.stringify({topics:[{topic:'Internal Tool Builder',reason:'品类词'},{topic:'NocoBase"x',reason:'bad'},{topic:'open source crm',reason:'用途'}]})+'\n```'}}};
+  projects:{get:async()=>({id:1,name:'NocoBase',domains:['www.nocobase.com'],memory:{brand:'Open source no-code'}})},followedTopics:{of:async()=>followed},
+  competitors:{state:async()=>({list:[{name:'Appsmith',site:'https://www.appsmith.com'},{name:'Retool',site:'https://retool.com'}]})}};
  const s=new AiQuestions(p);
  s.d4s.run=async(id,kind,v)=>{runs.push([v.topic,v.platform]);const items=v.platform==='google'?[{question:'best open source alternative to retool',volume:1900,answer:'Try Appsmith or ToolJet.',sources:[{url:'https://www.reddit.com/r/x',domain:'reddit.com'},{url:'https://www.appsmith.com/a',domain:'appsmith.com'}],brands:['Appsmith','ToolJet']},{question:'self hosted no code database',volume:590,answer:'NocoBase is a good pick.',sources:[{url:'https://www.nocobase.com/en',domain:'nocobase.com'}],brands:['NocoBase']},{question:'what is an internal tool',volume:300,answer:'An internal tool is software used by employees.',sources:[{url:'https://en.wikipedia.org/x',domain:'en.wikipedia.org'}],brands:[]}]:[{question:'best open source alternative to retool',volume:2400,answer:'Budibase is popular.',sources:[],brands:['Budibase']}];return {status:'completed',result:{items}};};
- let v=await s.view('1');assert.deepEqual(v.topics,[]);assert.equal(v.suggested,null);
- const topics=await s.suggest('1');assert.deepEqual(topics.map(t=>t.topic),['internal tool builder','open source crm'],'quotes refused');assert.equal(runs.length,0,'suggesting costs nothing');
- v=await s.setTopics('1',{topics:['internal tool builder']});await s.running.get('1');assert.deepEqual(runs,[['internal tool builder','chat_gpt'],['internal tool builder','google']]);
+ // Before the project's list moved into Memory nothing is set up or asked.
+ let v=await s.view('1');assert.deepEqual(v.topics,[]);await s.refresh('1');assert.equal(runs.length,0);
+ followed=['Internal Tool Builder','x'];await s.topicsChanged('1');await s.running.get('1');
+ assert.deepEqual(runs,[['internal tool builder','chat_gpt'],['internal tool builder','google']],'lower-cased; a topic too short to ask about is skipped');
  v=await s.view('1');assert.deepEqual(v.counts,{all:4,ours:1,gap:2,open:1});
  const gap=v.questions.find(q=>q.platform==='google'&&q.question.startsWith('best'));assert.equal(gap.status,'gap');assert.deepEqual(gap.rivals,['Appsmith']);assert.deepEqual(gap.brands,['ToolJet']);assert.equal(gap.sources.find(x=>x.domain==='appsmith.com').rival,'Appsmith');
  const ours=v.questions.find(q=>q.status==='ours');assert.equal(ours.weNamed,true);assert.equal(ours.weCited,true);
  assert.deepEqual(v.citedDomains.map(d=>[d.domain,d.count]).slice(0,2),[['reddit.com',1],['appsmith.com',1]],'sites cited in answers we are missing from');
  assert.equal(v.questions[0].volume,2400,'most asked first');
  await s.refresh('1');assert.equal(runs.length,2,'within a month nothing is asked again');
- // adding a topic asks only for it; removing one forgets its questions
- await s.setTopics('1',{topics:['internal tool builder','open source crm']});await s.running.get('1');assert.deepEqual(runs.slice(2).map(r=>r[0]),['open source crm','open source crm']);
- await s.setTopics('1',{topics:['open source crm']});v=await s.view('1');assert.deepEqual(v.topics.map(t=>t.keyword),['open source crm']);
- await assert.rejects(s.setTopics('1',{topics:[]}),/至少留一个/);await assert.rejects(new AiQuestions({...p,env:()=>''}).setTopics('1',{topics:['crm']}),/请先接入并验证 DataForSEO/);
+ // Adding a topic in Memory asks only for it; removing one forgets its questions; the same list changes nothing.
+ followed=['internal tool builder','Open Source CRM'];await s.topicsChanged('1');await s.running.get('1');assert.deepEqual(runs.slice(2).map(r=>r[0]),['open source crm','open source crm']);
+ followed=['open source crm'];await s.topicsChanged('1');await s.running.get('1');v=await s.view('1');assert.deepEqual(v.topics.map(t=>t.keyword),['open source crm']);assert.ok(v.questions.every(q=>q.topics.join()==='open source crm'));
+ await s.topicsChanged('1');assert.equal(s.running.has('1'),false);assert.equal(runs.length,4);
+ // Only the first ten are asked about, as on the Memory page.
+ followed=Array.from({length:12},(_,i)=>`topic ${i+1}`);await s.syncTopics('1');assert.deepEqual((await s.view('1')).topics.map(t=>t.keyword).slice(-1),['topic 10']);
+ // Without DataForSEO the list follows Memory but nothing is paid for.
+ const off=new AiQuestions({...p,env:()=>''});off.d4s.run=async()=>{throw new Error('not asked');};await off.refresh('1');
 });

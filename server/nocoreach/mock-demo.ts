@@ -256,6 +256,12 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         await p.packages.runs.wait(id);
       }
     });
+    // Followed topics before the sources that search them (Hacker News, Reddit, YouTube, Trends, AI questions).
+    await phase('followed-topics', async () => {
+      await p.knowledge.saveMemory(id, {
+        topics: ['internal tools', 'workflow automation', 'low-code'],
+      });
+    });
     await phase('hackernews', async () => {
       await p.hackernews.connect(id, { terms: [product.name] });
       await p.hackernews.runs.wait(id);
@@ -439,9 +445,6 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         });
     });
     await phase('ai-questions', async () => {
-      await p.aiQuestions.setTopics(id, {
-        topics: ['internal tools', 'workflow automation', product.name],
-      });
       await p.aiQuestions.refresh(id);
     });
     await phase('knowledge', async () => {

@@ -1,7 +1,8 @@
 import { $t, getCurrentLocale } from '#i18n';
 // YouTube (社区): public videos found by the project's terms and links, counted by publication date,
-// with the same parts as the other 社区 pages (collector-content.tsx).
-import { useMemo, useState } from 'react';
+// with the same parts as the other 社区 pages (collector-content.tsx). Since 2026-11-10 also the videos on the followed
+// topics, searched weekly, in their own group (Topic discussions) beside the mentions; the most viewed first.
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Youtube } from 'lucide-react';
 import { RefreshButton } from '#components/reach/refresh-button';
@@ -44,15 +45,39 @@ import {
   youtubeErrorMessage,
   youtubeRequest,
   type YouTubeStatus,
+  type YouTubeTopicVideo,
   type YouTubeVideo,
 } from './youtube-api';
+import { Card } from '#components/ui/card';
+import {
+  AllCheck,
+  RowCheck,
+  useTickedList,
+} from '#components/reach/hand-off-slot';
+import { EditTopicsLink, TopicGroupTabs } from './followed-topics';
+import { TOPIC_PRICES } from '../../shared/followed-topics';
+import {
+  topicMarks,
+  topicScopeText,
+  useTopicGroup,
+  type TopicGroup,
+} from './followed-topics-scope';
 import './data-views.css';
 import { formatDate, formatDateTime } from '#lib/format';
 
-type Report = YouTubeStatus & CollectorReport & { videos: YouTubeVideo[] };
+type Report = YouTubeStatus &
+  CollectorReport & {
+    videos: YouTubeVideo[];
+    topic?: {
+      topics: string[];
+      readAt: string | null;
+      count: number;
+      videos: YouTubeTopicVideo[];
+    };
+  };
 
 const time = (value: string | null | undefined) => formatDateTime(value);
-const summary = (v: YouTubeVideo) =>
+const summary = (v: Pick<YouTubeVideo, 'views' | 'likes' | 'comments'>) =>
   $t('bilibili.viewsLikesComments', {
     0: countText(v.views),
     1: countText(v.likes),
@@ -137,17 +162,22 @@ export default function DataYouTube() {
     }
   };
   const settings = () => navigate('/connections?source=youtube');
+  const topic = data?.topic,
+    [group, setGroup] = useTopicGroup(Boolean(topic?.topics.length));
   const hasData = Boolean(data && (data.configured || data.total > 0));
   return (
     <PageContainer className='nr-data-page'>
       <PageHeader
         title='YouTube'
-        description={$t('collectorPage.youtubeDescription')}
+        description={$t('collectorPage.youtubeTopicsDescription')}
         info={
           hasData ? (
             <NotesTip
               notes={[
                 $t('youtube.researchLimits'),
+                $t('youtube.topicResearchLimits', {
+                  0: TOPIC_PRICES.youtubeVideos,
+                }),
                 $t('collectorPage.datesNote'),
                 $t('collectorPage.unknownNote'),
               ]}
@@ -211,18 +241,20 @@ export default function DataYouTube() {
           {data.configured ? (
             <CollectorSourceLine
               parts={[
-                $t('common.searchTermValue', {
-                  0:
+                topicScopeText({
+                  terms: [
                     data.terms.length > 1
                       ? $t('youtube.termsAndMore', {
                           0: data.terms[0],
                           1: data.terms.length,
                         })
                       : data.terms[0],
+                  ],
+                  topics: topic?.topics.length ?? 0,
+                  // Read by hand, nothing runs on a schedule: the line says so instead.
+                  cadence: data.autoSync ? 'topicsWeekly' : undefined,
                 }),
-                $t(
-                  data.autoSync ? 'youtube.autoRead' : 'youtube.manualReading',
-                ),
+                !data.autoSync && $t('youtube.manualReading'),
                 data.fetchedAt &&
                   $t('youtube.sourceRetrieved', { 0: time(data.fetchedAt) }),
               ]}
@@ -230,7 +262,9 @@ export default function DataYouTube() {
                 $t('youtube.sourceInfo', {
                   0: new Intl.ListFormat(getCurrentLocale()).format(data.terms),
                 }),
+                $t('followedTopics.youtubeTopicsNote'),
               ]}
+              trailing={<EditTopicsLink />}
             />
           ) : null}
           {!data.configured ? (
@@ -247,51 +281,156 @@ export default function DataYouTube() {
               {paused}
             </p>
           ) : null}
-          <ReportMetrics kpis={data.kpis} />
-          <CollectorTrendCard trend={data.trend} matched={data.matched} />
-          <CollectorBody
-            list={
-              <CollectorTable
-                id='youtube-videos'
-                title={$t('collectorPage.videosInRange', { 0: data.matched })}
-                rows={data.videos}
-                rowId={(v) => v.id}
-                columns={columns}
-                sort={sort}
-                onSort={(next) => {
-                  setShown(20);
-                  setSort(next);
-                }}
-                loading={loading}
-                more={shown < data.matched}
-                onMore={() => setShown((n) => n + 20)}
-                handOff={(ticked) => ({
-                  playbookId: 'community-summary',
-                  description: $t('collectorPage.videosHandOff'),
-                  draft: () =>
-                    discussionsDraft(
-                      'YouTube',
-                      $t('collectorPage.videos'),
-                      ticked.map((v) => ({
-                        title: v.title,
-                        url: v.url,
-                        meta: `${v.channel} · ${summary(v)} · ${formatDate(v.publishedAt)}`,
-                        excerpt: v.description.slice(0, 300),
-                      })),
-                    ),
-                })}
+          {topic ? (
+            <TopicGroupTabs
+              group={group}
+              onChange={setGroup}
+              topics={topic.count}
+              mentions={data.matched}
+            />
+          ) : null}
+          {topic && group === 'topics' ? (
+            <TopicVideos topic={topic} />
+          ) : (
+            <MentionsGroup group={group}>
+              <ReportMetrics kpis={data.kpis} />
+              <CollectorTrendCard trend={data.trend} matched={data.matched} />
+              <CollectorBody
+                list={
+                  <CollectorTable
+                    id='youtube-videos'
+                    title={$t('collectorPage.videosInRange', {
+                      0: data.matched,
+                    })}
+                    rows={data.videos}
+                    rowId={(v) => v.id}
+                    columns={columns}
+                    sort={sort}
+                    onSort={(next) => {
+                      setShown(20);
+                      setSort(next);
+                    }}
+                    loading={loading}
+                    more={shown < data.matched}
+                    onMore={() => setShown((n) => n + 20)}
+                    handOff={(ticked) => ({
+                      playbookId: 'community-summary',
+                      description: $t('collectorPage.videosHandOff'),
+                      draft: () =>
+                        discussionsDraft(
+                          'YouTube',
+                          $t('collectorPage.videos'),
+                          ticked.map((v) => ({
+                            title: v.title,
+                            url: v.url,
+                            meta: `${v.channel} · ${summary(v)} · ${formatDate(v.publishedAt)}`,
+                            excerpt: v.description.slice(0, 300),
+                          })),
+                        ),
+                    })}
+                  />
+                }
+                side={
+                  <CollectorGroupsCard
+                    title={$t('collectorPage.channels')}
+                    groups={data.groups}
+                  />
+                }
               />
-            }
-            side={
-              <CollectorGroupsCard
-                title={$t('collectorPage.channels')}
-                groups={data.groups}
-              />
-            }
-          />
+            </MentionsGroup>
+          )}
         </>
       ) : null}
       <HandOffBar projectId={project?.id} />
     </PageContainer>
+  );
+}
+
+function MentionsGroup({
+  group,
+  children,
+}: {
+  group: TopicGroup;
+  children: ReactNode;
+}) {
+  return (
+    <div className='contents' data-group={group}>
+      {children}
+    </div>
+  );
+}
+
+// Videos on the followed topics in range, the most viewed first; ticked ones go to the Agent like the mentions.
+function TopicVideos({ topic }: { topic: NonNullable<Report['topic']> }) {
+  const ticked = useTickedList(
+    'youtube-topic-videos',
+    topic.videos,
+    (v) => v.id,
+    (list) => ({
+      playbookId: 'community-summary',
+      description: $t('collectorPage.videosHandOff'),
+      draft: () =>
+        discussionsDraft(
+          'YouTube',
+          $t('collectorPage.videos'),
+          list.map((v) => ({
+            title: v.title,
+            url: v.url,
+            meta: `${v.channel} · ${topicMarks(v.topics)} · ${summary(v)} · ${formatDate(v.publishedAt)}`,
+            excerpt: v.description.slice(0, 300),
+          })),
+        ),
+    }),
+  );
+  return (
+    <Card className='gap-0 py-0' data-group='topics'>
+      <div className='flex items-center gap-3 border-b border-border px-4 py-2'>
+        <AllCheck selection={ticked} count={topic.videos.length} />
+        <h2 className='text-sm font-semibold'>
+          {$t('followedTopics.mostViewed')}
+        </h2>
+      </div>
+      {topic.videos.length ? (
+        topic.videos.map((v) => (
+          <div
+            key={v.id}
+            className='flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0'
+            data-topic-video={v.id}
+          >
+            <span className='pt-0.5'>
+              <RowCheck selection={ticked} k={v.id} label={v.title} />
+            </span>
+            <div className='min-w-0 flex-1'>
+              <a
+                className='nr-link font-medium'
+                href={safeLink(v.url)}
+                target='_blank'
+                rel='noreferrer'
+              >
+                {v.title}
+              </a>
+              <p className='text-xs text-muted-foreground'>
+                {[
+                  v.channel,
+                  topicMarks(v.topics),
+                  summary(v),
+                  formatDate(v.publishedAt || v.firstSeenAt),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className='px-4 py-3 text-sm text-muted-foreground'>
+          {!topic.topics.length
+            ? $t('followedTopics.noTopics')
+            : topic.readAt
+              ? $t('followedTopics.noTopicPosts')
+              : $t('followedTopics.notSearchedYet')}
+        </p>
+      )}
+    </Card>
   );
 }

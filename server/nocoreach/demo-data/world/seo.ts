@@ -379,6 +379,27 @@ function redditSerp(world: World, keyword: string) {
   const term =
     keyword.match(/"([^"]+)"/)?.[1] ??
     keyword.replace('site:reddit.com', '').trim();
+  // A followed topic finds the market's threads on it, posted in the past week.
+  const topic = world.followedTopic(term);
+  if (topic)
+    return world.topicDiscussions.reddit
+      .filter((thread) => thread.topic === topic)
+      .map((thread, i) => ({
+        type: 'organic',
+        rank_group: i + 1,
+        rank_absolute: i + 1,
+        domain: 'www.reddit.com',
+        url: `https://www.reddit.com/r/${thread.subreddit}/comments/${world.seeded.hash(`rdt:${world.text(thread.title)}`).slice(0, 6)}/${encodeURIComponent(world.text(thread.title).slice(0, 40).replaceAll(' ', '_'))}/`,
+        title: `${world.text(thread.title)} : r/${thread.subreddit}`,
+        description: world.text(thread.description),
+        timestamp: dfsTime(
+          world.now -
+            thread.age * DAY -
+            world.seeded.int(`rdth:${i}`, 20) * 3_600_000,
+        ),
+        etv: thread.traffic,
+        keyword_match: term,
+      }));
   return world.reddit.map((thread, i) => ({
     type: 'organic',
     rank_group: i + 1,
@@ -704,7 +725,10 @@ function mentions(world: World, b: Json) {
     (c) => term.includes(c.name.toLowerCase()) || term.includes(c.domain),
   );
   // A topic search finds the questions asked under that topic.
-  const topical = world.aiQuestions.filter((q) => q.topics.includes(term));
+  const topical = [
+    ...world.aiQuestions.filter((q) => q.topics.includes(term)),
+    ...world.topicQuestions(term),
+  ];
   if (topical.length && !gap) return questionRows(world, topical, b);
   const questions = world.aiQuestions.filter((q) =>
     gap

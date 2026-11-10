@@ -1,24 +1,22 @@
 import { questionBrandEvidence } from './ai-question-evidence.js';
-import { chipClass } from '#components/reach/chip';
 import { StatTile } from "#components/seo/stat-tile";
-import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 // AI 搜索 › 问题 (2026-10-05): what people ask ChatGPT and Google AI Overviews about our topics, which answers name or cite
-// us, which name competitors or other brands instead (the chances), and which name nobody. Topics are suggested by the
-// online AI and confirmed before anything is paid; then monthly. A question opens with the AI's answer, the brands and
-// the sources; ticked questions go to the Agent as one task. Below, the sites cited where we are missing (where to be).
+// us, which name competitors or other brands instead (the chances), and which name nobody. The topics are the project's
+// followed topics in Project knowledge › Memory (2026-11-10), looked up when added, then monthly. A question opens with
+// the AI's answer, the brands and the sources; ticked questions go to the Agent as one task. Below, the sites cited
+// where we are missing (where to be).
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bot, LoaderCircle, Plus, Sparkles, X } from "lucide-react";
-import { toast } from "#lib/toast";
-import { InlineError, ListSkeleton, LoadError } from "#components/reach/states";
-import { AiMark } from "#components/reach/actor";
+import { Bot, LoaderCircle, MessagesSquare } from "lucide-react";
+import { useNavigate } from "react-router";
+import { EmptyState, InlineError, ListSkeleton, LoadError } from "#components/reach/states";
 import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { Tag } from "#components/reach/tag";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
-import { Input } from "#components/ui/input";
 import { TabsTrigger } from "#components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
 import { DataTableTabs } from "#components/seo/data-table-toolbar";
@@ -29,11 +27,13 @@ import { subjectOf } from './task-subject';
 import type { HandOffResult } from "./strategy/hand-off";
 import { safeLink } from "./analytics";
 import { formatCount, formatDate, joinList, labelValue } from '#lib/format';
+import { EditTopicsLink } from './followed-topics';
+import { TOPICS_EDIT_PATH, topicScopeText } from './followed-topics-scope';
 
 type Source = { url: string; title: string; domain: string; own: boolean; rival: string | null };
 type Question = { key: string; question: string; platform: "chat_gpt" | "google"; topics: string[]; volume: number | null; status: "ours" | "gap" | "open"; weNamed: boolean; weCited: boolean; rivals: string[]; brands: string[]; sources: Source[]; answer: string; at: string | null };
 type Topic = { id: string; keyword: string; platforms: Record<string, { at: string; count: number; error: string | null } | null> };
-type View = { dataforseo: boolean; aiReady: boolean; refreshing: boolean; topics: Topic[]; suggested: { topic: string; reason: string }[] | null; maxTopics: number; counts: { all: number; ours: number; gap: number; open: number }; questions: Question[]; citedDomains: { domain: string; count: number; own: boolean; rival: string | null }[]; notes: string[] };
+type View = { dataforseo: boolean; refreshing: boolean; topics: Topic[]; maxTopics: number; counts: { all: number; ours: number; gap: number; open: number }; questions: Question[]; citedDomains: { domain: string; count: number; own: boolean; rival: string | null }[]; notes: string[] };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrAiQuestions", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const getPlatform = () => ({ chat_gpt: "ChatGPT", google: $t('common.googleAiOverviews') } as const);
 const getStatus = () => ({ ours: { tone: "green", label: $t('aiQuestions.appears') }, gap: { tone: "amber", label: $t('aiQuestions.notAppearing') }, open: { tone: "grey", label: $t('aiQuestions.noBrands') } } as const);
@@ -66,12 +66,12 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
   useHandOffSource("ai-questions", view?.topics.length ? { count: selected.length, open: () => setHanding(selected), noun: $t('common.questionsSelected'), clear: () => setRowSelection({}) } : null);
   if (error) return <LoadError title={$t('aiQuestions.notLoadAiQuestions')} message={error} onRetry={() => void load()} />;
   if (!view) return <ListSkeleton rows={5} />;
-  if (!view.topics.length) return <TopicSetup projectId={projectId} view={view} onView={setView} />;
+  if (!view.topics.length) return <NoTopics view={view} />;
   const open = view.questions.find((q) => q.key === openKey);
   const pct = view.counts.all ? Math.round((view.counts.ours / view.counts.all) * 100) : 0;
   return (
     <>
-      <Topics projectId={projectId} view={view} onView={(v) => { setView(v); setRowSelection({}); }} />
+      <Topics view={view} />
       {view.refreshing ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('aiQuestions.checkingQuestionsAiUsuallyMinute')}</p> : null}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-question-counts>
         {/* The data pages' tile (UI review 2026-10-22): a share is the line under the number, not brackets beside it. */}
@@ -100,72 +100,23 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
   );
 }
 
-// First time: the online AI's topics, edited before 开始查询 (the only point where money is spent).
-function TopicSetup({ projectId, view, onView }: { projectId: number; view: View; onView: (v: View) => void }) {
-  const [topics, setTopics] = useState<string[]>(view.suggested?.map((t) => t.topic) ?? []);
-  const [reasons, setReasons] = useState<Record<string, string>>(Object.fromEntries((view.suggested ?? []).map((t) => [t.topic, t.reason])));
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState<"" | "suggest" | "start">("");
-  const [error, setError] = useMessageState("");
-  const suggest = async (force = false) => {
-    setBusy("suggest"); setError("");
-    try { const r = await call<{ topics: { topic: string; reason: string }[] }>(projectId, "suggest", { force }); setTopics(r.topics.map((t) => t.topic)); setReasons(Object.fromEntries(r.topics.map((t) => [t.topic, t.reason]))); }
-    catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('aiQuestions.noSuggestions'))); }
-    finally { setBusy(""); }
-  };
-  useEffect(() => { if (!view.suggested && view.aiReady && view.dataforseo) void suggest(); }, []);
-  const add = () => { const t = text.trim().toLowerCase(); if (t && !topics.includes(t) && topics.length < view.maxTopics) setTopics([...topics, t]); setText(""); };
-  const start = async () => {
-    setBusy("start"); setError("");
-    try { onView(await call<View>(projectId, "topics", { topics })); toast.success(() => ($t('common.checkStartedUsuallyMinuteTwo'))); }
-    catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('common.startFailed'))); }
-    finally { setBusy(""); }
-  };
+// No followed topics yet: they are kept in Memory, where the AI drafts them with the rest.
+function NoTopics({ view }: { view: View }) {
+  const navigate = useNavigate();
   if (!view.dataforseo) return <InlineError>{$t('aiQuestions.aiQuestionsComeDataforseoConnectMessage')}</InlineError>;
-  return (
-    <Card className="gap-3 px-4" data-topic-setup>
-      <h2 className="flex items-center gap-1.5 text-sm font-semibold"><AiMark label={$t('common.aiSuggestions')} />{$t('aiQuestions.pickFewTopicsFirst')}<InfoTip label={$t('common.info')}>{$t('aiQuestions.topicsUsedFindWhatPeople')}</InfoTip></h2>
-      {busy === "suggest" ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('aiQuestions.aiComingUpTopicsWebsite')}</p> : null}
-      <div className="flex flex-wrap gap-1.5">{topics.map((t) => <span key={t} className="inline-flex items-center gap-1 rounded-full border bg-card px-2.5 py-0.5 text-sm" title={reasons[t] || undefined}>{t}<button type="button" aria-label={$t('common.removeValue',{0:t})} onClick={() => setTopics(topics.filter((x) => x !== t))}><X className="size-3" /></button></span>)}</div>
-      <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>
-        <Input className="max-w-xs" aria-label={$t('aiQuestions.addTopic')} value={text} placeholder={$t('aiQuestions.internalToolBuilder')} onChange={(e) => setText(e.target.value)} />
-        <Button type="submit" variant="outline" disabled={!text.trim() || topics.length >= view.maxTopics}><Plus data-icon="inline-start" />{$t('common.add')}</Button>
-        {view.aiReady ? <Button type="button" variant="ghost" disabled={Boolean(busy)} onClick={() => void suggest(true)}><Sparkles data-icon="inline-start" />{$t('common.suggestAgain')}</Button> : null}
-      </form>
-      {error ? <InlineError>{error}</InlineError> : null}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={!topics.length || Boolean(busy)} onClick={() => void start()}>{busy === "start" ? $t('common.starting') : $t('aiQuestions.startCheckAbout',{0:(topics.length * 2 * COST).toFixed(1)})}</Button>
-        <span className="text-xs text-muted-foreground">{$t('aiQuestions.topicChecks100QuestionsChatgpt')}</span>
-      </div>
-    </Card>
-  );
+  return <EmptyState icon={<MessagesSquare />} title={$t('followedTopics.noTopicsTitle')} description={$t('aiQuestions.topicsEmptyHelp')} action={<Button onClick={() => void navigate(TOPICS_EDIT_PATH)}>{$t('followedTopics.addInMemory')}</Button>} />;
 }
 
-// The topics row once set: add (looked up at once) or remove.
-function Topics({ projectId, view, onView }: { projectId: number; view: View; onView: (v: View) => void }) {
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const save = async (topics: string[], done: Message) => {
-    setBusy(true);
-    try { onView(await call<View>(projectId, "topics", { topics })); toast.success(done); setText(""); }
-    catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notSaved'))); }
-    finally { setBusy(false); }
-  };
-  const list = view.topics.map((t) => t.keyword);
+// What is looked up: the followed topics, monthly, with the cost in the ⓘ and the link to change them in Memory.
+function Topics({ view }: { view: View }) {
   const failed = view.topics.flatMap((t) => Object.values(t.platforms).filter((x) => x?.error).map((x) => labelValue(t.keyword, $legacyText(x!.error))));
   return (
     <div className="space-y-1.5" data-topics>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-sm text-muted-foreground">{$t('aiQuestions.topicPrefix')}</span>
-        {view.topics.map((t) => <span key={t.id} className={chipClass}>{t.keyword}<button type="button" className="-mr-1 rounded-full text-muted-foreground hover:text-foreground" aria-label={$t('aiQuestions.removeTopic',{0:t.keyword})} disabled={busy || list.length <= 1} onClick={() => void save(list.filter((x) => x !== t.keyword), () => $t('aiQuestions.removed',{0:t.keyword}))}><X className="size-3" /></button></span>)}
-        {list.length < view.maxTopics ? (
-          <form className="inline-flex gap-1.5" onSubmit={(e) => { e.preventDefault(); const t = text.trim().toLowerCase(); if (t && !list.includes(t)) void save([...list, t], () => $t('aiQuestions.addedCheckingNow',{0:t})); }}>
-            <Input className="h-7 w-48" aria-label={$t('aiQuestions.addTopic')} value={text} disabled={busy} placeholder={$t('aiQuestions.addTopic')} onChange={(e) => setText(e.target.value)} />
-            <Button type="submit" size="sm" variant="outline" disabled={busy || !text.trim()}>{$t('common.add')}</Button>
-          </form>
-        ) : null}
+      <p className="nr-footnote flex flex-wrap items-center gap-x-1.5" data-topic-scope>
+        <span>{topicScopeText({ topics: view.topics.length, cadence: 'monthly' })}</span>
         <InfoTip label={$t('aiQuestions.howTopicsWork')}>{$tj('aiQuestions.topicChecksQuestionsContainingTerm',{0:(2 * COST).toFixed(1),1:view.maxTopics})}</InfoTip>
-      </div>
+        <EditTopicsLink />
+      </p>
       {failed.length ? <InlineError>{$tj('common.checkIncomplete',{0:failed[0]})}</InlineError> : null}
     </div>
   );

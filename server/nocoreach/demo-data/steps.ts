@@ -29,6 +29,9 @@ import {
 } from './content.js';
 import { writeActivity } from './activity.js';
 import { backdateYouTube } from './youtube-history.js';
+import { backdateGitHubStars } from './github-history.js';
+import { ACME_TOPICS, CRM_TOPICS } from './world/script/topics.js';
+import { memoryOf } from '../execution/memory.js';
 import type { DemoHost } from './host.js';
 import {
   COLLECTOR_TOKEN,
@@ -410,6 +413,23 @@ async function connectSources(
     ],
   ];
   phases.push(
+    // Followed topics in Memory before the sources that search them: Reddit, Hacker News, YouTube, Trends, GitHub
+    // hot topics and AI questions read them on their next run.
+    [
+      'followed-topics',
+      () =>
+        p.projects.update(
+          id,
+          (project: Record<string, unknown>) => ({
+            ...project,
+            memory: {
+              ...memoryOf(project),
+              topics: [...(which === 'main' ? ACME_TOPICS : CRM_TOPICS).topics],
+            },
+          }),
+          undefined,
+        ),
+    ],
     [
       'github',
       async () => {
@@ -419,6 +439,14 @@ async function connectSources(
           'ghp_DemoOnlyNeverLive000000000000000000000',
         );
         await p.github.backfill(id);
+      },
+    ],
+    [
+      // GitHub hot topics on the followed topics, as a month of daily reads leaves them.
+      'github-hot',
+      async () => {
+        await p.githubTrends.refresh(id);
+        await backdateGitHubStars(p.githubTrends, id);
       },
     ],
     [
@@ -641,10 +669,9 @@ async function connectSources(
       async () => {
         await p.trends.connect(id, { product: spec.name, locationCode: 0 });
         await p.trends.runs.wait(id);
-        for (const keyword of market.seeds) {
-          await p.trends.addKeyword(id, { keyword });
-          await p.trends.runs.wait(id);
-        }
+        // The followed topics' lines, as the first weekly read takes them.
+        await p.trends.topicsChanged(id);
+        await p.trends.runs.wait(id);
       },
     ],
     [
@@ -705,12 +732,6 @@ async function connectSources(
             model,
             requestKey: randomUUID(),
           });
-        await p.aiQuestions.setTopics(id, {
-          topics:
-            which === 'main'
-              ? ['project management', 'team collaboration', 'task management']
-              : ['sales pipeline', 'open source crm', 'workflow automation'],
-        });
         await p.aiQuestions.refresh(id);
       },
     ],

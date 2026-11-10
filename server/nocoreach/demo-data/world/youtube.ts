@@ -48,6 +48,27 @@ function video(world: World, index: number) {
   };
 }
 
+// Videos on the followed topics (none name the product): found by a search of their topic, after the team's videos.
+const TOPIC_BASE = 500;
+function topicVideo(world: World, index: number) {
+  const item = world.topicDiscussions.youtube[index];
+  const id = youtubeId(world, TOPIC_BASE + index);
+  const at = published(world, item, TOPIC_BASE + index);
+  return {
+    video_id: id,
+    title: world.text(item.title),
+    url: `https://www.youtube.com/watch?v=${id}`,
+    channel_name: item.channel ?? '',
+    channel_id: `UC${world.seeded.hash(`ytc:${item.channel ?? ''}`).slice(0, 22)}`,
+    description: item.description ? world.text(item.description) : '',
+    views_count: grown(world, item.views, item),
+    timestamp: dfsTime(at),
+    publication_date: `${item.age} days ago`,
+    duration_time_seconds: item.duration ?? 600,
+    is_shorts: false,
+  };
+}
+
 /** The result list of a YouTube SERP operation, or null for any other operation. */
 export function youtubeSerp(
   world: World,
@@ -57,23 +78,34 @@ export function youtubeSerp(
   if (operation === 'serp/youtube/organic/live/advanced') {
     const keyword = text(b.keyword);
     const query = keyword.toLowerCase();
-    const items = world.youtube
-      .slice(0, SEARCHED)
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => {
-        const title = world.text(item.title).toLowerCase();
-        return (
-          query.includes(world.site.name.toLowerCase()) ||
-          query.split(/\s+/).some((w) => w.length > 1 && title.includes(w))
-        );
-      })
-      .slice(0, 20)
-      .map(({ index }, rank) => ({
-        type: 'youtube_video',
-        rank_group: rank + 1,
-        rank_absolute: rank + 1,
-        ...video(world, index),
-      }));
+    const topic = world.followedTopic(keyword);
+    const items = topic
+      ? world.topicDiscussions.youtube
+          .map((item, index) => ({ item, index }))
+          .filter(({ item }) => item.topic === topic)
+          .map(({ index }, rank) => ({
+            type: 'youtube_video',
+            rank_group: rank + 1,
+            rank_absolute: rank + 1,
+            ...topicVideo(world, index),
+          }))
+      : world.youtube
+          .slice(0, SEARCHED)
+          .map((item, index) => ({ item, index }))
+          .filter(({ item }) => {
+            const title = world.text(item.title).toLowerCase();
+            return (
+              query.includes(world.site.name.toLowerCase()) ||
+              query.split(/\s+/).some((w) => w.length > 1 && title.includes(w))
+            );
+          })
+          .slice(0, 20)
+          .map(({ index }, rank) => ({
+            type: 'youtube_video',
+            rank_group: rank + 1,
+            rank_absolute: rank + 1,
+            ...video(world, index),
+          }));
     return [
       {
         keyword,
@@ -92,9 +124,31 @@ export function youtubeSerp(
       (_, i) => youtubeId(world, i) === text(b.video_id),
     );
     const item = world.youtube[index];
+    const onTopic = world.topicDiscussions.youtube.findIndex(
+      (_, i) => youtubeId(world, TOPIC_BASE + i) === text(b.video_id),
+    );
     const items =
       index < 0
-        ? []
+        ? onTopic < 0
+          ? []
+          : [
+              {
+                type: 'youtube_video_info',
+                rank_group: 1,
+                rank_absolute: 1,
+                ...topicVideo(world, onTopic),
+                likes_count: grown(
+                  world,
+                  world.topicDiscussions.youtube[onTopic].likes,
+                  world.topicDiscussions.youtube[onTopic],
+                ),
+                comments_count: grown(
+                  world,
+                  world.topicDiscussions.youtube[onTopic].comments,
+                  world.topicDiscussions.youtube[onTopic],
+                ),
+              },
+            ]
         : [
             {
               type: 'youtube_video_info',

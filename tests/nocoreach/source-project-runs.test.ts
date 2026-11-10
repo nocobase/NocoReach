@@ -781,7 +781,8 @@ test('Trends background actions reject new work while disconnect is draining', a
   expect((await call('status')).connected).toBe(false);
 });
 
-for (const action of ['addKeyword', 'pick']) {
+// Followed topics come from Memory (2026-11-10): Pick is the one Trends action that changes the configuration.
+for (const action of ['pick']) {
   for (const timing of ['disconnecting', 'waiting for the write lock']) {
     test(`Trends ${action} preserves configuration when cancelled while ${timing}`, async () => {
       const p = plugin();
@@ -816,10 +817,7 @@ for (const action of ['addKeyword', 'pick']) {
         };
       };
       const call = actionsFor(p, source, 'nrTrends');
-      const values =
-        action === 'addKeyword'
-          ? { keyword: 'new keyword' }
-          : { competitorIds: ['b', 'c', 'd', 'e'] };
+      const values = { competitorIds: ['b', 'c', 'd', 'e'] };
       let result;
       let stopping;
       if (timing === 'disconnecting') {

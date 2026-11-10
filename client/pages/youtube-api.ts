@@ -66,6 +66,22 @@ export interface YouTubeStatus {
     costUsd?: number;
   } | null;
   nextSyncAt: string | null;
+  /** How many followed topics (Project knowledge › Memory) are searched, weekly. */
+  topicCount?: number;
+}
+/** A video found on followed topics, with the topics it came up under. */
+export interface YouTubeTopicVideo {
+  id: string;
+  url: string;
+  title: string;
+  description: string;
+  channel: string;
+  publishedAt: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  topics: string[];
+  firstSeenAt: string;
 }
 export const youtubeRequest = (
   projectId: number,

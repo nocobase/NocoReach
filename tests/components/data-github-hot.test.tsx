@@ -179,16 +179,11 @@ describe('GitHub 热点', () => {
     sessionStorage.clear();
     t = trends(recorded());
     action.mockReset();
-    action.mockImplementation(
-      async (resource: string, name: string, options: { body: Raw }) => {
-        if (resource === 'nrGitHubTrends')
-          return name === 'setTopics'
-            ? t.setTopics('1', options.body)
-            : t.view('1');
-        if (resource === 'nrDataViews') return { connected: false };
-        throw new Error(`unexpected ${resource}:${name}`);
-      },
-    );
+    action.mockImplementation(async (resource: string, name: string) => {
+      if (resource === 'nrGitHubTrends') return t.view('1');
+      if (resource === 'nrDataViews') return { connected: false };
+      throw new Error(`unexpected ${resource}:${name}`);
+    });
   });
 
   it('opens from the repository tab and lists the followed topics with last week against the four before', async () => {
@@ -207,34 +202,41 @@ describe('GitHub 热点', () => {
     expect(within(mcp).getByText('mcp-org/server')).toBeTruthy();
   });
 
-  it('adds a topic and saves the list', async () => {
+  it('says what is searched and sends changes to the topics to Memory', async () => {
+    t = trends({
+      ...recorded(),
+      topics: ['mcp', 'low-code', 'internal tools'],
+      modes: { mcp: 'topic', 'low-code': 'topic', 'internal tools': 'text' },
+    });
     renderPage();
     await waitFor(() =>
       expect(document.querySelector('[data-hot-topics]')).toBeTruthy(),
     );
+    const scope = document.querySelector('[data-topic-scope]') as HTMLElement;
+    expect(scope.textContent).toContain('搜索：关注的话题 3 个 · 每天');
+    expect(
+      within(scope)
+        .getByRole('link', { name: '在记忆里改' })
+        .getAttribute('href'),
+    ).toBe('/project/memory/edit?field=topics');
     const topics = document.querySelector('[data-hot-topics]') as HTMLElement;
-    await userEvent.click(
-      within(topics).getByRole('button', { name: '编辑话题' }),
+    expect(
+      within(topics).queryByRole('button', { name: '编辑话题' }),
+    ).toBeNull();
+    // A name GitHub has no topic for is counted by its words, and says so.
+    const text = topics.querySelector(
+      '[data-topic="internal tools"]',
+    ) as HTMLElement;
+    expect(within(text).getByText('按文字搜')).toBeTruthy();
+    expect(
+      within(text)
+        .getByRole('link', { name: 'internal tools' })
+        .getAttribute('href'),
+    ).toBe(
+      'https://github.com/search?q=%22internal%20tools%22&type=repositories',
     );
-    await userEvent.type(
-      within(topics).getByRole('textbox', { name: '添加话题' }),
-      'AI Agents',
-    );
-    await userEvent.click(
-      within(topics).getByRole('button', { name: '添加话题' }),
-    );
-    await userEvent.click(within(topics).getByRole('button', { name: '保存' }));
-    await waitFor(() =>
-      expect(action).toHaveBeenCalledWith(
-        'nrGitHubTrends',
-        'setTopics',
-        expect.objectContaining({
-          body: expect.objectContaining({
-            topics: ['mcp', 'low-code', 'ai-agents'],
-          }),
-        }),
-      ),
-    );
+    const mcp = topics.querySelector('[data-topic="mcp"]') as HTMLElement;
+    expect(within(mcp).queryByText('按文字搜')).toBeNull();
   });
 
   it('ranks gainers for today, this week and a topic; marks competitors on Trending; shows new repositories', async () => {

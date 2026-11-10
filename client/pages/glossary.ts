@@ -80,7 +80,7 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   服务器响应: $t('glossary.timeFirstByteServerUnder'),
   执行者: $t('glossary.whoPerformsStepAgentsUse'),
   // Concepts
-  记忆: $t('glossary.longTermFactsAboutProject'),
+  记忆: $t('glossary.longTermFactsAndTopics'),
   知识库: $t('glossary.materialLookedUpWhenNeeded'),
   做法: $t('glossary.stepsKindWorkWhoStep'),
   Skills: $t('glossary.instructionsTeachAgentHowSomething'),

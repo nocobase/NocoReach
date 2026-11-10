@@ -173,3 +173,34 @@ test('legacy Reddit cutoff stays unknown before and after a failed check',async(
  assert.equal(after.lastSuccessAt,successfulAt);
  assert.equal(after.dataThrough,null,'a failed run cannot establish the missing business cutoff');
 });
+
+test('followed topics: one search a week each for the past week’s threads, kept apart from the mentions, each thread marked with its topics',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-15T00:00:00Z'));
+ try{
+  const thread=(id,sub,title)=>({type:'organic',url:`https://www.reddit.com/r/${sub}/comments/${id}/x/`,title,timestamp:'2026-10-12 10:00:00 +00:00'});
+  const {s,calls}=service({reply:b=>b.keyword==='site:reddit.com "Project management"'?serp([thread('pm1','projectmanagement','How do you plan sprints?'),thread('both1','productivity','Tools for small teams')]):b.keyword==='site:reddit.com "team collaboration"'?serp([thread('both1','productivity','Tools for small teams')]):serp([])});
+  let topics=['Project management','team collaboration'];s.p.followedTopics={of:async()=>topics};
+  await s.mutate('1',()=>({status:'active',terms:['Acme'],posts:{}}));
+  await s.checkTopics('1');
+  const asked=calls.filter(b=>b.keyword.includes('"'));
+  assert.deepEqual(asked.map(b=>[b.keyword,b.search_param,b.depth]),[['site:reddit.com "Project management"','&tbs=qdr:w',20],['site:reddit.com "team collaboration"','&tbs=qdr:w',20]]);
+  let state=await s.state('1');
+  assert.deepEqual(Object.keys(state.posts),[],'the mentions of the product are not mixed with the topics');
+  assert.deepEqual(state.topicPosts.both1.topics,['Project management','team collaboration']);
+  assert.deepEqual([state.topicRun.searched,state.topicRun.added],[2,2]);
+  await s.checkTopics('1');assert.equal(calls.filter(b=>b.keyword.includes('"')).length,2,'once a week');
+  let view=await s.view('1',{},windowFor);
+  assert.deepEqual(view.topic.posts.map(p=>[p.id,p.topics.length]).sort(),[['both1',2],['pm1',1]]);
+  assert.equal(view.status?.topicCount??(await s.status('1')).topicCount,2);
+  // A topic removed in Memory: its threads leave the view, its weekly check is forgotten.
+  topics=['team collaboration'];view=await s.view('1',{},windowFor);
+  assert.deepEqual(view.topic.posts.map(p=>[p.id,p.topics]),[['both1',['team collaboration']]]);
+  vi.setSystemTime(new Date('2026-10-22T00:00:00Z'));await s.checkTopics('1');
+  assert.equal(calls.filter(b=>b.keyword.includes('"')).length,3,'the next week, only the topics followed now');
+  assert.deepEqual(Object.values((await s.state('1')).topicChecks).map(c=>c.topic),['team collaboration']);
+  // The month's DataForSEO budget used up: the round stops until the next month.
+  topics=['team collaboration','sprint planning'];s.d4s.run=async()=>{throw Object.assign(new Error('budget'),{safeCode:'budget_exceeded'});};
+  await s.checkTopics('1');state=await s.state('1');assert.equal(state.topicRun.budgetUntil,'2026-11-01T00:00:00.000Z');
+  let asks=0;s.d4s.run=async()=>{asks++;throw new Error('no');};await s.checkTopics('1');assert.equal(asks,0);
+ }finally{vi.useRealTimers();}
+});

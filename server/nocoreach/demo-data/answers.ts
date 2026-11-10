@@ -8,6 +8,7 @@ import { ACME_PAGES } from './acme-content.js';
 import { CRM_PAGES } from './crm-content.js';
 import { ACME_RESEARCH } from './world/script/acme.js';
 import { CRM_RESEARCH } from './world/script/crm.js';
+import { ACME_TOPICS, CRM_TOPICS } from './world/script/topics.js';
 
 type Value = Record<string, unknown>;
 const object = (value: unknown): Value =>
@@ -624,29 +625,6 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       }
       return { keywords: picked, skipped };
     }
-    case 'ai-question-suggest':
-      return {
-        topics: (crm
-          ? [
-              'sales pipeline',
-              'account imports',
-              'quote approval',
-              'sales handover',
-            ]
-          : [
-              'project management',
-              'team collaboration',
-              'task management',
-              'project handover',
-            ]
-        ).map((topic) => ({
-          topic,
-          reason: t(
-            '用户在 AI 搜索里常问的选型问题。（演示建议）',
-            'A selection question people ask AI search. (Demo suggestion.)',
-          ),
-        })),
-      };
     case 'knowledge-suggest':
       return {
         title: t('资料摘要（演示）', 'Material summary (demo)'),
@@ -667,9 +645,40 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             'Every public piece gets a human review; never invent customer cases or prices.',
           ),
         },
+        topics: [...(crm ? CRM_TOPICS : ACME_TOPICS).topics],
       };
     case 'memory-check':
       return { memory: [] };
+    // The weekly topic check: one rising topic from the sources' evidence, with the numbers it rests on.
+    case 'memory-topics': {
+      const followed = new Set(
+        (Array.isArray(input.topics) ? input.topics : []).map((x) =>
+          String(x).toLowerCase(),
+        ),
+      );
+      const topic = crm ? 'AI sales agents' : 'AI project assistant';
+      return {
+        topics: followed.has(topic.toLowerCase())
+          ? []
+          : [
+              {
+                topic,
+                reason: crm
+                  ? t(
+                      '本周 GitHub 新热门仓库里 4 个带 ai-sales 话题；Google 趋势里“ai sales agent”在上升。（演示数据）',
+                      'Four of this week’s new popular GitHub repositories carry the ai-sales topic, and “ai sales agent” is rising in Google Trends. (Demo data.)',
+                    )
+                  : t(
+                      '本周 GitHub 新热门仓库里 5 个带 ai-agents 话题；Google 趋势里“ai project manager”在上升。（演示数据）',
+                      'Five of this week’s new popular GitHub repositories carry the ai-agents topic, and “ai project manager” is rising in Google Trends. (Demo data.)',
+                    ),
+                examples: crm
+                  ? ['ai sales agent', 'ai-sales']
+                  : ['ai project manager', 'ai-agents'],
+              },
+            ],
+      };
+    }
     case 'competitor-suggest':
       return {
         competitors: [

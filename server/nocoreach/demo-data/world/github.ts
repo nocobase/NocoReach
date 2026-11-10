@@ -39,7 +39,7 @@ const NEIGHBOURS: [
     'nimbus/tasks',
     t('虚构的项目任务客户端', 'A fictional project task client'),
     'TypeScript',
-    ['project-management', 'tasks'],
+    ['project-management', 'tasks', 'task-management'],
     9400,
     700,
   ],
@@ -47,7 +47,7 @@ const NEIGHBOURS: [
     'example-tasks/board',
     t('虚构的轻量看板工具', 'A fictional lightweight Kanban tool'),
     'TypeScript',
-    ['kanban', 'teamwork'],
+    ['kanban', 'teamwork', 'team-collaboration', 'task-management'],
     14200,
     900,
   ],
@@ -55,7 +55,7 @@ const NEIGHBOURS: [
     'example-sales/crm',
     t('虚构的销售协作工具', 'A fictional sales collaboration tool'),
     'Go',
-    ['crm', 'sales'],
+    ['crm', 'sales', 'sales-pipeline', 'open-source-crm'],
     22100,
     1300,
   ],
@@ -63,7 +63,7 @@ const NEIGHBOURS: [
     'example-team/calendar',
     t('虚构的团队日历示例', 'A fictional team calendar example'),
     'Python',
-    ['calendar', 'scheduling'],
+    ['calendar', 'scheduling', 'team-collaboration'],
     1840,
     30,
   ],
@@ -71,7 +71,7 @@ const NEIGHBOURS: [
     'example-team/reports',
     t('虚构的项目周报组件', 'A fictional project reporting component'),
     'TypeScript',
-    ['reporting', 'projects'],
+    ['reporting', 'projects', 'project-management'],
     6300,
     600,
   ],
@@ -79,9 +79,91 @@ const NEIGHBOURS: [
     'example-team/importer',
     t('虚构的表格导入工具', 'A fictional spreadsheet importer'),
     'Rust',
-    ['import', 'spreadsheets'],
+    ['import', 'spreadsheets', 'workflow-automation'],
     3100,
     420,
+  ],
+  // Created in the last week, so GitHub hot topics lists them under New and popular. The growth briefs name the same
+  // repositories with the same stars and creation days (openboard in project-management, the kanban ones).
+  [
+    'openboard/openboard',
+    t('虚构的自托管看板', 'A fictional self-hosted board'),
+    'TypeScript',
+    ['project-management', 'kanban', 'self-hosted'],
+    1240,
+    6,
+  ],
+  [
+    'planr/planr',
+    t('虚构的项目计划工具', 'A fictional project planning tool'),
+    'TypeScript',
+    ['project-management', 'planning', 'roadmap'],
+    520,
+    5,
+  ],
+  [
+    'sprintly/sprintly',
+    t('虚构的迭代计划工具', 'A fictional sprint planning tool'),
+    'Go',
+    ['project-management', 'agile', 'sprint-planning'],
+    330,
+    3,
+  ],
+  [
+    'roadmap-kit/roadmap-kit',
+    t('虚构的路线图组件', 'A fictional roadmap component kit'),
+    'TypeScript',
+    ['project-management', 'roadmap'],
+    140,
+    6,
+  ],
+  [
+    'laneflow/laneflow',
+    t('虚构的看板工作流引擎', 'A fictional board workflow engine'),
+    'Go',
+    ['kanban', 'workflow'],
+    410,
+    5,
+  ],
+  [
+    'kanbanui/react-kanban-kit',
+    t('虚构的 React 看板组件', 'A fictional React board component kit'),
+    'TypeScript',
+    ['kanban', 'react'],
+    260,
+    4,
+  ],
+  [
+    'taskdeck/taskdeck',
+    t('虚构的终端任务看板', 'A fictional terminal task board'),
+    'Rust',
+    ['kanban', 'task-management'],
+    180,
+    6,
+  ],
+  [
+    'boardsync/boardsync',
+    t('虚构的看板同步工具', 'A fictional board sync tool'),
+    'Python',
+    ['kanban', 'sync'],
+    95,
+    2,
+  ],
+  [
+    'pipelinehq/pipelinehq',
+    t('虚构的开源销售漏斗', 'A fictional open source sales pipeline'),
+    'TypeScript',
+    ['crm', 'sales-pipeline', 'open-source-crm'],
+    610,
+    4,
+  ],
+  [
+    'leadscore/leadscore',
+    t('虚构的线索评分服务', 'A fictional lead scoring service'),
+    'Python',
+    ['crm', 'lead-scoring'],
+    230,
+    5,
   ],
 ];
 
@@ -390,10 +472,16 @@ function trending(world: World, u: URL): Response {
         world.seeded.unit(`tr:${since}:${b[0]}`),
     )
     .slice(0, 10)
-    .map(([repo, description, language, , stars], i) => {
+    .map(([repo, description, language, , stars, age], i) => {
       const [owner, name] = repo.split('/');
-      const gained = Math.round(
-        (60 + world.seeded.int(`gain:${since}:${repo}`, 400)) * scale,
+      // Never more than the repository has, and one created this week gained its stars evenly since: all of them
+      // this week or month, a share of them today.
+      const days = since === 'daily' ? 1 : 7;
+      const gained = Math.min(
+        age < 7 ? Math.round((stars * Math.min(days, age)) / age) : stars,
+        Math.round(
+          (60 + world.seeded.int(`gain:${since}:${repo}`, 400)) * scale,
+        ),
       );
       return `<article class="Box-row"><h2 class="h3 lh-condensed"><a href="/${repo}" class="Link"><svg aria-hidden="true"></svg><span class="text-normal">${owner} /</span> ${name}</a></h2><p class="col-9 color-fg-muted my-1">${escapeHtml(world.text(description))}</p><div class="f6 color-fg-muted mt-2"><span itemprop="programmingLanguage">${language}</span><a href="/${repo}/stargazers" class="Link"><svg aria-label="star"></svg> ${stars.toLocaleString('en-US')}</a><a href="/${repo}/forks" class="Link"><svg aria-label="fork"></svg> ${Math.round(stars / 9 + i).toLocaleString('en-US')}</a><span class="d-inline-block float-sm-right"><svg aria-hidden="true"></svg> ${gained.toLocaleString('en-US')} stars ${word}</span></div></article>`;
     });

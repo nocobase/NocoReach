@@ -5,10 +5,17 @@ import {
   getCurrentLocale,
   useNocoReachLocale,
 } from '#i18n';
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { Fragment, useState, type ReactElement, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useOutletContext } from 'react-router';
 import { LoaderCircleIcon, PencilIcon } from 'lucide-react';
 import { LongText } from '#components/long-text';
+import { chipClass } from '#components/reach/chip';
+import { cn } from '#lib/utils';
+import {
+  TOPIC_PRICES,
+  TOPICS_MAX,
+  topicMonthlyCost,
+} from '../../../shared/followed-topics';
 import { AiMark } from '#components/reach/actor';
 import { InfoTip } from '#components/reach/info-tip';
 import { HeaderActions } from '#components/reach/page';
@@ -31,6 +38,7 @@ import {
   getMemorySections,
   memoryOf,
   SUGGESTED,
+  topicsOf,
   type MemorySuggestion,
   type ProjectKnowledgeContext,
 } from './model';
@@ -53,7 +61,11 @@ export default function MemoryTab(): ReactElement {
   const { project, updates } = context;
   const memory = memoryOf(project),
     sections = getMemorySections();
-  const filled = sections.filter(([k]) => memory[k]).length,
+  // Followed topics is one more item; the characters stay the sections', which is what the length limit is about.
+  const filled =
+      sections.filter(([k]) => memory[k]).length +
+      (topicsOf(project).length ? 1 : 0),
+    items = sections.length + 1,
     total = Object.values(memory).reduce((n, t) => n + t.length, 0);
   const { can: canDraft } = useBusinessAccess('nrMemory.draft', project.id),
     { can: canSave } = useBusinessAccess('nrKnowledge.saveMemory', project.id);
@@ -64,7 +76,7 @@ export default function MemoryTab(): ReactElement {
         <p className='flex items-center gap-1.5 text-sm text-muted-foreground'>
           {$tj('projectKnowledge.memorySummary', {
             0: filled,
-            1: sections.length,
+            1: items,
             2: total.toLocaleString(getCurrentLocale()),
           })}
           <InfoTip label={$t('projectKnowledge.whatMemory')}>
@@ -166,7 +178,7 @@ function MemoryUpdates({
           : $t('projectKnowledge.notCheckedYet')}
       </span>
       <InfoTip label={$t('projectKnowledge.howUpdatesWork')}>
-        {$t('projectKnowledge.weeklyCheckHelp')}
+        {$t('projectKnowledge.weeklyCheckHelpTopics')}
       </InfoTip>
       {canCheck ? (
         <HeaderActions>
@@ -345,6 +357,7 @@ const getSource = (): Record<MemorySuggestion['source'], string> => ({
   results: $t('projectKnowledge.approvedDeliverables'),
   site: $t('projectKnowledge.website'),
   draft: $t('projectKnowledge.rewriteWebsiteMaterials'),
+  signals: $t('projectKnowledge.marketSignals'),
 });
 // One suggestion: the item it belongs to, what would change, and why in one line; the quoted examples sit in the ⓘ.
 function Suggestion({
@@ -359,8 +372,10 @@ function Suggestion({
   onDismiss?: () => void;
 }): ReactElement {
   const section =
-    getMemorySections().find(([k]) => k === x.section)?.[1] ||
-    $legacyText(x.label);
+    x.section === 'topics'
+      ? $t('projectKnowledge.followedTopics')
+      : getMemorySections().find(([k]) => k === x.section)?.[1] ||
+        $legacyText(x.label);
   return (
     <div
       className='flex flex-col gap-2 border-b px-3 py-2.5 last:border-0 sm:flex-row sm:items-start sm:gap-3'
@@ -445,19 +460,92 @@ function MemoryList({
         <LanguageSetting context={context} />
       </Row>
       {getMemorySections().map(([k, title, hint]) => (
-        <Row key={k} label={title} item={k}>
-          {memory[k] ? (
-            // Five lines, the last fading out; a click unfolds the rest in place (guideline I14).
-            <LongText>{memory[k]}</LongText>
-          ) : (
-            <span className='flex flex-wrap items-center gap-2'>
-              <Tag tone='grey'>{$t('projectKnowledge.notFilledTag')}</Tag>
-              <span className='text-muted-foreground'>{hint}</span>
-            </span>
-          )}
-        </Row>
+        <Fragment key={k}>
+          <Row label={title} item={k}>
+            {memory[k] ? (
+              // Five lines, the last fading out; a click unfolds the rest in place (guideline I14).
+              <LongText>{memory[k]}</LongText>
+            ) : (
+              <span className='flex flex-wrap items-center gap-2'>
+                <Tag tone='grey'>{$t('projectKnowledge.notFilledTag')}</Tag>
+                <span className='text-muted-foreground'>{hint}</span>
+              </span>
+            )}
+          </Row>
+          {k === 'competitors' ? <TopicsRow project={project} /> : null}
+        </Fragment>
       ))}
     </dl>
+  );
+}
+// Followed topics (2026-11-10), below Competitors: one chip each, then which sources search them and what one topic
+// costs a month (its make-up in the ⓘ). Topics past TOPICS_MAX, kept from the lists the sources had before, are shown
+// faded with a request to trim the list; the sources search the first TOPICS_MAX meanwhile.
+function TopicsRow({
+  project,
+}: {
+  project: ProjectKnowledgeContext['project'];
+}): ReactElement {
+  const topics = topicsOf(project),
+    over = topics.length > TOPICS_MAX,
+    cost = topicMonthlyCost(),
+    usd = (v: number) => v.toFixed(2);
+  return (
+    <Row label={$t('projectKnowledge.followedTopics')} item='topics'>
+      <span className='flex flex-col gap-1.5'>
+        {topics.length ? (
+          <span className='flex flex-wrap items-center gap-1.5'>
+            {topics.map((t, i) => (
+              <span
+                key={t}
+                className={cn(
+                  chipClass,
+                  i >= TOPICS_MAX && 'border-dashed text-muted-foreground',
+                )}
+                data-topic={t}
+              >
+                {t}
+              </span>
+            ))}
+            {over ? (
+              <span className='flex items-center gap-1'>
+                <Tag tone='amber'>
+                  {$t('projectKnowledge.trimTopics', { 0: TOPICS_MAX })}
+                </Tag>
+                <InfoTip label={$t('common.info')}>
+                  {$t('projectKnowledge.trimTopicsHelp', {
+                    0: topics.length,
+                    1: TOPICS_MAX,
+                  })}
+                </InfoTip>
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span className='flex flex-wrap items-center gap-2'>
+            <Tag tone='grey'>{$t('projectKnowledge.notFilledTag')}</Tag>
+            <span className='text-muted-foreground'>
+              {$t('projectKnowledge.followedTopicsHint')}
+            </span>
+          </span>
+        )}
+        <span
+          className='flex flex-wrap items-center gap-1 text-xs text-muted-foreground'
+          data-topic-sources
+        >
+          {$t('projectKnowledge.topicSources', { 0: usd(cost.total) })}
+          <InfoTip label={$t('projectKnowledge.topicCostLabel')}>
+            {$t('projectKnowledge.topicCostHelp', {
+              0: usd(cost.reddit),
+              1: usd(cost.youtube),
+              2: usd(cost.trends),
+              3: usd(cost.aiQuestions),
+              4: TOPIC_PRICES.youtubeVideos,
+            })}
+          </InfoTip>
+        </span>
+      </span>
+    </Row>
   );
 }
 function Row({

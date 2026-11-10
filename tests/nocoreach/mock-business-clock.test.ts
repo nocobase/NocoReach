@@ -621,6 +621,10 @@ test('distinct connection clocks govern collection, retention and paused read pa
     },
   );
   await plugin.github.backfill(id);
+  // GitHub hot topics searches the followed topics in Memory; follow the repository's own topics.
+  const repoTopics = (await plugin.github.state(id)).profile.topics;
+  expect(repoTopics.length).toBeGreaterThan(0);
+  await call('nrKnowledge', 'saveMemory', { topics: repoTopics.slice(0, 3) });
   // Skip vendor pacing, not network calls or source parsing.
   vi.spyOn(plugin.githubTrends, 'sleep').mockResolvedValue(undefined);
   await plugin.githubTrends.refresh(id);

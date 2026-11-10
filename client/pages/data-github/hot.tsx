@@ -1,17 +1,17 @@
 import { useMessageState, $t } from "#i18n";
-// GitHub page · GitHub 热点 (2026-10-14, user request): what developers across GitHub look at, beside the project's own
-// repository (server/nocoreach/github-trends.ts, read once a day). 关注的话题 with their weeks, 涨星榜 from the stars
-// NocoReach records each day, the official GitHub Trending page, and the newest repositories with the most stars.
-// Ticked topics go to the Agent as 内容选题与大纲, ticked repositories as 研究变化.
+// GitHub page · GitHub hot topics (2026-10-14, user request): what developers across GitHub look at, beside the
+// project's own repository (server/nocoreach/github-trends.ts, read once a day). Followed topics (kept in Project
+// knowledge › Memory since 2026-11-10) with their weeks, Gainers from the stars NocoReach records each day, the official
+// GitHub Trending page, and the newest repositories with the most stars. Ticked topics go to the Agent as Content topic
+// and outline, ticked repositories as a research playbook.
 import { useEffect, useMemo, useState } from "react";
-import { Flame, RefreshCw, X } from "lucide-react";
+import { Flame, RefreshCw } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
 import { HeaderActions } from "#components/reach/page";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { toast } from "#lib/toast";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
-import { Input } from "#components/ui/input";
 import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
 import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
@@ -24,13 +24,15 @@ import { num } from "./model";
 import { formatDate, formatDateTime, joinList } from "#lib/format";
 import { Delta } from '#components/reach/delta';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
+import { EditTopicsLink } from "../followed-topics";
+import { topicScopeText } from "../followed-topics-scope";
 
 type Repo = { repo: string; url: string; description?: string; language?: string | null; topics?: string[]; stars: number | null; rival: boolean; own: boolean; matched: string[]; gained?: number | null; forks?: number | null; createdAt?: string | null };
-type Topic = { name: string; total: number | null; new7: number | null; lastWeek: number | null; priorAverage: number | null; weeks: { week: string; count: number | null }[]; leaders: Repo[]; fresh: Repo[] };
+type Topic = { name: string; mode: "topic" | "text"; url: string; read: boolean; total: number | null; new7: number | null; lastWeek: number | null; priorAverage: number | null; weeks: { week: string; count: number | null }[]; leaders: Repo[]; fresh: Repo[] };
 type Hot = {
-  ready: boolean; running: boolean; token: boolean; topicsAuto?: boolean; recordedSince?: string | null; day?: string;
+  ready: boolean; running: boolean; token: boolean; recordedSince?: string | null; day?: string;
   lastRun?: { at: string; day: string | null; ok: boolean; errors: string[]; limited: boolean; token: boolean } | null;
-  topics: Topic[]; suggestions?: string[];
+  topics: Topic[];
   gainers?: { day: Repo[]; week: Repo[]; month: Repo[] }; newHot?: { date: string | null; all: Repo[] };
   trending?: { date: string; daily: Repo[]; weekly: Repo[]; monthly: Repo[] } | null;
 };
@@ -84,24 +86,8 @@ function Frame({ title, info, actions, children, ...rest }: { title: string; inf
 }
 const Empty = ({ children }: { children: React.ReactNode }) => <p className="px-4 py-6 text-sm text-muted-foreground">{children}</p>;
 
-function TopicEditor({ topics, suggestions, onSave, onClose }: { topics: string[]; suggestions: string[]; onSave: (list: string[]) => Promise<void>; onClose: () => void }) {
-  const [list, setList] = useState(topics), [draft, setDraft] = useState(""), [busy, setBusy] = useState(false);
-  const add = (t: string) => { const v = t.trim().toLowerCase().replace(/\s+/g, "-"); if (v && !list.includes(v)) setList([...list, v]); setDraft(""); };
-  return (
-    <div className="flex flex-col gap-3 border-b border-border px-4 py-3" data-topic-editor="">
-      <div className="flex flex-wrap items-center gap-2">{list.map((t) => <span key={t} className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-sm">{t}<button type="button" aria-label={$t('githubHot.removeTopic', { 0: t })} onClick={() => setList(list.filter((x) => x !== t))}><X className="size-3" /></button></span>)}</div>
-      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); add(draft); }}>
-        <Input className="h-8 w-56" aria-label={$t('githubHot.addTopic')} placeholder="mcp" value={draft} onChange={(e) => setDraft(e.target.value)} />
-        <Button type="submit" variant="outline" size="sm" disabled={!draft.trim()}>{$t('githubHot.addTopic')}</Button>
-        {suggestions.filter((s) => !list.includes(s)).slice(0, 8).map((s) => <Button key={s} type="button" variant="ghost" size="sm" onClick={() => add(s)}>+ {s}</Button>)}
-      </form>
-      <div className="flex gap-2"><Button size="sm" disabled={busy || !list.length} onClick={async () => { setBusy(true); try { await onSave(list); onClose(); } finally { setBusy(false); } }}>{$t('githubHot.saveTopics')}</Button><Button size="sm" variant="ghost" onClick={onClose}>{$t('common.cancel')}</Button></div>
-    </div>
-  );
-}
-
 export function HotTab({ projectId }: { projectId: number }) {
-  const [hot, setHot] = useState<Hot>(), [error, setError] = useMessageState(""), [editing, setEditing] = useState(false);
+  const [hot, setHot] = useState<Hot>(), [error, setError] = useMessageState("");
   const [period, setPeriod] = useState<"day" | "week" | "month">("week"), [topic, setTopic] = useState("all"), [language, setLanguage] = useState("all");
   const [trendingSince, setTrendingSince] = useState<"daily" | "weekly" | "monthly">("daily"), [freshScope, setFreshScope] = useState("all");
   const load = () => call<Hot>(projectId, "view").then((v) => { setHot(v); setError(""); }).catch((e) => setError(() => (e instanceof Error ? e.message : $t('common.tryAgainLater'))));
@@ -109,7 +95,6 @@ export function HotTab({ projectId }: { projectId: number }) {
   // While a read runs (a few minutes the first time), look again every 30 seconds.
   useEffect(() => { if (!hot?.running) return; const t = window.setInterval(() => void load(), 30000); return () => window.clearInterval(t); }, [hot?.running]);
   const refresh = () => call<Hot>(projectId, "refresh").then((v) => { setHot(v); toast.success(() => $t('githubHot.readingStarted')); }).catch((e) => toast.error(() => (e instanceof Error ? e.message : $t('common.tryAgainLater'))));
-  const save = async (topics: string[]) => { try { setHot(await call<Hot>(projectId, "setTopics", { topics })); toast.success(() => $t('githubHot.topicsSaved')); } catch (e) { toast.error(() => (e instanceof Error ? e.message : $t('common.tryAgainLater'))); throw e; } };
   const topics = hot?.topics ?? [];
   const periodLabel = { day: $t('githubHot.today'), week: $t('githubHot.thisWeek'), month: $t('githubHot.thisMonth') }[period];
   const gainers = useMemo(() => (hot?.gainers?.[period] ?? []).filter((r) => (topic === "all" || r.matched.includes(topic)) && (language === "all" || r.language === language)).slice(0, 30), [hot, period, topic, language]);
@@ -122,28 +107,26 @@ export function HotTab({ projectId }: { projectId: number }) {
   const notes = [...(hot.token ? [] : [$t('githubHot.noTokenNote')]), $t('githubHot.dataNote'), ...(hot.lastRun?.errors ?? [])];
   const status = hot.running ? $t('githubHot.reading') : hot.lastRun ? $t('githubHot.readAt', { 0: formatDateTime(hot.lastRun.at) }) : "";
   if (!hot.ready) return (
-    <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelp')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button>} />
+    <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelpMemory')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button>} />
   );
   return (
     <div className="flex flex-col gap-4" data-github-hot="">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><HeaderActions><RefreshButton busy={hot.running} label={$t('common.updateNow')} onClick={() => void refresh()} /></HeaderActions></div>
-      <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfo')}
-        actions={<Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>{$t('githubHot.editTopics')}</Button>}>
-        {editing ? <TopicEditor topics={topics.map((t) => t.name)} suggestions={hot.suggestions ?? []} onSave={save} onClose={() => setEditing(false)} /> : null}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground" data-topic-scope><span>{[topicScopeText({ topics: topics.length, cadence: 'daily' }), status].filter(Boolean).join(" · ")}</span><NotesTip notes={notes} /><EditTopicsLink /><HeaderActions><RefreshButton busy={hot.running} label={$t('common.updateNow')} onClick={() => void refresh()} /></HeaderActions></div>
+      <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfoMemory')}>
         {topics.length ? (
           <table className="w-full text-sm">
             <thead data-slot="table-header"><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4"><AllCheck selection={topicSelection} count={topics.length} /></th><th className="py-2 font-medium">{$t('githubHot.topic')}</th><th className="py-2 text-right font-medium">{$t('githubHot.repositories')}</th><th className="py-2 text-right font-medium">{$t('githubHot.new7')}</th><th className="py-2 text-right font-medium">{$t('githubHot.lastWeekVsBefore')}</th><th className="py-2 pl-4 font-medium">{$t('githubHot.weeklyNew')}</th><th className="py-2 pr-4 font-medium">{$t('githubHot.leaders')}</th></tr></thead>
             <tbody>{topics.map((t) => { const c = t.lastWeek != null && t.priorAverage ? (t.lastWeek - t.priorAverage) / t.priorAverage : null; return (
               <tr key={t.name} className="border-b border-border last:border-0" data-topic={t.name}>
                 <td className="py-2 pl-4"><RowCheck selection={topicSelection} k={t.name} label={t.name} /></td>
-                <td className="py-2"><a className="nr-link" href={`https://github.com/topics/${t.name}`} target="_blank" rel="noreferrer">{t.name}</a></td>
+                <td className="py-2"><span className="flex flex-wrap items-center gap-1.5"><a className="nr-link" href={safeLink(t.url) ?? undefined} target="_blank" rel="noreferrer">{t.name}</a>{t.mode === "text" ? <Tag tone="grey" title={$t('githubHot.textSearchHelp')}>{$t('githubHot.textSearch')}</Tag> : null}</span></td>
                 <td className="py-2 text-right tabular-nums">{num(t.total)}</td><td className="py-2 text-right tabular-nums">{num(t.new7)}</td>
                 <td className="py-2 text-right tabular-nums">{num(t.lastWeek)}{c != null ? <Delta value={c} className="ml-1.5 text-xs" /> : null}</td>
                 <td className="py-2 pl-4"><Spark weeks={t.weeks} /></td>
                 <td className="max-w-xs py-2 pr-4 text-xs text-muted-foreground"><span className="block truncate">{joinList(t.leaders.slice(0, 3).map((r) => r.repo)) || "—"}</span></td>
               </tr>); })}</tbody>
           </table>
-        ) : <Empty>{$t('githubHot.noTopics')}</Empty>}
+        ) : <Empty>{$t('followedTopics.noTopics')} <EditTopicsLink /></Empty>}
       </Frame>
       <Frame data-hot-gainers="" title={$t('githubHot.gainers')} info={$t('githubHot.gainersInfo', { 0: hot.recordedSince ?? "—" })}
         actions={<>

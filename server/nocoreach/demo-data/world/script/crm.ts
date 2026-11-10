@@ -373,10 +373,17 @@ export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
   ][i % 3],
 }));
 export const CRM_AI: AiQuestion[] = CRM_PAGES.slice(0, 10).map((p, i) => ({
-  question: t(
-    `Acme CRM 如何处理${p.title.zh}？`,
-    `How does Acme CRM handle ${p.title.en.toLowerCase()}?`,
-  ),
+  // The one a competitor answers for asks without naming Acme CRM: an answer to a question naming the product names it.
+  question:
+    i === 8
+      ? t(
+          `哪个 CRM 的${p.title.zh}做得好？`,
+          `Which CRM handles ${p.title.en.toLowerCase()} best?`,
+        )
+      : t(
+          `Acme CRM 如何处理${p.title.zh}？`,
+          `How does Acme CRM handle ${p.title.en.toLowerCase()}?`,
+        ),
   answer: t(
     `虚构演示资料说明：${p.description.zh}`,
     `The fictional demo explains: ${p.description.en}`,

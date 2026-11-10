@@ -43,31 +43,35 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
  const none=new TrendsSource({...p,env:()=>''});await assert.rejects(none.connect('1',{terms:'NocoBase'}),/请先接入并验证 DataForSEO/);
 });
 
-test('Update now, saving and adding a keyword ask DataForSEO anew; the weekly check may reuse; a reused run keeps its date',async()=>{
+test('Update now, saving and adding a topic ask DataForSEO anew; the weekly check may reuse; a reused run keeps its date',async()=>{
  const rows=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list:[]})}};
+ let topics=[];const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list:[]})},followedTopics:{of:async()=>topics}};
  const s=new TrendsSource(p),asked=[];let reused=false;
  s.d4s.run=async(id,kind,v)=>{asked.push([kind,v.forceRefresh]);return {status:'completed',...(reused?{reused:true}:{}),result:{terms:v.terms||[v.keyword],points:weeks(8,()=>[20]),top:[],rising:[],checkUrl:null}};};
  await s.connect('1',{terms:'NocoBase'});await s.runs.wait('1');
- await s.addKeyword('1',{keyword:'nocobase crm'});await s.keywordRun;
+ topics=['nocobase crm'];await s.topicsChanged('1');await s.keywordRun;
  rows[0].payload.lastRun.at=new Date(Date.now()-8*DAY).toISOString();rows[0].payload.keywords[0].lastRun.at=rows[0].payload.lastRun.at;await s.checkAll('1');
  assert.deepEqual(asked,[['trends',true],['trends-keyword',true],['trends',false],['trends-keyword',false]],'clicks force a new run, the weekly check does not');
  reused=true;rows[0].payload.latest.at='2026-01-01T00:00:00.000Z';await s.check('1',{force:true});
  assert.equal((await s.status('1')).checkedAt,'2026-01-01T00:00:00.000Z','a run returned within the 10-minute guard keeps its own date, not the click time');
 });
 
-test('关注的关键词: one request each (own line and related searches), added on the page and queried at once, up to ten, weekly after',async()=>{
+test('Followed topics: one request each (own line and related searches), taken from Memory and queried at once, up to ten, weekly after',async()=>{
  const {keywordSpecification,keywordResult}=__trends_source;
  const spec=keywordSpecification({keyword:' ai  agent builder ',locationCode:2840});assert.equal(spec.kind,'trends-keyword');assert.deepEqual(spec.request.keywords,['ai agent builder']);assert.deepEqual(spec.request.item_types,['google_trends_graph','google_trends_queries_list']);assert.equal(spec.request.location_code,2840);assert.equal(spec.estimatedUsd,0.011);
  const r=keywordResult(reply([{type:'google_trends_graph',data:weeks(3,i=>[50+i])},{type:'google_trends_queries_list',data:{top:[{query:'ai agent',value:100}],rising:[{query:'n8n ai agent',value:250}]}}]));
  assert.deepEqual(r.result.points.map(p=>p.value),[50,51,52]);assert.deepEqual(r.result.rising,[{query:'n8n ai agent',value:250}]);assert.equal(r.costUsd,0.011);assert.equal(keywordResult({status_code:40000,tasks:[]}).status,'failed');
  const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1']};
+ let topics=['AI agent builder'];const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],followedTopics:{of:async()=>topics}};
  const s=new TrendsSource(p),calls=[];let n=0;const rising=[[{query:'n8n ai agent',value:200}],[{query:'n8n ai agent',value:250},{query:'ai agent builder free',value:500}]];
  s.d4s.run=async(id,kind,v)=>{calls.push([kind,v.keyword||v.terms]);if(kind==='trends')return {status:'completed',result:{terms:v.terms,points:weeks(8,()=>[50]),top:[],rising:[],checkUrl:null}};return {status:'completed',result:{points:weeks(8,i=>i<4?40:60).map(w=>({date:w.date_from,value:w.values})),top:[{query:'ai agent',value:100}],rising:rising[Math.min(n++,1)],checkUrl:null}};};
- await assert.rejects(new TrendsSource({...p,env:()=>''}).addKeyword('1',{keyword:'ai agent'}),/请先接入并验证 DataForSEO/);
- let v=await s.addKeyword('1',{keyword:'AI agent builder'});assert.equal(v.connected,false,'no product comparison needed');assert.equal(v.keywords[0].keyword,'AI agent builder');await s.keywordRun;
- await assert.rejects(s.addKeyword('1',{keyword:'ai agent builder'}),/已经在关注/);
+ // without DataForSEO the topics are listed but nothing is asked
+ const other=[],offline=new TrendsSource({...p,env:()=>'',db:{getRepository:()=>({findOne:async({filter})=>{const x=other.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{other.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{other.push({id:other.length+1,...values});}}),sequelize:p.db.sequelize}});
+ await offline.topicsChanged('1');assert.equal(calls.length,0);assert.equal(other[0].payload.keywords[0].keyword,'AI agent builder');
+ // a project whose lists were not moved into Memory yet keeps its own
+ assert.deepEqual(await new TrendsSource({...p,followedTopics:{of:async()=>null}}).syncTopics('1'),[]);
+ await s.topicsChanged('1');let v=await s.view('1');assert.equal(v.connected,false,'no product comparison needed');assert.equal(v.keywords[0].keyword,'AI agent builder');await s.keywordRun;
+ assert.deepEqual(await s.syncTopics('1'),[],'the same list changes nothing');
  v=await s.view('1');const k=v.keywords[0];assert.deepEqual([k.recent,k.change,k.average],[60,0.5,50]);assert.deepEqual(k.rising.map(q=>q.isNew),[false],'the first run marks nothing new');assert.match(v.notes[0],/各自单独查/);
  assert.deepEqual(await s.checkAll('1'),{ok:true,error:''});assert.equal(calls.length,1,'not again within the week');
  await s.checkAll('1',{force:true});v=await s.view('1');assert.deepEqual(v.keywords[0].rising.map(q=>[q.query,q.isNew]),[['n8n ai agent',false],['ai agent builder free',true]]);
@@ -75,8 +79,10 @@ test('关注的关键词: one request each (own line and related searches), adde
  // the product comparison added later keeps the keywords; both are checked together
  await s.connect('1',{terms:'NocoBase'});await s.runs.wait('1');assert.equal((await s.view('1')).keywords.length,1);
  calls.length=0;await s.checkAll('1',{force:true});assert.deepEqual(calls.map(c=>c[0]),['trends','trends-keyword']);
- for(let i=1;i<10;i++)await s.addKeyword('1',{keyword:`keyword ${i}`});await assert.rejects(s.addKeyword('1',{keyword:'one more'}),/最多关注 10 个关键词/);
- v=await s.removeKeyword('1',{keywordId:k.id});assert.equal(v.keywords.length,9);assert.ok(!v.keywords.some(x=>x.id===k.id));
+ // the first ten topics are followed; a removed topic is forgotten with its data, the others keep theirs
+ topics=[...topics,...Array.from({length:9},(_,i)=>`keyword ${i+1}`),'one more'];await s.topicsChanged('1');await s.keywordRun;v=await s.view('1');assert.equal(v.keywords.length,10);assert.ok(!v.keywords.some(x=>x.keyword==='one more'));assert.ok(v.keywords[0].checkedAt,'a kept topic keeps its line');
+ topics=topics.filter(t=>t!=='AI agent builder');await s.topicsChanged('1');v=await s.view('1');assert.equal(v.keywords.length,10);assert.ok(!v.keywords.some(x=>x.id===k.id));
+ topics=topics.slice(0,9);await s.topicsChanged('1');
  // stopping the comparison leaves the keywords running
  await s.disconnect('1');v=await s.view('1');assert.equal(v.connected,false);assert.equal(v.keywords.length,9);
 });
