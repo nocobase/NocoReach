@@ -1679,6 +1679,13 @@ for (const target of [
     expect(githubView.figures.starsAdded).toBeGreaterThan(0);
     expect(githubView.figures.views).toBeGreaterThan(0);
     expect(githubView.totals.contributors).toBeGreaterThan(0);
+    // GitHub hot topics searches the followed topics in Memory; follow the repository's own topics.
+    expect(gh.profile.topics.length).toBeGreaterThan(0);
+    await data(
+      call('nrKnowledge', 'saveMemory', {
+        topics: gh.profile.topics.slice(0, 3),
+      }),
+    );
     // Main's new GitHub hot view must use the same project Profile and raw transport.
     // Only skip wall-clock vendor pacing; requests, parsers and persistence stay real.
     vi.spyOn(plugin.githubTrends, 'sleep').mockResolvedValue(undefined);

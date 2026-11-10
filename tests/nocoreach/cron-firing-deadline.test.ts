@@ -85,6 +85,8 @@ function trendsPlugin(
       }),
     },
     competitors: { state: async () => ({ list: [] }) },
+    // GitHub hot topics searches the followed topics in Memory.
+    followedTopics: { of: async () => ['kanban'] },
     projectIds: async () => ['1'],
     network: {
       bind: () => {},
