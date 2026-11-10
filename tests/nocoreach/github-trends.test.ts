@@ -51,7 +51,8 @@ function harness({ token = 'github_pat_x', limitAfter = Infinity, trendingHtml =
   const rows = { 'github:1': { repo: 'me/app', profile: { topics: ['low-code', 'lowcode', 'ai-agents', 'crud'] } }, 'competitors:1': { list: [{ name: 'Rival', repo: 'rival/app' }] } };
   const repo = { findOne: async ({ filter }) => (rows[filter.key] != null ? { id: filter.key, get: () => rows[filter.key] } : null), update: async ({ filterByTk, values }) => { rows[filterByTk] = values.payload; }, create: async ({ values }) => { rows[values.key] = values.payload; } };
   const plugin = { mock: { enabled: true, clock: () => '2026-10-14T09:00:00Z' }, db: { getRepository: () => repo, sequelize: { transaction: (fn) => fn({}), query: async () => {} } },
-    github: { token: () => token, state: async () => rows['github:1'] }, competitors: { state: async () => rows['competitors:1'] }, projectIds: async () => ['1'] };
+    github: { token: () => token, state: async () => rows['github:1'] }, competitors: { state: async () => rows['competitors:1'] }, projectIds: async () => ['1'],
+    followedTopics: { of: async () => ['Low code', 'AI agents', 'CRUD', 'internal tools'] } };
   const asked = []; let searches = 0;
   const item = (name, stars, topics = []) => ({ full_name: name, html_url: `https://github.com/${name}`, description: name, language: 'TypeScript', topics, stargazers_count: stars, created_at: '2026-10-10T00:00:00Z' });
   const ok = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => body });
@@ -62,6 +63,7 @@ function harness({ token = 'github_pat_x', limitAfter = Infinity, trendingHtml =
       const q = u.searchParams.get('q'), topic = q.match(/topic:(\S+)/)?.[1];
       if (/created:\d{4}-\d{2}-\d{2}\.\./.test(q)) return ok({ total_count: q.includes('2026-10-05') ? 90 : 30, items: [] });
       if (q.includes('created:>=')) return ok({ total_count: 12, items: topic ? [item(`${topic}/new`, 80, [topic])] : [item('fresh/one', 500)] });
+      if (q.includes(' in:name,description,topics')) return ok({ total_count: 340, items: [item('tools/internal', 3000, ['internal-tools'])] });
       return ok({ total_count: { 'low-code': 2700, 'ai-agents': 114000, crud: 900 }[topic] ?? 0, items: [item(`${topic}/top`, 5000, [topic]), item('me/app', 21000, [topic])] });
     }
     if (u.pathname === '/graphql') { const names = [...JSON.parse(init.body).query.matchAll(/(r\d+):repository\(owner:"([^"]+)",name:"([^"]+)"\)/g)]; return ok({ data: Object.fromEntries(names.map(([, a, o, n]) => [a, { nameWithOwner: `${o}/${n}`, stargazerCount: 700 }])) }); }
@@ -72,15 +74,17 @@ function harness({ token = 'github_pat_x', limitAfter = Infinity, trendingHtml =
   return { t, rows, asked, plugin };
 }
 
-test('a day: topics suggested from the repository (largest first, one spelling each), weeks filled once, stars recorded', async () => {
+test('a day: the followed topics in Memory, as GitHub topics or by their words, weeks filled once, stars recorded', async () => {
   const { t, rows, asked } = harness();
   await t.refresh('1');
   const s = rows[KEY('1')];
-  assert.deepEqual(s.topics, ['ai-agents', 'low-code', 'crud'], 'lowcode and low-code are one topic');
-  assert.equal(s.topicsAuto, true);
-  assert.deepEqual(s.heat['low-code']['2026-10-14'], { total: 2700, new7: 12 });
-  assert.equal(Object.keys(s.weekly['low-code']).length, 12);
-  assert.equal(s.weekly['low-code']['2026-10-05'], 90);
+  assert.deepEqual(s.topics, ['Low code', 'AI agents', 'CRUD', 'internal tools']);
+  assert.deepEqual(s.modes, { 'Low code': 'topic', 'AI agents': 'topic', CRUD: 'topic', 'internal tools': 'text' }, 'a topic GitHub has no repositories under is searched by its words');
+  assert.deepEqual(s.heat['Low code']['2026-10-14'], { total: 2700, new7: 12 });
+  assert.equal(s.heat['internal tools']['2026-10-14'].total, 340);
+  assert.ok(asked.some((q) => q.includes(encodeURIComponent('"internal tools" in:name,description,topics').replace(/%20/g, '+')) || decodeURIComponent(q.replace(/\+/g, ' ')).includes('"internal tools" in:name,description,topics created:2026-')));
+  assert.equal(Object.keys(s.weekly['Low code']).length, 12);
+  assert.equal(s.weekly['Low code']['2026-10-05'], 90);
   assert.deepEqual([s.stars['me/app']['2026-10-14'], s.stars['rival/app']['2026-10-14'], s.stars['fresh/one']['2026-10-14']], [21000, 220272, 500], 'Trending gives the rival its count; search the rest');
   assert.ok(asked.includes('/trending?since=weekly'));
   assert.equal(s.lastRun.day, '2026-10-14');
@@ -88,24 +92,31 @@ test('a day: topics suggested from the repository (largest first, one spelling e
   s.stars['me/app']['2026-10-13'] = 20900; s.stars['low-code/top']['2026-10-07'] = 4000;
   const before = asked.length; t.p.mock.clock = () => '2026-10-14T09:00:00Z';
   const view = await t.view('1');
-  assert.equal(view.topics.find((x) => x.name === 'low-code').lastWeek, 90);
-  assert.equal(view.topics.find((x) => x.name === 'low-code').priorAverage, 30);
+  const low = view.topics.find((x) => x.name === 'Low code');
+  assert.deepEqual([low.lastWeek, low.priorAverage, low.mode, low.url], [90, 30, 'topic', 'https://github.com/topics/low-code']);
+  assert.equal(view.topics.find((x) => x.name === 'internal tools').url, 'https://github.com/search?q=%22internal%20tools%22&type=repositories');
   assert.deepEqual(view.gainers.day.map((g) => [g.repo, g.gained, g.own]), [['me/app', 100, true]]);
-  assert.deepEqual(view.gainers.week.map((g) => [g.repo, g.gained, g.matched]), [['low-code/top', 1000, ['low-code']]]);
+  assert.deepEqual(view.gainers.week.map((g) => [g.repo, g.gained, g.matched]), [['low-code/top', 1000, ['Low code']]]);
   assert.deepEqual(view.trending.daily.map((x) => [x.repo, x.rival, x.gained]), [['rival/app', true, 54679]]);
   assert.equal(asked.length, before, 'the view reads nothing from GitHub');
 });
 
-test('the rate limit stops the run without marking the day done; topics are checked when set', async () => {
-  const { t, rows } = harness({ limitAfter: 6 });
+test('the rate limit stops the run without marking the day done; saved topics are read until they move to Memory', async () => {
+  const { t, rows, plugin } = harness({ limitAfter: 6 });
+  plugin.followedTopics = { of: async () => null };
+  rows[KEY('1')] = { topics: ['mcp', 'workflow'] };
   await t.refresh('1');
   assert.equal(rows[KEY('1')].lastRun.limited, true);
   assert.equal(rows[KEY('1')].lastRun.day, null);
-  await assert.rejects(t.setTopics('1', { topics: ['Low Code!'] }), /只能用小写字母/);
-  await assert.rejects(t.setTopics('1', { topics: Array.from({ length: 13 }, (_, i) => `t${i}`) }), /最多关注 12 个/);
-  await t.setTopics('1', { topics: ['MCP', 'mcp', 'workflow'] });
   assert.deepEqual(rows[KEY('1')].topics, ['mcp', 'workflow']);
-  assert.equal(rows[KEY('1')].topicsAuto, false);
+  assert.ok(rows[KEY('1')].heat.mcp);
+  // Changed in Memory: read again in the background; what was read under another spelling stays with the topic.
+  plugin.followedTopics = { of: async () => ['MCP'] };
+  await t.topicsChanged('1');
+  await t.later;
+  assert.deepEqual(rows[KEY('1')].topics, ['MCP']);
+  assert.ok(rows[KEY('1')].heat.MCP);
+  assert.equal(rows[KEY('1')].heat.mcp, undefined);
 });
 
 test('signals: a followed topic well above its four weeks before, and a competitor gaining stars far faster', () => {

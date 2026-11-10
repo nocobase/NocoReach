@@ -334,7 +334,7 @@ it('shows YouTube provenance without captions, and offers reading only with the 
   expect(screen.getByText(/播放 10 · 点赞 — · 评论 —/)).toBeVisible();
   // Where the videos come from, in one line; the ⓘ after it says what the read time means.
   const line = screen
-    .getByText(/^搜索词：NocoBase · 手动读取 · 更新于/)
+    .getByText(/^搜索：产品名 NocoBase · 关注的话题 0 个 · 手动读取 · 更新于/)
     .closest('[data-source-line]') as HTMLElement;
   await userEvent.click(within(line).getByRole('button'));
   expect(
@@ -357,6 +357,55 @@ it('shows YouTube provenance without captions, and offers reading only with the 
   expect(
     screen.queryByRole('button', { name: '立即更新' }),
   ).not.toBeInTheDocument();
+});
+
+it('opens YouTube on the videos of the followed topics, each marked with its topic, beside the mentions', async () => {
+  authorization.can.mockResolvedValue(true);
+  action.mockResolvedValue({
+    ...youtube,
+    autoSync: true,
+    topic: {
+      topics: ['workflow automation', 'internal tools'],
+      readAt: '2026-10-15T00:00:00Z',
+      count: 1,
+      videos: [
+        {
+          id: 'topic1',
+          url: 'https://www.youtube.com/watch?v=topic1',
+          title: 'Automating approvals end to end',
+          description: 'A walkthrough',
+          channel: 'Ops Weekly',
+          publishedAt: '2026-10-10',
+          views: 5400,
+          likes: 210,
+          comments: 18,
+          topics: ['workflow automation'],
+          firstSeenAt: '2026-10-15T00:00:00Z',
+        },
+      ],
+    },
+  });
+  show(DataYouTube, '/data/youtube');
+  const video = (
+    await screen.findByRole('link', {
+      name: 'Automating approvals end to end',
+    })
+  ).closest('[data-topic-video]') as HTMLElement;
+  expect(video).toHaveTextContent(
+    'Ops Weekly · workflow automation · 播放 5,400',
+  );
+  expect(
+    screen.getByText(
+      /^搜索：产品名 NocoBase · 关注的话题 2 个 · 产品名每天，话题每周一次 · 更新于/,
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole('link', { name: '在记忆里改' })).toHaveAttribute(
+    'href',
+    '/project/memory/edit?field=topics',
+  );
+  expect(screen.queryByRole('link', { name: 'Tutorial' })).toBeNull();
+  await userEvent.click(screen.getByRole('tab', { name: /提到我们/ }));
+  expect(await screen.findByRole('link', { name: 'Tutorial' })).toBeVisible();
 });
 
 it('waits to read YouTube while the month’s DataForSEO budget is used up, and says until when', async () => {

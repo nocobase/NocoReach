@@ -46,6 +46,7 @@ import { KnowledgeSuggest } from './knowledge-suggest.js';
 import { Lighthouse } from './lighthouse.js';
 import { Members } from './members.js';
 import { MemoryUpdate } from './memory-update.js';
+import { FollowedTopics } from './followed-topics.js';
 import { Notifications } from './notifications.js';
 import { OnlineAI } from './online-ai.js';
 import { PackagesSource } from './packages-source.js';
@@ -185,6 +186,9 @@ export class Connections{
   this.skills=new Skills(this);this.skills.register();
   new KnowledgeSuggest(this).register();
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
+  // Followed topics (2026-11-10): the sources' own topic lists move into Memory once; a failure is retried next start.
+  this.followedTopics=new FollowedTopics(this);
+  await this.followedTopics.migrate().then(moved=>{if(moved)this.app.logger.info('NocoReach moved followed topics into Memory',{projects:moved});},e=>this.app.logger.warn('NocoReach followed topics move skipped',{message:e?.message}));
   this.dataViews=new DataViews(this);this.dataViews.register();
   new KeywordDetail(this).register();
   this.searchIndex=new SearchIndex(this);this.searchIndex.register();

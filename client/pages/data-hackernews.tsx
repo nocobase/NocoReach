@@ -1,5 +1,7 @@
 import { $t, $tj } from "#i18n";
-// Hacker News (社区): mentions per day, the stories that drew most points and the latest comments in range.
+// Hacker News (社区): mentions per day, the stories that drew most points and the latest comments in range. Since
+// 2026-11-10 also the last week's stories on the followed topics with the most points and comments, read with each daily
+// sync, in their own group (Topic discussions) beside the mentions.
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -19,11 +21,14 @@ import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-sl
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
-import { formatDate, joinList } from '#lib/format';
+import { formatDate } from '#lib/format';
+import { TopicGroupTabs, TopicScope } from './followed-topics';
+import { topicMarks, useTopicGroup } from './followed-topics-scope';
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
 type Comment = { title: string; hnUrl: string; excerpt: string; date: string; term: string };
-type View = { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; kpis?: Metric[]; notes?: string[]; series?: { date: string; value: number | null }[]; stories?: Story[]; comments?: Comment[] };
+type TopicStory = Omit<Story, 'term'> & { topics: string[] };
+type View = { connected: boolean; topic?: { topics: string[]; lastSync: { at: string; ok: boolean } | null; count: number; stories: TopicStory[] }; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; kpis?: Metric[]; notes?: string[]; series?: { date: string; value: number | null }[]; stories?: Story[]; comments?: Comment[] };
 
 export default function DataHackerNews() {
   const { project } = useProject();
@@ -32,6 +37,8 @@ export default function DataHackerNews() {
   const custom = !validRange(range);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:hackernews:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "hackernews", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window;
+  const topic = view?.topic, [group, setGroup] = useTopicGroup(Boolean(topic?.topics.length));
+  const topicStories = useTickedList("hn-topic-stories", view?.connected && topic ? topic.stories : undefined, (s) => s.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('common.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.posts'), ticked.map((s) => ({ title: s.title, url: s.hnUrl, meta: `${topicMarks(s.topics)} · ${$t('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:formatDate(s.date)})}` }))) }));
   const stories = useTickedList("hn-stories", view?.connected ? view.stories : undefined, (s) => s.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('common.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.posts'), ticked.map((s) => ({ title: s.title, url: s.hnUrl, meta: $t('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:formatDate(s.date)}) }))) }));
   const comments = useTickedList("hn-comments", view?.connected ? view.comments : undefined, (c) => c.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('dataHackernews.commentsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.comments'), ticked.map((c) => ({ title: c.title || $t('common.comments'), url: c.hnUrl, meta: c.date, excerpt: c.excerpt }))) }));
   return (
@@ -43,7 +50,20 @@ export default function DataHackerNews() {
       {view && !view.connected ? <EmptyState icon={<Newspaper />} title={$t('dataHackernews.onceHackerNewsConnectedDaily')} description={$t('dataHackernews.searchesPublicHackerNewsPosts')} action={<Button onClick={() => navigate("/connections?source=mentions")}>{$t('dataHackernews.connectHackerNews')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj('common.searchTermValue',{0:joinList(view.terms!)})}</p>
+          <TopicScope terms={view.terms} topics={topic?.topics.length ?? 0} cadence="daily" />
+          {topic ? <TopicGroupTabs group={group} onChange={setGroup} topics={topic.count} mentions={view.stories!.length + view.comments!.length} /> : null}
+          {topic && group === 'topics' ? (
+            <Card className="gap-0 py-0" data-group="topics">
+              <div className="flex items-center gap-3 border-b border-border px-4 py-2"><AllCheck selection={topicStories} count={topic.stories.length} /><h2 className="text-sm font-semibold">{$t('followedTopics.topStories')}</h2></div>
+              {topic.stories.length ? topic.stories.map((s) => (
+                <div key={s.hnUrl} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-topic-story>
+                  <span className="pt-0.5"><RowCheck selection={topicStories} k={s.hnUrl} label={s.title} /></span><div className="min-w-0 flex-1">
+                  <a className="nr-link font-medium" href={safeLink(s.hnUrl)} target="_blank" rel="noreferrer">{s.title}</a>
+                  <p className="text-xs text-muted-foreground">{topicMarks(s.topics)} · {$tj('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:formatDate(s.date)})}{s.url ? <> · <a className="nr-link" href={safeLink(s.url)} target="_blank" rel="noreferrer">{$t('dataHackernews.original')}</a></> : null}</p>
+                </div></div>
+              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{!topic.topics.length ? $t('followedTopics.noTopics') : topic.lastSync ? $t('followedTopics.noTopicPosts') : $t('followedTopics.notSearchedYet')}</p>}
+            </Card>
+          ) : <>
           <div className={metricGrid(view.kpis!.length)}>{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.length ? (
@@ -86,6 +106,7 @@ export default function DataHackerNews() {
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t('dataHackernews.noCommentsMentionProductSelected')}</p>}
             </Card>
           </div>
+          </>}
         </>
       ) : null}
       <HandOffBar projectId={project?.id} />

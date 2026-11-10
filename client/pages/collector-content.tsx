@@ -44,9 +44,12 @@ import { countText } from './collector-columns';
 export function CollectorSourceLine({
   parts,
   notes = [],
+  trailing,
 }: {
   parts: (string | false | null | undefined)[];
   notes?: string[];
+  /** After the ⓘ, such as the link that changes what is searched. */
+  trailing?: ReactNode;
 }) {
   return (
     <p
@@ -59,6 +62,7 @@ export function CollectorSourceLine({
           <p key={note}>{note}</p>
         ))}
       </InfoTip>
+      {trailing}
     </p>
   );
 }

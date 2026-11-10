@@ -640,8 +640,57 @@ function hnRows(world: World): Json[] {
   return rows.sort((a, b) => Number(b.created_at_i) - Number(a.created_at_i));
 }
 
+/** Stories on the followed topics, which only the ranking search (/api/v1/search) of a topic phrase finds. */
+function hnTopicRows(world: World, query: string): Json[] {
+  const topic = world.followedTopic(query);
+  if (!topic) return [];
+  return world.topicDiscussions.hn
+    .filter((story) => story.topic === topic)
+    .map((story, i) => {
+      const storyId =
+        42_000_000 +
+        world.seeded.int(`hnt:${world.text(story.title)}`, 900_000) +
+        i;
+      const at = world.now - story.age * DAY - (2 + i) * HOUR;
+      return {
+        objectID: String(storyId),
+        _tags: ['story', `author_${story.author}`, `story_${storyId}`],
+        title: world.text(story.title),
+        url: story.url ?? null,
+        author: story.author,
+        points: story.points,
+        num_comments:
+          story.comments.length * 9 + world.seeded.int(`hntc:${i}`, 30),
+        story_id: storyId,
+        created_at: iso(at),
+        created_at_i: Math.floor(at / 1000),
+      };
+    })
+    .sort((a, b) => b.points - a.points);
+}
+
 export function hackernews(world: World, u: URL): Response | undefined {
   if (u.hostname !== 'hn.algolia.com') return undefined;
+  const phrase = (u.searchParams.get('query') || '').replaceAll('"', '');
+  if (u.pathname === '/api/v1/search' && world.followedTopic(phrase)) {
+    const min = u.searchParams
+      .get('numericFilters')
+      ?.match(/created_at_i>=?(\d+)/)?.[1];
+    const rows = hnTopicRows(world, phrase).filter(
+      (r) => !min || Number(r.created_at_i) > Number(min),
+    );
+    const per = Math.max(1, integer(u.searchParams.get('hitsPerPage'), 20));
+    return json({
+      hits: rows.slice(0, per),
+      page: 0,
+      nbHits: rows.length,
+      nbPages: rows.length ? 1 : 0,
+      hitsPerPage: per,
+      exhaustiveNbHits: true,
+      query: u.searchParams.get('query') || '',
+      processingTimeMS: 1,
+    });
+  }
   if (['/api/v1/search_by_date', '/api/v1/search'].includes(u.pathname)) {
     const min = u.searchParams
       .get('numericFilters')

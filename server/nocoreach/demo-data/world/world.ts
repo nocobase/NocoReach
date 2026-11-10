@@ -9,6 +9,7 @@ import {
   COMPETITORS,
 } from './script/market.js';
 import { BILIBILI, XIAOHONGSHU, YOUTUBE } from './script/media.js';
+import { ACME_TOPICS, CRM_TOPICS } from './script/topics.js';
 import {
   CRM_REPOSITORY,
   CRM_FORUM,
@@ -31,6 +32,7 @@ import { MAIN_QUERIES, RESEARCH, SECOND_QUERIES } from './script/search.js';
 import { MAIN_SITE } from './script/site-main.js';
 import { SECOND_SITE } from './script/site-second.js';
 import type {
+  AiQuestion,
   Analytics,
   L,
   Page,
@@ -243,6 +245,25 @@ export class World {
   }
   get youtube() {
     return this.main ? YOUTUBE : CRM_MEDIA;
+  }
+  /** What the market discusses on the project's followed topics, apart from the product. */
+  get topicDiscussions() {
+    return this.main ? ACME_TOPICS : CRM_TOPICS;
+  }
+  /** The followed topic a search phrase names (any case or spacing), if any. */
+  followedTopic(phrase: string): string | null {
+    const key = (v: string) => v.toLowerCase().replace(/[\s_-]+/g, '');
+    return (
+      this.topicDiscussions.topics.find((t) => key(t) === key(phrase)) ?? null
+    );
+  }
+
+  /** The questions AI search answers on a followed topic, as the script lists them for that topic. */
+  topicQuestions(phrase: string): AiQuestion[] {
+    const topic = this.followedTopic(phrase);
+    return this.topicDiscussions.questions
+      .filter((q) => q.topic === topic)
+      .map(({ topic: name, ...q }) => ({ ...q, cites: [], topics: [name] }));
   }
 
   text(value: L): string {

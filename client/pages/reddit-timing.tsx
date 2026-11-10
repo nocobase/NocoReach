@@ -23,9 +23,12 @@ export type RedditTimingState = {
 export function RedditTiming({
   state,
   lead,
+  trailing,
 }: {
   state: RedditTimingState;
   lead?: ReactNode;
+  /** After the ⓘ, such as the link that changes what is searched. */
+  trailing?: ReactNode;
 }) {
   const date = (value?: string | null) =>
     value ? formatDateTime(value) : $t('redditTiming.never');
@@ -59,6 +62,7 @@ export function RedditTiming({
             <span>{$t('redditTiming.hourlyScan')}</span>
           </span>
         </InfoTip>
+        {trailing}
       </p>
       {!next ? (
         <p className='nr-error' role='alert'>

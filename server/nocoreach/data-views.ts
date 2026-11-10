@@ -18,6 +18,7 @@ import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_M
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
 import { pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { topicKey } from '../../shared/followed-topics.js';
 import { readPageDays, sumPageDays } from './page-days.js';
 import { snapshotPageStart } from './sync-data.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
@@ -216,7 +217,12 @@ class DataViews{
   const list=Object.values(st.mentions||{}).filter(inRange);
   return {connected:true,terms:st.terms,window:w,retainedFrom:st.retainedFrom||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],
    stories:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,20).map(m=>({title:m.title,url:m.url,hnUrl:m.hnUrl,points:m.points,comments:m.comments,date:m.createdAt.slice(0,10),term:m.term})),
-   comments:list.filter(m=>m.type==='comment').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,20).map(m=>({title:m.title,hnUrl:m.hnUrl,excerpt:m.excerpt,date:m.createdAt.slice(0,10),term:m.term}))};}
+   comments:list.filter(m=>m.type==='comment').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,20).map(m=>({title:m.title,hnUrl:m.hnUrl,excerpt:m.excerpt,date:m.createdAt.slice(0,10),term:m.term})),
+   topic:await this.hackernewsTopics(id,st,inRange)};}
+ // Stories on the followed topics in range, the most points first, each with the topics it came up under.
+ async hackernewsTopics(id,st,inRange){const topics=(await this.p.followedTopics?.of(String(id)))||[],keys=new Set(topics.map(topicKey));
+  const list=Object.values(st.topicStories||{}).map(m=>({...m,topics:(m.topics||[]).filter(t=>keys.has(topicKey(t)))})).filter(m=>m.topics.length&&inRange(m));
+  return {topics,lastSync:st.topicSync||null,count:list.length,stories:list.sort((a,b)=>b.points-a.points).slice(0,30).map(m=>({title:m.title,url:m.url,hnUrl:m.hnUrl,points:m.points,comments:m.comments,date:m.createdAt.slice(0,10),topics:m.topics}))};}
  async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id,'community')-DAY),String(v.range||'28'),v.from,v.to,cm.retainedFrom||Object.values(cm.topics||{}).map(t=>t.createdAt?.slice(0,10)).filter(Boolean).sort()[0]);
   const retainedFrom=cm.retainedFrom||add(iso(businessNow(this.p,id,'community')),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||systemMessageText('communitySource.uncategorized')}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
   const cur=topics.filter(t=>inRange(t,w.start,w.end)),prev=topics.filter(t=>inRange(t,w.previousStart,w.previousEnd)),prevCovered=!w.all&&retainedFrom<=w.previousStart,covered=retainedFrom<=w.start;

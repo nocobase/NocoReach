@@ -15,10 +15,10 @@ export const MOCK_AI_OPERATIONS = [
   'keyword-seeds',
   'keyword-curate',
   'keyword-names',
-  'ai-question-suggest',
   'knowledge-suggest',
   'memory-draft',
   'memory-check',
+  'memory-topics',
   'competitor-suggest',
   'task-draft',
   'article-rewrite',
@@ -184,17 +184,6 @@ function fixture(
               name: `Demo group ${i + 1}`,
             })),
       };
-    case 'ai-question-suggest':
-      return {
-        topics: empty
-          ? []
-          : [
-              'demo workflow',
-              'demo project dashboard',
-              'demo reporting',
-              'demo analytics',
-            ].map((topic) => ({ topic, reason: `${LABEL}固定测试主题` })),
-      };
     case 'knowledge-suggest':
       return {
         title: `${LABEL}资料样例 ${stamp}`,
@@ -211,6 +200,7 @@ function fixture(
               product: `${LABEL}固定样例 ${stamp}，未核实真实产品信息。`,
               rules: `${LABEL}所有生成内容必须经人工检查。`,
             },
+        topics: empty ? [] : ['demo workflow', 'demo reporting'],
       };
     case 'memory-check':
       return {
@@ -222,6 +212,18 @@ function fixture(
                 text: `${LABEL}固定样例 ${stamp}，不代表真实长期事实。`,
                 reason: `${LABEL}用于验证建议审核流程`,
                 source: 'site',
+                examples: [],
+              },
+            ],
+      };
+    case 'memory-topics':
+      return {
+        topics: empty
+          ? []
+          : [
+              {
+                topic: 'demo analytics',
+                reason: `${LABEL}固定测试话题`,
                 examples: [],
               },
             ],

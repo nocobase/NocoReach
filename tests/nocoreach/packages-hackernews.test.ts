@@ -5,7 +5,7 @@ vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
 import * as pk from '../../server/nocoreach/packages-source.js';
 import * as hn from '../../server/nocoreach/hackernews-source.js';
-import { packagesCard, hackernewsCard, windowFor } from '../../server/nocoreach/data-views.js';
+import { packagesCard, hackernewsCard, windowFor, DataViews } from '../../server/nocoreach/data-views.js';
 import { packagesSignals, hackernewsSignals } from '../../server/nocoreach/signals.js';
 const test=__vitest_test;
 const DAY=86400000,iso=t=>new Date(t).toISOString().slice(0,10),ago=n=>iso(Date.now()-n*DAY);
@@ -60,4 +60,31 @@ test('Hacker News: first sync reads a year, coverage starts where results end; d
  const card=hackernewsCard(st,windowFor(ago(1),'28'));assert.equal(card.id,'mentions');assert.equal(card.metrics[0].value,6);assert.equal(card.metrics[0].previous,1);assert.ok(card.notes[0].includes('Post 1'));
  const sig=hackernewsSignals({hn:st,now});assert.ok(sig.some(x=>x.key.startsWith('hn-spike')));assert.ok(sig.some(x=>x.key==='hn-story:1'&&x.title.includes('120 分')));
  const status=await s.status('1');assert.equal(status.last30,6);assert.equal(status.top[0].points,120);
+});
+
+test('Hacker News followed topics: each sync reads the last week’s stories on each topic with the most points and comments, kept apart from the mentions',async()=>{
+ const now=Date.now(),story=(id,daysAgo,points,comments)=>({objectID:String(id),_tags:['story'],title:`Story ${id}`,points,num_comments:comments,created_at_i:Math.floor((now-daysAgo*DAY)/1000)});
+ const calls=[];const read=async url=>{calls.push(url);const u=new URL(url);
+  if(u.pathname==='/api/v1/search'){const q=u.searchParams.get('query');
+   const hits=q==='"team collaboration"'?Array.from({length:14},(_,i)=>story(100+i,2,i*10,i)):q==='"task management"'?[story(105,2,50,5),story(200,3,300,40)]:[];
+   return {text:JSON.stringify({nbPages:1,hits})};}
+  return {text:JSON.stringify({nbPages:1,hits:[]})};};
+ let topics=['team collaboration','task management'];
+ const p={...plugin(),followedTopics:{of:async()=>topics}},s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'acme'});await s.runs.wait('1');
+ const asked=calls.filter(u=>new URL(u).pathname==='/api/v1/search');
+ assert.equal(asked.length,2);const u=new URL(asked[0]);
+ assert.deepEqual([u.searchParams.get('tags'),u.searchParams.get('hitsPerPage')],['story','50']);
+ assert.ok(Math.abs(Number(u.searchParams.get('numericFilters').split('>')[1])-Math.floor((now-7*DAY)/1000))<5,'the last seven days');
+ const st=await s.state('1');
+ assert.deepEqual(Object.keys(st.mentions||{}),[],'no mention of the product');
+ assert.equal(Object.keys(st.topicStories).length,11,'the ten with most points and comments of a topic, and the other topic’s');
+ assert.deepEqual(st.topicStories['105'].topics,['team collaboration','task management']);
+ assert.equal(st.topicStories['100'],undefined,'the lowest are left out');
+ assert.deepEqual([st.topicSync.ok,st.topicSync.found],[true,12]);
+ assert.equal((await s.status('1')).topicCount,2);
+ const view=await new DataViews({...p,hackernews:s}).hackernews('1',{range:'7'});
+ assert.deepEqual(view.topic.stories.slice(0,2).map(x=>[x.title,x.topics]),[['Story 200',['task management']],['Story 113',['team collaboration']]]);
+ topics=['task management'];const after=await new DataViews({...p,hackernews:s}).hackernews('1',{range:'7'});
+ assert.deepEqual(after.topic.stories.map(x=>x.title),['Story 200','Story 105'],'a removed topic’s stories leave the view');
+ assert.deepEqual(after.topic.stories[1].topics,['task management']);
 });

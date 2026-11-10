@@ -34,6 +34,72 @@ describe('YouTube through DataForSEO', () => {
     expect(f.reader.search).not.toHaveBeenCalled();
   });
 
+  it('searches each followed topic once a week, reads details of the first three new videos, and keeps them apart from the mentions', async () => {
+    const f = await youtubeFixture();
+    let topics = ['workflow automation', 'internal tools'];
+    Object.assign(f.host, { followedTopics: { of: async () => topics } });
+    const recent = new Date(Date.now() - 2 * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const at = (n: number) => found(n, { publishedAt: recent });
+    f.reader.search.mockImplementation(async (_id, term) => ({
+      ok: true,
+      videos:
+        term === 'NocoBase'
+          ? [found(1)]
+          : term === 'workflow automation'
+            ? [at(10), at(11), at(12), at(13)]
+            : [at(11), at(20)],
+      costUsd: 0.002,
+    }));
+    f.reader.details.mockImplementation(async (_id, key) => ({
+      ok: true,
+      video: details(Number(key.slice(5)), { publishedAt: recent }),
+      costUsd: 0.006,
+    }));
+    const first = await f.connect('1', 'NocoBase');
+    expect(f.reader.search.mock.calls.map((c) => c[1])).toEqual([
+      'NocoBase',
+      'workflow automation',
+      'internal tools',
+    ]);
+    // Video 13 is the fourth new one of its topic; video 11 was read under the first topic already.
+    expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([
+      videoKey(1),
+      videoKey(10),
+      videoKey(11),
+      videoKey(12),
+      videoKey(20),
+    ]);
+    expect(first).toMatchObject({ topicCount: 2, total: 1 });
+    expect((await f.videos()).map((v) => v.id)).toEqual([videoKey(1)]);
+    const state = await f.stored();
+    expect(state?.topicVideos?.[videoKey(11)]?.topics).toEqual([
+      'workflow automation',
+      'internal tools',
+    ]);
+    expect(state?.topicVideos?.[videoKey(13)]).toMatchObject({
+      likes: null,
+      views: 1300,
+    });
+    // The next read the same week searches the product name only.
+    await f.sync();
+    expect(
+      f.reader.search.mock.calls.filter((c) => c[1] !== 'NocoBase'),
+    ).toHaveLength(2);
+    const { windowFor } = await import('../../server/nocoreach/data-views.js');
+    topics = ['internal tools'];
+    const report = await f.source.report('1', { range: '7' }, windowFor);
+    expect(report.topic?.videos.map((v) => [v.id, v.topics])).toEqual([
+      [videoKey(20), ['internal tools']],
+      [videoKey(11), ['internal tools']],
+    ]);
+    expect(report.topic).toMatchObject({
+      topics: ['internal tools'],
+      count: 2,
+    });
+  });
+
   it('searches each term, reads likes and comments once per new video, and keeps daily reading on', async () => {
     const f = await youtubeFixture();
     f.reader.search.mockImplementation(async (_id, term) => ({

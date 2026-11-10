@@ -7,6 +7,7 @@ import { businessNow } from './business-clock.js';
 import { createHash } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
+import { TOPIC_PRICES, TOPICS_MAX } from '../../shared/followed-topics.js';
 // 趋势 (SPEC §11 市场需求, Google Trends; 2026-10-04 user choice: weekly, automatic). Google's own Trends API is an alpha
 // open by application only, so the data comes through the shared DataForSEO layer (Google Trends Explore, live): once a
 // week one run of two requests — interest over the past 12 months for up to five terms (the product and competitors)
@@ -14,15 +15,16 @@ import { DataForSeo } from './dataforseo.js';
 // is reused for 6 days by the weekly check and an uncertain one is never retried; a click (Update now, saving the
 // settings, adding a keyword) asks anew, as Update now promises (2026-11-02: it read nothing new for 6 days but showed
 // the click's time). Values are Google's relative interest, 0–100 within one run.
-// 关注的关键词 (2026-10-04 user choice): up to ten keywords added on the 趋势 page, each queried on its own (its own
-// 12-month line, 100 = its own busiest week, so keywords are not compared with each other) with its related searches,
-// one request of about $0.011 a keyword a week; queried right after being added, then weekly with the rest.
+// Followed topics (2026-10-04 user choice; since 2026-11-10 the project's followed topics in Project knowledge › Memory):
+// up to ten topics, each queried on its own (its own 12-month line, 100 = its own busiest week, so topics are not
+// compared with each other) with its related searches, one request of about $0.011 a topic a week; queried right after
+// being added to Memory, then weekly with the rest. They are stored as `keywords`, the name they had on this page.
 // 产品与竞品 (2026-10-05 user choice): the product name is set here, the competitors come from 竞品 (its list, kept in
 // one place); with more than four, the user picks which four. A change in the list queries the comparison again.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 // Google Trends live can take well over the default 45 s with five words (2026-10-05: a run cut off at 45 s was left
 // uncertain), so it waits up to two minutes; the checks run in the background and the page polls.
-const DAY=86400000,WEEK=7*DAY,PATH='keywords_data/google_trends/explore/live',MAX_KEYWORDS=10,MAX_RIVALS=4,TIMEOUT=120000;
+const DAY=86400000,WEEK=7*DAY,PATH='keywords_data/google_trends/explore/live',MAX_KEYWORDS=TOPICS_MAX,MAX_RIVALS=4,TIMEOUT=120000;
 const LOCATIONS=[[0,systemMessageText('common.worldwide')],[2840,systemMessageText('aiQuestions.unitedStates')],[2826,systemMessageText('competitorResearch.unitedKingdom')],[2276,systemMessageText('competitorResearch.germany')],[2250,systemMessageText('competitorResearch.france')],[2392,systemMessageText('competitorResearch.japan')],[2156,systemMessageText('competitorResearch.china')],[2356,systemMessageText('competitorResearch.india')],[2076,systemMessageText('competitorResearch.brazil')]];
 const placeName=code=>(LOCATIONS.find(([c])=>c===Number(code||0))||LOCATIONS[0])[1];
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null;};
@@ -45,14 +47,14 @@ function result(raws,spec){const tasks=raws.map(r=>(Array.isArray(r?.tasks)?r.ta
 // One watched keyword: interest over 12 months and its related searches in one request.
 function keywordSpecification(v){const [keyword]=termsOf([v.keyword]),location=Number(v.locationCode||0);if(!LOCATIONS.some(([c])=>c===location))fail(systemMessageText('trendsSource.regionNotSupported'));
  return {kind:'trends-keyword',keyword,locationCode:location||null,path:PATH,request:{keywords:[keyword],time_range:'past_12_months',language_code:'en',...(location?{location_code:location}:{}),item_types:['google_trends_graph','google_trends_queries_list']},
-  estimatedUsd:0.011,reservationUsd:0.025,timeoutMs:TIMEOUT,priceVersion:'official-list-2026-07'};}
+  estimatedUsd:TOPIC_PRICES.trendsUsd,reservationUsd:0.025,timeoutMs:TIMEOUT,priceVersion:'official-list-2026-07'};}
 function keywordResult(raw){const task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},costUsd=num(raw?.cost)??num(task.cost);
  if(raw?.status_code!==20000||task.status_code!==20000)return {status:'failed',errorCode:systemMessageText('trendsSource.googleTrendsCheckFailed'),result:null,costUsd};
  const items=task.result?.[0]?.items||[],graph=items.find(x=>x?.type==='google_trends_graph'),lists=items.find(x=>x?.type==='google_trends_queries_list')?.data||{};
  const list=a=>(Array.isArray(a)?a:[]).map(x=>({query:String(x?.query||'').trim().slice(0,120),value:num(x?.value)||0})).filter(x=>x.query).slice(0,25);
  return {status:'completed',errorCode:null,result:{points:(graph?.data||[]).filter(d=>d?.date_from).map(d=>({date:String(d.date_from).slice(0,10),value:d.missing_data?null:num(d.values?.[0])})),top:list(lists.top),rising:list(lists.rising),checkUrl:String(task.result?.[0]?.check_url||'')||null},costUsd};}
 const keywordId=k=>createHash('sha1').update(k.toLowerCase()).digest('hex').slice(0,10);
-const KEYWORD_NOTES=[systemMessageText('trendsSource.followedKeywordCheckedSeparately100')];
+const KEYWORD_NOTES=[systemMessageText('trendsSource.followedTopicCheckedSeparately')];
 const avg=list=>{const v=list.filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
 // Per term: the 12-month average and the last four weeks against the four before them.
 function summary(latest){const p=latest?.points||[];return (latest?.terms||[]).map((term,i)=>{const vals=p.map(x=>x.values[i]),now=avg(vals.slice(-4)),before=avg(vals.slice(-8,-4));
@@ -91,12 +93,19 @@ class TrendsSource{
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
    return {...cur,latest:{at:run.reused&&cur.latest?.at||now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
   return {ok:!error,error};}
- // 关注的关键词: add (queried at once in the background), remove, and the weekly check of each.
- async addKeyword(id,v){if(!this.d4s.config(id)?.verifiedAt)fail(systemMessageText('trendsSource.keywordTrendsUseDataforseoCheck'),409);const [keyword]=termsOf([v.keyword]),kid=keywordId(keyword);
-  await this.runs.run<unknown>(id,()=>this.mutate(id,cur=>{const list=cur?.keywords||[];if(list.some(k=>k.id===kid))fail(systemMessageText('messages.alreadyFollowing', { 0: keyword }));if(list.length>=MAX_KEYWORDS)fail(systemMessageText('messages.followUpKeywords', { 0: MAX_KEYWORDS }));
-   return {...(cur||{terms:[],status:'disconnected',latest:null,risingSeen:{},lastRun:null}),keywords:[...list,{id:kid,keyword,addedAt:new Date().toISOString(),latest:null,risingSeen:{},lastRun:null}]};}),`addKeyword:${kid}`);
-  this.startKeyword(id,kid);return this.view(id);}
- async removeKeyword(id,v){const kid=String(v.keywordId||'');await this.mutate(id,cur=>cur?{...cur,keywords:(cur.keywords||[]).filter(k=>k.id!==kid)}:cur);return this.view(id);}
+ // Followed topics: the topics in Memory, in their order (the first MAX_KEYWORDS). A topic kept keeps its line and
+ // searches, a new one waits for its first check, a removed one is forgotten with its data. Returns the new topics' ids;
+ // nothing changes until the project's own lists were moved into Memory (followed-topics.ts).
+ async syncTopics(id){const topics=await this.p.followedTopics?.of(id);if(!topics)return [];
+  const list=topics.map(t=>{try{return termsOf([t])[0];}catch{return null;}}).filter(Boolean).slice(0,MAX_KEYWORDS);
+  const next=cur=>{const old=new Map((cur?.keywords||[]).map(k=>[k.id,k]));return list.map(k=>{const was=old.get(keywordId(k));return was?{...was,keyword:k}:{id:keywordId(k),keyword:k,addedAt:new Date().toISOString(),latest:null,risingSeen:{},lastRun:null};});};
+  const same=cur=>JSON.stringify((cur?.keywords||[]).map(k=>[k.id,k.keyword]))===JSON.stringify(next(cur).map(k=>[k.id,k.keyword]));
+  if(same(await this.state(id)))return [];let added=[];
+  await this.mutate(id,cur=>{if(same(cur))return cur;const old=new Set((cur?.keywords||[]).map(k=>k.id)),keywords=next(cur);added=keywords.filter(k=>!old.has(k.id)).map(k=>k.id);
+   return {...(cur||{terms:[],status:'disconnected',latest:null,risingSeen:{},lastRun:null}),keywords};});
+  return added;}
+ // The list changed in Memory: new topics are queried at once in the background when DataForSEO is connected.
+ async topicsChanged(id){const added=await this.syncTopics(id);if(!this.d4s.config(id)?.verifiedAt)return;for(const kid of added){try{this.startKeyword(id,kid);}catch{/* a closing source reads them next week */}}}
  startKeyword(id,kid,{retry=false}={}){this.runs.assertCanRun(id);const key=`${id}:${kid}`;if(this.keywordChecks.has(key))return;this.keywordChecks.add(key);this.keywordRun=this.checkKeyword(id,kid,{force:true,retry}).catch(()=>undefined).finally(()=>this.keywordChecks.delete(key));}
  checkKeyword(id,kid,options={}){return this.runs.run(id,()=>this.collectKeyword(id,kid,options),`keyword:${kid}`);}
  async collectKeyword(id,kid,{force=false,retry=false}={}){const s=await this.state(id),k=(s?.keywords||[]).find(x=>x.id===kid);if(!k)return {skipped:true};
@@ -120,7 +129,7 @@ class TrendsSource{
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),dataforseo,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
    nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,summary:summary(s.latest)};}
  // The 趋势 page: the 12-month lines, each term's recent change, related searches (rising ones first seen this week marked).
- async view(id){await this.sync(id).catch(()=>false);const s=await this.state(id),week=businessNow(this.p,id,'dataforseo')-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
+ async view(id){await this.sync(id).catch(()=>false);await this.syncTopics(id).catch(()=>[]);const s=await this.state(id),week=businessNow(this.p,id,'dataforseo')-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
   const keywords=(s?.keywords||[]).map(k=>({id:k.id,keyword:k.keyword,addedAt:k.addedAt,checking:this.keywordChecks.has(`${id}:${k.id}`),lastRun:k.lastRun||null,checkedAt:k.latest?.at||null,checkUrl:k.latest?.checkUrl||null,
    points:k.latest?.points||[],...keywordSummary(k),top:k.latest?.top||[],rising:(k.latest?.rising||[]).map(q=>({...q,isNew:newSince(k.risingSeen,q,week)}))}));
   const shared={dataforseo,checking:this.runs.has(id),keywords,maxKeywords:MAX_KEYWORDS,keywordPlace:placeName(s?.locationCode)};
@@ -129,13 +138,13 @@ class TrendsSource{
   return {connected:true,...shared,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,place:placeName(s.locationCode),checking:this.runs.has(id),lastRun:s.lastRun||null,checkedAt:l?.at||null,checkUrl:l?.checkUrl||null,
    points:l?.points||[],summary:summary(l),top:l?.top||[],rising:(l?.rising||[]).map(q=>({...q,isNew:Boolean(seen[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=week})),
    notes:[systemMessageText('trendsSource.valuesGoogleTrendsRelativeInterest'),systemMessageText('trendsSource.relatedSearchesUseFirstTerm'),...(keywords.length?KEYWORD_NOTES:[])]};}
- async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if((!s?.terms?.length||s.status==='disconnected')&&!(s?.keywords||[]).length||this.runs.has(String(id)))continue;await this.sync(String(id));if(!this.runs.has(String(id)))await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{if(this.runs.has(String(id)))continue;await this.syncTopics(String(id));const t=await this.state(String(id));if((!t?.terms?.length||t.status==='disconnected')&&!(t?.keywords||[]).length)continue;await this.sync(String(id));if(!this.runs.has(String(id)))await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  async close(){await this.runs.close();}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('trendsSource.notLoadTrendsTryAgain'));}};
   const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{const s=await this.state(id);if(!(s?.terms?.length&&s.status!=='disconnected')&&!(s?.keywords||[]).length)fail(systemMessageText('trendsSource.connectTrendsAddKeywordsFirst'),409);void this.runAll(id,()=>this.checkAll(id,{force:true}));return this.status(id);}),
    // 重新查询 after an uncertain run: the user's own click, so the block on the same query is lifted once.
    retry:wrap(async(id,v)=>{if(v.keywordId)this.startKeyword(id,String(v.keywordId),{retry:true});else void this.runAll(id,()=>this.check(id,{force:true,retry:true}),'brand');return this.view(id);}),disconnect:wrap(id=>this.disconnect(id)),view:wrap(id=>this.view(id)),
-   addKeyword:wrap((id,v)=>this.addKeyword(id,v)),removeKeyword:wrap((id,v)=>this.removeKeyword(id,v)),pick:wrap((id,v)=>this.pick(id,v))};
+   pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }
 export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, LOCATIONS };

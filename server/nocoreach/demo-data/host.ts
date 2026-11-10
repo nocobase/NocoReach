@@ -5,6 +5,7 @@ import type { LegacyApp } from '../legacy/app.js';
 import type { SyncService } from '../sync-service.js';
 import type { SiteContent } from '../site-content.js';
 import type { GitHubSource } from '../github-source.js';
+import type { GitHubTrends } from '../github-trends.js';
 import type { CommunitySource } from '../community-source.js';
 import type { PackagesSource } from '../packages-source.js';
 import type { HackerNewsSource } from '../hackernews-source.js';
@@ -34,6 +35,7 @@ export type DemoHost = Connections & {
   sync: SyncService;
   siteContent: SiteContent;
   github: GitHubSource;
+  githubTrends: GitHubTrends;
   community: CommunitySource;
   packages: PackagesSource;
   hackernews: HackerNewsSource;

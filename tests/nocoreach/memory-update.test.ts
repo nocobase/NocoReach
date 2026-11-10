@@ -12,11 +12,11 @@ function store(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).
   create:async o=>{const r={id:++id,...o.values};rows.push(r);return wrap(r);},update:async o=>{Object.assign(rows.find(r=>r.id===o.filterByTk),o.values);}};}
 const HOME='<html><head><title>NocoBase</title></head><body><a href="/pricing">定价</a><a href="https://www.nocobase.com/en/about">关于</a><a href="/blog/2026/post">博客</a><a href="https://other.com/pricing">外站</a><p>NocoBase 是开源、可自托管的无代码平台，用数据模型搭建业务系统，插件扩展一切功能，适合企业 IT 团队。</p></body></html>';
 const PAGE=t=>`<html><head><title>${t}</title></head><body><p>${t}：${'这是一段足够长的正文，说明产品的价值和用法。'.repeat(4)}</p></body></html>`;
-function service({replies=[],noAi=false,site=null}={}){const snaps=store(),calls={prompts:[],downloads:[],saved:[]};
+function service({replies=[],noAi=false,site=null,extra={}}={}){const snaps=store(),calls={prompts:[],downloads:[],saved:[]};
  const project={id:1,name:'NocoBase',domains:['nocobase.com'],memory:{brand:'',product:'',audience:'',markets:'',voice:'',wording:'写“无代码”，不写“低代码”',messages:'',competitors:'Retool',rules:''}};
  const p={db:{getRepository:()=>snaps},projects:{row:async()=>({get:()=>project})},projectIds:async()=>['1'],
-  knowledge:{list:async()=>({items:[{id:'k1',title:'2026 竞品对比'}]}),get:async()=>({text:'Appsmith 和 ToolJet 是主要竞品'}),saveMemory:async(id,v)=>{calls.saved.push(v.memory);project.memory=v.memory;return v;}},
-  siteContent:{state:async()=>site},
+  knowledge:{list:async()=>({items:[{id:'k1',title:'2026 竞品对比'}]}),get:async()=>({text:'Appsmith 和 ToolJet 是主要竞品'}),saveMemory:async(id,v)=>{calls.saved.push(v.memory);project.memory={...project.memory,...(v.memory||{}),...(v.topics?{topics:v.topics}:{})};return v;}},
+  siteContent:{state:async()=>site},...extra,
   ...(noAi?{}:{taskExecution:{provider:{complete:async(system,user)=>{calls.prompts.push({system,user:JSON.parse(user)});const r=replies.shift();if(r instanceof Error)throw r;return r;}}}})};
  const s=new MemoryUpdate(p,async url=>{calls.downloads.push(url);if(url==='https://nocobase.com/')return {text:HOME,type:'text/html'};if(/pricing|about/.test(url))return {text:PAGE(/pricing/.test(url)?'定价':'关于我们'),type:'text/html'};throw new Error('no');});
  return {s,calls,snaps,project};}
@@ -51,7 +51,7 @@ test('weekly check: change requests, approved results and new pages since the la
  assert.deepEqual(user.results,[{text:'Retool 按人收费，我们按服务器收费'}]);assert.deepEqual(user.newPages.map(p=>p.title),['AI 员工']);assert.equal(user.website.length,3,'website text the first time it is seen');
  let st=await s.status('1');
  assert.deepEqual(st.suggestions.map(x=>[x.label,x.text,x.replace||'',x.source]),[['用词','产品名写 NocoBase，不写 Nocobase','','reviews'],['竞品','Retool（按人收费）','Retool','results'],['产品','新增 AI 员工','','site']],'unknown sections, lines already in 记忆 and replacements of lines that are not there are cleaned');
- assert.equal(st.lastCheck.added,3);assert.deepEqual(st.lastCheck.counts,{comments:1,results:1,pages:1,siteChanged:true});
+ assert.equal(st.lastCheck.added,3);assert.deepEqual(st.lastCheck.counts,{comments:1,results:1,pages:1,siteChanged:true,topics:0},'no topic is asked about when the sources found nothing');
  // nothing new since: no AI call
  await s.check('1');assert.equal(calls.prompts.length,1);
  // accept two, ignore one; ignored lines are not suggested again
@@ -61,6 +61,33 @@ test('weekly check: change requests, approved results and new pages since the la
  snaps.rows.push({id:96,key:'nr-task-review:1:8:e',payload:{decision:'requestChanges',comment:'Nocobase 又错了',at:new Date().toISOString()}});await s.check('1');
  assert.deepEqual((await s.status('1')).suggestions.map(x=>x.text),[],'accepted lines are in 记忆 now and the ignored one stays ignored');
  await assert.rejects(s.accept('1',{ids:[w.id]}),/已经处理过/);
+});
+
+test('followed topics: written by the first draft, suggested by later drafts and the weekly check from what the sources found, accepted up to ten',async()=>{
+ const github={newHot:{all:['a/x','b/y','c/z']},repos:{'a/x':{topics:['ai-agents','mcp']},'b/y':{topics:['ai-agents']},'c/z':{topics:['mcp']}}};
+ const {s,calls,project}=service({extra:{githubTrends:{state:async()=>github}},replies:[
+  '{"memory":{"brand":"NocoBase"},"topics":["Internal tools","internal-tools","Workflow automation"]}',
+  '{"memory":{},"topics":["internal tools","Low code"]}',
+  JSON.stringify({topics:[{topic:'AI agents',reason:'3 new popular repositories',examples:['a/x']},{topic:'internal_tools',reason:'followed'},{topic:'Low code',reason:'waiting'}]}),
+  '{"memory":[]}']});
+ await s.draft('1');
+ assert.deepEqual(project.memory.topics,['Internal tools','Workflow automation'],'one spelling each, written because the project followed none');
+ assert.equal((await s.status('1')).draft.filled.length,2,'the brand section and the topics');
+ await s.draft('1');
+ let st=await s.status('1');assert.deepEqual(project.memory.topics,['Internal tools','Workflow automation'],'a list already there is not overwritten');
+ assert.deepEqual(st.suggestions.map(x=>[x.section,x.text,x.source]),[['topics','Low code','draft']]);
+ s.state=(orig=>async id=>({...(await orig.call(s,id)),lastCheck:{at:ago(8),ok:true}}))(s.state);
+ await s.check('1');
+ const asked=calls.prompts.find(x=>x.user.githubTopics);assert.deepEqual(asked.user.githubTopics,[{topic:'ai-agents',repositories:2},{topic:'mcp',repositories:2}]);
+ assert.deepEqual(asked.user.topics,['Internal tools','Workflow automation']);
+ st=await s.status('1');
+ assert.deepEqual(st.suggestions.map(x=>[x.text,x.source,x.reason,x.examples]),[['AI agents','signals','3 new popular repositories',['a/x']],['Low code','draft',st.suggestions[1].reason,[]]],'a followed topic or one already waiting is not suggested again');
+ st=await s.accept('1',{ids:[st.suggestions[0].id]});
+ assert.deepEqual(project.memory.topics,['Internal tools','Workflow automation','AI agents']);assert.equal(project.memory.brand,'NocoBase','only the topics were written');
+ project.memory.topics=Array.from({length:10},(_,i)=>`topic ${i}`);
+ await assert.rejects(s.accept('1',{ids:[st.suggestions[0].id]}),e=>e.status===409&&/10/.test(e.message),'not past ten');
+ st=await s.dismiss('1',{ids:[st.suggestions[0].id]});assert.equal(st.suggestions.length,0);
+ assert.equal(s.addSuggestions(await s.state('1'),[{section:'topics',text:'low-code'}],{},[]).lastAdded,0,'ignored for every spelling');
 });
 
 test('hourly tick checks projects a week after the last check or first draft; never without an online AI',async()=>{

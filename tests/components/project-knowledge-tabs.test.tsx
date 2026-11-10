@@ -421,3 +421,134 @@ test('ticking a material away and back keeps the automatic choice; a refused sta
     }),
   );
 });
+
+function withTopics(topics: string[]) {
+  const memory = project.memory as Record<string, unknown>;
+  memory.topics = topics;
+  return () => delete memory.topics;
+}
+
+test('Followed topics sit below Competitors as chips, with the sources that search them and the cost per topic', async () => {
+  const restore = withTopics(['workflow automation', 'internal tools']);
+  try {
+    await mountProjectKnowledge('/project/memory');
+    const row = await waitFor(() =>
+      document.querySelector<HTMLElement>('[data-memory-item="topics"]')!,
+    );
+    expect(row.previousElementSibling?.getAttribute('data-memory-item')).toBe(
+      'competitors',
+    );
+    expect(
+      [...row.querySelectorAll('[data-topic]')].map((x) => x.textContent),
+    ).toEqual(['workflow automation', 'internal tools']);
+    expect(row.querySelector('[data-topic-sources]')).toHaveTextContent(
+      'Reddit、Hacker News、YouTube、趋势、GitHub 热点、AI 问题都按这些话题找讨论和热点 · 每个话题每月约 $0.62 的 DataForSEO 费用',
+    );
+    expect(within(row).queryByText('请删减到 10 个')).not.toBeInTheDocument();
+    // Still nine sections filled or not: the topics are a list beside them.
+    expect(screen.getByText(/已填 2 \/ 9 项/)).toBeInTheDocument();
+  } finally {
+    restore();
+  }
+});
+
+test('more than ten topics moved from the sources are all kept, and the page asks to trim them', async () => {
+  const restore = withTopics(
+    Array.from({ length: 12 }, (_, i) => `topic ${i + 1}`),
+  );
+  try {
+    await mountProjectKnowledge('/project/memory');
+    const row = await waitFor(() =>
+      document.querySelector<HTMLElement>('[data-memory-item="topics"]')!,
+    );
+    expect(row.querySelectorAll('[data-topic]')).toHaveLength(12);
+    expect(within(row).getByText('请删减到 10 个')).toBeInTheDocument();
+    expect(row.querySelector('[data-topic="topic 11"]')).toHaveClass(
+      'border-dashed',
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('topics are edited as tags in the Memory dialog: Enter adds, × removes, only the list is sent', async () => {
+  const restore = withTopics(['workflow automation', 'internal tools']);
+  try {
+    const user = userEvent.setup();
+    const router = await mountProjectKnowledge(
+      '/project/memory/edit?field=topics',
+    );
+    const dialog = await screen.findByRole('dialog', { name: '编辑记忆' });
+    const input = within(dialog).getByRole('textbox', { name: /^关注的话题/ });
+    // Opened from a source page's Edit in Memory, the field has the focus.
+    await waitFor(() => expect(input).toHaveFocus());
+    await user.type(input, 'Low code{Enter}');
+    await user.type(input, 'low-code{Enter}');
+    await user.type(input, 'x{Enter}');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      '话题“x”不能用',
+    );
+    await user.clear(input);
+    await user.click(
+      within(dialog).getByRole('button', { name: '移除 internal tools' }),
+    );
+    expect(
+      [...dialog.querySelectorAll('[data-topic]')].map((x) => x.textContent),
+    ).toEqual(['workflow automation', 'Low code']);
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/project/memory'),
+    );
+    expect(action).toHaveBeenCalledWith('nrKnowledge', 'saveMemory', {
+      method: 'POST',
+      body: { projectId: '1', topics: ['workflow automation', 'Low code'] },
+      unwrap: 'data',
+    });
+  } finally {
+    restore();
+  }
+});
+
+test('a topic the weekly check found is offered with its evidence, under the suggestions', async () => {
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(async (resource: string, command: string, o) =>
+    resource === 'nrMemory' && command === 'status'
+      ? {
+          running: null,
+          aiReady: true,
+          draft: null,
+          lastCheck: { at: '2026-10-19T00:00:00Z', ok: true, added: 1 },
+          suggestions: [
+            {
+              id: 't1',
+              section: 'topics',
+              label: '关注的话题',
+              text: 'AI agents',
+              reason: '3 new popular repositories carry this topic',
+              examples: ['acme/agent-kit'],
+              source: 'signals',
+              at: '2026-10-19T00:00:00Z',
+            },
+          ],
+        }
+      : base(resource, command, o),
+  );
+  const user = userEvent.setup();
+  await mountProjectKnowledge('/project/memory');
+  const region = await screen.findByRole('region', { name: '更新建议' });
+  const card = await waitFor(() =>
+    region.querySelector<HTMLElement>('[data-suggestion="t1"]')!,
+  );
+  expect(card).toHaveTextContent('关注的话题AI agents');
+  expect(card).toHaveTextContent(
+    '市场信号 · 3 new popular repositories carry this topic',
+  );
+  await user.click(within(card).getByRole('button', { name: '补充' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrMemory',
+      'accept',
+      expect.objectContaining({ body: { projectId: '1', ids: ['t1'] } }),
+    ),
+  );
+});

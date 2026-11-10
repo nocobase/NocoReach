@@ -540,6 +540,7 @@ test('imports the demo through the API and clears all business data while preser
     for (const key of [
       'site-content',
       'github',
+      'github-trends',
       'community',
       'packages',
       'chat',
