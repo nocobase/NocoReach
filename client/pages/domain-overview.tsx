@@ -53,7 +53,8 @@ const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const fmtTime = (v?: string | null) => formatDateTime(v);
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
-const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+// A bare host: no scheme, www or path (Backlinks uses it too).
+export const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
 
 export default function DomainOverview({ embedded = false }: { embedded?: boolean } = {}) {
   const { project } = useProject();

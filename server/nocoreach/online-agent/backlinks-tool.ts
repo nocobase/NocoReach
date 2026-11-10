@@ -3,9 +3,17 @@ import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
 import { toolInput } from '../../online-agent/errors.js';
 import { VisibilityError } from '../research-helpers.js';
-import { GAP_COMPETITORS, specification } from '../backlinks-service.js';
+import { specification } from '../backlinks-service.js';
+import { GAP_COMPETITORS } from '../../../shared/backlinks.js';
 
 const VIEWS = ['overview', 'links', 'domains', 'pages', 'gap'] as const;
+// Which URL parameter of Search & market › Backlinks holds each view's run.
+const RUN_PARAMS = {
+  overview: 'o',
+  links: 'l',
+  domains: 'r',
+  pages: 'g',
+} as const;
 const ROWS = 50;
 const input = z.strictObject({
   view: z
@@ -50,9 +58,7 @@ type Run = Obj & {
 export interface BacklinksSource {
   run(id: string, v: object): Promise<Run>;
   saved(id: string, v: object): Promise<Run | null>;
-  sites(
-    id: string,
-  ): Promise<{
+  sites(id: string): Promise<{
     own: string[];
     competitors: { name: string; domain: string }[];
   }>;
@@ -120,11 +126,24 @@ export function backlinksTool(
         }
       } else run = await source.saved(projectId, query);
       const spec = (run?.spec ?? {}) as Obj;
-      const params = new URLSearchParams({
-        t: String(spec.target ?? target),
-      });
-      if (run) params.set(v.view === 'gap' ? 'gap' : 'o', String(run.id));
-      if (v.view === 'gap') params.set('view', 'gap');
+      // The page's own parameters (client/pages/backlinks.tsx): a gap opens on Link gap; a tab's run opens that tab of
+      // Link profile, beside the target's latest saved overview when there is one.
+      const params = new URLSearchParams();
+      if (v.view === 'gap') {
+        params.set('view', 'gap');
+        if (run) params.set('gap', String(run.id));
+      } else {
+        params.set('t', String(spec.target ?? target));
+        if (run) params.set(RUN_PARAMS[v.view], String(run.id));
+        if (v.view !== 'overview') {
+          params.set('bt', v.view);
+          const overview = await source.saved(projectId, {
+            view: 'overview',
+            target: spec.target ?? target,
+          });
+          if (overview) params.set('o', String(overview.id));
+        }
+      }
       const where = {
         page: 'Search & market › Backlinks',
         url: link(`/backlinks?${params.toString()}`),

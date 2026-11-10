@@ -1079,7 +1079,7 @@ export function dataforseo(
       url_to: world.origin + l.target,
     }));
     const live = links.filter((l) => l.lost === undefined);
-    // One linking site scores as spam, so Competitors › Backlinks has a row its Hide spam switch hides.
+    // One linking site scores as spam, so Search & market › Backlinks has a row its Hide spam switch hides.
     const spam = (l: (typeof links)[number]) =>
       l.rank === 24 ? 72 : 2 + world.seeded.int(`spam:${l.domain}`, 12);
     if (op === 'summary')

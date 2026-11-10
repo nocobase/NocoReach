@@ -1,9 +1,10 @@
-// Competitors › Backlinks (client/pages/backlinks.tsx): an opened lookup shows the overview tiles and, on a tab that was
+// Search & market › Backlinks (client/pages/backlinks.tsx): an opened lookup shows the overview tiles and, on a tab that was
 // looked up, its rows; Hide spam hides the rows already read without another lookup, and a tab not looked up yet offers
 // its own lookup.
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import { linkProspectsDraft } from '#pages/seo-hand-off';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 import BacklinksPage, {
@@ -139,7 +140,9 @@ const gap = {
   },
 };
 
+let recent: unknown[] = [];
 beforeEach(() => {
+  recent = [];
   action.mockReset();
   action.mockImplementation(
     async (
@@ -153,7 +156,7 @@ beforeEach(() => {
           verifiedAt: '2026-10-01',
           monthlyBudgetUsd: 5,
         };
-      if (resource === 'nrBacklinks' && act === 'list') return [];
+      if (resource === 'nrBacklinks' && act === 'list') return recent;
       if (resource === 'nrBacklinks' && act === 'getRun')
         return options.body.runId === '1'
           ? overview
@@ -265,4 +268,54 @@ it('shows the link gap with the competitors each site links to, spam hidden, and
     await screen.findByRole('button', { name: /交给 Agent/ }),
   ).toBeTruthy();
   expect(action.mock.calls.filter(([, act]) => act === 'run')).toHaveLength(0);
+});
+
+it('arriving with a target opens its saved overview and only completed tab lookups', async () => {
+  const row = (id: string, view: string, status: string) => ({
+    id,
+    status,
+    spec: spec(view),
+    createdAt: '2026-11-01T00:00:00Z',
+    completedAt: null,
+    count: 1,
+    summary: null,
+  });
+  recent = [
+    row('5', 'links', 'unknown'),
+    row('1', 'overview', 'completed'),
+    row('2', 'links', 'completed'),
+  ];
+  const router = open('/backlinks?t=acme.example');
+  expect(await screen.findByText('18,420')).toBeTruthy();
+  expect(router.state.location.search).toContain('o=1');
+  expect(router.state.location.search).toContain('l=2');
+  expect(router.state.location.search).not.toContain('l=5');
+});
+
+it("says a competitor's referring domains were not checked against our links", () => {
+  const rows = [
+    {
+      domain: 'ref.example',
+      rank: 20,
+      spam: 1,
+      competitors: ['rival.example'],
+    },
+  ];
+  const unchecked = linkProspectsDraft(
+    'acme.example',
+    ['rival.example'],
+    rows,
+    '2026-11-01T00:00:00Z',
+    false,
+  );
+  expect(unchecked.brief).toContain('没有和 acme.example 的外链核对过');
+  expect(unchecked.brief).not.toContain('没有链接 acme.example');
+  const gap = linkProspectsDraft(
+    'docs.acme.example',
+    ['rival.example'],
+    rows,
+    '2026-11-01T00:00:00Z',
+  );
+  expect(gap.brief).toContain('但没有链接 docs.acme.example');
+  expect(gap.title).toContain('ref.example');
 });

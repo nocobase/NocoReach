@@ -8,7 +8,6 @@ import type {
 import type { DemoTaskStory } from './editorial.js';
 import { historyBounds } from '../search-history.js';
 import { DomainService } from '../domain-service.js';
-import { BacklinksService } from '../backlinks-service.js';
 import { Lighthouse } from '../lighthouse.js';
 import { secretKey } from '../policy.js';
 import { projectWork, type Artifact } from '../execution/model.js';
@@ -578,7 +577,7 @@ async function connectSources(
           });
         // Backlinks › Link profile: the site's overview and each of its tabs, already looked up.
         for (const view of ['overview', 'links', 'domains', 'pages'])
-          await new BacklinksService(p).run(id, {
+          await p.backlinks.run(id, {
             target: spec.domain,
             view,
             requestKey: randomUUID(),
@@ -671,9 +670,8 @@ async function connectSources(
           });
         await p.competitorResearch.refresh(id);
         // Backlinks › Link gap against the competitors just listed.
-        const backlinks = new BacklinksService(p);
-        const sites = await backlinks.sites(id);
-        await backlinks.run(id, {
+        const sites = await p.backlinks.sites(id);
+        await p.backlinks.run(id, {
           view: 'gap',
           target: spec.domain,
           competitors: sites.competitors.map(

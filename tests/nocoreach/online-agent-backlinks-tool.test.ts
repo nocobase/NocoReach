@@ -55,17 +55,23 @@ describe('backlinks tool', () => {
     expect(s.run).not.toHaveBeenCalled();
   });
 
-  it('returns a saved lookup in pages of 50 rows with a link to the page', async () => {
-    const { t } = tool(() => true, {
-      saved: vi.fn(async () => run('domains')),
-    });
+  it('returns a saved lookup in pages of 50 rows with a link that opens its tab beside the saved overview', async () => {
+    const saved = vi.fn(async (_id: string, v: { view: string }) =>
+      v.view === 'overview' ? { ...run('overview'), id: 3 } : run('domains'),
+    );
+    const { t } = tool(() => true, { saved });
     const out = (await t.execute({ view: 'domains' })) as Record<
       string,
       unknown
     >;
     expect(out.rows).toHaveLength(50);
     expect(out.nextOffset).toBe(50);
-    expect(out.url).toBe('/app/backlinks?t=acme.example&o=7');
+    expect(out.url).toBe('/app/backlinks?t=acme.example&r=7&bt=domains&o=3');
+    const overview = (await t.execute({ view: 'overview' })) as Record<
+      string,
+      unknown
+    >;
+    expect(overview.url).toBe('/app/backlinks?t=acme.example&o=3');
   });
 
   it('runs a gap lookup against the listed competitors only with lookUp and the run permission', async () => {

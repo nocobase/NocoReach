@@ -8072,5 +8072,7 @@
   "seoHandOff.linkProspectsIntro": "链接了 {0} 但没有链接 {1} 的网站（DataForSEO 外链索引，查询于 {2}）：",
   "seoHandOff.linkProspectsMore": "- 另有 {0} 个见外链页面",
   "seoHandOff.linkProspectsAdvice": "依据说明：权威度（0–100）和垃圾分是 DataForSEO 的估算。先看链接了多个竞品的网站：它们已经在链接同类产品。",
-  "playbooks.linkBuildingInstruction": "根据任务说明里的网站规划外链拓展：这些网站链接了竞品，却没有链接我们（或链接了说明里提到的竞品）。逐个打开网站和它链接竞品的那个页面；跳过垃圾分 40 及以上、内容不相关或买卖链接的网站。对值得联系的网站，说明链接所在的是哪类页面（资源列表、测评或对比、目录、投稿、新闻、论坛社区、合作伙伴），它为什么会链接我们，我们哪个页面最合适，以及怎么联系（联系页面、作者、提交表单）。每个网站单独写一节：第一行是“## 域名”，接着是“- Linking page: 网址”“- Type: …”“- Our page: 网址”“- Contact: …”“- Priority: high、medium 或 low”，然后在“### Message”下写一封简短、有针对性的联系信，使用该网站的语言。字段名 Linking page、Type、Our page、Contact、Priority 和小标题 Message、Summary 必须保持原样。所有网站之后写“## Summary”：按优先级排列的网站，以及要拿到现在拿不到的链接还需要补充哪些内容。只写草稿：不发送任何消息、不注册任何账号、不修改仓库。"
+  "playbooks.linkBuildingInstruction": "根据任务说明里的网站规划外链拓展：这些网站链接了竞品，却没有链接我们（或链接了说明里提到的竞品）。逐个打开网站和它链接竞品的那个页面；跳过垃圾分 40 及以上、内容不相关或买卖链接的网站。对值得联系的网站，说明链接所在的是哪类页面（资源列表、测评或对比、目录、投稿、新闻、论坛社区、合作伙伴），它为什么会链接我们，我们哪个页面最合适，以及怎么联系（联系页面、作者、提交表单）。每个网站单独写一节：第一行是“## 域名”，接着是“- Linking page: 网址”“- Type: …”“- Our page: 网址”“- Contact: …”“- Priority: high、medium 或 low”，然后在“### Message”下写一封简短、有针对性的联系信，使用该网站的语言。字段名 Linking page、Type、Our page、Contact、Priority 和小标题 Message、Summary 必须保持原样。所有网站之后写“## Summary”：按优先级排列的网站，以及要拿到现在拿不到的链接还需要补充哪些内容。只写草稿：不发送任何消息、不注册任何账号、不修改仓库。",
+  "backlinks.noHistory": "没有取到近 12 个月的趋势：{0}",
+  "seoHandOff.linkProspectsUncheckedIntro": "链接了 {0} 的网站（DataForSEO 外链索引，查询于 {2}）。这些网站没有和 {1} 的外链核对过，其中可能有已经链接我们的，联系前先确认："
 }

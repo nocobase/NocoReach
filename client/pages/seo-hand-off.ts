@@ -93,13 +93,15 @@ export function competitorPagesDraft(domain: string, market: string, rows: Compe
 // Backlinks › Link gap, or a competitor's Referring domains: sites linking to competitors but not to us, to approach
 // with the Link building playbook. `competitors` are the sites they were found through.
 export type LinkProspect = { domain: string; rank: number | null; spam: number | null; competitors: string[]; backlinks?: number | null };
-export function linkProspectsDraft(own: string, competitors: string[], rows: LinkProspect[], at: string): TaskDraft {
+// `checked` is false for a competitor's referring domains, which were never compared with our links: the brief says so
+// instead of claiming they do not link to us.
+export function linkProspectsDraft(own: string, competitors: string[], rows: LinkProspect[], at: string, checked = true): TaskDraft {
   const lines = rows.slice(0, 60).map((r) => $t('seoHandOff.linkProspectLine', { 0: r.domain, 1: r.rank ?? "—", 2: joinList(r.competitors), 3: r.spam != null ? $t('seoHandOff.linkProspectSpam', { 0: r.spam }) : "" }));
   return {
     title: clip(rows.length === 1 ? $t('seoHandOff.linkProspectTitle', { 0: rows[0].domain }) : $t('seoHandOff.linkProspectsTitle', { 0: rows.length, 1: own }), 200),
     subject: clip(subjectOf(rows[0].domain, rows.length, 'sites'), 160),
     objective: clip($t('seoHandOff.linkProspectsObjective', { 0: own, 1: joinList(rows.map((r) => r.domain)) }), 1000),
-    brief: clip([$t('seoHandOff.linkProspectsIntro', { 0: joinList(competitors), 1: own, 2: formatDate(at) }), ...lines, ...(rows.length > 60 ? [$t('seoHandOff.linkProspectsMore', { 0: rows.length - 60 })] : []), "", $t('seoHandOff.linkProspectsAdvice')].join("\n"), 20000),
+    brief: clip([$t(checked ? 'seoHandOff.linkProspectsIntro' : 'seoHandOff.linkProspectsUncheckedIntro', { 0: joinList(competitors), 1: own, 2: formatDate(at) }), ...lines, ...(rows.length > 60 ? [$t('seoHandOff.linkProspectsMore', { 0: rows.length - 60 })] : []), "", $t('seoHandOff.linkProspectsAdvice')].join("\n"), 20000),
   };
 }
 

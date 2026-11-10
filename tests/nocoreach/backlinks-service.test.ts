@@ -169,25 +169,26 @@ describe('backlinks lookups', () => {
         spec,
       ),
     ).toMatchObject({ status: 'failed', errorCode: 'provider_status_40501' });
-    // One failed reply fails the whole overview; an unknown cost stays unknown.
+    // A failed history reply keeps the overview, naming why; an unknown cost stays unknown.
     const overview = specification({ view: 'overview', target: 'example.com' });
-    expect(
-      result(
-        [
-          ok(undefined),
-          { status_code: 20000, tasks: [{ status_code: 40200 }] },
-        ],
-        overview,
-      ),
-    ).toMatchObject({
-      status: 'failed',
-      errorCode: 'backlinks_balance',
-      costUsd: null,
-    });
+    const parsed = result(
+      [ok(undefined), { status_code: 20000, tasks: [{ status_code: 40200 }] }],
+      overview,
+    );
+    expect(parsed).toMatchObject({ status: 'completed', costUsd: null });
+    expect(parsed.result.historyError).toBe('backlinks_balance');
   });
 
-  it('lists backlinks runs only and refuses another kind', async () => {
-    const rows = [
+  it('lists backlinks runs found past many runs of other kinds, and refuses another kind', async () => {
+    // 1,200 newer runs of other kinds (keyword seeds, Reddit, Lighthouse) come before the one backlinks lookup.
+    const rows: Record<string, unknown>[] = [
+      ...Array.from({ length: 1200 }, (_, i) => ({
+        id: 100 + i,
+        projectId: '1',
+        status: 'completed',
+        spec: { kind: 'keyword-seed' },
+        createdAt: '2026-10-03',
+      })),
       {
         id: 1,
         projectId: '1',
@@ -199,18 +200,27 @@ describe('backlinks lookups', () => {
         },
         createdAt: '2026-10-02',
       },
-      {
-        id: 2,
-        projectId: '1',
-        status: 'completed',
-        spec: { kind: 'domain', view: 'keywords' },
-        createdAt: '2026-10-01',
-      },
     ];
     const wrap = (r?: Record<string, unknown>) =>
       r && { ...r, get: (k: string) => r[k], toJSON: () => r };
+    const reads: { fields?: string[]; offset?: number }[] = [];
     const repo = {
-      find: async () => rows.map(wrap),
+      find: async (o: {
+        filter: { id?: { $in: string[] } };
+        fields?: string[];
+        limit?: number;
+        offset?: number;
+      }) => {
+        reads.push({ fields: o.fields, offset: o.offset });
+        const wanted = o.filter.id?.$in;
+        const list = wanted
+          ? rows.filter((r) => wanted.includes(String(r.id)))
+          : rows.slice(
+              o.offset ?? 0,
+              (o.offset ?? 0) + (o.limit ?? rows.length),
+            );
+        return list.map(wrap);
+      },
       findOne: async (o: { filter: { id: string } }) =>
         wrap(rows.find((r) => String(r.id) === o.filter.id)),
     };
@@ -225,7 +235,95 @@ describe('backlinks lookups', () => {
       backlinks: 5,
       referringDomains: 2,
     });
-    await expect(service.getRun('1', { runId: 2 })).rejects.toThrow(/不存在/);
+    // The scan reads small columns only; just the backlinks run is read in full.
+    expect(
+      reads.slice(0, -1).every((r) => r.fields?.join() === 'id,spec'),
+    ).toBe(true);
+    expect(reads.slice(0, -1).map((r) => r.offset)).toEqual([0, 500, 1000]);
+    await expect(service.getRun('1', { runId: 100 })).rejects.toThrow(/不存在/);
+  });
+
+  it('finds the saved lookup a new one would reuse by its query hash, however many runs came after', async () => {
+    const found: Record<string, unknown>[] = [];
+    const recent = {
+      id: 9,
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      spec: { kind: 'backlinks' },
+    };
+    const repo = {
+      findOne: async (o: { filter: Record<string, unknown> }) => {
+        found.push(o.filter);
+        return {
+          ...recent,
+          get: (k: string) => (recent as Record<string, unknown>)[k],
+          toJSON: () => recent,
+        };
+      },
+    };
+    const service = new BacklinksService({
+      env: () => null,
+      db: { getRepository: () => repo },
+    });
+    expect(
+      await service.saved('1', { view: 'links', target: 'a.com' }),
+    ).toEqual(recent);
+    expect(found[0]).toMatchObject({
+      projectId: '1',
+      status: 'completed',
+      queryHash: expect.any(String),
+    });
+  });
+
+  it('keeps a billed summary when the history reply fails, and leaves an unknown rank unknown', () => {
+    const spec = specification({ view: 'overview', target: 'new.example' });
+    const parsed = result(
+      [
+        ok(undefined, { rank: 3, backlinks: 12 }),
+        { status_code: 20000, cost: 0.02, tasks: [{ status_code: 40501 }] },
+      ],
+      spec,
+    );
+    expect(parsed).toMatchObject({
+      status: 'completed',
+      costUsd: expect.any(Number),
+    });
+    expect(parsed.result.summary.backlinks).toBe(12);
+    expect(parsed.result.history).toEqual([]);
+    expect(parsed.result.historyError).toBe('provider_status_40501');
+    // A failed summary still fails the run.
+    expect(
+      result(
+        [
+          { status_code: 20000, cost: 0.02, tasks: [{ status_code: 40501 }] },
+          ok([]),
+        ],
+        spec,
+      ).status,
+    ).toBe('failed');
+    const gapSpec = specification({
+      view: 'gap',
+      target: 'acme.example',
+      competitors: ['a.example'],
+    });
+    const gap = result(
+      [
+        ok([
+          { domain_intersection: { 1: { target: 'norank.example' } } },
+          { domain_intersection: { 1: { target: 'ranked.example', rank: 5 } } },
+        ]),
+      ],
+      gapSpec,
+    );
+    expect(
+      gap.result.items.map((r: { domain: string; rank: number | null }) => [
+        r.domain,
+        r.rank,
+      ]),
+    ).toEqual([
+      ['ranked.example', 5],
+      ['norank.example', null],
+    ]);
   });
 });
 

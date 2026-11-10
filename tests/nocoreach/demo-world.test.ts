@@ -143,7 +143,7 @@ describe.each(['zh-CN', 'en-US'])(
       ]);
     });
 
-    it('answers every Competitors › Backlinks lookup the way the service reads it', async () => {
+    it('answers every Search & market › Backlinks lookup the way the service reads it', async () => {
       const project = { id: 'main', ...content.projects.main, language };
       const ask = async (path: string, body: unknown) =>
         (

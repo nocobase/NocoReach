@@ -4,6 +4,7 @@ import { VisibilityError } from './research-helpers.js';
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
 import { host } from './domain-service.js';
+import { GAP_COMPETITORS } from '../../shared/backlinks.js';
 // Backlinks (Search & market › Backlinks): after every-app/open-seo db8bde1 src/server/features/backlinks/ and
 // src/server/lib/dataforseo/backlinks.ts (MIT). Any site's (or one page's) link profile from the DataForSEO Backlinks
 // API, on the shared DataForSEO layer (runs only when asked, monthly budget, 30-day reuse, uncertain results not
@@ -19,7 +20,6 @@ const error = (message, status = 400) => {
 };
 const VIEWS = ['overview', 'links', 'domains', 'pages', 'gap'];
 const LIMIT = 100;
-export const GAP_COMPETITORS = 3;
 // dataforseo.com/pricing/backlinks, as OpenSEO's src/server/lib/dataforseo/pricing.ts charges it: per task plus per
 // returned row, uniform across endpoints.
 const TASK_USD = 0.024,
@@ -287,7 +287,8 @@ function gap(replies, spec) {
         firstSeen: null,
       };
       row.competitors.push(rival);
-      row.rank = Math.max(row.rank ?? 0, num(link.rank ?? item.rank) ?? 0);
+      const rank = num(link.rank ?? item.rank);
+      if (rank !== null) row.rank = Math.max(row.rank ?? rank, rank);
       row.backlinks += num(link.backlinks) ?? 0;
       const spam = num(link.backlinks_spam_score ?? item.backlinks_spam_score);
       if (spam !== null) row.spam = Math.max(row.spam ?? 0, spam);
@@ -301,7 +302,7 @@ function gap(replies, spec) {
     .sort(
       (a, b) =>
         b.competitors.length - a.competitors.length ||
-        (b.rank ?? 0) - (a.rank ?? 0) ||
+        (b.rank ?? -1) - (a.rank ?? -1) ||
         a.domain.localeCompare(b.domain),
     )
     .map((row, n) => ({ id: String(n), ...row }));
@@ -312,7 +313,13 @@ function result(raw, spec) {
     taskId: str(replies[0]?.tasks?.[0]?.id),
     costUsd: cost(replies),
   };
-  const failed = replies.map(failure).find(Boolean);
+  // An overview stands on its summary: a site without history (a new site, a subdomain) still gets its figures, with
+  // the trend left out and why.
+  const historyFailed =
+    spec.view === 'overview' && replies[1] ? failure(replies[1]) : null;
+  const failed = (historyFailed ? replies.slice(0, 1) : replies)
+    .map(failure)
+    .find(Boolean);
   if (failed)
     return { ...base, status: 'failed', errorCode: failed, result: null };
   if (spec.view === 'gap') {
@@ -341,7 +348,9 @@ function result(raw, spec) {
       errorCode: null,
       result: {
         summary: summary(s),
-        history: replies[1] ? history(page(replies[1])?.items) : [],
+        history:
+          replies[1] && !historyFailed ? history(page(replies[1])?.items) : [],
+        historyError: historyFailed,
         items: [],
         totalCount: null,
       },
@@ -371,34 +380,51 @@ class BacklinksService {
   run(id, v) {
     return this.d4s.run(id, 'backlinks', v);
   }
-  // Recent lookups: the overview runs, newest first, with the counts the list shows.
+  // Recent lookups, newest first, with the counts the list shows. Runs of every DataForSEO kind share the table, so
+  // it is scanned page by page on its small columns until enough backlinks runs are found, and only those are read in
+  // full.
   async list(id) {
-    return (
-      await this.d4s
-        .repo()
-        .find({ filter: { projectId: id }, sort: '-createdAt', limit: 200 })
-    )
-      .filter((r) => r.get('spec')?.kind === 'backlinks')
-      .slice(0, 60)
-      .map((r) => {
-        const s = r.get('result')?.summary;
-        return {
-          id: String(r.id),
-          status: r.get('status'),
-          spec: r.get('spec'),
-          createdAt: r.get('createdAt'),
-          completedAt: r.get('completedAt') || null,
-          errorCode: r.get('errorCode') || null,
-          count: r.get('result')?.items?.length ?? null,
-          summary: s
-            ? {
-                rank: s.rank ?? null,
-                backlinks: s.backlinks ?? null,
-                referringDomains: s.referringDomains ?? null,
-              }
-            : null,
-        };
+    const PAGE = 500,
+      WANT = 60,
+      MAX = 20000;
+    const repo = this.d4s.repo(),
+      ids = [];
+    for (let offset = 0; offset < MAX && ids.length < WANT; offset += PAGE) {
+      const rows = await repo.find({
+        filter: { projectId: id },
+        fields: ['id', 'spec'],
+        sort: '-createdAt',
+        limit: PAGE,
+        offset,
       });
+      for (const r of rows)
+        if (r.get('spec')?.kind === 'backlinks') ids.push(String(r.id));
+      if (rows.length < PAGE) break;
+    }
+    if (!ids.length) return [];
+    const rows = await repo.find({
+      filter: { projectId: id, id: { $in: ids.slice(0, WANT) } },
+      sort: '-createdAt',
+    });
+    return rows.map((r) => {
+      const s = r.get('result')?.summary;
+      return {
+        id: String(r.id),
+        status: r.get('status'),
+        spec: r.get('spec'),
+        createdAt: r.get('createdAt'),
+        completedAt: r.get('completedAt') || null,
+        errorCode: r.get('errorCode') || null,
+        count: r.get('result')?.items?.length ?? null,
+        summary: s
+          ? {
+              rank: s.rank ?? null,
+              backlinks: s.backlinks ?? null,
+              referringDomains: s.referringDomains ?? null,
+            }
+          : null,
+      };
+    });
   }
   async getRun(id, v) {
     const r = await this.d4s
@@ -425,25 +451,12 @@ class BacklinksService {
         .map((c) => ({ name: c.name || bare(c.site), domain: bare(c.site) })),
     };
   }
-  /** The latest completed lookup of a view for a target (and, for a gap, the same competitors), saved or none. */
+  /**
+   * The saved lookup a new one would reuse without a charge (the same query, completed within the reuse time), found by
+   * the shared layer's query hash as a run would find it; none when there is no such lookup.
+   */
   async saved(id, v) {
-    const want = specification(v);
-    const rows = await this.d4s.repo().find({
-      filter: { projectId: id, status: 'completed' },
-      sort: '-createdAt',
-      limit: 300,
-    });
-    const row = rows.find((r) => {
-      const s = r.get('spec');
-      return (
-        s?.kind === 'backlinks' &&
-        s.view === want.view &&
-        s.target === want.target &&
-        (want.view !== 'gap' ||
-          JSON.stringify(s.competitors) === JSON.stringify(want.competitors))
-      );
-    });
-    return row ? row.toJSON() : null;
+    return (await this.d4s.preview(id, 'backlinks', v)).existing;
   }
   register() {
     const wrap = (fn) => async (ctx, next) => {

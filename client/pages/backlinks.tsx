@@ -62,6 +62,8 @@ import { HandOffNotice, type HandOffResult } from './strategy/hand-off';
 import { linkProspectsDraft } from './seo-hand-off';
 import { formatCount, formatDateTime } from '#lib/format';
 import { useProject } from './reach-data';
+import { bare } from './domain-overview';
+import { GAP_COMPETITORS, SPAM_THRESHOLD } from '../../shared/backlinks.js';
 import './reach-workspace.css';
 import './data-views.css';
 import { currentProjectId } from './current-project';
@@ -148,6 +150,7 @@ type Run<T = unknown> = {
     totalCount: number | null;
     summary?: Summary | null;
     history?: Month[];
+    historyError?: string | null;
     perCompetitor?: { domain: string; total: number | null }[];
   };
   errorCode?: string | null;
@@ -181,12 +184,6 @@ const right = {
   cellClassName: 'text-right tabular-nums',
 } as const;
 const fmtTime = (v?: string | null) => formatDateTime(v);
-const bare = (d?: string) =>
-  String(d || '')
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/^www\./, '')
-    .replace(/\/.*$/, '');
 const pathOf = (u: string) => {
   try {
     const x = new URL(u);
@@ -195,8 +192,8 @@ const pathOf = (u: string) => {
     return u;
   }
 };
-// OpenSEO's DEFAULT_BACKLINKS_SPAM_THRESHOLD: rows scoring this or more are hidden while Hide spam is on.
-export const SPAM_THRESHOLD = 40;
+// Rows scoring SPAM_THRESHOLD or more are hidden while Hide spam is on.
+export { SPAM_THRESHOLD };
 // The URL keeps the opened runs (o overview, l links, r referring domains, g top pages), so a reload reopens them
 // without a new query; bt is the open tab and t the looked-up target.
 const RUN_PARAMS: Record<View, string> = {
@@ -360,7 +357,10 @@ export function Backlinks() {
     p.set('o', overview.id);
     for (const view of TABS) {
       const r = recent.find(
-        (x) => x.spec.view === view && x.spec.target === overview.spec.target,
+        (x) =>
+          x.spec.view === view &&
+          x.spec.target === overview.spec.target &&
+          x.status === 'completed',
       );
       if (r) p.set(RUN_PARAMS[view], r.id);
     }
@@ -647,6 +647,15 @@ function Overview({ run, own }: { run: Run<never>; own: boolean }) {
       ) : run.spec.scope === 'page' ? (
         <p className='text-xs text-muted-foreground'>
           {$t('backlinks.noTrendForPage')}
+        </p>
+      ) : run.result?.historyError ? (
+        <p
+          className='text-xs text-muted-foreground'
+          data-backlinks-no-history=''
+        >
+          {$t('backlinks.noHistory', {
+            0: backlinksError(run.result.historyError),
+          })}
         </p>
       ) : null}
     </div>
@@ -1203,19 +1212,21 @@ function DomainsTable({ run, own }: { run: Run<DomainRow>; own: boolean }) {
     spam: true,
     select: !own,
   });
-  const handOff = useLinkHandOff(
-    'backlinks-domains',
-    t.selected.map((r) => ({
+  // A competitor's referring domains were not checked against our links, and the brief says so.
+  const handOff = useLinkHandOff({
+    source: 'backlinks-domains',
+    rows: t.selected.map((r) => ({
       domain: r.domain,
       rank: r.rank,
       spam: r.spam,
       competitors: [bare(run.spec.target)],
     })),
-    [bare(run.spec.target)],
-    run.completedAt || run.createdAt,
-    t.clearSelection,
-    !own,
-  );
+    competitors: [bare(run.spec.target)],
+    at: run.completedAt || run.createdAt,
+    clear: t.clearSelection,
+    enabled: !own,
+    checked: false,
+  });
   const exportRows = () =>
     downloadCsv(
       fileName(run, 'domains'),
@@ -1258,27 +1269,40 @@ function DomainsTable({ run, own }: { run: Run<DomainRow>; own: boolean }) {
 
 /**
  * Hand off to agent for link prospects: the selected sites become one Link building task (created, not started),
- * whose brief lists each site with its authority, spam score and the competitors it links to.
+ * whose brief lists each site with its authority, spam score and the competitors it links to. `own` is the domain the
+ * sites were checked against (a gap's), our first domain otherwise; `checked` says whether they were.
  */
-function useLinkHandOff(
-  source: string,
-  rows: Parameters<typeof linkProspectsDraft>[2],
-  competitors: string[],
-  at: string,
-  clear: () => void,
+function useLinkHandOff({
+  source,
+  rows,
+  competitors,
+  at,
+  clear,
   enabled = true,
-) {
+  own: checkedAgainst,
+  checked,
+}: {
+  source: string;
+  rows: Parameters<typeof linkProspectsDraft>[2];
+  competitors: string[];
+  at: string;
+  clear: () => void;
+  enabled?: boolean;
+  own?: string;
+  checked: boolean;
+}) {
   const { project } = useProject();
   const [handing, setHanding] = useState<TaskDraft>();
   const [handed, setHanded] = useState<HandOffResult>();
-  const own = bare(project?.domains?.[0]) || $t('backlinks.ourSite');
+  const own =
+    checkedAgainst || bare(project?.domains?.[0]) || $t('backlinks.ourSite');
   useHandOffSource(
     source,
     project && enabled
       ? {
           count: rows.length,
           open: () =>
-            setHanding(linkProspectsDraft(own, competitors, rows, at)),
+            setHanding(linkProspectsDraft(own, competitors, rows, at, checked)),
           noun: $t('backlinks.sitesSelected'),
           clear,
         }
@@ -1459,8 +1483,6 @@ type GapRow = {
   firstSeen: string | null;
 };
 type Sites = { own: string[]; competitors: { name: string; domain: string }[] };
-// The most competitors one gap lookup compares with (backlinks-service.ts GAP_COMPETITORS).
-const GAP_COMPETITORS = 3;
 
 /**
  * Link gap: the sites that link to up to three competitors but not to us, each with the competitors it links to.
@@ -1827,18 +1849,21 @@ function GapTable({ run }: { run: Run<GapRow> }) {
     'linksTo',
     { spam: true, select: true },
   );
-  const handOff = useLinkHandOff(
-    'backlinks-gap',
-    t.selected.map((r) => ({
+  // The gap excluded the domain it was looked up for, which the brief names as ours.
+  const handOff = useLinkHandOff({
+    source: 'backlinks-gap',
+    rows: t.selected.map((r) => ({
       domain: r.domain,
       rank: r.rank,
       spam: r.spam,
       competitors: r.competitors,
     })),
-    run.spec.competitors ?? [],
-    run.completedAt || run.createdAt,
-    t.clearSelection,
-  );
+    competitors: run.spec.competitors ?? [],
+    at: run.completedAt || run.createdAt,
+    clear: t.clearSelection,
+    own: run.spec.target,
+    checked: true,
+  });
   const exportRows = () =>
     downloadCsv(
       fileName(run, 'gap'),
