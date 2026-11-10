@@ -89,6 +89,7 @@ export const PROJECT_SNAPSHOTS = new Set([
   'nr-task-sources',
   'packages',
   'rank-tracking',
+  'backlinks-watch',
   'reddit',
   'search-index',
   'signals',

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { VisibilityError } from './research-helpers.js';
 import { projectId, requireAccess } from './policy.js';
@@ -490,6 +491,99 @@ class BacklinksService {
   async saved(id, v) {
     return (await this.d4s.preview(id, 'backlinks', v)).existing;
   }
+  // Monthly check (2026-11-10 user request): our own site's overview and broken pages looked up again once their
+  // saved lookups pass the 30-day reuse time, while the person keeps it switched on — like Keywords › Tracking, the
+  // only paid lookups that run on their own, because someone switched them on. Kept in nrSnapshots
+  // (backlinks-watch:<project>); the daily analysis reads the saved lookups (analysisData) and never asks for one.
+  watchKey(id) {
+    return `backlinks-watch:${id}`;
+  }
+  snapshots() {
+    return this.p.db.getRepository('nrSnapshots');
+  }
+  async watch(id) {
+    const row = await this.snapshots().findOne({
+      filter: { key: this.watchKey(id) },
+    });
+    const saved = row?.get('payload') || {};
+    const target = (await this.sites(id)).own[0] || null;
+    const estimate = (view) =>
+      target ? specification({ view, target }).estimatedUsd : 0;
+    return {
+      enabled: saved.enabled === true,
+      since: saved.since || null,
+      target,
+      verified: Boolean(this.d4s.config(id)?.verifiedAt),
+      monthlyUsd: usd(estimate('overview') + estimate('broken')),
+    };
+  }
+  async setWatch(id, v) {
+    const enabled = v.enabled === true;
+    const repo = this.snapshots(),
+      key = this.watchKey(id);
+    const row = await repo.findOne({ filter: { key } });
+    const payload = {
+      enabled,
+      since: enabled ? new Date().toISOString() : null,
+    };
+    if (row) await repo.update({ filterByTk: row.id, values: { payload } });
+    else await repo.create({ values: { key, payload } });
+    // Switched on: the first check runs now rather than at the next hour.
+    if (enabled)
+      void this.check(id).catch((e) =>
+        this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
+          projectId: String(id),
+          message: e?.message,
+        }),
+      );
+    return this.watch(id);
+  }
+  /** Looks up whatever of our site's overview and broken pages has no saved lookup within the reuse time. */
+  async check(id) {
+    const w = await this.watch(id);
+    if (!w.enabled || !w.target || !w.verified) return { checked: 0 };
+    let checked = 0;
+    for (const view of ['overview', 'broken']) {
+      if (await this.saved(id, { view, target: w.target })) continue;
+      const run = await this.run(id, {
+        view,
+        target: w.target,
+        requestKey: randomUUID().replace(/-/g, ''),
+      });
+      if (!run.reused) checked++;
+    }
+    return { checked };
+  }
+  async tick() {
+    if (this.busy) return;
+    this.busy = true;
+    try {
+      for (const id of await this.p.projectIds()) {
+        try {
+          await this.check(String(id));
+        } catch (e) {
+          // A budget refusal or a provider failure waits for the next hour; it never stops other projects.
+          this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
+            projectId: String(id),
+            message: e?.message,
+          });
+        }
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+  /** What the daily analysis reads: our site's saved overview and broken pages, never a new lookup. */
+  async analysisData(id) {
+    const w = await this.watch(id);
+    if (!w.target) return null;
+    const [overview, broken] = await Promise.all(
+      ['overview', 'broken'].map((view) =>
+        this.saved(id, { view, target: w.target }).catch(() => null),
+      ),
+    );
+    return { target: w.target, enabled: w.enabled, overview, broken };
+  }
   /** This month's DataForSEO spending and budget, for a lookup's cost note. */
   spend(id) {
     return this.d4s.spend(id);
@@ -526,6 +620,8 @@ class BacklinksService {
       sites: wrap((id) => this.sites(id)),
       // Wrapped: a bare null would come back to the client as the whole response (its unwrap falls back on `data ?? payload`).
       saved: wrap(async (id, v) => ({ run: await this.saved(id, v) })),
+      watch: wrap((id) => this.watch(id)),
+      setWatch: wrap((id, v) => this.setWatch(id, v)),
     };
     this.p.app.resourceManager.define({ name: 'nrBacklinks', actions });
     this.p.app.acl.allow('nrBacklinks', Object.keys(actions), 'loggedIn');

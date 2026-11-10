@@ -15,6 +15,9 @@ import BacklinksPage, {
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
+vi.mock('#hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true }),
+}));
 vi.mock('#pages/reach-data', () => ({
   useProject: () => ({ project: { id: 1, domains: ['acme.example'] } }),
 }));
@@ -513,4 +516,44 @@ it('a broken-pages brief lists each address with its links and says how to win t
   expect(draft.title).toContain('/blog/old');
   expect(draft.brief).toContain('状态码 404');
   expect(draft.brief).toContain('301');
+});
+
+it('the monthly check of our site is off until someone switches it on, with its cost shown', async () => {
+  let watch = {
+    enabled: false,
+    since: null as string | null,
+    target: 'acme.example',
+    verified: true,
+    monthlyUsd: 0.08,
+  };
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { enabled?: boolean } },
+    ) => {
+      if (resource === 'nrBacklinks' && act === 'watch') return watch;
+      if (resource === 'nrBacklinks' && act === 'setWatch') {
+        watch = {
+          ...watch,
+          enabled: Boolean(options.body.enabled),
+          since: '2026-11-10T00:00:00Z',
+        };
+        return watch;
+      }
+      return base(resource, act, options as never);
+    },
+  );
+  open('/backlinks');
+  const toggle = await screen.findByRole('switch', {
+    name: /每月自动检查 acme\.example 的外链/,
+  });
+  expect(screen.getByText(/每月约 \$0\.08/)).toBeTruthy();
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  await userEvent.click(toggle);
+  const sets = action.mock.calls.filter(([, act]) => act === 'setWatch');
+  expect(sets).toHaveLength(1);
+  expect(sets[0][2].body).toMatchObject({ enabled: true });
+  expect(await screen.findByText(/起开启/)).toBeTruthy();
 });

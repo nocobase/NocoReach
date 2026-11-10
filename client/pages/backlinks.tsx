@@ -56,6 +56,7 @@ import { InfoTip } from '#components/reach/info-tip';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { useHandOffSource } from '#components/reach/hand-off-slot';
 import { usePageTab } from '#hooks/use-page-tab';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { HandOffBar } from './hand-off-bar';
 import { DraftHandOffDialog, type TaskDraft } from './keyword-hand-off';
 import { HandOffNotice, type HandOffResult } from './strategy/hand-off';
@@ -494,6 +495,7 @@ export function Backlinks() {
               {error}
             </p>
           ) : null}
+          <WatchSwitch />
         </Card>
       )}
       {shown ? (
@@ -2186,5 +2188,72 @@ function BrokenTable({ run, own }: { run: Run<BrokenRow>; own: boolean }) {
         </>
       }
     />
+  );
+}
+
+type Watch = {
+  enabled: boolean;
+  since: string | null;
+  target: string | null;
+  verified: boolean;
+  monthlyUsd: number;
+};
+/**
+ * The monthly check of our own site: while on, our overview and broken pages are looked up again once their saved
+ * lookups pass 30 days, and the daily analysis reads them (lost referring domains, broken pages still linked). Off by
+ * default: it is a paid lookup that runs on its own, so someone has to switch it on, as with tracked keywords.
+ */
+function WatchSwitch() {
+  const { project } = useProject();
+  const { can } = useBusinessAccess('nrBacklinks.setWatch', project?.id);
+  const [watch, setWatch] = useState<Watch>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useMessageState('');
+  useEffect(() => {
+    void call<Watch>('watch')
+      .then(setWatch)
+      .catch(() => undefined);
+  }, [project?.id]);
+  if (!watch?.target || !watch.verified) return null;
+  const toggle = async (enabled: boolean) => {
+    setBusy(true);
+    setError('');
+    try {
+      setWatch(await call<Watch>('setWatch', { enabled }));
+    } catch (e) {
+      setError(() =>
+        e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      className='mt-3 flex flex-col gap-1 border-t pt-3 text-sm'
+      data-backlinks-watch={watch.enabled ? 'on' : 'off'}
+    >
+      <label className='flex items-center gap-2'>
+        <Switch
+          size='sm'
+          checked={watch.enabled}
+          disabled={busy || !can}
+          onCheckedChange={(v) => void toggle(Boolean(v))}
+        />
+        {$t('backlinks.watchLabel', { 0: watch.target })}
+        <InfoTip label={$t('common.info')}>{$t('backlinks.watchHelp')}</InfoTip>
+      </label>
+      <p className='text-xs text-muted-foreground'>
+        {$t('backlinks.watchCost', { 0: watch.monthlyUsd.toFixed(2) })}
+        {watch.enabled && watch.since
+          ? ` · ${$t('backlinks.watchSince', { 0: fmtTime(watch.since) })}`
+          : ''}
+      </p>
+      {error ? (
+        <p role='alert' className='nr-error'>
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

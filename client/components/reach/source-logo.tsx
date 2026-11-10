@@ -4,6 +4,7 @@ import {
   CalendarClock,
   FolderGit2,
   Globe,
+  Link2,
   Newspaper,
   Plug,
   Search,
@@ -50,6 +51,7 @@ const ICON: Record<string, LucideIcon> = {
   'ai-search': Sparkles,
   competitors: Binoculars,
   rank: TrendingUp,
+  backlinks: Link2,
   'daily-analysis': CalendarClock,
 };
 // `xs` is the bare mark, for a source named inside a button.

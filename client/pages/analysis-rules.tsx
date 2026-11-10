@@ -59,7 +59,7 @@ function settingsOf(rules: Rule[], change: Rule): Settings['rules'] {
 }
 // Sources by the area the rules summary names; the rule list is tabbed by these areas.
 const COVERAGE_AREAS = [
-  ['search', ['gsc', 'rank', 'trends', 'ai-search']],
+  ['search', ['gsc', 'rank', 'backlinks', 'trends', 'ai-search']],
   ['traffic', ['ga4', 'github-traffic']],
   ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
   ['community', ['discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x']],
@@ -86,6 +86,7 @@ const SOURCE_ORDER = [
   'x',
   'discord',
   'rank',
+  'backlinks',
   'trends',
   'competitors',
   'ai-search',
