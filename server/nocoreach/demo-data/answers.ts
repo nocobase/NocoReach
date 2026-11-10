@@ -77,10 +77,24 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       return { mappings: [] };
     case 'daily-report': {
       const signals = list(object(object(input.evidence).signals).items);
+      // Opportunities are growth points (2026-11-10): only changes that carry a growth become one, and the reason
+      // names its size from the figures the server computed.
       const actionable = signals
-        .filter((s) => s.actionable === true && typeof s.key === 'string')
+        .filter(
+          (s) =>
+            s.actionable === true &&
+            typeof s.key === 'string' &&
+            Boolean(s.growth),
+        )
         .slice(0, 3);
       const cited = new Set(actionable.map((s) => s.key));
+      const figures = (s: Value) => {
+        const raw = object(s.growth).figures;
+        return (Array.isArray(raw) ? (raw as unknown[]) : [])
+          .map((f) => str(f, 120))
+          .filter(Boolean)
+          .slice(0, 2);
+      };
       return {
         observations: [
           t(
@@ -90,12 +104,12 @@ function business(operation: string, input: Value, en: boolean): Value | null {
         ],
         insights: actionable.map((s) => ({
           title: t(
-            `跟进：${str(s.title, 120)}`,
-            `Follow up: ${str(s.title, 120)}`,
+            `抓住增长点：${str(s.title, 120)}`,
+            `Growth point: ${str(s.title, 120)}`,
           ),
           reason: t(
-            '信号强度较高，且与当前内容目标相关。',
-            'A strong signal related to the current content goal.',
+            `${figures(s).join('；')}。`,
+            'The growth potential is listed with the opportunity.',
           ),
           observation: str(s.title, 300),
           meaning: t(

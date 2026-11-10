@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { demoContent } from '../../server/nocoreach/demo-data/content';
+import {
+  acmeGrowthBriefs,
+  crmGrowthBriefs,
+} from '../../server/nocoreach/demo-data/growth-briefs';
+import { GROWTH_KINDS } from '../../shared/growth';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
 import { World } from '../../server/nocoreach/demo-data/world/world';
 import {
@@ -79,10 +84,34 @@ describe.each(['zh-CN', 'en-US'])(
           }
         }
         expect(documents.length).toBeGreaterThanOrEqual(8);
-        expect(opportunities.briefs).toHaveLength(which === 'main' ? 16 : 12);
+        // Two handed off and two ignored; the pending ones are growth points, one of each kind for Acme.
+        expect(opportunities.briefs).toHaveLength(4);
         expect(opportunities.watches).toHaveLength(6);
         for (const brief of opportunities.briefs)
           expect(world.page(brief[6])).toBeDefined();
+        const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
+          new Date(now),
+        );
+        expect(growth).toHaveLength(which === 'main' ? 12 : 8);
+        const lang = language === 'en-US' ? 'en' : 'zh';
+        const kinds = growth.map((brief) => brief.growth(lang).kind);
+        expect(new Set(kinds).size).toBe(kinds.length);
+        if (which === 'main')
+          expect(kinds.sort()).toEqual(Object.keys(GROWTH_KINDS).sort());
+        for (const brief of growth) {
+          const g = brief.growth(lang);
+          expect(g.figures.length).toBeGreaterThanOrEqual(1);
+          expect(g.figures.length).toBeLessThanOrEqual(4);
+          expect(g.evidence!.rows.length).toBeLessThanOrEqual(10);
+          expect(g.evidence!.total).toBeGreaterThanOrEqual(
+            g.evidence!.rows.length,
+          );
+          // The list's line states the size of the growth.
+          expect(brief.reason[lang]).toMatch(/\d/u);
+        }
+        expect(JSON.stringify(growth.map((b) => b.growth(lang)))).not.toMatch(
+          /nocobase|nococrm/i,
+        );
         expect(world.queries.length).toBeGreaterThanOrEqual(50);
         expect(world.research.length).toBeGreaterThanOrEqual(40);
         for (const query of world.queries)
@@ -125,7 +154,9 @@ describe.each(['zh-CN', 'en-US'])(
       expect(imports.filter((topic) => topic.posts.length === 1)).toHaveLength(
         3,
       );
-      expect(content.opportunities.briefs[0][6]).toBe('/docs/import-excel');
+      expect(acmeGrowthBriefs(new Date(now))[0].path).toBe(
+        '/docs/import-excel',
+      );
       const query = world.queries.find(
         (q) =>
           q.q ===

@@ -9,11 +9,17 @@ import type {
   StrategyState,
   WatchOutcome,
 } from '../../../shared/strategy-model.js';
+import type { Growth } from '../../../shared/growth.js';
 import { totals, type Partition } from '../execution/effect.js';
 import { number as numberOpportunities } from '../opportunity-board.js';
 import { applyVerdicts, endMissing, ignore } from '../watch.js';
 import type { DemoContent } from './content.js';
 import type { DemoTaskStory } from './editorial.js';
+import {
+  acmeGrowthBriefs,
+  crmGrowthBriefs,
+  GROWTH_PRIORITY,
+} from './growth-briefs.js';
 
 const DAY = 86_400_000;
 const applyWatchVerdicts = applyVerdicts as (
@@ -80,9 +86,43 @@ export function opportunityHistory(
     watch: {},
     insightHistory: [],
   };
-  const cards = copy.briefs.map(
-    (
-      [
+  // Pending opportunities are growth points (2026-11-10), each with its growth; the handled ones keep their briefs.
+  const lang = en ? 'en' : 'zh';
+  const entries: {
+    key: string;
+    title: string;
+    observation: string;
+    meaning: string;
+    suggestion: string;
+    objective: string;
+    path: string;
+    source: string;
+    priority: Opportunity['priority'];
+    priorityReason: string;
+    reason?: string;
+    effort?: string;
+    growth?: Growth;
+  }[] = [
+    ...(which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
+      context.clock.now,
+    ).map((brief) => ({
+      key: brief.key,
+      title: brief.title[lang],
+      observation: brief.reason[lang],
+      meaning: brief.meaning[lang],
+      suggestion: brief.suggestion[lang],
+      objective: brief.objective[lang],
+      path: brief.path,
+      source: brief.source,
+      priority: brief.priority,
+      priorityReason:
+        GROWTH_PRIORITY[brief.priority === 'high' ? 'high' : 'other'][lang],
+      reason: brief.reason[lang],
+      effort: brief.effort,
+      growth: brief.growth(lang),
+    })),
+    ...copy.briefs.map(
+      ([
         key,
         title,
         observation,
@@ -92,43 +132,57 @@ export function opportunityHistory(
         path,
         source,
         priority,
-      ],
-      i,
-    ): Opportunity => {
-      const task = linkedKeys.includes(key) ? linked(key) : undefined;
-      const discovered = task
-        ? age(task.createdAt) + 3
-        : i >= copy.briefs.length - 2
-          ? 18 + (i % 2) * 9
-          : [2, 5, 1, 8, 3, 6, 10, 4, 12, 7, 9, 11][i % 12];
-      return {
-        id: `editorial-opportunity-${key}`,
+      ]) => ({
+        key,
         title,
         observation,
         meaning,
         suggestion,
         objective,
-        source:
-          source === 'gsc' ? 'search' : source === 'site' ? 'website' : 'mixed',
-        evidenceText: `${observation}\n${copy.notice}`,
-        limitation: `${copy.notice} ${copy.limitation}`,
-        signalIds: [`editorial-signal-${key}`],
-        sources: [source],
+        path,
+        source,
         priority,
         priorityReason:
           priority === 'high' ? copy.priorityHigh : copy.priorityOther,
-        confidence: 'supported',
-        category: 'optimize',
-        lifecycle: 'persistent',
-        change: discovered <= 2 ? 'new' : 'continuing',
-        audience: copy.audience,
-        effort: 'medium',
-        target: origin + path,
-        firstSeenAt: at(discovered),
-        updatedAt: at(0),
-      };
-    },
-  );
+      }),
+    ),
+  ];
+  const cards = entries.map((entry, i): Opportunity => {
+    const { key, observation, path, source } = entry;
+    const task = linkedKeys.includes(key) ? linked(key) : undefined;
+    const discovered = task
+      ? age(task.createdAt) + 3
+      : i >= entries.length - 2
+        ? 18 + (i % 2) * 9
+        : [2, 5, 1, 8, 3, 6, 10, 4, 12, 7, 9, 11][i % 12];
+    return {
+      id: `editorial-opportunity-${key}`,
+      title: entry.title,
+      observation,
+      meaning: entry.meaning,
+      suggestion: entry.suggestion,
+      objective: entry.objective,
+      ...(entry.reason ? { reason: entry.reason } : {}),
+      source:
+        source === 'gsc' ? 'search' : source === 'site' ? 'website' : 'mixed',
+      evidenceText: `${observation}\n${copy.notice}`,
+      limitation: `${copy.notice} ${copy.limitation}`,
+      signalIds: [`editorial-signal-${key}`],
+      sources: [source],
+      priority: entry.priority,
+      priorityReason: entry.priorityReason,
+      confidence: 'supported',
+      category: 'optimize',
+      lifecycle: 'persistent',
+      change: discovered <= 2 ? 'new' : 'continuing',
+      audience: copy.audience,
+      effort: entry.effort ?? 'medium',
+      target: origin + path,
+      firstSeenAt: at(discovered),
+      updatedAt: at(0),
+      ...(entry.growth ? { growth: entry.growth } : {}),
+    };
+  });
   const signalFor = (card: Opportunity): Signal => ({
     key: card.signalIds![0],
     type: 'editorial',
@@ -140,6 +194,7 @@ export function opportunityHistory(
     actionable: true,
     action: 'optimize',
     isNew: age(card.firstSeenAt!) <= 2,
+    ...(card.growth ? { growth: card.growth } : {}),
   });
   const handoff = (card: Opportunity, task: OpportunityTask) => {
     const snapshot = evidence(age(task.createdAt), [signalFor(card)]);

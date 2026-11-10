@@ -29,7 +29,9 @@ const move=c=>`${c>=0?'↑':'↓'} ${Math.abs(Math.round(c*100))}%`;
 // The analysis rules Current situation lists, by the area and group they belong to and the page that has their data.
 // Each value counts what the rule found (pages, competitors, AI platforms, posts...), so the labels name that unit;
 // `playbook` is how its ticked items are handed to the Agent (2026-10-24 user feedback: every line that lists items
-// can hand them off).
+// can hand them off). Since only growth points become opportunities (2026-11-10), every change that fixes a problem is
+// listed here: `only` keeps a rule's changes another line does not list already (the critical audit issues have their
+// own line), and `rows` lists what a change stands for instead of the change (the digest's topics).
 const RULE_LINES={
  'gsc-click-drop':{area:'search',group:'worse',to:'/seo-opportunities',playbook:'optimize-page'},
  'competitor-release':{area:'search',group:'worse',to:'/research/domain',playbook:'competitor-compare'},
@@ -47,6 +49,9 @@ const RULE_LINES={
  'community-theme':{area:'community',group:'chance',to:'/data/community',playbook:'content-outline'},
  'github-referrer':{area:'site',group:'chance',to:'/data/github',playbook:'change-research'},
  'github-release':{area:'site',group:'chance',to:'/data/github',playbook:'release-notes'},
+ 'github-star-spike':{area:'site',group:'chance',to:'/data/github',playbook:'change-research'},
+ 'community-digest':{area:'community',group:'handle',to:'/data/community',playbook:'content-outline',rows:s=>(s.topics||[]).map(t=>({key:t.url||t.title,title:t.title,meta:systemMessageText('insightSummary.topicActivity',{0:n(t.replies),1:n(t.views)}),url:t.url||null}))},
+ audit:{area:'site',group:'handle',to:'/audit',playbook:'optimize-page',only:s=>!['audit-broken','audit-noindex'].includes(s.key)},
 };
 const SOURCE_NAME={gsc:systemMessageText('common.searchPerformance'),ga4:'GA4',site:systemMessageText('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:systemMessageText('common.forum'),hackernews:'Hacker News',x:'X',trends:systemMessageText('dataTrends.trends'),competitors:systemMessageText('common.competitor'),'ai-search':systemMessageText('common.aiSearch')};
 class InsightSummary{
@@ -95,10 +100,10 @@ class InsightSummary{
   const snapshot=await this.safe(()=>this.p.analysisRules?.snapshot?.(id)),config=snapshot?.config||await this.safe(()=>this.p.analysisRules?.config(id)),{inputs}=await engine.inputs(id);
   if(snapshot)inputs.ruleCatalog=snapshot.catalog;
   const catalog=snapshot?.catalog||RULES,by={},areas={};
-  for(const s of computeAll(inputs,config).ranked){const rule=ruleOf(s.key,catalog);if(RULE_LINES[rule])(by[rule]||=[]).push(s);}
-  for(const [rule,list] of Object.entries(by)){const {area,group,to,playbook}=RULE_LINES[rule],meta=catalog.find(r=>r.id===rule)||RULES.find(r=>r.id===rule),label=meta?.label||rule;
-   (areas[area]||=[]).push({key:`rule-${rule}`,group,text:label,values:[n(list.reduce((t,s)=>t+(s.count||1),0))],source:SOURCE_NAME[meta?.source]||meta?.source||'',detail:meta?.description||'',to,handOff:{playbookId:playbook,title:`${label}：{0}`},
-    ...rows(list,s=>({key:s.key,title:s.title,meta:s.facts?.[0],url:s.url||null,...(s.key.startsWith('audit-')&&Array.isArray(s.evidence)?{pages:s.evidence.slice(0,30)}:{}),tag:s.chip}))});}
+  for(const s of computeAll(inputs,config).ranked){const rule=ruleOf(s.key,catalog),line=RULE_LINES[rule];if(line&&(!line.only||line.only(s)))(by[rule]||=[]).push(s);}
+  for(const [rule,list] of Object.entries(by)){const {area,group,to,playbook,rows:expand}=RULE_LINES[rule],meta=catalog.find(r=>r.id===rule)||RULES.find(r=>r.id===rule),label=meta?.label||rule,own=expand?list.flatMap(expand):null;
+   (areas[area]||=[]).push({key:`rule-${rule}`,group,text:label,values:[n(own?own.length:list.reduce((t,s)=>t+(s.count||1),0))],source:SOURCE_NAME[meta?.source]||meta?.source||'',detail:meta?.description||'',to,handOff:{playbookId:playbook,title:`${label}：{0}`},
+    ...(own?rows(own,x=>x):rows(list,s=>({key:s.key,title:s.title,meta:s.facts?.[0],url:s.url||null,...(s.key.startsWith('audit-')&&Array.isArray(s.evidence)?{pages:s.evidence.slice(0,30)}:{}),tag:s.chip})))});}
   return areas;}
  // Volumes the metric cards have no room for (they show five, and search, visits, key events and new stars come first):
  // Hacker News mentions and new Reddit posts in the last 7 days and downloads in the last 28, each against the period

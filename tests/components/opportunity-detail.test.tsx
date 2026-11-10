@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import OpportunityLibrary from '../../client/pages/strategy/library';
+import type { Growth } from '../../shared/growth';
 import type {
   Opportunity,
   Signal,
@@ -624,4 +625,73 @@ it('shows the shared skeleton while the opportunities load', () => {
       .getByRole('status', { name: 'strategy.loadingOpportunities' })
       .querySelectorAll('[data-slot="skeleton"]'),
   ).toHaveLength(6);
+});
+
+// A growth opportunity (2026-11-10): its area and kind as tags, Growth potential where What happened was, and the rows
+// behind it with "View all" to the page listing them. The figures are the server's, never the model's.
+it('reads a growth opportunity as its tags, growth potential and evidence', async () => {
+  const growth: Growth = {
+    kind: 'demand-gap',
+    area: 'keywords',
+    figures: [
+      {
+        label: { key: 'growth.figure.monthlySearchesTotal' },
+        value: 8900,
+      },
+      {
+        label: { key: 'growth.figure.extraVisits' },
+        value: 640,
+        estimate: true,
+      },
+    ],
+    evidence: {
+      columns: [
+        { key: 'keyword', label: 'growth.column.keyword', format: 'text' },
+        { key: 'volume', label: 'growth.column.volume', format: 'count' },
+      ],
+      rows: [
+        { keyword: 'gantt chart', volume: 5400 },
+        { keyword: 'gantt chart template', volume: 3500 },
+      ],
+      total: 14,
+      unit: 'growth.unit.keywords',
+      link: '/keywords?tab=suggest',
+    },
+  };
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [{ ...card, growth }],
+    },
+  };
+  show();
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(
+    brief.querySelector('[data-growth-area="keywords"]')!.textContent,
+  ).toBe('common.keywords');
+  expect(brief.querySelector('[data-growth-kind]')!.textContent).toBe(
+    'growth.kind.demandGap',
+  );
+  const potential = within(brief).getByRole('region', { name: 'growth.title' });
+  expect(potential.textContent).toContain('growth.figure.monthlySearchesTotal');
+  expect(potential.textContent).toContain('8,900');
+  expect(potential.textContent).toContain('640');
+  const evidence = within(brief).getByRole('region', {
+    name: 'growth.evidence(growth.unit.keywords(14))',
+  });
+  expect(within(evidence).getAllByRole('row')).toHaveLength(3);
+  expect(evidence.textContent).toContain('gantt chart template');
+  expect(
+    within(evidence)
+      .getByRole('link', { name: /growth\.viewAll/ })
+      .getAttribute('href'),
+  ).toBe('/keywords?tab=suggest');
+  // Growth potential takes the place of What happened; the rest of the detail is as before.
+  expect(brief.textContent).not.toContain('strategy.briefWhatHappened');
+  expect(brief.textContent).not.toContain(card.observation);
+  expect(brief.textContent).toContain('strategy.briefWhyWorthDoing');
+  // The list shows the same two tags in place of the signal chip and sources.
+  const listed = screen.getByRole('button', { current: true });
+  expect(listed.querySelector('[data-growth-kind="demand-gap"]')).toBeTruthy();
 });

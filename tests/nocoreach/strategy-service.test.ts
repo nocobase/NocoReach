@@ -150,12 +150,15 @@ test('memory: the AI reads the handbook sections by title; older projects are re
  assert.throws(()=>memoryInput(Object.fromEntries(['brand','product','audience'].map(k=>[k,'x'.repeat(3000)]))),/一共 9000 字/);assert.throws(()=>memoryInput({voice:42}),/格式不对/);
 });
 
-test('signal-based analysis keeps only suggestions that cite a current signal and stores observations',async()=>{
+test('signal-based analysis keeps only suggestions that cite a current growth change, with its growth, and stores observations',async()=>{
  const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[]};
- service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'gsc-near-first:/docs/a',source:'gsc'}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const growth={kind:'near-first',area:'keywords',figures:[{label:{key:'growth.figure.topExtraClicks',params:{0:3}},value:210,estimate:true}]};
+ service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'gsc-click-drop:/docs/b',source:'gsc',actionable:false},{key:'gsc-near-first:/docs/a',source:'gsc',actionable:true,growth}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  const base={title:'T',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',sources:['gsc']};
- await service.saveInsights(1,{insights:[{...base,signalIds:['gsc-near-first:/docs/a','invented']},{...base,title:'Made up',objective:'other',signalIds:['invented']}],observations:['搜索曝光上升 18%',' ','x'.repeat(400),'a','b','c']});
- assert.equal(state.insights.items.length,1);assert.deepEqual(state.insights.items[0].signalIds,['gsc-near-first:/docs/a']);
+ // The model's own growth is never kept; an opportunity takes the growth of the first growth change it cites.
+ await service.saveInsights(1,{insights:[{...base,growth:{kind:'demand-gap',figures:[{value:1e9}]},signalIds:['gsc-click-drop:/docs/b','gsc-near-first:/docs/a','invented']},{...base,title:'Made up',objective:'other',signalIds:['invented']},{...base,title:'A fix, not growth',objective:'fix',signalIds:['gsc-click-drop:/docs/b']}],observations:['搜索曝光上升 18%',' ','x'.repeat(400),'a','b','c']});
+ assert.equal(state.insights.items.length,1);assert.deepEqual(state.insights.items[0].signalIds,['gsc-click-drop:/docs/b','gsc-near-first:/docs/a']);
+ assert.deepEqual(state.insights.items[0].growth,growth);
  assert.equal(state.insights.observations.length,4);assert.equal(state.insights.observations[1].length,300);
 });
 test('opportunity decisions: ignore or restore only; ignored ones are not brought back by later analyses',async()=>{
@@ -267,21 +270,23 @@ test('each new task gets the next short number of its project, whoever creates i
 
 test('每条变化的结论: do / watch / skip with a reason; a change an opportunity cites is do; information cannot be do; judged later one by one',async()=>{
  const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={};
- const signals=[{key:'audit-dupTitle',source:'site',actionable:true},{key:'gsc-up',source:'gsc',actionable:true},{key:'gh-stars',source:'github',actionable:false},{key:'later',source:'gsc',actionable:true}];
+ const growth={kind:'demand-gap',area:'keywords',figures:[{label:{key:'growth.figure.monthlySearchesTotal'},value:8900}]};
+ const signals=[{key:'keyword-demand:g1',source:'keywords',actionable:true,growth},{key:'gsc-up',source:'gsc',actionable:true,growth},{key:'gh-stars',source:'github',actionable:false},{key:'later',source:'gsc',actionable:true,growth}];
  service.context=async()=>({evidence:{signals:{items:signals}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
- const card={title:'Fix titles',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'website',sources:['site'],signalIds:['audit-dupTitle']};
- await service.saveInsights(1,{insights:[card],signalReviews:[{key:'audit-dupTitle',verdict:'skip',reason:'x'},{key:'gsc-up',verdict:'watch',reason:'刚出现，先看两周'},{key:'gh-stars',verdict:'do',reason:'好消息'},{key:'nope',verdict:'do'},{key:'later',verdict:'maybe'}]});
- assert.deepEqual(state.insights.signalReviews,{'audit-dupTitle':{verdict:'do',reason:''},'gsc-up':{verdict:'watch',reason:'刚出现，先看两周'},'gh-stars':{verdict:'watch',reason:'好消息'}});
+ const card={title:'Write a guide',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'mixed',sources:['keywords'],signalIds:['keyword-demand:g1']};
+ await service.saveInsights(1,{insights:[card],signalReviews:[{key:'keyword-demand:g1',verdict:'skip',reason:'x'},{key:'gsc-up',verdict:'watch',reason:'刚出现，先看两周'},{key:'gh-stars',verdict:'do',reason:'好消息'},{key:'nope',verdict:'do'},{key:'later',verdict:'maybe'}]});
+ assert.deepEqual(state.insights.signalReviews,{'keyword-demand:g1':{verdict:'do',reason:''},'gsc-up':{verdict:'watch',reason:'刚出现，先看两周'},'gh-stars':{verdict:'watch',reason:'好消息'}});
  await service.reviewSignal(1,{signalKey:'later',verdict:'skip',reason:'影响很小'});assert.deepEqual(state.insights.signalReviews.later,{verdict:'skip',reason:'影响很小'});
  await assert.rejects(service.reviewSignal(1,{signalKey:'gone',verdict:'do'}),/不在最近一次分析/);
 });
 
 test('a change judged worth doing gets an opportunity, or is skipped when a task already covers it',async()=>{
  const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[{id:'p',signalKey:'handed',taskId:7,taskNo:7}]};
- const signals=[{key:'fresh',source:'gsc',title:'/en/blog/x ranks 19.8',facts:['5,790 impressions, 0 clicks'],url:'https://www.example.com/en/blog/x',actionable:true},{key:'handed',source:'gsc',title:'h',facts:[],actionable:true}];
+ const growth={kind:'near-first',area:'keywords',figures:[{label:{key:'growth.figure.impressions28'},value:5790}]};
+ const signals=[{key:'fresh',source:'gsc',title:'/en/blog/x ranks 19.8',facts:['5,790 impressions, 0 clicks'],url:'https://www.example.com/en/blog/x',actionable:true,growth},{key:'handed',source:'gsc',title:'h',facts:[],actionable:true,growth}];
  service.context=async()=>({evidence:{signals:{items:signals}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  await service.saveInsights(1,{insights:[],locale:'en-US',signalReviews:[{key:'fresh',verdict:'do',reason:'Rewrite the title'},{key:'handed',verdict:'do',reason:'r'}]});
- assert.deepEqual(state.insights.items.map(c=>[c.title,c.signalIds,c.suggestion]),[['/en/blog/x ranks 19.8',['fresh'],'Rewrite the title']]);
+ assert.deepEqual(state.insights.items.map(c=>[c.title,c.signalIds,c.suggestion]),[['/en/blog/x ranks 19.8',['fresh'],'Rewrite the title']]);assert.deepEqual(state.insights.items[0].growth,growth);
  assert.deepEqual(state.insights.signalReviews.fresh,{verdict:'do',reason:'Rewrite the title'});
  assert.deepEqual(state.insights.signalReviews.handed,{verdict:'skip',reason:'Task T-7 is already on it'});
 });

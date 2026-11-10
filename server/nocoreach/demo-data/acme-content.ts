@@ -2199,7 +2199,9 @@ export function acmeOpportunities(
 ): DemoContent['opportunities'] {
   const lang = language === 'en-US' ? 'en' : 'zh';
   const copy = (value: L) => value[lang];
-  const selected = [0, 1, 2, 3, 4, 14, 16, 17, 20, 21, 22, 26, 5, 15, 24, 25];
+  // The handled opportunities: two handed off (dependencies, handover) and two ignored. The pending ones are growth
+  // points (growth-briefs.ts).
+  const selected = [5, 15, 24, 25];
   return {
     notice: copy(
       t(
@@ -2234,15 +2236,15 @@ export function acmeOpportunities(
     observations: [
       copy(
         t(
-          '本周优先解决 Excel 导入、首页搜索摘要与客户协作说明；负荷页继续积累样本。',
-          'Prioritize Excel imports, homepage snippets and client collaboration this week; collect more workload-page evidence.',
+          '本周增长空间最大的是甘特图这组关键词和 Excel 导入指南；AI 回答协作工具问题时还很少提到 Acme。负荷页继续积累样本。',
+          'The largest growth this week is in the Gantt chart keywords and the Excel import guide; AI answers on collaboration tools still rarely name Acme. The workload page keeps gathering evidence.',
         ),
       ),
     ],
     doReason: copy(
       t(
-        '样例搜索或社区反馈指向明确的协作问题。',
-        'Sample search or community evidence identifies a concrete collaboration issue.',
+        '增长空间明确，和产品相关，投入可控。',
+        'Clear growth potential, relevant to the product, with manageable effort.',
       ),
     ),
     skipReason: copy(
@@ -2261,8 +2263,8 @@ export function acmeOpportunities(
         copy(s.comments[1][1]),
         copy(ACME_DISCUSSIONS[index].title),
         s.path,
-        ['discourse', 'gsc', 'ga4', 'keywords'][order % 4],
-        order < 4 ? 'high' : 'medium',
+        ['discourse', 'gsc', 'ga4', 'keywords'][order],
+        'medium',
       ];
     }),
     watches: [

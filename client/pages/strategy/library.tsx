@@ -30,6 +30,8 @@ import {placesOf,severalTag,standingOf,type HandOffDone} from './places-model';
 import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
+import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
+import {growthOf} from '../../../shared/growth.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
@@ -44,7 +46,8 @@ type Item=Row&{state:OpportunityState;reason?:string;task?:TaskStanding;/** Wher
 const destOf=(r:Item):Dest=>r.state==='task'?(!r.task||r.task==='todo'?'task':r.task):r.state==='archived'?(r.reason==='ignored'?'ignored':'expired'):'pending';
 /** A handed-off opportunity's tag text: where its task stands, with its number when known. */
 const taskLine=(r:Item)=>`${TASK_TAG[r.task??'todo'][1]()}${r.taskNo?` · ${taskNo(r.taskNo)}`:''}`;
-// The coloured fact of an opportunity: its strongest cited signal's tag (as on 洞察).
+// The coloured fact of an opportunity: its strongest cited signal's tag (as on Insights). A growth opportunity says instead
+// where it comes from and what kind it is (2026-11-10); an older one keeps its fact and sources.
 const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
 const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">{oppNo(row.card)}</span>:null;
 // 机会 (SPEC §5): 待处理 — the undecided ones, list left and a read-only detail right (2026-10-21); 观察中 — the changes the AI advised watching
@@ -94,7 +97,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
   setNotice({ok:true,text:()=>$t('opportunityTasks.created',{0:r.taskIds.length})});if(project)void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else go({item:r.card.id});}
  const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
- return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.thingsWorthDoingWhatChanged')}/>
+ return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
   <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length-pending.length+settled.length}`:''}</button>)}</nav>
@@ -103,11 +106,11 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
   :!pending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
   :<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
    <div className="flex flex-col gap-2">
-    {pending.map(r=>{const c=leadChip(r);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
+    {pending.map(r=>{const c=leadChip(r),g=growthOf(r.card.growth);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
      className="flex flex-col gap-1.5 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
      <span className="line-clamp-2 text-sm font-medium"><No row={r}/>{r.card.no?' ':''}{r.card.title}</span>
      <span className="line-clamp-2 text-xs text-muted-foreground">{reasonLine(r)}</span>
-     <span className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(r).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{r.card.change==='new'&&<Tag tone="blue">{$t('strategy.new')}</Tag>}</span>
+     <span className="flex flex-wrap items-center gap-1">{g?<GrowthTags growth={g}/>:<>{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(r).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</>}{r.card.change==='new'&&<Tag tone="blue">{$t('strategy.new')}</Tag>}</span>
     </button>;})}
    </div>
    {selected&&detail(selected)}
@@ -238,25 +241,29 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
 // with which 做法 is settled on the task after 交给 Agent; the list stays on the left so every opportunity is in sight):
 // what happened, why it is worth doing, what to do and where, with the AI's priority, effort and confidence as tags and
 // its limits behind ⓘ. A pending one is handed off or ignored, a handed-off one opens its task, an archived one is restored.
+// A growth opportunity (2026-11-10) shows its growth potential where what happened was, and under why it is worth doing
+// the rows the growth rests on.
 const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.priorityHigh')],medium:['amber',()=>$t('strategy.priorityMedium')],low:['grey',()=>$t('strategy.priorityLow')]};
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
 function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
- const card=row.card,c=leadChip(row),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
+ const card=row.card,c=leadChip(row),growth=growthOf(card.growth),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
  const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
  const priority=PRIORITY[row.priority],effort=EFFORT[card.effort||''],confidence=CONFIDENCE[card.confidence||''];
- const happened=card.observation||card.reason||card.evidenceText;
+ const happened=growth?'':card.observation||card.reason||card.evidenceText;
  return <article data-opportunity-id={card.id} aria-label={card.title} className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
   <div className="flex flex-col gap-1.5">
    {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
-   <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
+   <div className="flex flex-wrap items-center gap-1">{growth?<GrowthTags growth={growth}/>:<>{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</>}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
    <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?several?$t('strategy.handedOffAgent'):`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
   </div>
+  {growth&&<GrowthRow growth={growth}/>}
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
+  {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
   {card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
   {several&&<OpportunityTasks row={row} tasks={tasks}/>}

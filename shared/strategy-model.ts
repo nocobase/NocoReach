@@ -1,5 +1,6 @@
 import type { TaskPart } from './opportunity-parts.js';
 import type { ResultSource } from './result-source.js';
+import type { Growth } from './growth.js';
 export type GoalFields = {
   intent: string;
   audience: string;
@@ -61,6 +62,8 @@ export type Signal = {
   action: string | null;
   isNew?: boolean;
   topics?: { title: string; url: string | null }[];
+  /** A growth point's size and the rows behind it (shared/growth.ts); only growth points are actionable. */
+  growth?: Growth;
 };
 export type Evidence = {
   signals?: {
@@ -113,6 +116,8 @@ export type Opportunity = {
   no?: number;
   reason?: string;
   signalIds?: string[];
+  /** The growth of the first growth point it cites, as the server computed it. */
+  growth?: Growth;
   lifecycle?: string;
   reviewAt?: string;
   category?: string;

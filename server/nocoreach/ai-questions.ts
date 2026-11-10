@@ -39,6 +39,16 @@ const SUGGEST=`你在帮一个营销团队找用户在 ChatGPT、Google AI 概�
 const words=s=>String(s||'').toLowerCase();
 const mentions=(text,brands,name)=>{const n=words(name).trim();if(n.length<3)return false;const re=new RegExp(`(^|[^a-z0-9])${n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z0-9]|$)`);return re.test(words(text))||brands.some(b=>words(b)===n||words(b).startsWith(n+' '));};
 const isSite=(domain,site)=>Boolean(domain&&site)&&(domain===site||domain.endsWith('.'+site));
+// Every question of every topic once (a question two topics found lists both), marked against the project and the
+// competitors: `ours` when we are named or cited, `gap` when other brands are named and we are not, `open` otherwise.
+// Most searched first. Read by the page and by the growth signals (growth-signals.ts), which pay for nothing.
+function markQuestions(s,{own,name,rivals}){const byKey=new Map();
+ for(const t of s?.topics||[])for(const platform of PLATFORMS)for(const q of s.results?.[t.id]?.[platform]?.items||[]){const k=`${platform}|${q.question.toLowerCase()}`,e=byKey.get(k);if(e){if(!e.topics.includes(t.keyword))e.topics.push(t.keyword);continue;}
+  const weCited=q.sources.some(x=>own.some(o=>isSite(x.domain,o))),weNamed=mentions(q.answer,q.brands,name)||own.some(o=>mentions(q.answer,q.brands,o.split('.')[0])),named=rivals.filter(r=>mentions(q.answer,q.brands,r.name)||q.sources.some(x=>isSite(x.domain,r.site)));
+  const ours=weNamed||weCited,status=ours?'ours':q.brands.length||named.length?'gap':'open';
+  byKey.set(k,{key:k,question:q.question,platform,topics:[t.keyword],volume:q.volume,status,weNamed,weCited,rivals:named.map(r=>r.name),brands:q.brands.filter(b=>!rivals.some(r=>words(b).startsWith(words(r.name)))&&!words(b).startsWith(words(name))).slice(0,5),
+   sources:q.sources.map(x=>({...x,own:own.some(o=>isSite(x.domain,o)),rival:rivals.find(r=>isSite(x.domain,r.site))?.name||null})),answer:q.answer,at:q.at});}
+ return [...byKey.values()].sort((a,b)=>(b.volume||0)-(a.volume||0));}
 class AiQuestions{
  constructor(p){this.p=p;(this.p as Connections).network?.bind(this,['suggest']);this.d4s=new DataForSeo(p,{'ai-questions':{...questions,reuseMs:25*DAY}});this.running=new Map();}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -64,17 +74,13 @@ class AiQuestions{
   for(const t of s?.topics||[])for(const platform of PLATFORMS){const old=s.results?.[t.id]?.[platform];if(!force&&old?.at&&Date.now()-Date.parse(old.at)<MONTH)continue;
    const now=new Date().toISOString();let r;try{const run=await this.d4s.run(id,'ai-questions',{topic:t.keyword,platform,requestKey:`ai-questions-${id}-${t.id}-${platform}-${Date.now()}`});r=run.status==='completed'?{at:now,items:run.result.items,error:null}:{at:now,items:old?.items||[],error:run.errorCode||systemMessageText('common.notComplete')};}catch(e){r={at:now,items:old?.items||[],error:e.message};}
    await this.mutate(id,cur=>(cur.topics||[]).some(x=>x.id===t.id)?{...cur,results:{...(cur.results||{}),[t.id]:{...(cur.results?.[t.id]||{}),[platform]:r}}}:cur);}}
+ // Who the questions are marked against: the project (its name and domains) and the competitors in Competitors.
+ async parties(id){const project=await this.p.projects.get(id);return {own:(project.domains||[]).map(d=>String(d).replace(/^www\./,'').toLowerCase()),name:project.name||'',rivals:((await this.p.competitors?.state(id).catch(()=>null))?.list||[]).map(c=>({name:c.name,site:c.site?hostOf(c.site):''}))};}
  // Every question marked: we are named or cited, competitors named or cited, or no brand at all; plus the sites the
  // answers we are missing from cite most (where to be seen).
  async view(id){const s=await this.state(id)||{},dataforseo=Boolean(this.d4s.config(id)?.verifiedAt),aiReady=Boolean(this.p.taskExecution?.provider);
-  const project=await this.p.projects.get(id),own=(project.domains||[]).map(d=>String(d).replace(/^www\./,'').toLowerCase()),name=project.name||'',rivals=((await this.p.competitors?.state(id).catch(()=>null))?.list||[]).map(c=>({name:c.name,site:c.site?hostOf(c.site):''}));
-  const byKey=new Map();
-  for(const t of s.topics||[])for(const platform of PLATFORMS)for(const q of s.results?.[t.id]?.[platform]?.items||[]){const k=`${platform}|${q.question.toLowerCase()}`,e=byKey.get(k);if(e){if(!e.topics.includes(t.keyword))e.topics.push(t.keyword);continue;}
-   const weCited=q.sources.some(x=>own.some(o=>isSite(x.domain,o))),weNamed=mentions(q.answer,q.brands,name)||own.some(o=>mentions(q.answer,q.brands,o.split('.')[0])),named=rivals.filter(r=>mentions(q.answer,q.brands,r.name)||q.sources.some(x=>isSite(x.domain,r.site)));
-   const ours=weNamed||weCited,status=ours?'ours':q.brands.length||named.length?'gap':'open';
-   byKey.set(k,{key:k,question:q.question,platform,topics:[t.keyword],volume:q.volume,status,weNamed,weCited,rivals:named.map(r=>r.name),brands:q.brands.filter(b=>!rivals.some(r=>words(b).startsWith(words(r.name)))&&!words(b).startsWith(words(name))).slice(0,5),
-    sources:q.sources.map(x=>({...x,own:own.some(o=>isSite(x.domain,o)),rival:rivals.find(r=>isSite(x.domain,r.site))?.name||null})),answer:q.answer,at:q.at});}
-  const list=[...byKey.values()].sort((a,b)=>(b.volume||0)-(a.volume||0)),count=st=>list.filter(q=>q.status===st).length,cited=new Map();
+  const {own,name,rivals}=await this.parties(id);
+  const list=markQuestions(s,{own,name,rivals}),count=st=>list.filter(q=>q.status===st).length,cited=new Map();
   for(const q of list.filter(x=>x.status!=='ours'))for(const d of new Set(q.sources.map(x=>x.domain))){const src=q.sources.find(x=>x.domain===d),c=cited.get(d)||{domain:d,count:0,own:src.own,rival:src.rival};c.count++;cited.set(d,c);}
   const topics=(s.topics||[]).map(t=>({id:t.id,keyword:t.keyword,platforms:Object.fromEntries(PLATFORMS.map(pf=>{const r=s.results?.[t.id]?.[pf];return [pf,r?{at:r.at,count:r.items.length,error:r.error}:null];}))}));
   return {dataforseo,aiReady,refreshing:this.running.has(id),topics,suggested:!topics.length?s.suggested?.topics||null:null,maxTopics:MAX_TOPICS,
@@ -85,4 +91,4 @@ class AiQuestions{
   const actions={view:wrap(id=>this.view(id)),suggest:wrap(async(id,v)=>({topics:await this.suggest(id,{force:Boolean(v.force)})})),topics:wrap((id,v)=>this.setTopics(id,v))};
   this.p.app.resourceManager.define({name:'nrAiQuestions',actions});this.p.app.acl.allow('nrAiQuestions',Object.keys(actions),'loggedIn');}
 }
-export { AiQuestions, questions, mentions, PLATFORM };
+export { AiQuestions, questions, mentions, markQuestions, PLATFORM };

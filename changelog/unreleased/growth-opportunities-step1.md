@@ -1,0 +1,8 @@
+## Opportunities: growth points from keywords and AI search, with their growth potential and evidence
+
+- Opportunities lists growth points only: places where people search, ask or look and the site does not yet get them. Drops and breakages, such as falling clicks, low conversion, stale or thin pages, ranking losses, unanswered community topics and audit issues, stay in Insights under Current situation · needs attention, which now also lists star spikes, unsolved community topics and audit warnings.
+- Each opportunity shows where it comes from (Keywords, AI search, GitHub or Competitors) and its kind as two tags, a Growth potential row of up to four figures, and an Evidence table of up to ten rows with View all to the page that lists all of them. Layout, Hand off to agent, Ignore and numbering are unchanged.
+- Seven new analysis rules find growth points in data already collected, with no new paid queries: Pages found by new searches, Searched keywords we do not rank for, Keywords with rising searches, Competitor pages ranking where we do not, AI answers naming others, not us, Third-party pages AI cites often, and New popular projects in followed topics. Each has its thresholds in Analysis rules.
+- Pages close to page one and pages with many impressions but few clicks now estimate the extra clicks a month from a published click-through rate by position (Backlinko), as impressions × (target rate − current rate), and become opportunities only above a minimum gain that Analysis rules sets.
+- The server computes every figure and evidence row; the model only words the opportunity and can no longer change the numbers.
+- The demo data has growth opportunities of every kind for ACME and the main kinds for ACME CRM, with figures that match their evidence.

@@ -79,7 +79,9 @@ test('recent lookups and questions group the latest run per platform or model; t
  assert.equal(list[0].runs.chat_gpt.id,'1','the latest run per platform');
  assert.deepEqual((await s.open('1',{kind:'answer',group:'best no-code tool?'})).runs.map(r=>r.spec.model),['claude','chat_gpt']);
  const sig=aiSearchSignals({ai:await s.state('1')});
- assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['ai-share','ai-uncited','ai-answer']);assert.ok(sig.every(x=>x.actionable&&x.source==='ai-search'));
+ assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['ai-share','ai-uncited','ai-answer']);assert.ok(sig.every(x=>x.source==='ai-search'));
+ // Only the growth point becomes an opportunity (2026-11-10): mentioned but not cited; the others stay in Insights.
+ assert.deepEqual(sig.map(x=>x.actionable),[false,true,false]);assert.equal(sig[1].growth.kind,'uncited');assert.deepEqual(sig[1].growth.figures.map(f=>f.value),[6,0,6]);
  assert.match(sig[0].title,/appsmith.com 被提到的次数比你多/);assert.match(sig[2].title,/Claude 没有提到你/);assert.match(sig[2].facts[1],/budibase.com/);
 });
 

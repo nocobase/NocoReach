@@ -115,7 +115,11 @@ class StrategyService{
   const available=new Set([...(context.evidence.summary?.web.days?['ga4']:[]),...(context.evidence.summary?.search.days?['gsc']:[]),...(context.evidence.industryCandidates?.length?['keywords']:[]),...(context.evidence.publicSources||[]).map(s=>s.id)]);
   const signalKeys=new Set((context.evidence.signals?.items||[]).map(s=>s.key));for(const s of context.evidence.signals?.items||[])available.add(s.source);
   for(const c of cards)c.sources=c.sources.filter(s=>available.has(s));
-  if(context.evidence.signals){for(const c of cards)c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));cards.splice(0,cards.length,...cards.filter(c=>c.signalIds.length));}
+  // An opportunity is a growth point (2026-11-10): it must cite a growth change, and carries the growth of the first one
+  // it cites, as the server computed it (shared/growth.ts); the model's own figures are never stored as growth.
+  if(context.evidence.signals){const growthBy=new Map((context.evidence.signals.items||[]).filter(s=>s.actionable&&s.growth).map(s=>[s.key,s.growth]));
+   for(const c of cards){c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));const first=c.signalIds.find(k=>growthBy.has(k));if(first)c.growth=growthBy.get(first);}
+   cards.splice(0,cards.length,...cards.filter(c=>c.growth));}
   const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
   const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards),maxDays=context.evidence.signals?.analysisSnapshot?.config?.watchDays??(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;

@@ -10,7 +10,10 @@ const now=Date.parse('2026-10-01T00:00:00Z'),DAY=86400000;
 test('search rules: low CTR against the site median, near first page, click drop; each capped',()=>{
  const rows=[{page:'https://ex.com/a',clicks:2,impressions:2000,previous:3,position:15},{page:'https://ex.com/b',clicks:60,impressions:1000,previous:50,position:4},{page:'https://ex.com/c',clicks:50,impressions:900,previous:40,position:3},{page:'https://ex.com/d',clicks:5,impressions:400,previous:40,position:11}];
  const s=searchSignals({queries:rows,history:[],end:'2026-09-27'});const keys=s.map(x=>x.key).sort();
- assert.deepEqual(keys,['gsc-click-drop:/d','gsc-low-ctr:/a','gsc-near-first:/a','gsc-near-first:/d']);assert.ok(s.every(x=>x.actionable&&x.facts.length));
+ assert.deepEqual(keys,['gsc-click-drop:/d','gsc-low-ctr:/a','gsc-near-first:/a','gsc-near-first:/d']);assert.ok(s.every(x=>x.facts.length));
+ // Only growth with a size is actionable (2026-11-10): a click drop stays in Insights, and a better snippet adds nothing
+ // on page two, where the usual CTR is 0.
+ assert.deepEqual(s.filter(x=>x.actionable).map(x=>x.key).sort(),['gsc-near-first:/a','gsc-near-first:/d']);assert.ok(s.filter(x=>x.actionable).every(x=>x.growth?.figures.length===4));
  const many=Array.from({length:20},(_,i)=>({page:`https://ex.com/p${i}`,clicks:1,impressions:600+i,position:10}));assert.equal(searchSignals({queries:many,history:[],end:null}).filter(x=>x.key.startsWith('gsc-near-first')).length,8);
 });
 test('conversion rule skips home, locale roots and legal pages',()=>{
@@ -24,7 +27,7 @@ test('content rules need traffic; stale uses lastmod and thin uses fetched word 
 });
 test('GitHub: releases collapse into one signal favouring stable versions; star spike needs history',()=>{
  const gh={repo:'o/r',daily:{},releases:[{tag:'v2.0.0',publishedAt:new Date(now-DAY).toISOString(),url:'u1'},{tag:'v2.1.0-alpha.1',publishedAt:new Date(now-2*DAY).toISOString(),url:'u2'},{tag:'v1.0.0',publishedAt:new Date(now-30*DAY).toISOString(),url:'u3'}]};
- const s=githubSignals({gh,now});assert.equal(s.length,1);assert.deepEqual(s[0].chip,{tone:'violet',text:'新版本'});assert.match(s[0].title,/v2\.0\.0/);assert.match(s[0].facts[1],/alpha/);assert.equal(s[0].actionable,true);
+ const s=githubSignals({gh,now});assert.equal(s.length,1);assert.deepEqual(s[0].chip,{tone:'violet',text:'新版本'});assert.match(s[0].title,/v2\.0\.0/);assert.match(s[0].facts[1],/alpha/);assert.equal(s[0].actionable,false,'a release of our own is in Insights, not a growth point');
  const pre=githubSignals({gh:{...gh,releases:[gh.releases[1]]},now});assert.equal(pre[0].actionable,false);
  const daily={};for(let i=0;i<9;i++)daily[new Date(now-(8-i)*DAY).toISOString().slice(0,10)]={stars:1000+i*5+(i===8?95:0)};
  assert.ok(githubSignals({gh:{repo:'o/r',daily,releases:[]},now}).some(x=>x.key.startsWith('github-star-spike')));

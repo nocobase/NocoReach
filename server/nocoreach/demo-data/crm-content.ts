@@ -848,40 +848,10 @@ export function crmOpportunities(
 ): DemoContent['opportunities'] {
   const lang = language === 'en-US' ? 'en' : 'zh';
   const copy = (value: L) => value[lang];
-  const selected = [0, 1, 2, 3, 12, 14, 15, 19, 8, 9, 17, 13];
+  // The handled opportunities: two handed off (search, forum hand-off) and two ignored. The pending ones are growth
+  // points (growth-briefs.ts).
+  const selected = [8, 9, 17, 13];
   const observations = [
-    t(
-      '导入相关搜索展示增加，社区仍反复询问重复联系人该如何合并。',
-      'Import impressions rose while the community keeps asking how to merge duplicate contacts.',
-    ),
-    t(
-      '无地区线索与请假分配的问题在样例讨论中同时出现。',
-      'Unknown territories and routing to absent reps appear together in sample discussions.',
-    ),
-    t(
-      '漏斗页有访问，但访谈中五名销售给同一商机选择了不同阶段。',
-      'The pipeline page receives visits, but five interviewed reps selected different stages for the same deal.',
-    ),
-    t(
-      '报价版本问题有两条未解决提问，错误附件会影响采购沟通。',
-      'Two unresolved quote-version questions highlight the risk of sending the wrong attachment.',
-    ),
-    t(
-      '报表页的说明偏短，主管无法核对“本月新增”的日期口径。',
-      'The report page is too brief to verify the date definition of new deals this month.',
-    ),
-    t(
-      '邮件接入讨论关注正文可见范围，现有说明没有撤销访问步骤。',
-      'Mailbox discussions focus on body visibility, but the guide lacks revocation steps.',
-    ),
-    t(
-      '预约页面移动访问增加，样例反馈集中在时区不清楚。',
-      'Mobile booking-page visits grew and sample feedback highlights unclear time zones.',
-    ),
-    t(
-      '集成问题开始出现重复回传，当前示例只演示成功一次。',
-      'Duplicate callback questions appeared while the current example covers one successful delivery only.',
-    ),
     t(
       '“免费 CRM”搜索同时包含托管、自建与替换表格三类需求。',
       'Free-CRM searches mix hosting, self-management and spreadsheet-replacement intents.',
@@ -933,15 +903,15 @@ export function crmOpportunities(
     observations: [
       copy(
         t(
-          '本周先解决导入、线索分配和报价版本；续约指南继续积累样本。',
-          'Prioritize imports, lead routing and quote versions this week; keep collecting renewal-guide samples.',
+          '本周增长空间最大的是小团队 CRM 文章和报价单这组关键词；AI 回答开源 CRM 问题时还很少提到 Acme CRM。续约指南继续积累样本。',
+          'The largest growth this week is in the small-team CRM article and the quote keywords; AI answers on open-source CRMs still rarely name Acme CRM. The renewal guide keeps gathering samples.',
         ),
       ),
     ],
     doReason: copy(
       t(
-        '多个样例入口指向同一问题，交给负责人核实。',
-        'Several sample sources point to the issue; assign an owner to verify it.',
+        '增长空间明确，和产品相关，投入可控。',
+        'Clear growth potential, relevant to the product, with manageable effort.',
       ),
     ),
     skipReason: copy(
@@ -965,8 +935,8 @@ export function crmOpportunities(
           ),
         ),
         story.path,
-        i % 3 === 0 ? 'gsc' : i % 3 === 1 ? 'discourse' : 'site',
-        i < 4 ? 'high' : 'medium',
+        (['site', 'gsc', 'discourse', 'site'] as const)[i],
+        'medium',
       ];
     }),
     watches: [
