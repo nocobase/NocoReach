@@ -178,12 +178,12 @@ jobs:
       archive_name: solutions-release-archive
     secrets: inherit
 
-  deploy-hongkong:
+  deploy-production:
     needs: [release, image]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     concurrency:
-      group: nocoreach-hongkong-deployment
+      group: nocoreach-production-deployment
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
