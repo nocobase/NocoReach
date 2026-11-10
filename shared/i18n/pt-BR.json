@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "Perfil de links",
   "backlinks.gapTab": "Lacuna de links",
   "backlinks.ourSite": "nosso site",
-  "backlinks.sitesSelected": "sites selecionados",
+  "backlinks.sitesSelected": "Sites selecionados:",
   "backlinks.handOffDescription": "Os {0} sites selecionados viram uma tarefa de link building: o agente analisa cada site e redige a abordagem e uma mensagem. Nada é enviado. Inicie-a na página da tarefa.",
   "backlinks.ourDomain": "Nosso domínio",
   "backlinks.competitorDomains": "Concorrentes (até {0})",

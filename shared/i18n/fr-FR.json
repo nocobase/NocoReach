@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "Profil de liens",
   "backlinks.gapTab": "Écart de liens",
   "backlinks.ourSite": "notre site",
-  "backlinks.sitesSelected": "sites sélectionnés",
+  "backlinks.sitesSelected": "Sites sélectionnés :",
   "backlinks.handOffDescription": "Les {0} sites sélectionnés deviennent une tâche de netlinking : l’agent examine chaque site et rédige l’approche et un message. Rien n’est envoyé. Lancez-la depuis la page de la tâche.",
   "backlinks.ourDomain": "Notre domaine",
   "backlinks.competitorDomains": "Concurrents (jusqu’à {0})",

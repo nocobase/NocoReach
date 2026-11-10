@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "Link profile",
   "backlinks.gapTab": "Link gap",
   "backlinks.ourSite": "our site",
-  "backlinks.sitesSelected": "sites selected",
+  "backlinks.sitesSelected": "Selected sites:",
   "backlinks.handOffDescription": "The {0} selected sites become one Link building task: the agent checks each site and drafts how to approach it and a message. Nothing is sent. Start it on the task page.",
   "backlinks.ourDomain": "Our domain",
   "backlinks.competitorDomains": "Competitors (up to {0})",

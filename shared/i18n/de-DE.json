@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "Linkprofil",
   "backlinks.gapTab": "Link-Lücke",
   "backlinks.ourSite": "unsere Website",
-  "backlinks.sitesSelected": "Websites ausgewählt",
+  "backlinks.sitesSelected": "Ausgewählte Websites:",
   "backlinks.handOffDescription": "Die {0} ausgewählten Websites werden zu einer Linkaufbau-Aufgabe: Der Agent prüft jede Website und entwirft Vorgehen und Nachricht. Es wird nichts gesendet. Starten Sie sie auf der Aufgabenseite.",
   "backlinks.ourDomain": "Unsere Domain",
   "backlinks.competitorDomains": "Wettbewerber (bis zu {0})",

@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "外部連結概況",
   "backlinks.gapTab": "外部連結差距",
   "backlinks.ourSite": "本站",
-  "backlinks.sitesSelected": "個網站已選",
+  "backlinks.sitesSelected": "已選網站：",
   "backlinks.handOffDescription": "選中的 {0} 個網站合成一個外部連結拓展任務：Agent 逐一查看網站，寫出聯絡方案和信件草稿，不會傳送任何訊息。在任務頁開始執行。",
   "backlinks.ourDomain": "本站網域",
   "backlinks.competitorDomains": "競品（最多 {0} 個）",

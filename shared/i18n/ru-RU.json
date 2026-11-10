@@ -8053,7 +8053,7 @@
   "backlinks.profileTab": "Ссылочный профиль",
   "backlinks.gapTab": "Разрыв по ссылкам",
   "backlinks.ourSite": "наш сайт",
-  "backlinks.sitesSelected": "сайтов выбрано",
+  "backlinks.sitesSelected": "Выбранные сайты:",
   "backlinks.handOffDescription": "Выбранные сайты ({0}) станут одной задачей по наращиванию ссылок: агент изучит каждый сайт и подготовит план и черновик письма. Ничего не отправляется. Запустите её на странице задачи.",
   "backlinks.ourDomain": "Наш домен",
   "backlinks.competitorDomains": "Конкуренты (до {0})",

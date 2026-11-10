@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "Profil tautan",
   "backlinks.gapTab": "Kesenjangan tautan",
   "backlinks.ourSite": "situs kita",
-  "backlinks.sitesSelected": "situs dipilih",
+  "backlinks.sitesSelected": "Situs yang dipilih:",
   "backlinks.handOffDescription": "{0} situs terpilih menjadi satu tugas pembangunan tautan: agen memeriksa setiap situs dan menyusun cara pendekatan serta draf pesan. Tidak ada yang dikirim. Mulai di halaman tugas.",
   "backlinks.ourDomain": "Domain kita",
   "backlinks.competitorDomains": "Pesaing (maks. {0})",

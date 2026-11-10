@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "リンクプロフィール",
   "backlinks.gapTab": "リンクギャップ",
   "backlinks.ourSite": "自社サイト",
-  "backlinks.sitesSelected": "サイトを選択中",
+  "backlinks.sitesSelected": "選択中のサイト：",
   "backlinks.handOffDescription": "選択した {0} 件のサイトを 1 つのリンク獲得タスクにまとめます。エージェントが各サイトを確認し、アプローチ方法とメッセージの下書きを作成します。何も送信しません。タスクページで開始してください。",
   "backlinks.ourDomain": "自社ドメイン",
   "backlinks.competitorDomains": "競合（最大 {0} 件）",

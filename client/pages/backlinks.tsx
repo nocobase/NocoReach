@@ -18,6 +18,7 @@ import {
   BarChart,
   CartesianGrid,
   ComposedChart,
+  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -486,7 +487,11 @@ export function Backlinks() {
                   className='h-auto p-0'
                   disabled={Boolean(busy)}
                   onClick={() =>
-                    void query(visible.spec.view as View, visible.spec.target, true)
+                    void query(
+                      visible.spec.view as View,
+                      visible.spec.target,
+                      true,
+                    )
                   }
                 >
                   {$t('common.queryAgain')}
@@ -696,6 +701,12 @@ function GrowthChart({ history }: { history: Month[] }) {
           tickFormatter={tick}
         />
         <Tooltip labelFormatter={(d) => month(String(d))} formatter={tip} />
+        <Legend
+          verticalAlign='top'
+          height={24}
+          iconSize={10}
+          wrapperStyle={{ fontSize: 12 }}
+        />
         <Line
           yAxisId='links'
           isAnimationActive={false}
@@ -740,6 +751,12 @@ function NewLostChart({ history }: { history: Month[] }) {
         />
         <YAxis fontSize={11} width={44} tickFormatter={tick} />
         <Tooltip labelFormatter={(d) => month(String(d))} formatter={tip} />
+        <Legend
+          verticalAlign='top'
+          height={24}
+          iconSize={10}
+          wrapperStyle={{ fontSize: 12 }}
+        />
         <Bar
           isAnimationActive={false}
           dataKey='newBacklinks'

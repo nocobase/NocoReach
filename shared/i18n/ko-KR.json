@@ -8037,7 +8037,7 @@
   "backlinks.profileTab": "링크 프로필",
   "backlinks.gapTab": "링크 격차",
   "backlinks.ourSite": "우리 사이트",
-  "backlinks.sitesSelected": "개 사이트 선택됨",
+  "backlinks.sitesSelected": "선택한 사이트:",
   "backlinks.handOffDescription": "선택한 사이트 {0}개를 하나의 링크 빌딩 작업으로 만듭니다. 에이전트가 각 사이트를 확인하고 접근 방법과 메시지 초안을 작성하며, 아무것도 보내지 않습니다. 작업 페이지에서 시작하세요.",
   "backlinks.ourDomain": "우리 도메인",
   "backlinks.competitorDomains": "경쟁사(최대 {0}개)",

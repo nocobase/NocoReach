@@ -8035,7 +8035,7 @@
   "backlinks.profileTab": "外链概况",
   "backlinks.gapTab": "外链差距",
   "backlinks.ourSite": "本站",
-  "backlinks.sitesSelected": "个网站已选",
+  "backlinks.sitesSelected": "已选网站：",
   "backlinks.handOffDescription": "选中的 {0} 个网站合成一个外链拓展任务：Agent 逐个查看网站，写出联系方案和信件草稿，不会发送任何消息。在任务页开始执行。",
   "backlinks.ourDomain": "本站域名",
   "backlinks.competitorDomains": "竞品（最多 {0} 个）",
