@@ -7,6 +7,7 @@ import { agentsOverridesEnUS } from './overrides/agents.js';
 
 const enUS = {
   'nocoreach.nav.apiKeys': 'API keys',
+  'aiSearch.trendMonth': 'Month',
   'aiSearch.trendTitle': 'AI mention gains and losses',
   'aiSearch.trendHelp': 'Optional paid DataForSEO LLM Mentions history for the brand and market above. Each platform is queried separately; results cover up to the last 12 completed months.',
   'aiSearch.trendCheck': 'View history',
