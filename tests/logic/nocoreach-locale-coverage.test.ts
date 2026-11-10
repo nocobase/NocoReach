@@ -421,6 +421,10 @@ describe('NocoReach semantic-key translations', () => {
       // Average position's ⓘ follows the arrow on Search performance, where ↑ is a ranking that rose (2026-11-07).
       '本站在 Google 搜索结果里的平均位置，按曝光加权。数字越小越靠前，所以下降算变好。':
         '本站在 Google 搜索结果里的平均位置，按曝光加权。数字越小越靠前，所以 ↑ 表示排名上升（平均排名数字变小），↓ 表示排名下降。',
+      // The online model's glossary entry names Model services' default chat model and Editing and suggestions
+      // (2026-11-10).
+      '服务器上的模型（NocoBase AI 插件），每天分析数据、提出机会，也帮你起草做法。':
+        '服务器上的模型（「模型服务」里的默认对话模型），每天分析数据、提出机会，也负责编辑与建议：改写选中的文字、整理新任务、起草做法等。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

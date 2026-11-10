@@ -176,7 +176,7 @@ function CreateTask({
       }),
     [api, scope.sessionId],
   );
-  // The same chat model as the daily analysis and the chat panel (Agent › Model services).
+  // The default chat model: the Agent page's Editing and suggestions, the same one the daily analysis runs on.
   useEffect(() => {
     const controller = new AbortController();
     nocobaseClient

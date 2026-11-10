@@ -93,7 +93,7 @@ type Catalog = {
   defaultModel?: ModelRef | null;
 };
 type Row = {
-  key: 'analysis' | 'chat' | 'execution';
+  key: 'analysis' | 'editing' | 'chat' | 'execution';
   work: string;
   does: string;
   uses?: string;
@@ -159,8 +159,8 @@ function healthText(health: Extract<AgentHealth, { state: 'attention' }>) {
 
 /**
  * Who does which work in NocoReach, as the people running marketing meet it (2026-10-21 user decision): cloud models
- * (the Model services tab) run the daily analysis and answer in the chat panel; local agents (a coding tool on a
- * computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where a local agent runs
+ * (the Model services tab) run the daily analysis, editing and suggestions, and the chat panel; local agents (a coding
+ * tool on a computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where a local agent runs
  * and who may use that computer, and a status read from how its latest work ended, not only from whether it is set up.
  * Every row has one Settings button for administrators, a dialog that changes what the row uses; while a row needs
  * attention, the button is the fix instead (2026-10-22 user decision).
@@ -274,6 +274,9 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const addModel: Action | undefined = modelsPage.can
     ? { label: $t('agentRoles.addModel'), to: '/agents/models' }
     : undefined;
+  const viewModels: Action | undefined = modelsPage.can
+    ? { label: $t('agentRoles.viewModels'), to: '/agents/models' }
+    : undefined;
   const addRuntime: Action | undefined = runtimesPage.can
     ? { label: $t('agentsPage.addRuntime'), to: '/agents/runtimes/connect' }
     : undefined;
@@ -291,34 +294,67 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           run: async () => setDialog('analysis'),
         }
       : undefined;
+  // The default chat model Daily analysis and Editing and suggestions both run on, as the analysis reports it: none
+  // without a model service, and none either when no enabled service offers a chat model (the plugin then has no
+  // effective default). Without the report, whether a model service exists.
+  const defaultModelState: Pick<Row, 'state' | 'detail' | 'action'> | null =
+    modelsLoading || analysis === undefined
+      ? { state: 'loading' }
+      : (analysis ? analysisModel : !noModels)
+        ? null
+        : noModels
+          ? {
+              state: 'attention',
+              detail: $t('agentRoles.noModel'),
+              action: addModel,
+            }
+          : {
+              state: 'attention',
+              detail: $t('agentRoles.noChatModel'),
+              action: viewModels,
+            };
   const analysisRow: Row = {
     key: 'analysis',
     work: $t('agentRoles.analysis'),
     does: $t('agentRoles.analysisWork'),
     uses: analysisModel,
-    ...(modelsLoading || analysis === undefined
-      ? { state: 'loading' }
-      : (analysis ? !analysisModel : noModels)
+    ...(defaultModelState
+      ? defaultModelState
+      : lastRun && lastRun.ok === false
         ? {
             state: 'attention',
-            detail: $t('agentRoles.noModel'),
-            action: addModel,
-          }
-        : lastRun && lastRun.ok === false
-          ? {
-              state: 'attention',
-              detail: $t('agentRoles.analysisFailed', {
-                0: formatDateTime(lastRun.at),
-              }),
-              action: analysisSettings,
-            }
-          : {
-              state: 'ready',
-              where: lastRun?.at
-                ? $t('agentRoles.lastRun', { 0: formatDateTime(lastRun.at) })
-                : $t('agentRoles.notRunYet'),
-              action: analysisSettings,
+            detail: $t('agentRoles.analysisFailed', {
+              0: formatDateTime(lastRun.at),
             }),
+            action: analysisSettings,
+          }
+        : {
+            state: 'ready',
+            where: lastRun?.at
+              ? $t('agentRoles.lastRun', { 0: formatDateTime(lastRun.at) })
+              : $t('agentRoles.notRunYet'),
+            action: analysisSettings,
+          }),
+  };
+  // Every on-demand use of the default chat model (OnlineProvider.complete or .stream outside the daily analysis) is
+  // this row's work (2026-11-10 user decision), so it shares the analysis's model and Settings dialog: rewriting a
+  // selected passage in the review editor (article-rewrite), New task › Organize with AI (task-draft), Keywords' AI
+  // suggestions (keyword-seeds, keyword-curate, keyword-names), suggested competitors (competitor-suggest), AI search
+  // questions (ai-question-suggest), Knowledge › Add (knowledge-suggest), Analysis rules' proposals and new rules
+  // (analysis-rules-propose, analysis-rule-draft) and New playbook's draft. Add a new feature on that model to this list.
+  // Its scheduled and background uses are Daily analysis's: the analysis with its custom rules (analysis-rule-evaluate),
+  // Project knowledge's first draft and weekly check (memory-draft, memory-check) and source mapping
+  // (content-source-map).
+  const editingRow: Row = {
+    key: 'editing',
+    work: $t('agentRoles.editing'),
+    does: $t('agentRoles.editingWork'),
+    uses: analysisModel,
+    ...(defaultModelState || {
+      state: 'ready',
+      where: $t('agentRoles.sameModel'),
+      action: analysisSettings,
+    }),
   };
 
   const definitions = online.data || [];
@@ -530,7 +566,7 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           : undefined,
     },
   ];
-  const settled = [analysisRow, chatRow, executionRow].every(
+  const settled = [analysisRow, editingRow, chatRow, executionRow].every(
     (row) => row.state !== 'loading',
   );
   const refreshAll = () => setInner((value) => value + 1);
@@ -578,6 +614,7 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
             hint={$t('agentRoles.cloudHint')}
           >
             <RoleRow row={analysisRow} busy={busy} />
+            <RoleRow row={editingRow} busy={busy} />
             <RoleRow row={chatRow} busy={busy} />
           </Group>
           <Group
@@ -810,7 +847,7 @@ function AnalysisModelDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{$t('agentRoles.analysis')}</DialogTitle>
+          <DialogTitle>{$t('agentRoles.modelDialogTitle')}</DialogTitle>
           <DialogDescription>
             {$t('agentRoles.analysisModelHint')}
           </DialogDescription>

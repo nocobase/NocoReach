@@ -170,11 +170,24 @@ test('says which work cloud models and local agents do, with what each uses and 
   await waitFor(() =>
     expect(within(row('执行任务')).getByText('正常')).toBeVisible(),
   );
-  for (const work of ['每日分析', '对话栏'])
+  for (const work of ['每日分析', '编辑与建议', '对话栏'])
     expect(within(row(work)).getByText('正常')).toBeVisible();
   expect(
     within(row('每日分析')).getByText('deepseek-v4.1-flash'),
   ).toBeVisible();
+  // Editing and suggestions sits between them and runs on the daily analysis's model.
+  const rows = screen.getAllByRole('rowheader').map((cell) => cell.textContent);
+  expect(rows.slice(1, 4)).toEqual([
+    '每日分析每天找机会，每周整理项目知识',
+    '编辑与建议改写选中的文字、整理新任务、推荐关键词和竞品等',
+    '对话栏回答你的问题',
+  ]);
+  expect(
+    within(row('编辑与建议')).getByText('deepseek-v4.1-flash'),
+  ).toBeVisible();
+  expect(
+    within(row('编辑与建议')).getByText('和每日分析用同一个模型'),
+  ).toHaveClass('text-xs');
   expect(within(row('对话栏')).getByText('deepseek-v4.1-flash')).toBeVisible();
   expect(
     within(row('执行任务')).getByText('Codex · GPT-6 Astra'),
@@ -191,7 +204,7 @@ test('says which work cloud models and local agents do, with what each uses and 
   expect(
     within(row('对话栏')).getByRole('button', { name: '设置' }),
   ).toHaveAttribute('href', '/agents/chat/online');
-  for (const work of ['每日分析', '执行任务'])
+  for (const work of ['每日分析', '编辑与建议', '执行任务'])
     expect(
       within(row(work)).getByRole('button', { name: '设置' }),
     ).toBeVisible();
@@ -280,12 +293,12 @@ test('a tool that is not signed in is not fixed by an agent with the same tool',
   );
 });
 
-test('without a model service, analysis and chat point to connecting one', async () => {
+test('without a model service, analysis, editing and chat point to connecting one', async () => {
   state.services = [];
   state.analysis = { model: null, analysis: { last: null } };
   mount();
   await waitFor(() => expect(screen.getByText('最快配置')).toBeVisible());
-  for (const work of ['每日分析', '对话栏']) {
+  for (const work of ['每日分析', '编辑与建议', '对话栏']) {
     expect(within(row(work)).getByText('需要处理')).toBeVisible();
     expect(
       within(row(work)).getByRole('button', { name: '接入模型服务' }),
@@ -307,7 +320,29 @@ test('a project on simulated data runs the daily analysis without a model servic
   expect(
     within(row('每日分析')).getByText('synthetic-fixture-v1'),
   ).toBeVisible();
+  // The simulated model answers the on-demand helpers too.
+  expect(within(row('编辑与建议')).getByText('正常')).toBeVisible();
+  expect(
+    within(row('编辑与建议')).getByText('synthetic-fixture-v1'),
+  ).toBeVisible();
   expect(within(row('对话栏')).getByText('需要处理')).toBeVisible();
+});
+
+test('model services without an enabled chat model leave analysis and editing without a model', async () => {
+  state.defaultModel = null;
+  state.analysis = { model: null, analysis: { last: null } };
+  mount();
+  await waitFor(() =>
+    expect(within(row('每日分析')).getByText('需要处理')).toBeVisible(),
+  );
+  for (const work of ['每日分析', '编辑与建议']) {
+    expect(within(row(work)).getByText('需要处理')).toBeVisible();
+    expect(detail(work)).toHaveTextContent('模型服务里没有启用的对话模型。');
+    expect(
+      within(row(work)).getByRole('button', { name: '查看模型服务' }),
+    ).toHaveAttribute('href', '/agents/models');
+  }
+  expect(screen.queryByText('还没有接入模型服务。')).toBeNull();
 });
 
 test('a daily analysis that did not finish last time needs attention', async () => {
@@ -320,6 +355,8 @@ test('a daily analysis that did not finish last time needs attention', async () 
     expect(within(row('每日分析')).getByText('需要处理')).toBeVisible(),
   );
   expect(detail('每日分析')).toHaveTextContent(/上次运行（.+）没有完成/);
+  // A failed analysis run says nothing about the model the helpers use.
+  expect(within(row('编辑与建议')).getByText('正常')).toBeVisible();
 });
 
 test('a chat agent that is turned off is turned on from its row', async () => {
@@ -402,8 +439,21 @@ test('with no runtime yet, tasks and the setup point to adding one', async () =>
   expect(screen.getByText('最快配置')).toBeVisible();
 });
 
-test('Daily analysis › Settings changes the model the analysis runs on', async () => {
+test('Daily analysis › Settings changes the model the analysis and editing run on', async () => {
   const user = userEvent.setup();
+  const view = mount();
+  await waitFor(() =>
+    expect(within(row('编辑与建议')).getByText('正常')).toBeVisible(),
+  );
+  // Editing and suggestions › Settings opens the same dialog.
+  await user.click(
+    within(row('编辑与建议')).getByRole('button', { name: '设置' }),
+  );
+  expect(
+    await screen.findByRole('dialog', { name: '每日分析、编辑与建议' }),
+  ).toBeVisible();
+  view.unmount();
+
   mount();
   await waitFor(() =>
     expect(within(row('每日分析')).getByText('正常')).toBeVisible(),
@@ -411,9 +461,13 @@ test('Daily analysis › Settings changes the model the analysis runs on', async
   await user.click(
     within(row('每日分析')).getByRole('button', { name: '设置' }),
   );
-  const dialog = await screen.findByRole('dialog', { name: '每日分析' });
+  const dialog = await screen.findByRole('dialog', {
+    name: '每日分析、编辑与建议',
+  });
   expect(
-    within(dialog).getByText(/对话栏没有单独选模型时，也用这个/),
+    within(dialog).getByText(
+      '从「模型服务」里已启用的对话模型中选。两处用同一个模型，改了同时生效；对话栏没有单独选模型时，也用这个。',
+    ),
   ).toBeVisible();
   expect(within(dialog).getByRole('button', { name: '保存' })).toBeDisabled();
   await user.click(
