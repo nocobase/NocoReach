@@ -69,3 +69,21 @@ export function backlinksPath(
   }
   return `/backlinks?${params.toString()}`;
 }
+
+/**
+ * A page's name wherever Backlinks shows or keys it (the Broken pages table, the analysis signal, the task brief): its
+ * path on our site itself, with its host on a subdomain (docs.example.com/intro), so it is not taken for the main
+ * site's page of the same path. An address that does not parse is shown as it is.
+ */
+export function pagePlace(url: string, site: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    const path = u.pathname.replace(/\/$/, '') || '/';
+    return host !== site.toLowerCase().replace(/^www\./, '')
+      ? `${host}${path}`
+      : path;
+  } catch {
+    return url;
+  }
+}

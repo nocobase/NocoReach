@@ -144,8 +144,11 @@ function service(
   const snapshots = {
     findOne: async (o: { filter: { key: string } }) =>
       wrap(rows.get(o.filter.key)),
-    update: async (o: { values: { payload: unknown } }) => {
-      rows.get('backlinks-watch:1')!.payload = o.values.payload;
+    find: async (o: { filter: { key: { $in: string[] } } }) =>
+      o.filter.key.$in.flatMap((k) => (rows.has(k) ? [wrap(rows.get(k))] : [])),
+    update: async (o: { filterByTk: number; values: { payload: unknown } }) => {
+      for (const r of rows.values())
+        if (r.id === o.filterByTk) r.payload = o.values.payload;
     },
     create: async (o: { values: { key: string; payload: unknown } }) => {
       rows.set(o.values.key, { id: 2, ...o.values });
@@ -247,7 +250,7 @@ describe('backlinks source status', () => {
       (
         await sourceStatuses(
           host({
-            enabled: false,
+            enabled: true,
             overview: { createdAt: '2026-11-01T00:00:00Z' },
           }),
           '1',
@@ -255,5 +258,94 @@ describe('backlinks source status', () => {
         )
       ).backlinks,
     ).toEqual({ state: 'ready', collectedAt: '2026-11-01T00:00:00Z' });
+  });
+});
+
+describe('monthly check failures and state', () => {
+  it('tries a failed check again a day later, not every hour, and says why', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-11-10T10:00:00Z'));
+      const { s } = service({ watch: { enabled: true } });
+      (s.run as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: 11,
+        status: 'failed',
+        errorCode: 'backlinks_balance',
+      });
+      expect(await s.check('1')).toMatchObject({
+        checked: 0,
+        error: { view: 'overview', code: 'backlinks_balance' },
+      });
+      const w = await s.watch('1');
+      expect(w.lastCheck.error).toMatchObject({ code: 'backlinks_balance' });
+      expect(w.retryAt).toBe('2026-11-11T10:00:00.000Z');
+      // The next hours ask for nothing.
+      vi.setSystemTime(new Date('2026-11-10T20:00:00Z'));
+      expect(await s.check('1')).toEqual({ checked: 0, waiting: true });
+      expect(s.run).toHaveBeenCalledTimes(1);
+      // A day later it is tried again, and a success clears the failure.
+      vi.setSystemTime(new Date('2026-11-11T10:30:00Z'));
+      expect(await s.check('1')).toEqual({ checked: 2 });
+      expect((await s.watch('1')).lastCheck.error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('counts a refusal (the month budget) as a failure too', async () => {
+    const { s } = service({ watch: { enabled: true } });
+    (s.run as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('本月 DataForSEO 预算已用完'),
+    );
+    expect((await s.check('1')).error).toMatchObject({ view: 'overview' });
+    expect((await s.watch('1')).lastCheck.error.message).toContain('预算');
+  });
+
+  it('runs the first check before answering, and asking for the same state changes nothing', async () => {
+    const { s } = service();
+    const on = await s.setWatch('1', { enabled: true });
+    expect(s.run).toHaveBeenCalledTimes(2);
+    expect(on.lastCheck).toMatchObject({ error: null });
+    const again = await s.setWatch('1', { enabled: true });
+    expect(again.since).toBe(on.since);
+    expect(s.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads nothing for the analysis while the check is off', async () => {
+    const { s } = service({ watch: { enabled: false } });
+    expect(await s.analysisData('1')).toEqual({
+      enabled: false,
+      overview: null,
+      broken: null,
+    });
+    expect(s.saved).not.toHaveBeenCalled();
+  });
+
+  it('counts only whole months: the month the lookup ran in is left out', () => {
+    const bl = data([
+      month('2026-09-30'),
+      month('2026-10-31', { newReferringDomains: 1, lostReferringDomains: 30 }),
+      month('2026-11-30', { newReferringDomains: 0, lostReferringDomains: 0 }),
+    ]);
+    bl.overview.completedAt = '2026-11-03T00:00:00Z';
+    expect(backlinksSignals({ bl }).map((x: { key: string }) => x.key)).toEqual(
+      ['backlinks-lost'],
+    );
+  });
+
+  it('shows the source in error after a failed check', async () => {
+    const snapshot = { catalog: RULES, config: { rules: {} } };
+    const host = {
+      backlinks: {
+        analysisData: async () => ({
+          enabled: true,
+          failed: true,
+          overview: null,
+        }),
+      },
+    } as never;
+    expect((await sourceStatuses(host, '1', snapshot)).backlinks).toEqual({
+      state: 'error',
+    });
   });
 });

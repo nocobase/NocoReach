@@ -8116,5 +8116,6 @@
   "backlinks.watchLabel": "{0} の被リンクを毎月チェック",
   "backlinks.watchHelp": "毎月、自社サイトのリンク概要とリンク切れページを再調査し、日次分析がその結果を読みます。参照ドメインの純減や、リンクが残るリンク切れページは対応できる機会になります。",
   "backlinks.watchCost": "毎月約 ${0}（プロジェクトの DataForSEO 予算から）",
-  "backlinks.watchSince": "{0} から有効"
+  "backlinks.watchSince": "{0} から有効",
+  "backlinks.watchFailed": "前回のチェックは完了しませんでした：{0} {1} 以降に再試行します。"
 }

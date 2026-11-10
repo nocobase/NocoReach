@@ -30,6 +30,15 @@ const TASK_USD = 0.024,
   HISTORY_ROWS = 96,
   HISTORY_SHOWN = 12;
 const usd = (n) => Number(n.toFixed(6));
+const DAY_MS = 86400000;
+// A failed monthly check (a refusal, the month's budget, an unreadable reply) is tried again a day later.
+const CHECK_RETRY_MS = DAY_MS;
+const bareDomain = (d) =>
+  String(d || '')
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/[/:].*$/, '');
 // A site (hostname, subdomains included) or one exact page. A page keeps an explicit http:// scheme, as the API
 // matches page addresses exactly; a query string or fragment would point at another page, so it is refused.
 function target(input) {
@@ -470,12 +479,7 @@ class BacklinksService {
   // What the lookups start from: our site and the competitors listed on Competitors (by their websites).
   async sites(id) {
     const project = await this.p.project(id);
-    const bare = (d) =>
-      String(d || '')
-        .toLowerCase()
-        .replace(/^https?:\/\//, '')
-        .replace(/^www\./, '')
-        .replace(/[/:].*$/, '');
+    const bare = bareDomain;
     const state = await this.p.competitors?.state?.(id).catch(() => null);
     return {
       own: [...new Set((project?.domains || []).map(bare).filter(Boolean))],
@@ -501,12 +505,32 @@ class BacklinksService {
   snapshots() {
     return this.p.db.getRepository('nrSnapshots');
   }
-  async watch(id) {
+  /** Our own site: the project's first domain, bare. */
+  async ownTarget(id) {
+    const project = await this.p.project(id);
+    return bareDomain((project?.domains || [])[0]) || null;
+  }
+  async watchSaved(id) {
     const row = await this.snapshots().findOne({
       filter: { key: this.watchKey(id) },
     });
-    const saved = row?.get('payload') || {};
-    const target = (await this.sites(id)).own[0] || null;
+    return { row, saved: row?.get('payload') || {} };
+  }
+  async writeWatch(id, payload) {
+    const { row } = await this.watchSaved(id);
+    if (row)
+      await this.snapshots().update({
+        filterByTk: row.id,
+        values: { payload },
+      });
+    else
+      await this.snapshots().create({
+        values: { key: this.watchKey(id), payload },
+      });
+  }
+  async watch(id) {
+    const { saved } = await this.watchSaved(id);
+    const target = await this.ownTarget(id);
     const estimate = (view) =>
       target ? specification({ view, target }).estimatedUsd : 0;
     return {
@@ -515,22 +539,31 @@ class BacklinksService {
       target,
       verified: Boolean(this.d4s.config(id)?.verifiedAt),
       monthlyUsd: usd(estimate('overview') + estimate('broken')),
+      // The last check that asked for a lookup: when, and why it failed if it did. A failed one is tried again after
+      // CHECK_RETRY_MS, never every hour (a failed run does not block the same query, and each try may be billed).
+      lastCheck: saved.lastCheck || null,
+      retryAt:
+        saved.lastCheck?.error && saved.lastCheck.at
+          ? new Date(
+              Date.parse(saved.lastCheck.at) + CHECK_RETRY_MS,
+            ).toISOString()
+          : null,
     };
   }
   async setWatch(id, v) {
     const enabled = v.enabled === true;
-    const repo = this.snapshots(),
-      key = this.watchKey(id);
-    const row = await repo.findOne({ filter: { key } });
-    const payload = {
+    const { saved } = await this.watchSaved(id);
+    // Asking for the state it already has (a retry, another tab) changes nothing: the switch keeps its time and no
+    // second check starts.
+    if ((saved.enabled === true) === enabled) return this.watch(id);
+    await this.writeWatch(id, {
       enabled,
       since: enabled ? new Date().toISOString() : null,
-    };
-    if (row) await repo.update({ filterByTk: row.id, values: { payload } });
-    else await repo.create({ values: { key, payload } });
-    // Switched on: the first check runs now rather than at the next hour.
+      lastCheck: null,
+    });
+    // Switched on: the first check runs before answering, so a refusal (the month's budget) shows on the switch.
     if (enabled)
-      void this.check(id).catch((e) =>
+      await this.check(id).catch((e) =>
         this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
           projectId: String(id),
           message: e?.message,
@@ -539,32 +572,71 @@ class BacklinksService {
     return this.watch(id);
   }
   /** Looks up whatever of our site's overview and broken pages has no saved lookup within the reuse time. */
-  async check(id) {
-    const w = await this.watch(id);
-    if (!w.enabled || !w.target || !w.verified) return { checked: 0 };
-    let checked = 0;
+  async check(id, saved) {
+    const state = saved ?? (await this.watchSaved(id)).saved;
+    if (state.enabled !== true || !this.d4s.config(id)?.verifiedAt)
+      return { checked: 0 };
+    const last = state.lastCheck;
+    if (last?.error && Date.now() - Date.parse(last.at) < CHECK_RETRY_MS)
+      return { checked: 0, waiting: true };
+    const target = await this.ownTarget(id);
+    if (!target) return { checked: 0 };
+    let checked = 0,
+      error = null,
+      asked = false;
     for (const view of ['overview', 'broken']) {
-      if (await this.saved(id, { view, target: w.target })) continue;
-      const run = await this.run(id, {
-        view,
-        target: w.target,
-        requestKey: randomUUID().replace(/-/g, ''),
-      });
-      if (!run.reused) checked++;
+      if (await this.saved(id, { view, target })) continue;
+      asked = true;
+      try {
+        const run = await this.run(id, {
+          view,
+          target,
+          requestKey: randomUUID().replace(/-/g, ''),
+        });
+        if (run.status !== 'completed') {
+          error = { view, code: run.errorCode || run.status };
+          break;
+        }
+        if (!run.reused) checked++;
+      } catch (e) {
+        error = { view, message: e?.message || 'failed' };
+        break;
+      }
     }
-    return { checked };
+    if (asked)
+      await this.writeWatch(id, {
+        ...state,
+        lastCheck: { at: new Date().toISOString(), error },
+      });
+    if (error)
+      this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
+        projectId: String(id),
+        view: error.view,
+        code: error.code,
+      });
+    return { checked, ...(error ? { error } : {}) };
   }
+  /** Every hour: the projects with the check on, read in one query, each checked in turn. */
   async tick() {
     if (this.busy) return;
     this.busy = true;
     try {
-      for (const id of await this.p.projectIds()) {
+      const ids = (await this.p.projectIds()).map(String);
+      const rows = ids.length
+        ? await this.snapshots().find({
+            filter: { key: { $in: ids.map((id) => this.watchKey(id)) } },
+          })
+        : [];
+      for (const row of rows) {
+        const saved = row.get('payload') || {};
+        if (saved.enabled !== true) continue;
+        const id = String(row.get('key')).slice('backlinks-watch:'.length);
         try {
-          await this.check(String(id));
+          await this.check(id, saved);
         } catch (e) {
-          // A budget refusal or a provider failure waits for the next hour; it never stops other projects.
+          // One project failing never stops the others.
           this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
-            projectId: String(id),
+            projectId: id,
             message: e?.message,
           });
         }
@@ -573,16 +645,23 @@ class BacklinksService {
       this.busy = false;
     }
   }
-  /** What the daily analysis reads: our site's saved overview and broken pages, never a new lookup. */
+  /**
+   * What the daily analysis reads while the check is on: our site's saved overview and broken pages, never a new
+   * lookup. With the check off it reads nothing, and Analysis rules shows the source disconnected.
+   */
   async analysisData(id) {
-    const w = await this.watch(id);
-    if (!w.target) return null;
+    const { saved } = await this.watchSaved(id);
+    if (saved.enabled !== true)
+      return { enabled: false, overview: null, broken: null };
+    const failed = Boolean(saved.lastCheck?.error);
+    const target = await this.ownTarget(id);
+    if (!target) return { enabled: true, failed, overview: null, broken: null };
     const [overview, broken] = await Promise.all(
       ['overview', 'broken'].map((view) =>
-        this.saved(id, { view, target: w.target }).catch(() => null),
+        this.saved(id, { view, target }).catch(() => null),
       ),
     );
-    return { target: w.target, enabled: w.enabled, overview, broken };
+    return { target, enabled: true, failed, overview, broken };
   }
   /** This month's DataForSEO spending and budget, for a lookup's cost note. */
   spend(id) {

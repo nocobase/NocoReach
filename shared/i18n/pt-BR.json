@@ -8116,5 +8116,6 @@
   "backlinks.watchLabel": "Verificar os backlinks de {0} todo mês",
   "backlinks.watchHelp": "Uma vez por mês a visão geral e as páginas quebradas do nosso site são consultadas de novo, e a análise diária as lê: domínios de referência perdidos e páginas quebradas ainda com links viram oportunidades para corrigir.",
   "backlinks.watchCost": "Cerca de ${0} por mês do orçamento da DataForSEO do projeto",
-  "backlinks.watchSince": "ativo desde {0}"
+  "backlinks.watchSince": "ativo desde {0}",
+  "backlinks.watchFailed": "A última verificação não foi concluída: {0} Será tentada de novo depois de {1}."
 }

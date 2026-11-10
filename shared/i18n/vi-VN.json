@@ -8116,5 +8116,6 @@
   "backlinks.watchLabel": "Kiểm tra backlink của {0} hằng tháng",
   "backlinks.watchHelp": "Mỗi tháng một lần, phần tổng quan và các trang hỏng của trang web được tra lại, và phân tích hằng ngày sẽ đọc kết quả: tên miền giới thiệu bị mất ròng và trang hỏng còn liên kết trở thành cơ hội để xử lý.",
   "backlinks.watchCost": "Khoảng ${0} mỗi tháng từ ngân sách DataForSEO của dự án",
-  "backlinks.watchSince": "bật từ {0}"
+  "backlinks.watchSince": "bật từ {0}",
+  "backlinks.watchFailed": "Lần kiểm tra trước chưa hoàn tất: {0} Sẽ thử lại sau {1}."
 }

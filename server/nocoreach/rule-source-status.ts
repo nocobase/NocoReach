@@ -27,6 +27,7 @@ type Host = Parameters<typeof contentInputs>[0] & {
   backlinks?: {
     analysisData(id: string): Promise<{
       enabled: boolean;
+      failed?: boolean;
       overview: { completedAt?: string | null; createdAt: string } | null;
     } | null>;
   };
@@ -62,8 +63,8 @@ export async function sourceStatuses(
   } catch {
     /* Unknown is distinct from disconnected. */
   }
-  // Backlinks has no Data health row: it is ready while our site's lookup is saved, waiting for its first monthly
-  // check once switched on, and disconnected otherwise.
+  // Backlinks has no Data health row: disconnected while its monthly check is off, ready once our site's lookup is
+  // saved, in error when the last check failed, waiting for its first check otherwise.
   if ('backlinks' in out)
     try {
       const data = await host.backlinks?.analysisData(id);
@@ -72,7 +73,13 @@ export async function sourceStatuses(
             state: 'ready',
             collectedAt: data.overview.completedAt || data.overview.createdAt,
           }
-        : { state: data?.enabled ? 'waiting' : 'disconnected' };
+        : {
+            state: !data?.enabled
+              ? 'disconnected'
+              : data.failed
+                ? 'error'
+                : 'waiting',
+          };
     } catch {
       /* Unknown. */
     }

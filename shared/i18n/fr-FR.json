@@ -8116,5 +8116,6 @@
   "backlinks.watchLabel": "Contrôler les backlinks de {0} chaque mois",
   "backlinks.watchHelp": "Une fois par mois, l’aperçu et les pages cassées de notre site sont de nouveau recherchés, et l’analyse quotidienne les lit : les domaines référents perdus et les pages cassées encore liées deviennent des opportunités à traiter.",
   "backlinks.watchCost": "Environ ${0} par mois sur le budget DataForSEO du projet",
-  "backlinks.watchSince": "activé depuis le {0}"
+  "backlinks.watchSince": "activé depuis le {0}",
+  "backlinks.watchFailed": "Le dernier contrôle n’a pas abouti : {0} Nouvel essai après le {1}."
 }

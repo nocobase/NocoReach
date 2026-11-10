@@ -8116,5 +8116,6 @@
   "backlinks.watchLabel": "每月自动检查 {0} 的外链",
   "backlinks.watchHelp": "每月自动重新查询本站的外链概况和失效页面，每日分析会读取结果：引用域名净流失、仍有外链的失效页面，会变成可以处理的机会。",
   "backlinks.watchCost": "每月约 ${0}，计入项目的 DataForSEO 预算",
-  "backlinks.watchSince": "{0} 起开启"
+  "backlinks.watchSince": "{0} 起开启",
+  "backlinks.watchFailed": "上次检查没有完成：{0} 将在 {1} 后再试。"
 }

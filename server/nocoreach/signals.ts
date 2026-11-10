@@ -14,6 +14,7 @@ import * as __packages_source from './packages-source.js';
 import * as __hackernews_source from './hackernews-source.js';
 import * as __audit from './audit.js';
 import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { pagePlace } from '../../shared/backlinks.js';
 // Signal engine (SPEC §9): deterministic rules per data source. Reads saved data only; never calls external services.
 // A change keeps its key from day to day (no dates in keys since 2026-10-08), so a watched change can be followed.
 const DAY=86400000;
@@ -112,13 +113,13 @@ function rankSignals({rt}){if(!rt?.keywords?.length)return [];const out=[];
 // month losing referring domains on balance or many backlinks, and our pages that no longer open while other sites
 // still link to them — each a fix that wins links back (a redirect or the page restored).
 function backlinksSignals({bl}){if(!bl?.target)return [];const out=[],site=`https://${bl.target}`;
- const months=(bl.overview?.result?.history||[]).filter(h=>h.date),last=months.at(-1),before=months.at(-2);
+ // Whole months only: a month still running (the lookup's own month) has too few days to compare.
+ const checked=String(bl.overview?.completedAt||bl.overview?.createdAt||'').slice(0,7),months=(bl.overview?.result?.history||[]).filter(h=>h.date&&(!checked||h.date.slice(0,7)<checked)),last=months.at(-1),before=months.at(-2);
  if(last){const net=(last.lostReferringDomains??0)-(last.newReferringDomains??0),drop=before?.backlinks&&last.backlinks!==null?(before.backlinks-last.backlinks)/before.backlinks:0;
   if(net>=V('backlinks-lost','minNetDomains')||drop>=V('backlinks-lost','dropPct')/100)out.push(signal({key:'backlinks-lost',type:'change',source:'backlinks',url:site,title:systemMessageText('signals.backlinksLost',{0:bl.target,1:last.date.slice(0,7)}),chip:chip('red',drop>=V('backlinks-lost','dropPct')/100?`↓ ${size(drop)}`:systemMessageText('signals.netLostDomains',{0:n(net)})),facts:[systemMessageText('signals.referringDomainsMonth',{0:n(last.newReferringDomains),1:n(last.lostReferringDomains)}),systemMessageText('signals.backlinksMonth',{0:n(last.newBacklinks),1:n(last.lostBacklinks),2:n(before?.backlinks),3:n(last.backlinks)})],strength:clamp(Math.max(net,drop*100))}));}
  const broken=(bl.broken?.result?.items||[]).filter(p=>(p.backlinks??0)>=V('backlinks-broken','minLinks')).slice(0,5);
- // A page on a subdomain (docs.example.com) is named with its host, so it is not taken for the main site's page of the
- // same path and two such pages stay two changes.
- const place=u=>{let h='';try{h=new URL(u).hostname.toLowerCase().replace(/^www\./,'');}catch{/* keep the path */}return h&&h!==bl.target?`${h}${pathOf(u)}`:pathOf(u);};
+ // Named with its host on a subdomain, so two pages of the same path on two hosts stay two changes.
+ const place=u=>pagePlace(u,bl.target);
  for(const p of broken)out.push(signal({key:`backlinks-broken:${place(p.url)}`,type:'page',source:'backlinks',url:p.url,title:systemMessageText('signals.brokenPageLinks',{0:place(p.url),1:n(p.backlinks),2:n(p.referringDomains)}),chip:chip('red',String(p.status??'4xx')),facts:[systemMessageText('signals.brokenPageFact',{0:p.status??'—',1:(bl.broken.completedAt||bl.broken.createdAt||'').slice(0,10)})],strength:clamp(20+Math.log2(1+(p.backlinks||0))*8),actionable:true,action:'technical',evidence:[p.url]}));
  return out;}
 // 网站审计: pages that do not open or ask not to be indexed, and missing titles or descriptions on several pages.

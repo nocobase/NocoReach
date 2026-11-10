@@ -5,6 +5,7 @@ import { getCurrentLocale, $t } from "#i18n";
 import type { TaskDraft } from "./keyword-hand-off";
 import { countOf, subjectOf } from './task-subject';
 import { distinctPages } from '../../shared/task-start.js';
+import { pagePlace } from '../../shared/backlinks.js';
 
 const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 const pos = (v: number | null | undefined) => (v == null || !v ? "—" : v.toFixed(1));
@@ -109,8 +110,7 @@ export function linkProspectsDraft(own: string, competitors: string[], rows: Lin
 // with the Technical fix playbook so the links count again.
 export type BrokenPage = { url: string; status: number | null; backlinks: number | null; referringDomains: number | null };
 export function brokenPagesDraft(site: string, rows: BrokenPage[], at: string): TaskDraft {
-  // A page on a subdomain (docs.example.com) is named with its host, so it is not taken for the main site's page.
-  const place = (u: string) => { let h = ""; try { h = new URL(u).hostname.toLowerCase().replace(/^www\./, ""); } catch { /* keep the path */ } return h && h !== site ? `${h}${pathOf(u)}` : pathOf(u); };
+  const place = (u: string) => pagePlace(u, site);
   const head = place(rows[0].url);
   const lines = rows.slice(0, 60).map((r) => $t('seoHandOff.brokenPageLine', { 0: r.url, 1: r.status ?? "—", 2: n(r.backlinks), 3: n(r.referringDomains) }));
   return {

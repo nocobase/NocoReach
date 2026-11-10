@@ -8118,5 +8118,6 @@
   "backlinks.watchLabel": "{0}의 백링크를 매월 점검",
   "backlinks.watchHelp": "매월 우리 사이트의 링크 개요와 깨진 페이지를 다시 조회하고, 일일 분석이 그 결과를 읽습니다. 참조 도메인 순감소와 링크가 남은 깨진 페이지는 처리할 수 있는 기회가 됩니다.",
   "backlinks.watchCost": "매월 약 ${0}, 프로젝트 DataForSEO 예산에서 차감",
-  "backlinks.watchSince": "{0}부터 켜짐"
+  "backlinks.watchSince": "{0}부터 켜짐",
+  "backlinks.watchFailed": "지난 점검이 완료되지 않았습니다: {0} {1} 이후 다시 시도합니다."
 }

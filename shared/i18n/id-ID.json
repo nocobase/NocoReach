@@ -8116,5 +8116,6 @@
   "backlinks.watchLabel": "Periksa backlink {0} setiap bulan",
   "backlinks.watchHelp": "Sebulan sekali ringkasan dan halaman rusak situs kita dicari ulang, dan analisis harian membacanya: domain perujuk yang hilang bersih dan halaman rusak yang masih ditautkan menjadi peluang untuk diperbaiki.",
   "backlinks.watchCost": "Sekitar ${0} per bulan dari anggaran DataForSEO proyek",
-  "backlinks.watchSince": "aktif sejak {0}"
+  "backlinks.watchSince": "aktif sejak {0}",
+  "backlinks.watchFailed": "Pemeriksaan terakhir tidak selesai: {0} Akan dicoba lagi setelah {1}."
 }

@@ -13,13 +13,16 @@ import BacklinksPage, {
   SPAM_THRESHOLD,
 } from '#pages/backlinks';
 
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+const { action, current } = vi.hoisted(() => ({
+  action: vi.fn(),
+  current: { project: { id: 1, domains: ['acme.example'] } },
+}));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
 vi.mock('#hooks/use-business-access', () => ({
   useBusinessAccess: () => ({ can: true }),
 }));
 vi.mock('#pages/reach-data', () => ({
-  useProject: () => ({ project: { id: 1, domains: ['acme.example'] } }),
+  useProject: () => ({ project: current.project }),
 }));
 
 const spec = (view: string) => ({
@@ -146,6 +149,7 @@ const gap = {
 let recent: unknown[] = [];
 beforeEach(() => {
   recent = [];
+  current.project = { id: 1, domains: ['acme.example'] };
   action.mockReset();
   action.mockImplementation(
     async (
@@ -571,4 +575,76 @@ it('the monthly check of our site is off until someone switches it on, with its 
   expect(sets).toHaveLength(1);
   expect(sets[0][2].body).toMatchObject({ enabled: true });
   expect(await screen.findByText(/起开启/)).toBeTruthy();
+});
+
+it('a failed monthly check says why under the switch and when it is tried again', async () => {
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (resource: string, act: string, options: never) =>
+      resource === 'nrBacklinks' && act === 'watch'
+        ? {
+            enabled: true,
+            since: '2026-11-01T00:00:00Z',
+            target: 'acme.example',
+            verified: true,
+            monthlyUsd: 0.08,
+            lastCheck: {
+              at: '2026-11-10T00:00:00Z',
+              error: { view: 'overview', code: 'backlinks_balance' },
+            },
+            retryAt: '2026-11-11T00:00:00Z',
+          }
+        : base(resource, act, options),
+  );
+  open('/backlinks');
+  const note = await screen.findByRole('alert');
+  expect(note.textContent).toContain('上次检查没有完成');
+  expect(note.textContent).toContain('余额');
+});
+
+it("switching project never shows the last project's switch, even when its answer comes late", async () => {
+  let answerA: (w: unknown) => void = () => undefined;
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (resource: string, act: string, options: never) => {
+      if (resource === 'nrBacklinks' && act === 'watch')
+        return current.project.id === 1
+          ? new Promise((r) => (answerA = r))
+          : {
+              enabled: false,
+              since: null,
+              target: 'beta.example',
+              verified: true,
+              monthlyUsd: 0.08,
+              lastCheck: null,
+              retryAt: null,
+            };
+      return base(resource, act, options);
+    },
+  );
+  const router = createMemoryRouter(
+    [{ path: '/backlinks', element: <Backlinks /> }],
+    {
+      initialEntries: ['/backlinks'],
+    },
+  );
+  const view = render(<RouterProvider router={router} />);
+  current.project = { id: 2, domains: ['beta.example'] };
+  view.rerender(<RouterProvider router={router} />);
+  expect(
+    await screen.findByRole('switch', { name: /beta\.example/ }),
+  ).toBeTruthy();
+  // Project 1's answer arrives late: it is dropped.
+  answerA({
+    enabled: true,
+    since: '2026-11-01T00:00:00Z',
+    target: 'acme.example',
+    verified: true,
+    monthlyUsd: 0.08,
+    lastCheck: null,
+    retryAt: null,
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.queryByRole('switch', { name: /acme\.example/ })).toBeNull();
+  expect(screen.getByRole('switch', { name: /beta\.example/ })).toBeTruthy();
 });

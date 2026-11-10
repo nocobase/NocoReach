@@ -6,7 +6,7 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 // one query per table page), Hide spam filters the rows already read, a site or one page (no subfolder scope), no
 // search tabs, CSV export of the rows on screen. Added here: Link gap (sites linking to competitors but not to us) and
 // Hand off to agent from it and from a competitor's referring domains, with the Link building playbook.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   createColumnHelper,
@@ -64,7 +64,11 @@ import { brokenPagesDraft, linkProspectsDraft } from './seo-hand-off';
 import { formatCount, formatDateTime } from '#lib/format';
 import { useProject } from './reach-data';
 import { bare } from './domain-overview';
-import { GAP_COMPETITORS, SPAM_THRESHOLD } from '../../shared/backlinks.js';
+import {
+  GAP_COMPETITORS,
+  SPAM_THRESHOLD,
+  pagePlace,
+} from '../../shared/backlinks.js';
 import './reach-workspace.css';
 import './data-views.css';
 import { currentProjectId } from './current-project';
@@ -636,30 +640,42 @@ function Overview({
   const s = run.result?.summary;
   const history = run.result?.history ?? [];
   const last = history[history.length - 1];
-  const tiles: [string, string, string, ('success' | 'destructive')?][] = [
-    [$t('backlinks.rank'), count(s?.rank), $t('backlinks.rankHelp')],
+  // [id, label, value, help, tone]; the id names a tile for what it does (broken opens Broken pages).
+  const tiles: [
+    string,
+    string,
+    string,
+    string,
+    ('success' | 'destructive')?,
+  ][] = [
+    ['rank', $t('backlinks.rank'), count(s?.rank), $t('backlinks.rankHelp')],
     [
+      'backlinks',
       $t('backlinks.backlinks'),
       count(s?.backlinks),
       $t('backlinks.backlinksHelp'),
     ],
     [
+      'referringDomains',
       $t('backlinks.referringDomains'),
       count(s?.referringDomains),
       $t('backlinks.referringDomainsHelp'),
     ],
     [
+      'referringPages',
       $t('backlinks.referringPages'),
       count(s?.referringPages),
       $t('backlinks.referringPagesHelp'),
     ],
     [
+      'spam',
       $t('backlinks.spamScore'),
       count(s?.spam),
       $t('backlinks.spamScoreHelp'),
       (s?.spam ?? 0) >= SPAM_THRESHOLD ? 'destructive' : undefined,
     ],
     [
+      'broken',
       $t('backlinks.brokenBacklinks'),
       count(s?.brokenBacklinks),
       own
@@ -670,15 +686,15 @@ function Overview({
   return (
     <div className='space-y-3'>
       <div className='grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6'>
-        {tiles.map(([label, value, help, tone]) => {
+        {tiles.map(([id, label, value, help, tone]) => {
           const tile = (
             <Card className='h-full gap-0 p-4' data-metric={label}>
               <StatTile label={label} value={value} help={help} tone={tone} />
             </Card>
           );
-          return label === $t('backlinks.brokenBacklinks') && onBroken ? (
+          return id === 'broken' && onBroken ? (
             <button
-              key={label}
+              key={id}
               type='button'
               className='rounded-xl text-left transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none'
               title={$t('backlinks.openBroken')}
@@ -688,7 +704,7 @@ function Overview({
               {tile}
             </button>
           ) : (
-            <div key={label}>{tile}</div>
+            <div key={id}>{tile}</div>
           );
         })}
       </div>
@@ -2040,15 +2056,6 @@ function RecentGaps({
   );
 }
 
-// A page's address as a row shows it: the path on the site itself, with the host on a subdomain (docs.example.com).
-const placeOf = (url: string, site: string) => {
-  try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    return host !== site ? `${host}${pathOf(url)}` : pathOf(url);
-  } catch {
-    return url;
-  }
-};
 const bHelper = createColumnHelper<BrokenRow>();
 /**
  * Broken pages: the site's pages that no longer open (4xx or 5xx) while other sites still link to them, most linked
@@ -2071,7 +2078,7 @@ function BrokenTable({ run, own }: { run: Run<BrokenRow>; own: boolean }) {
           <div className='min-w-0'>
             {link(
               row.original.url,
-              placeOf(row.original.url, bare(run.spec.target)),
+              pagePlace(row.original.url, bare(run.spec.target)),
               'max-w-xl',
             )}
             {row.original.title ? (
@@ -2210,6 +2217,11 @@ type Watch = {
   target: string | null;
   verified: boolean;
   monthlyUsd: number;
+  lastCheck: {
+    at: string;
+    error: { view: string; code?: string; message?: string } | null;
+  } | null;
+  retryAt: string | null;
 };
 /**
  * The monthly check of our own site: while on, our overview and broken pages are looked up again once their saved
@@ -2222,17 +2234,29 @@ function WatchSwitch() {
   const [watch, setWatch] = useState<Watch>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useMessageState('');
+  // Each project reads its own switch: the last one's is dropped at once, and an answer that comes back after the
+  // project changed is ignored, so the switch shown is always the one a click changes.
+  const projectRef = useRef(project?.id);
+  projectRef.current = project?.id;
   useEffect(() => {
+    const asked = project?.id;
+    setWatch(undefined);
+    setError('');
     void call<Watch>('watch')
-      .then(setWatch)
+      .then((w) => {
+        if (projectRef.current === asked) setWatch(w);
+      })
       .catch(() => undefined);
   }, [project?.id]);
   if (!watch?.target || !watch.verified) return null;
+  const failure = watch.enabled ? watch.lastCheck?.error : null;
   const toggle = async (enabled: boolean) => {
+    const asked = project?.id;
     setBusy(true);
     setError('');
     try {
-      setWatch(await call<Watch>('setWatch', { enabled }));
+      const next = await call<Watch>('setWatch', { enabled });
+      if (projectRef.current === asked) setWatch(next);
     } catch (e) {
       setError(() =>
         e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'),
@@ -2262,6 +2286,16 @@ function WatchSwitch() {
           ? ` · ${$t('backlinks.watchSince', { 0: fmtTime(watch.since) })}`
           : ''}
       </p>
+      {failure ? (
+        <p className='nr-error' role='alert' data-backlinks-watch-failed=''>
+          {$t('backlinks.watchFailed', {
+            0: failure.code
+              ? backlinksError(failure.code)
+              : $legacyText(failure.message || ''),
+            1: fmtTime(watch.retryAt),
+          })}
+        </p>
+      ) : null}
       {error ? (
         <p role='alert' className='nr-error'>
           {error}
