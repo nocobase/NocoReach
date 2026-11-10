@@ -14,16 +14,37 @@ export const priorityRank: Record<string, number> = {
 };
 /**
  * Pending opportunities in the order they are shown: by priority, which the AI set from the growth, the relevance to
- * the product and the effort; at the same priority Trending now first, as it does not keep (2026-11-10); then the
- * newest first.
+ * the product and the effort; at the same priority Trending now first, as it does not keep (2026-11-10), and among
+ * those the one Insights' first note is about (its batch's `leadId`); then the newest first. `saveInsights` gives that
+ * one the highest priority of its batch's trending opportunities, so Most worth a look today is the first of them here.
  */
 export function pendingOrder(a: Row, b: Row): number {
-  const trending = (r: Row) => Number(categoryOf(r.card) === 'trending');
+  const trending = (r: Row) => Number(categoryOf(r.card) === 'trending'),
+    lead = (r: Row) => Number(r.batch.leadId === r.card.id);
   return (
     (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) ||
     trending(b) - trending(a) ||
+    lead(b) - lead(a) ||
     String(b.firstSeenAt).localeCompare(String(a.firstSeenAt))
   );
+}
+/**
+ * The priority the opportunity of Insights' first note takes so it ranks first among the batch's trending
+ * opportunities (or among all of them, when it is not trending): the highest any of them has, if above its own.
+ */
+export function leadPriority(
+  lead: Pick<Opportunity, 'priority' | 'growth'>,
+  items: Pick<Opportunity, 'priority' | 'growth'>[],
+): string | undefined {
+  const trending = (c: Pick<Opportunity, 'growth'>) =>
+      categoryOf(c) === 'trending',
+    peers = trending(lead) ? items.filter(trending) : items,
+    rank = (c: Pick<Opportunity, 'priority'>) =>
+      priorityRank[c.priority || 'unrated'] ?? 3,
+    top = peers.reduce((m, c) => Math.min(m, rank(c)), rank(lead));
+  return top < rank(lead)
+    ? Object.keys(priorityRank).find((k) => priorityRank[k] === top)
+    : undefined;
 }
 export function citedSignals(row: Row) {
   const ids = new Set(row.card.signalIds || []);

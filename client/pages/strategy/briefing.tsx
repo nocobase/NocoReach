@@ -339,9 +339,12 @@ function Summary({
       )}
       {first && (
         <div className='mt-2 flex flex-col gap-0.5' data-lead-note=''>
-          <span className='text-xs text-muted-foreground'>
-            {$t('strategy.mostWorthSeeing')}
-          </span>
+          {/* On a day with no opportunity to point to, the note only says why (2026-11-10 review). */}
+          {batch?.leadId ? (
+            <span className='text-xs text-muted-foreground'>
+              {$t('strategy.mostWorthSeeing')}
+            </span>
+          ) : null}
           <p>
             {first}
             {lead?.card.no ? (

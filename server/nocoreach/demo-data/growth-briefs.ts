@@ -47,6 +47,11 @@ export interface GrowthBrief {
   priority: 'high' | 'medium' | 'low';
   effort: 'low' | 'medium' | 'high';
   growth: (lang: Lang) => Growth;
+  /**
+   * Ignored this many days ago, so it is under Handled rather than To do: To do keeps the four categories in about the
+   * proportion of the approved mockup, with at most three Content optimization (2026-11-10 review).
+   */
+  ignored?: number;
 }
 
 const text = (
@@ -945,7 +950,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       ),
       newPage: { section: '/features/', linkFrom: ['/', '/features/workload'] },
       source: 'keywords',
-      priority: 'medium',
+      priority: 'high',
       effort: 'medium',
       growth: () =>
         rising(
@@ -1131,6 +1136,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'ai-search',
       priority: 'medium',
       effort: 'low',
+      ignored: 3,
       growth: (lang) =>
         uncited(
           34,
@@ -1317,7 +1323,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       ),
       newPage: { section: '/blog/', linkFrom: ['/docs/getting-started'] },
       source: 'github',
-      priority: 'low',
+      priority: 'high',
       effort: 'medium',
       growth: () =>
         newRepo('project-management', 9_600, [
@@ -1376,6 +1382,63 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
               ['okr excel template', 210, 22, []],
               ['okr tracking', 140, 35, [nimbus(9)]],
               ['personal okr examples', 90, 16, []],
+            ],
+          ),
+          '/keywords?tab=suggest',
+        ),
+    },
+    {
+      key: 'acme-growth-status-report',
+      title: t(
+        '写一篇项目周报模板指南，拿下 7 个还没排上的词',
+        'Write a project status report guide to win 7 keywords we do not rank for',
+      ),
+      reason: t(
+        '这 7 个词每月搜索 6,620 次，本站都没排进前 20；Example Tasks 和 Nimbus 各有 3 个排在前 10。',
+        'These 7 keywords are searched 6,620 times a month and we rank in the top 20 for none; Example Tasks and Nimbus each have 3 in the top 10.',
+      ),
+      meaning: t(
+        '对应 Acme 的周报摘要：每周自动汇总项目进度发给相关的人，但网站上没有讲项目周报怎么写的内容。这组词一年来搜索平稳，前 10 名多是范本下载和写法教程，Example Tasks 和 Nimbus 都靠范本页拿到了这部分流量。',
+        'This fits Acme’s weekly report summaries, which sum up a project’s progress every week for the people involved, yet the site has nothing on writing a status report. These terms have been searched steadily for a year, the top 10 are mostly template downloads and how-tos, and Example Tasks and Nimbus both take this traffic with template pages.',
+      ),
+      suggestion: t(
+        '写一篇“项目周报模板与写法”的指南，给出周报、月报两个范例和一份可下载的模板，演示周报摘要怎么自动生成；从模板页链接过来。',
+        'Write a guide to project status report templates and how to write them, with a weekly and a monthly example and a downloadable template, showing how the weekly report summary writes one for you; link to it from the templates page.',
+      ),
+      objective: t(
+        '用一篇周报模板指南拿下这组关键词',
+        'Win this keyword group with a status report guide',
+      ),
+      newPage: { section: '/blog/', linkFrom: ['/templates'] },
+      source: 'keywords',
+      priority: 'medium',
+      effort: 'medium',
+      growth: (lang) =>
+        demandGap(
+          pick<Keyword[]>(
+            lang,
+            [
+              ['專案週報範本', 2400, 26, [tasks(2), nimbus(7)]],
+              ['週報怎麼寫', 1600, 15, []],
+              ['專案進度報告', 880, 23, [tasks(5)]],
+              ['週報範例', 720, 19, [nimbus(4)]],
+              ['專案狀態報告', 590, 28, [tasks(3), nimbus(9)]],
+              ['進度報告 excel', 260, 17, []],
+              ['主管週報', 170, 12, []],
+            ],
+            [
+              [
+                'project status report template',
+                2400,
+                26,
+                [tasks(2), nimbus(7)],
+              ],
+              ['how to write a status report', 1600, 15, []],
+              ['project progress report', 880, 23, [tasks(5)]],
+              ['weekly status report example', 720, 19, [nimbus(4)]],
+              ['project status report', 590, 28, [tasks(3), nimbus(9)]],
+              ['status report excel template', 260, 17, []],
+              ['weekly report to manager', 170, 12, []],
             ],
           ),
           '/keywords?tab=suggest',
@@ -1459,8 +1522,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
     {
       key: 'acme-growth-migrate',
       title: t(
-        '更新迁移文档，保住每月约 1,800 次访问',
-        'Update the migration docs to keep about 1,800 visits a month',
+        '更新每月约 1,800 次访问的迁移文档',
+        'Update the migration docs, visited about 1,800 times a month',
       ),
       reason: t(
         '这页 15 个月没更新，每月仍有约 1,800 次访问，是从其他工具迁移过来的团队最常看的文档之一。',
@@ -1482,6 +1545,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'site',
       priority: 'medium',
       effort: 'low',
+      ignored: 2,
       growth: (lang) => {
         const page = '/docs/migrate';
         return pageGrowth('stale-page', {
@@ -1542,6 +1606,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'ai-search',
       priority: 'medium',
       effort: 'medium',
+      ignored: 4,
       growth: (lang) =>
         aiDroppedGrowth({
           platform: 'chat_gpt',
@@ -1579,8 +1644,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
     {
       key: 'acme-growth-template-titles',
       title: t(
-        '改掉模板页的重复标题，保住每月约 1,500 次点击',
-        'Fix the duplicate titles on template pages to keep about 1,500 clicks a month',
+        '改掉模板页的重复标题，涉及每月约 1,500 次点击',
+        'Fix the duplicate titles on template pages, which get about 1,500 clicks a month',
       ),
       reason: t(
         '7 个模板页用了同一个标题，其中 3 个有搜索流量，近 28 天点击 1,380 次。',
@@ -1602,6 +1667,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'site',
       priority: 'medium',
       effort: 'low',
+      ignored: 1,
       growth: (lang) =>
         pageIssueGrowth({
           issue: pick(lang, '标题重复', 'Duplicate title'),
@@ -2218,8 +2284,8 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
     {
       key: 'crm-growth-email-sync',
       title: t(
-        '把邮件同步文档写完整，留住每月约 830 次访问',
-        'Fill out the email sync docs to keep about 830 visits a month',
+        '补全每月约 830 次访问的邮件同步文档',
+        'Fill out the email sync docs, visited about 830 times a month',
       ),
       reason: t(
         '这页正文只有约 120 字，每月仍有约 830 次访问；读者要找的授权步骤和常见错误都没写。',

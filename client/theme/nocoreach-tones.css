@@ -31,6 +31,8 @@
   --nr-ink-red: oklch(0.52 0.18 27);
   --nr-tint-orange: oklch(0.955 0.045 60);
   --nr-ink-orange: oklch(0.55 0.15 50);
+  --nr-tint-cyan: oklch(0.96 0.03 210);
+  --nr-ink-cyan: oklch(0.5 0.1 215);
 }
 
 /* Dark: the tint is a dim translucent wash of the hue, the ink a lighter shade, so a pill never glows. */
@@ -56,6 +58,8 @@
   --nr-ink-red: oklch(0.78 0.13 25);
   --nr-tint-orange: oklch(0.7 0.15 55 / 0.2);
   --nr-ink-orange: oklch(0.82 0.12 60);
+  --nr-tint-cyan: oklch(0.65 0.1 215 / 0.2);
+  --nr-ink-cyan: oklch(0.8 0.09 210);
 }
 
 /* Badge text: 12px (the tag reference), between the xs caption and the sm body sizes. Line height stays tight

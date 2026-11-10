@@ -105,6 +105,7 @@ export function opportunityHistory(
     reason?: string;
     effort?: string;
     growth?: Growth;
+    ignored?: number;
   }[] = [
     ...(which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
       context.clock.now,
@@ -125,6 +126,7 @@ export function opportunityHistory(
       reason: brief.reason[lang],
       effort: brief.effort,
       growth: brief.growth(lang),
+      ...(brief.ignored ? { ignored: brief.ignored } : {}),
     })),
     ...copy.briefs.map(
       ([
@@ -231,6 +233,16 @@ export function opportunityHistory(
       ignoredAt: at(i ? 15 : 6),
       reviewedAt: at(i ? 15 : 6),
     };
+  // Growth opportunities someone already ignored (growth-briefs.ts), never before they were found.
+  for (const [i, entry] of entries.entries())
+    if (entry.ignored) {
+      const ago = Math.min(entry.ignored, age(cards[i].firstSeenAt!));
+      state.opportunityMeta![cards[i].id] = {
+        status: 'ignored',
+        ignoredAt: at(ago),
+        reviewedAt: at(ago),
+      };
+    }
 
   // Completed monthly work remains discoverable from Handled and links to its actual task.
   const stories = which === 'main' ? content.stories : content.secondTasks;

@@ -407,12 +407,13 @@ it('lists every waiting opportunity in the message of the day, most important fi
   setup();
   await decisionGroup(7);
   expect(screen.getByText('strategy.briefHeadline:7')).toBeTruthy();
-  // The first analysis note is shown at once, under Most worth a look today (2026-11-10); with no other, nothing folds.
+  // The first analysis note is shown at once (2026-11-10); about no opportunity, it has no Most worth a look today
+  // label; with no other note, nothing folds.
   expect(
     screen
       .getByText('Search clicks held steady this week.')
       .closest('[data-lead-note]')!.textContent,
-  ).toContain('strategy.mostWorthSeeing');
+  ).not.toContain('strategy.mostWorthSeeing');
   expect(
     screen.queryByRole('button', { name: /strategy.otherAnalysisNotes/ }),
   ).toBeNull();

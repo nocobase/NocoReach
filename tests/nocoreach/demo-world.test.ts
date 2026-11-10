@@ -92,7 +92,7 @@ describe.each(['zh-CN', 'en-US'])(
         const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
           new Date(now),
         );
-        expect(growth).toHaveLength(which === 'main' ? 17 : 10);
+        expect(growth).toHaveLength(which === 'main' ? 18 : 10);
         const lang = language === 'en-US' ? 'en' : 'zh';
         const kinds = growth.map((brief) => brief.growth(lang).kind);
         // Acme has two or more of each category; with Acme CRM every kind is shown.
@@ -102,6 +102,27 @@ describe.each(['zh-CN', 'en-US'])(
             expect(
               categories.filter((c) => c === category).length,
             ).toBeGreaterThanOrEqual(2);
+          // To do keeps about the proportion of the approved mockup, not mostly Content optimization; the rest are
+          // under Handled (2026-11-10 review).
+          const todo = growth.filter((brief) => !brief.ignored),
+            count = (category: string) =>
+              todo.filter((brief) => brief.growth(lang).category === category)
+                .length;
+          expect(count('trending')).toBeGreaterThanOrEqual(4);
+          expect(count('new-content')).toBe(3);
+          expect(count('competitor-gaps')).toBeGreaterThanOrEqual(3);
+          expect(count('competitor-gaps')).toBeLessThanOrEqual(4);
+          expect(count('optimize')).toBeLessThanOrEqual(3);
+          // Most worth a look today is a trending one of high priority, as is another, so both lead To do.
+          const leading = todo.filter(
+            (brief) =>
+              brief.priority === 'high' &&
+              brief.growth(lang).category === 'trending',
+          );
+          expect(leading.map((brief) => brief.key)).toContain(
+            opportunities.lead,
+          );
+          expect(leading.length).toBeGreaterThanOrEqual(2);
           const crm = crmGrowthBriefs(new Date(now)).map(
             (brief) => brief.growth(lang).kind,
           );
@@ -117,8 +138,9 @@ describe.each(['zh-CN', 'en-US'])(
           expect(g.evidence!.total).toBeGreaterThanOrEqual(
             g.evidence!.rows.length,
           );
-          // The list's line states the size of the growth.
+          // The list's line states the size of the growth; a title never says to keep traffic (2026-11-10 review).
           expect(brief.reason[lang]).toMatch(/\d/u);
+          expect(brief.title[lang]).not.toMatch(/保住|留住|守住|\bkeep\b/iu);
         }
         expect(JSON.stringify(growth.map((b) => b.growth(lang)))).not.toMatch(
           /nocobase|nococrm/i,

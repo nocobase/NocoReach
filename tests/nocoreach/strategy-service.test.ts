@@ -176,6 +176,21 @@ test('the first observation names its opportunity, and an off-site change says w
  assert.deepEqual([first.offsite,second.offsite],[undefined,'Submit to the saas-review.example author']);
  assert.equal(state.insights.leadId,second.id);assert.ok(state.insights.items.every(c=>!('lead' in c)));
 });
+// Most worth a look today is the first trending opportunity on Opportunities too (2026-11-10 review): a trending lead
+// takes the highest priority of the trending ones; the others keep theirs.
+test('the first observation\'s trending opportunity ranks first among trending ones',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[]};
+ const g=(kind,category)=>({kind,category,figures:[{label:{key:'growth.figure.clicks28'},value:1}]});
+ service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'kw-rising:a',source:'keywords',actionable:true,growth:g('rising','trending')},{key:'github-new-repo:b',source:'github',actionable:true,growth:g('new-repo','trending')},{key:'gsc-near-first:/c',source:'gsc',actionable:true,growth:g('near-first','optimize')}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const base={observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',source:'mixed',sources:['gsc']};
+ await service.saveInsights(1,{insights:[
+  {...base,title:'Near',objective:'a',signalIds:['gsc-near-first:/c'],target:'https://ex.com/c',priority:'high'},
+  {...base,title:'Repo',objective:'b',signalIds:['github-new-repo:b'],priority:'high'},
+  {...base,title:'Rising',objective:'c',signalIds:['kw-rising:a'],priority:'low',lead:true}],observations:['Rising first','b']});
+ const by=Object.fromEntries(state.insights.items.map(c=>[c.title,c]));
+ assert.equal(state.insights.leadId,by.Rising.id);
+ assert.deepEqual([by.Near.priority,by.Repo.priority,by.Rising.priority],['high','high','high']);
+});
 // A new page has no address: the model says the section it goes under and the pages to link from (2026-11-10 review).
 test('an opportunity that writes a new page keeps where it goes instead of an address',async()=>{
  const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[]};

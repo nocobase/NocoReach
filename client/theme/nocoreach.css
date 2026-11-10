@@ -27,4 +27,6 @@
   --color-nr-ink-red: var(--nr-ink-red);
   --color-nr-tint-orange: var(--nr-tint-orange);
   --color-nr-ink-orange: var(--nr-ink-orange);
+  --color-nr-tint-cyan: var(--nr-tint-cyan);
+  --color-nr-ink-cyan: var(--nr-ink-cyan);
 }

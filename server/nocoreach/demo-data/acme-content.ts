@@ -2248,14 +2248,14 @@ export function acmeOpportunities(
       ),
       copy(
         t(
-          '已有内容里，Excel 导入指南进前 3 预计每月多 210 次点击；迁移文档 15 个月没更新，每月仍有约 1,800 次访问。',
-          'Among existing pages, the Excel import guide would bring an estimated 210 more clicks a month in the top 3; the migration docs have not been updated for 15 months and still get about 1,800 visits a month.',
+          '已有内容里，Excel 导入指南进前 3 预计每月多 210 次点击；看板页近 28 天曝光 3,860 次、点击率只有 0.9%，改好标题和摘要预计每月多 280 次点击。',
+          'Among existing pages, the Excel import guide would bring an estimated 210 more clicks a month in the top 3; the kanban page had 3,860 impressions in 28 days at a 0.9% click-through rate, and a better title and description would bring an estimated 280 more clicks a month.',
         ),
       ),
       copy(
         t(
-          '要留意的下降：权限文档 5 个跟踪的关键词排名下降，近 28 天点击从 1,810 次降到 1,020 次；ChatGPT 上 6 个问题的回答不再提到 Acme。',
-          'Drops to watch: the permissions docs fell for 5 tracked keywords, with clicks down from 1,810 to 1,020 over 28 days; ChatGPT answers to 6 questions no longer name Acme.',
+          '要留意的下降：权限文档 5 个跟踪的关键词排名下降，近 28 天点击从 1,810 次降到 1,020 次；整站近 7 天的搜索点击和访问也都比前 7 天少。',
+          'Drops to watch: the permissions docs fell for 5 tracked keywords, with clicks down from 1,810 to 1,020 over 28 days; site-wide search clicks and sessions over the last 7 days are also below the 7 days before.',
         ),
       ),
     ],

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import {rowsFor,opportunityState,insightPending} from '../../shared/strategy-pending.js';
+import {rowsFor,opportunityState,insightPending,leadPriority} from '../../shared/strategy-pending.js';
 import {taskOwner,taskWaiting} from '../../shared/task-pending.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { newPageOf } from '../../shared/growth.js';
@@ -130,8 +130,10 @@ class StrategyService{
   const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards),maxDays=context.evidence.signals?.analysisSnapshot?.config?.watchDays??(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;
   return this.mutate(id,v,async(state,transaction)=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights){await this.archive(id,state.insights,transaction);state.insightHistory.unshift(slimBatch(state.insights));}
    const signals=context.evidence.signals?.items||[];watch.enforceDeadlines(state,signalReviews,now);
-   // The opportunity the first observation is about (the model marks it `lead`), shown beside it on Insights.
+   // The opportunity the first observation is about (the model marks it `lead`), shown beside it on Insights. It ranks
+   // first among the batch's trending opportunities on Opportunities too: it takes the highest priority they have.
    const lead=observations.length?items.find(c=>c.lead):null;for(const c of items)delete c.lead;
+   const raised=lead?leadPriority(lead,items):undefined;if(raised)lead.priority=raised;
    state.insights={generatedAt:now,evidence:withoutCatalog(context.evidence),items,sourceReviews:reviews,observations,signalReviews,...(lead?{leadId:lead.id}:{})};
    settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v),await this.pageIdentity(id,transaction));
    watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:state.insights.items,now,maxDays});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
