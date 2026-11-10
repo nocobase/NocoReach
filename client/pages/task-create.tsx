@@ -34,12 +34,7 @@ import {
 } from '#components/ui/select';
 import { InfoTip } from '#components/reach/info-tip';
 import { nocobaseClient } from '#lib/nocoreach-api';
-import {
-  Field,
-  FieldLabel,
-  FieldDescription,
-  FieldError,
-} from '#components/ui/field';
+import { Field, FieldLabel, FieldError } from '#components/ui/field';
 import { confirmAction } from '#components/reach/confirm';
 import { refreshNavBadges } from '#components/app-shell/nav-badges';
 import { toast } from '#lib/toast';
@@ -126,6 +121,8 @@ function CreateTask({
     ),
   });
   const [entries, setEntries] = useState<Entry[]>([]);
+  // The files the last paste, drop or pick left out, a line for each limit broken.
+  const [problems, setProblems] = useState<string[]>([]);
   const entriesRef = useRef<Entry[]>([]);
   const activeRef = useRef(true);
   const savedRef = useRef(false);
@@ -210,19 +207,33 @@ function CreateTask({
   }, [discard]);
   async function addFiles(files: File[]) {
     if (!validScope || busy || attempt) return;
+    const left: string[] = [];
     for (const file of files) {
       const type = taskFileType(file.name, file.type);
+      // A file that breaks a limit is not added: one line names it, as under Activity's message box (ImageProblem).
+      // The count is of the files kept: a failed one waits only to be removed.
+      const kept = entriesRef.current.filter(
+        (value) => value.status !== 'failed',
+      ).length;
+      const why =
+        type === 'legacy'
+          ? ''
+          : !type
+            ? $t('manualTask.typeRejected', { 0: file.name })
+            : file.size > TASK_MEDIA_LIMIT
+              ? $t('manualTask.tooLarge', { 0: file.name })
+              : kept >= TASK_MEDIA_COUNT
+                ? $t('manualTask.tooMany', { 0: TASK_MEDIA_COUNT })
+                : '';
+      if (why) {
+        if (!left.includes(why)) left.push(why);
+        continue;
+      }
       const entry: Entry = {
         key: crypto.randomUUID(),
         file,
         controller: new AbortController(),
-        status:
-          entriesRef.current.length >= TASK_MEDIA_COUNT ||
-          file.size > TASK_MEDIA_LIMIT ||
-          !type ||
-          type === 'legacy'
-            ? 'failed'
-            : 'uploading',
+        status: type === 'legacy' ? 'failed' : 'uploading',
         // Macro-enabled and legacy Office files are named before any upload.
         ...(type === 'legacy' ? { problem: 'legacy' as const } : {}),
       };
@@ -281,6 +292,7 @@ function CreateTask({
           },
         );
     }
+    setProblems(left);
   }
   function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(event.clipboardData.files);
@@ -472,6 +484,7 @@ function CreateTask({
   }
   const locked = busy || Boolean(attempt) || !validScope;
   // Images, videos and documents attach to the draft in either step, by paste or drop on the text or with the button.
+  // No line of hints lists the types and limits (2026-11-04 user request); they show only when a file breaks them.
   const media = (
     <>
       <input
@@ -495,6 +508,13 @@ function CreateTask({
       >
         {$t('manualTask.upload')}
       </Button>
+      {problems.length > 0 && (
+        <div role='alert' className='mt-2 space-y-0.5 text-sm text-destructive'>
+          {problems.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
+      )}
       <ul className='mt-3 space-y-2'>
         {entries.map((entry) => (
           <li key={entry.key} className='text-sm'>
@@ -691,7 +711,6 @@ function CreateTask({
                     : []
                 }
               />
-              <FieldDescription>{$t('manualTask.mediaHint')}</FieldDescription>
             </Field>
             {media}
           </div>
@@ -748,7 +767,6 @@ function CreateTask({
                 {...form.register('description')}
               />
               <FieldError errors={[form.formState.errors.description]} />
-              <FieldDescription>{$t('manualTask.mediaHint')}</FieldDescription>
             </Field>
             {media}
           </div>
