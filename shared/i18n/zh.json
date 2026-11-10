@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "话题里的仓库",
   "growth.figure.starsWeek": "近 7 天 Star",
   "growth.figure.topicRank": "新仓库排名",
-  "growth.figure.created": "创建于",
-  "growth.figure.language": "语言",
   "growth.figure.newPagesWeek": "近 7 天新页面",
   "growth.figure.latestRelease": "最新发布",
   "growth.figure.rivalStarsWeek": "{0} 近 7 天 Star",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI 概览 {1}",
   "growth.detail.questions": "个问题",
   "growth.detail.perWeek": "个/周",
-  "growth.detail.inTopic": "在 {0}",
   "growth.level.easy": "容易",
   "growth.level.medium": "中等",
   "growth.level.hard": "难",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "你的仓库 Star 激增",
   "strategy.situationDigest": "没解决的社区主题 · 近 30 天",
   "strategy.situationAuditWarnings": "审计警告",
-  "insightSummary.topicActivity": "{0} 条回复 · {1} 次浏览"
+  "insightSummary.topicActivity": "{0} 条回复 · {1} 次浏览",
+  "growth.figure.topic": "话题",
+  "growth.detail.ofNewRepositories": "/ {0} 个新仓库",
+  "growth.where.newPage": "新页面 · 建议放在 {0}",
+  "growth.where.linkFrom": "从这些页面加链接：{0}"
 }

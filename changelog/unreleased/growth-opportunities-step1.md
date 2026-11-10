@@ -5,4 +5,7 @@
 - Seven new analysis rules find growth points in data already collected, with no new paid queries: Pages found by new searches, Searched keywords we do not rank for, Keywords with rising searches, Competitor pages ranking where we do not, AI answers naming others, not us, Third-party pages AI cites often, and New popular projects in followed topics. Each has its thresholds in Analysis rules.
 - Pages close to page one and pages with many impressions but few clicks now estimate the extra clicks a month from a published click-through rate by position (Backlinko), as impressions × (target rate − current rate), and become opportunities only above a minimum gain that Analysis rules sets.
 - The server computes every figure and evidence row; the model only words the opportunity and can no longer change the numbers.
+- Estimates are rounded to two significant figures wherever they appear (1,100 extra visits, not 1,073); measured figures such as search volume, impressions and stars stay exact.
+- An opportunity that writes a new page says so under Where to change, with the section it would go under and the existing pages to link to it from, instead of an address that does not exist yet; the task brief carries the same lines.
+- Growth potential never cuts a figure short: a long name, a unit or a breakdown wraps to a second line, and on a phone the detail stays within the screen with the evidence table scrolling sideways.
 - The demo data has growth opportunities of every kind for ACME and the main kinds for ACME CRM, with figures that match their evidence.

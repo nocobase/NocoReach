@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "Repositories im Thema",
   "growth.figure.starsWeek": "Sterne, letzte 7 Tage",
   "growth.figure.topicRank": "Platz unter neuen Repositories",
-  "growth.figure.created": "Erstellt",
-  "growth.figure.language": "Sprache",
   "growth.figure.newPagesWeek": "Neue Seiten, letzte 7 Tage",
   "growth.figure.latestRelease": "Neuestes Release",
   "growth.figure.rivalStarsWeek": "Sterne von {0}, letzte 7 Tage",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "Fragen",
   "growth.detail.perWeek": "pro Woche",
-  "growth.detail.inTopic": "in {0}",
   "growth.level.easy": "Leicht",
   "growth.level.medium": "Mittel",
   "growth.level.hard": "Schwer",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "Sternanstieg bei Ihrem Repository",
   "strategy.situationDigest": "Ungelöste Community-Themen · letzte 30 Tage",
   "strategy.situationAuditWarnings": "Audit-Warnungen",
-  "insightSummary.topicActivity": "{0} Antworten · {1} Aufrufe"
+  "insightSummary.topicActivity": "{0} Antworten · {1} Aufrufe",
+  "growth.figure.topic": "Thema",
+  "growth.detail.ofNewRepositories": "von {0} neuen Repositories",
+  "growth.where.newPage": "Neue Seite · vorgeschlagen unter {0}",
+  "growth.where.linkFrom": "Verlinken von: {0}"
 }

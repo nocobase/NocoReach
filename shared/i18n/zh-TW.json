@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "話題裡的倉庫",
   "growth.figure.starsWeek": "近 7 天 Star",
   "growth.figure.topicRank": "新倉庫排名",
-  "growth.figure.created": "建立於",
-  "growth.figure.language": "語言",
   "growth.figure.newPagesWeek": "近 7 天新頁面",
   "growth.figure.latestRelease": "最新發布",
   "growth.figure.rivalStarsWeek": "{0} 近 7 天 Star",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI 概覽 {1}",
   "growth.detail.questions": "個問題",
   "growth.detail.perWeek": "個/週",
-  "growth.detail.inTopic": "在 {0}",
   "growth.level.easy": "容易",
   "growth.level.medium": "中等",
   "growth.level.hard": "難",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "你的倉庫 Star 激增",
   "strategy.situationDigest": "沒解決的社群主題 · 近 30 天",
   "strategy.situationAuditWarnings": "審計警告",
-  "insightSummary.topicActivity": "{0} 則回覆 · {1} 次瀏覽"
+  "insightSummary.topicActivity": "{0} 則回覆 · {1} 次瀏覽",
+  "growth.figure.topic": "話題",
+  "growth.detail.ofNewRepositories": "/ {0} 個新倉庫",
+  "growth.where.newPage": "新頁面 · 建議放在 {0}",
+  "growth.where.linkFrom": "從這些頁面加連結：{0}"
 }

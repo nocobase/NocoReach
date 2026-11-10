@@ -8203,8 +8203,6 @@
   "growth.figure.topicRepositories": "Репозиториев в теме",
   "growth.figure.starsWeek": "Звезды за 7 дней",
   "growth.figure.topicRank": "Место среди новых репозиториев",
-  "growth.figure.created": "Создан",
-  "growth.figure.language": "Язык",
   "growth.figure.newPagesWeek": "Новые страницы за 7 дней",
   "growth.figure.latestRelease": "Последний релиз",
   "growth.figure.rivalStarsWeek": "Звезды {0} за 7 дней",
@@ -8220,7 +8218,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "вопросов",
   "growth.detail.perWeek": "в неделю",
-  "growth.detail.inTopic": "в {0}",
   "growth.level.easy": "Легко",
   "growth.level.medium": "Средне",
   "growth.level.hard": "Сложно",
@@ -8266,5 +8263,9 @@
   "strategy.situationStarSpike": "Резкий рост звезд вашего репозитория",
   "strategy.situationDigest": "Нерешенные темы сообщества · за 30 дней",
   "strategy.situationAuditWarnings": "Предупреждения аудита",
-  "insightSummary.topicActivity": "Ответы: {0} · Просмотры: {1}"
+  "insightSummary.topicActivity": "Ответы: {0} · Просмотры: {1}",
+  "growth.figure.topic": "Тема",
+  "growth.detail.ofNewRepositories": "из {0} новых репозиториев",
+  "growth.where.newPage": "Новая страница · предлагается в {0}",
+  "growth.where.linkFrom": "Добавить ссылки со страниц: {0}"
 }

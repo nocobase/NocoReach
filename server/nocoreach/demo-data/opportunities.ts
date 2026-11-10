@@ -9,7 +9,7 @@ import type {
   StrategyState,
   WatchOutcome,
 } from '../../../shared/strategy-model.js';
-import type { Growth } from '../../../shared/growth.js';
+import type { Growth, NewPage } from '../../../shared/growth.js';
 import { totals, type Partition } from '../execution/effect.js';
 import { number as numberOpportunities } from '../opportunity-board.js';
 import { applyVerdicts, endMissing, ignore } from '../watch.js';
@@ -95,7 +95,8 @@ export function opportunityHistory(
     meaning: string;
     suggestion: string;
     objective: string;
-    path: string;
+    path?: string;
+    newPage?: NewPage;
     source: string;
     priority: Opportunity['priority'];
     priorityReason: string;
@@ -112,7 +113,8 @@ export function opportunityHistory(
       meaning: brief.meaning[lang],
       suggestion: brief.suggestion[lang],
       objective: brief.objective[lang],
-      path: brief.path,
+      ...(brief.path ? { path: brief.path } : {}),
+      ...(brief.newPage ? { newPage: brief.newPage } : {}),
       source: brief.source,
       priority: brief.priority,
       priorityReason:
@@ -172,12 +174,14 @@ export function opportunityHistory(
       priority: entry.priority,
       priorityReason: entry.priorityReason,
       confidence: 'supported',
-      category: 'optimize',
+      category: entry.newPage ? 'create' : 'optimize',
       lifecycle: 'persistent',
       change: discovered <= 2 ? 'new' : 'continuing',
       audience: copy.audience,
       effort: entry.effort ?? 'medium',
-      target: origin + path,
+      // A new page has no address yet: it says where it would go (growth-briefs.ts).
+      ...(path ? { target: origin + path } : {}),
+      ...(entry.newPage ? { newPage: entry.newPage } : {}),
       firstSeenAt: at(discovered),
       updatedAt: at(0),
       ...(entry.growth ? { growth: entry.growth } : {}),
@@ -192,7 +196,7 @@ export function opportunityHistory(
     url: card.target,
     strength: card.priority === 'high' ? 90 : 65,
     actionable: true,
-    action: 'optimize',
+    action: card.newPage ? 'create' : 'optimize',
     isNew: age(card.firstSeenAt!) <= 2,
     ...(card.growth ? { growth: card.growth } : {}),
   });

@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "Dépôts du sujet",
   "growth.figure.starsWeek": "Étoiles, 7 derniers jours",
   "growth.figure.topicRank": "Rang parmi les nouveaux dépôts",
-  "growth.figure.created": "Créé le",
-  "growth.figure.language": "Langage",
   "growth.figure.newPagesWeek": "Nouvelles pages, 7 derniers jours",
   "growth.figure.latestRelease": "Dernière version",
   "growth.figure.rivalStarsWeek": "Étoiles de {0}, 7 derniers jours",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "questions",
   "growth.detail.perWeek": "par semaine",
-  "growth.detail.inTopic": "dans {0}",
   "growth.level.easy": "Facile",
   "growth.level.medium": "Moyen",
   "growth.level.hard": "Difficile",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "Afflux d’étoiles sur votre dépôt",
   "strategy.situationDigest": "Sujets de la communauté non résolus · 30 derniers jours",
   "strategy.situationAuditWarnings": "Avertissements d’audit",
-  "insightSummary.topicActivity": "{0} réponses · {1} vues"
+  "insightSummary.topicActivity": "{0} réponses · {1} vues",
+  "growth.figure.topic": "Sujet",
+  "growth.detail.ofNewRepositories": "sur {0} nouveaux dépôts",
+  "growth.where.newPage": "Nouvelle page · à placer sous {0}",
+  "growth.where.linkFrom": "Ajouter un lien depuis : {0}"
 }

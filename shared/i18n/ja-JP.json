@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "トピックのリポジトリ数",
   "growth.figure.starsWeek": "スター（直近 7 日）",
   "growth.figure.topicRank": "新しいリポジトリでの順位",
-  "growth.figure.created": "作成日",
-  "growth.figure.language": "言語",
   "growth.figure.newPagesWeek": "新しいページ（直近 7 日）",
   "growth.figure.latestRelease": "最新リリース",
   "growth.figure.rivalStarsWeek": "{0} のスター（直近 7 日）",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "件の質問",
   "growth.detail.perWeek": "件/週",
-  "growth.detail.inTopic": "{0} 内",
   "growth.level.easy": "易しい",
   "growth.level.medium": "普通",
   "growth.level.hard": "難しい",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "あなたのリポジトリのスターが急増",
   "strategy.situationDigest": "未解決のコミュニティのトピック · 直近 30 日",
   "strategy.situationAuditWarnings": "監査の警告",
-  "insightSummary.topicActivity": "返信 {0} 件 · 閲覧 {1} 回"
+  "insightSummary.topicActivity": "返信 {0} 件 · 閲覧 {1} 回",
+  "growth.figure.topic": "トピック",
+  "growth.detail.ofNewRepositories": "/ 新規リポジトリ {0} 件",
+  "growth.where.newPage": "新規ページ · {0} 配下を推奨",
+  "growth.where.linkFrom": "リンク元：{0}"
 }

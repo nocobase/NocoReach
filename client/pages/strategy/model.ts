@@ -1,4 +1,5 @@
 import type {GoalFields,SourceSummary,Opportunity,SourceReview,ActionDraft,Evidence} from '../../../shared/strategy-model.js';
+import {newPageOf} from '../../../shared/growth.js';
 export type {GoalFields,Goal,Proposal,SourceSummary,Signal,Evidence,StrategyState,Opportunity,ActionDraft,SourceReview,SignalReview,WatchOutcome,WatchRecord,InsightBatch} from '../../../shared/strategy-model.js';
 import { $t } from "#i18n";
 export const emptyGoal:GoalFields={intent:'',audience:'',focus:'',progress:''};
@@ -45,7 +46,9 @@ export function summaryMetrics(evidence?:Evidence):SummaryMetric[]{
 }
 // Converting a suggestion keeps its evidence in the work brief; the server re-reads the frozen batch by id.
 export function draftFromOpportunity(card:Opportunity):ActionDraft{
- const brief=[$t('strategy.suggestionValue',{0:card.suggestion}),$t('strategy.observationValue',{0:card.observation}),$t('messages.evidence',{0:card.evidenceText}),$t('strategy.limitation',{0:card.limitation})].join('\n\n');
+ // A new page goes where the opportunity suggests, with links to it from the pages it names.
+ const page=newPageOf(card.newPage),where=page?[$t('growth.where.newPage',{0:page.section}),...(page.linkFrom.length?[$t('growth.where.linkFrom',{0:page.linkFrom.join(' · ')})]:[])].join('\n'):'';
+ const brief=[$t('strategy.suggestionValue',{0:card.suggestion}),...(where?[where]:[]),$t('strategy.observationValue',{0:card.observation}),$t('messages.evidence',{0:card.evidenceText}),$t('strategy.limitation',{0:card.limitation})].join('\n\n');
  // The opportunity is the task's subject: the server titles it with the playbook (task-subject.ts).
  return {title:card.title.slice(0,200),subject:card.title.slice(0,160),objective:(card.objective||card.meaning).slice(0,1000),brief:brief.slice(0,20000)};
 }

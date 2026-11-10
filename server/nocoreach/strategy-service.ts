@@ -2,6 +2,7 @@
 import {rowsFor,opportunityState,insightPending} from '../../shared/strategy-pending.js';
 import {taskOwner,taskWaiting} from '../../shared/task-pending.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { newPageOf } from '../../shared/growth.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import * as watch from './watch.js';
@@ -44,7 +45,9 @@ const pagesInput=v=>distinctPages((Array.isArray(v)?v.slice(0,100):[]).map(pageI
 // first. Optional; Markdown and line breaks are flattened, and anything past 300 characters is dropped.
 const whyInput=v=>{if(typeof v!=='string')return '';const t=v.replace(/[*_`#>]/g,'').replace(/\s+/g,' ').trim();return t.length>300?'':t;};
 function proposalInput(v){const page=pageInput(v.page),pages=pagesInput(v.pages),why=whyInput(v.why),subject=subjectInput(v.subject);return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(why?{why}:{}),...(subject?{subject}:{}),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{}),...(page?{page}:{}),...(pages.length?{pages}:{}),...(typeof v.entry==='string'&&/^\/[\w\-/]{1,200}$/.test(v.entry)?{entry:v.entry}:{})};}
-function insightInput(v){return {...board.assessment(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
+// A new page has no address yet: it goes by the section and the pages to link from (shared/growth.ts newPageOf).
+const newPageInput=v=>{const page=newPageOf(v.newPage);return page?{newPage:page,target:''}:{};};
+function insightInput(v){return {...board.assessment(v),...newPageInput(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
 function resultEvidence(source){return {capturedAt:source.capturedAt,availableThrough:null,periodDays:source.day||28,searchQueries:[],pages:[],industryCandidates:[],limitations:[systemMessageText('results.sourceEvidenceOnly')]};}
 function evidenceFrom(snapshots,candidates,now,requestedDays=28){

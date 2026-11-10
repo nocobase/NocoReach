@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "Repositori di topik",
   "growth.figure.starsWeek": "Bintang, 7 hari terakhir",
   "growth.figure.topicRank": "Peringkat di antara repositori baru",
-  "growth.figure.created": "Dibuat",
-  "growth.figure.language": "Bahasa",
   "growth.figure.newPagesWeek": "Halaman baru, 7 hari terakhir",
   "growth.figure.latestRelease": "Rilis terbaru",
   "growth.figure.rivalStarsWeek": "Bintang {0}, 7 hari terakhir",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "pertanyaan",
   "growth.detail.perWeek": "per minggu",
-  "growth.detail.inTopic": "di {0}",
   "growth.level.easy": "Mudah",
   "growth.level.medium": "Sedang",
   "growth.level.hard": "Sulit",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "Lonjakan bintang di repositori Anda",
   "strategy.situationDigest": "Topik komunitas yang belum selesai · 30 hari terakhir",
   "strategy.situationAuditWarnings": "Peringatan audit",
-  "insightSummary.topicActivity": "{0} balasan · {1} kali dilihat"
+  "insightSummary.topicActivity": "{0} balasan · {1} kali dilihat",
+  "growth.figure.topic": "Topik",
+  "growth.detail.ofNewRepositories": "dari {0} repositori baru",
+  "growth.where.newPage": "Halaman baru · disarankan di {0}",
+  "growth.where.linkFrom": "Tautkan dari: {0}"
 }

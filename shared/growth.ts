@@ -46,6 +46,16 @@ export type GrowthFigure = {
 };
 
 /**
+ * An estimate to two significant figures (1,073 reads 1,100; 211 reads 210), as everywhere it is shown or quoted: the
+ * growth row, the facts and what the model is told. Counted numbers (searches, impressions, stars) stay exact.
+ */
+export function roundEstimate(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return value;
+  const step = 10 ** Math.max(0, Math.floor(Math.log10(Math.abs(value))) - 1);
+  return Math.round(value / step) * step;
+}
+
+/**
  * How a column's values read: counts, ratios as percentages, positions, keyword difficulty, a change (a ratio, +1.8
  * reads "+180%"), a day, an AI platform (chat_gpt, google), lists, and message keys (`label`).
  */
@@ -98,4 +108,38 @@ export function growthOf(value: unknown): Growth | undefined {
   if (!isGrowthKind(g.kind) || !Array.isArray(g.figures) || !g.figures.length)
     return undefined;
   return { ...(g as Growth), area: GROWTH_KINDS[g.kind] };
+}
+
+/**
+ * Where an opportunity that writes a new page puts it (2026-11-10 review: a new page has no address to show yet): the
+ * section of the site it would go under ("/blog/") and up to three existing pages to link to it from, as paths. The
+ * model writes it; a full address is read as its path, and anything else is dropped.
+ */
+export type NewPage = { section: string; linkFrom: string[] };
+
+const sitePath = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const text = value.trim();
+  if (!text) return '';
+  try {
+    return new URL(text).pathname;
+  } catch {
+    return text.startsWith('/') ? text : '';
+  }
+};
+
+export function newPageOf(value: unknown): NewPage | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  const section = sitePath(v.section).slice(0, 200);
+  if (!section) return null;
+  const linkFrom = [
+    ...new Set(
+      (Array.isArray(v.linkFrom) ? v.linkFrom : [])
+        .map(sitePath)
+        .filter((path) => path && path !== section)
+        .map((path) => path.slice(0, 300)),
+    ),
+  ].slice(0, 3);
+  return { section, linkFrom };
 }

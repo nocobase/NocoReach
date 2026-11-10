@@ -31,7 +31,7 @@ import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
 import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
-import {growthOf} from '../../../shared/growth.js';
+import {growthOf,newPageOf} from '../../../shared/growth.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
@@ -104,7 +104,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
   {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
   :!pending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
-  :<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+  :<div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
    <div className="flex flex-col gap-2">
     {pending.map(r=>{const c=leadChip(r),g=growthOf(r.card.growth);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
      className="flex flex-col gap-1.5 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
@@ -242,13 +242,13 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
 // what happened, why it is worth doing, what to do and where, with the AI's priority, effort and confidence as tags and
 // its limits behind ⓘ. A pending one is handed off or ignored, a handed-off one opens its task, an archived one is restored.
 // A growth opportunity (2026-11-10) shows its growth potential where what happened was, and under why it is worth doing
-// the rows the growth rests on.
+// the rows the growth rests on. One that writes a new page says where it would go instead of an address it has not got.
 const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.priorityHigh')],medium:['amber',()=>$t('strategy.priorityMedium')],low:['grey',()=>$t('strategy.priorityLow')]};
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
 function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
- const card=row.card,c=leadChip(row),growth=growthOf(card.growth),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
+ const card=row.card,c=leadChip(row),growth=growthOf(card.growth),newPage=newPageOf(card.newPage),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
  const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
  const priority=PRIORITY[row.priority],effort=EFFORT[card.effort||''],confidence=CONFIDENCE[card.confidence||''];
@@ -265,7 +265,8 @@ function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;task
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
   {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
-  {card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
+  {newPage?<Block title={$t('strategy.briefWhere')}><span className="block break-words">{$t('growth.where.newPage',{0:newPage.section})}</span>{newPage.linkFrom.length>0&&<span className="block break-words">{$t('growth.where.linkFrom',{0:newPage.linkFrom.join(' · ')})}</span>}</Block>
+   :card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
   {several&&<OpportunityTasks row={row} tasks={tasks}/>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}

@@ -695,3 +695,32 @@ it('reads a growth opportunity as its tags, growth potential and evidence', asyn
   const listed = screen.getByRole('button', { current: true });
   expect(listed.querySelector('[data-growth-kind="demand-gap"]')).toBeTruthy();
 });
+
+// A page that does not exist yet has no address to show: Where to change says it is a new page, the section it goes
+// under and the existing pages to link to it from (2026-11-10 review).
+it('says where a new page goes instead of an address that does not exist yet', async () => {
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        {
+          ...card,
+          category: 'create',
+          target: '',
+          newPage: {
+            section: '/blog/',
+            linkFrom: ['/features/timeline', '/templates'],
+          },
+        },
+      ],
+    },
+  };
+  show();
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(brief.textContent).toContain('growth.where.newPage(/blog/)');
+  expect(brief.textContent).toContain(
+    'growth.where.linkFrom(/features/timeline · /templates)',
+  );
+  expect(brief.textContent).not.toContain(card.target);
+});

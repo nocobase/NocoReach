@@ -8187,8 +8187,6 @@
   "growth.figure.topicRepositories": "주제의 저장소",
   "growth.figure.starsWeek": "스타(최근 7일)",
   "growth.figure.topicRank": "새 저장소 중 순위",
-  "growth.figure.created": "생성일",
-  "growth.figure.language": "언어",
   "growth.figure.newPagesWeek": "새 페이지(최근 7일)",
   "growth.figure.latestRelease": "최신 릴리스",
   "growth.figure.rivalStarsWeek": "{0} 스타(최근 7일)",
@@ -8204,7 +8202,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "개 질문",
   "growth.detail.perWeek": "개/주",
-  "growth.detail.inTopic": "{0} 내",
   "growth.level.easy": "쉬움",
   "growth.level.medium": "보통",
   "growth.level.hard": "어려움",
@@ -8250,5 +8247,9 @@
   "strategy.situationStarSpike": "내 저장소 스타 급증",
   "strategy.situationDigest": "해결되지 않은 커뮤니티 주제 · 최근 30일",
   "strategy.situationAuditWarnings": "진단 경고",
-  "insightSummary.topicActivity": "답글 {0}개 · 조회 {1}회"
+  "insightSummary.topicActivity": "답글 {0}개 · 조회 {1}회",
+  "growth.figure.topic": "토픽",
+  "growth.detail.ofNewRepositories": "/ 새 저장소 {0}개",
+  "growth.where.newPage": "새 페이지 · {0} 아래 권장",
+  "growth.where.linkFrom": "링크할 페이지: {0}"
 }

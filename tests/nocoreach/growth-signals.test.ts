@@ -3,7 +3,12 @@ import { expect, test } from 'vitest';
 import * as growth from '../../server/nocoreach/growth-signals.js';
 import { markQuestions } from '../../server/nocoreach/ai-questions.js';
 import { searchSignals } from '../../server/nocoreach/signals.js';
-import { EVIDENCE_ROWS, growthOf } from '../../shared/growth.js';
+import {
+  EVIDENCE_ROWS,
+  growthOf,
+  newPageOf,
+  roundEstimate,
+} from '../../shared/growth.js';
 
 // Growth points (2026-11-10): Opportunities lists only growth, each with its size and the rows behind it, computed here.
 
@@ -104,7 +109,12 @@ test('near page one and low CTR carry their growth; a click drop is left to Insi
   // Page /a at position 15 is past page one: reaching the top 3 is worth its impressions at 11%.
   const far = s.find((x) => x.key === 'gsc-near-first:/a');
   expect(far.actionable).toBe(true);
-  expect(far.growth.figures[3].value).toBe(growth.extraClicks(2000, 3, 0.001));
+  // Shown to two significant figures: an estimate is not that precise (237 reads 240).
+  expect(far.growth.figures[3].value).toBe(
+    roundEstimate(growth.extraClicks(2000, 3, 0.001)),
+  );
+  expect(far.growth.figures[3].value).toBe(240);
+  expect(far.facts.at(-1)).toContain('240');
   const low = s.find((x) => x.key === 'gsc-low-ctr:/a');
   expect(low.growth.kind).toBe('low-ctr');
   expect(keys(low.growth)).toEqual([
@@ -378,6 +388,7 @@ test('new popular projects: the most starred new repository of a followed topic,
       'old/board': { createdAt: '2026-09-01T10:00:00Z' },
       'tiny/board': { createdAt: '2026-11-08T10:00:00Z' },
     },
+    heat: { kanban: { '2026-11-10': { total: 18400 } } },
     stars: {
       'new/board': { '2026-11-10': 900 },
       'acme/acme': { '2026-11-10': 5000 },
@@ -387,15 +398,23 @@ test('new popular projects: the most starred new repository of a followed topic,
   };
   const s = growth.newRepoSignals({ ght, gh: { repo: 'acme/acme' }, now, V });
   expect(s.map((x) => x.key)).toEqual(['github-new-repo:new/board']);
+  // The size of the chance: stars, rank among the topic's new repositories, the topic and its size; when it was
+  // created and its language stay in the evidence.
   expect(s[0].growth.figures.map((f) => f.value)).toEqual([
     900,
     1,
-    '2026-11-06T10:00:00Z',
-    'TypeScript',
+    'kanban',
+    18400,
   ]);
+  expect(s[0].growth.figures[1].detail).toEqual({
+    key: 'growth.detail.ofNewRepositories',
+    params: { 0: 2 },
+  });
   expect(s[0].growth.evidence.rows[0]).toMatchObject({
     repository: 'new/board',
     stars: 900,
+    created: '2026-11-06T10:00:00Z',
+    language: 'TypeScript',
   });
 });
 
@@ -460,4 +479,59 @@ test('every new growth point has an analysis rule with adjustable thresholds', a
   );
   expect(set.value('gsc-near-first', 'minGain')).toBe(500);
   expect(resolver({}, RULES).value('gsc-near-first', 'minGain')).toBe(20);
+});
+
+test('estimates read to two significant figures; counted numbers are left alone', () => {
+  expect(
+    [1073, 211, 279, 125, 342, 47, 8, 0, 18_450].map(roundEstimate),
+  ).toEqual([1100, 210, 280, 130, 340, 47, 8, 0, 18_000]);
+});
+
+test('a new page keeps a section and up to three pages to link from, as paths', () => {
+  expect(
+    newPageOf({
+      section: 'https://acme.example/blog/',
+      linkFrom: [
+        '/features/timeline',
+        'https://acme.example/templates',
+        '/features/timeline',
+        'not a page',
+        '/blog/',
+        '/docs/a',
+        '/docs/b',
+      ],
+    }),
+  ).toEqual({
+    section: '/blog/',
+    linkFrom: ['/features/timeline', '/templates', '/docs/a'],
+  });
+  expect(newPageOf({ section: 'somewhere', linkFrom: ['/a'] })).toBeNull();
+  expect(newPageOf('/blog/')).toBeNull();
+});
+
+test('a rising keyword counts as often as it is searched now, the last three months', () => {
+  const months = [
+    400, 420, 410, 430, 400, 420, 600, 700, 800, 1200, 1400, 1600,
+  ].map((volume, i) => ({ year: 2026, month: i + 1, volume }));
+  const s = growth.risingKeywordSignals({
+    ks: {
+      version: 2,
+      items: [
+        {
+          keyword: 'ai planning',
+          group: 'AI',
+          metrics: { volume: 700, monthlySearches: months },
+        },
+      ],
+    },
+    gaps: [],
+    V,
+  });
+  expect(s.map((x) => x.key)).toEqual(['keyword-rising:ai planning']);
+  const g = s[0].growth;
+  // Now 1,400 a month against 700 the three months before; the yearly average (700) would understate it.
+  expect(g.figures[0].value).toBe(1400);
+  expect(g.figures[3].value).toBe(
+    roundEstimate(growth.extraVisits(1400, 3, null)),
+  );
 });

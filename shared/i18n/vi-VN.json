@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "Kho trong chủ đề",
   "growth.figure.starsWeek": "Sao, 7 ngày qua",
   "growth.figure.topicRank": "Hạng trong các kho mới",
-  "growth.figure.created": "Ngày tạo",
-  "growth.figure.language": "Ngôn ngữ",
   "growth.figure.newPagesWeek": "Trang mới, 7 ngày qua",
   "growth.figure.latestRelease": "Bản phát hành mới nhất",
   "growth.figure.rivalStarsWeek": "Sao của {0}, 7 ngày qua",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · AI Overviews {1}",
   "growth.detail.questions": "câu hỏi",
   "growth.detail.perWeek": "mỗi tuần",
-  "growth.detail.inTopic": "trong {0}",
   "growth.level.easy": "Dễ",
   "growth.level.medium": "Trung bình",
   "growth.level.hard": "Khó",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "Số sao kho của bạn tăng vọt",
   "strategy.situationDigest": "Chủ đề cộng đồng chưa giải quyết · 30 ngày qua",
   "strategy.situationAuditWarnings": "Cảnh báo kiểm tra",
-  "insightSummary.topicActivity": "{0} trả lời · {1} lượt xem"
+  "insightSummary.topicActivity": "{0} trả lời · {1} lượt xem",
+  "growth.figure.topic": "Chủ đề",
+  "growth.detail.ofNewRepositories": "/ {0} kho mới",
+  "growth.where.newPage": "Trang mới · đề xuất đặt trong {0}",
+  "growth.where.linkFrom": "Thêm liên kết từ: {0}"
 }

@@ -161,6 +161,19 @@ test('signal-based analysis keeps only suggestions that cite a current growth ch
  assert.deepEqual(state.insights.items[0].growth,growth);
  assert.equal(state.insights.observations.length,4);assert.equal(state.insights.observations[1].length,300);
 });
+// A new page has no address: the model says the section it goes under and the pages to link from (2026-11-10 review).
+test('an opportunity that writes a new page keeps where it goes instead of an address',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[]};
+ const growth={kind:'demand-gap',area:'keywords',figures:[{label:{key:'growth.figure.monthlySearchesTotal'},value:9750}]};
+ service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'keyword-demand:gantt',source:'keywords',actionable:true,growth}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const base={observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',source:'search',sources:['keywords'],signalIds:['keyword-demand:gantt']};
+ await service.saveInsights(1,{insights:[
+  {...base,title:'Gantt guide',objective:'a',category:'create',target:'https://acme.example/blog/gantt-chart-guide',newPage:{section:'https://acme.example/blog/',linkFrom:['/features/timeline','made up','/templates']}},
+  {...base,title:'Gantt page',objective:'b',target:'https://acme.example/features/timeline',newPage:{section:'somewhere'}}]});
+ assert.deepEqual(state.insights.items.map(c=>[c.title,c.target,c.newPage]),[
+  ['Gantt guide','',{section:'/blog/',linkFrom:['/features/timeline','/templates']}],
+  ['Gantt page','https://acme.example/features/timeline',undefined]]);
+});
 test('opportunity decisions: ignore or restore only; ignored ones are not brought back by later analyses',async()=>{
  const {StrategyService}=__strategy_service;const {withoutIgnored}=__opportunity_board;
  const old={id:'old',title:'t',objective:'g',suggestion:'s',signalIds:['b','a']};let state={insights:{items:[old]}};

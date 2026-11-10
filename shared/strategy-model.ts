@@ -1,6 +1,6 @@
 import type { TaskPart } from './opportunity-parts.js';
 import type { ResultSource } from './result-source.js';
-import type { Growth } from './growth.js';
+import type { Growth, NewPage } from './growth.js';
 export type GoalFields = {
   intent: string;
   audience: string;
@@ -125,7 +125,10 @@ export type Opportunity = {
   priorityReason?: string;
   confidence?: string;
   effort?: string;
+  /** The existing page to change; empty when the opportunity writes a new page (`newPage`). */
   target?: string;
+  /** A page that does not exist yet: the section it would go under and existing pages to link to it from (paths). */
+  newPage?: NewPage;
   audience?: string;
   sources?: string[];
   firstSeenAt?: string;

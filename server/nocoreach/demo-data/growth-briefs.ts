@@ -7,6 +7,8 @@ import {
   type GrowthFigure,
   type GrowthKind,
   type GrowthText,
+  type NewPage,
+  roundEstimate,
 } from '../../../shared/growth.js';
 import { expectedCtr, extraClicks, extraVisits } from '../growth-signals.js';
 
@@ -28,7 +30,9 @@ export interface GrowthBrief {
   meaning: L;
   suggestion: L;
   objective: L;
-  path: string;
+  /** The existing page to change, or where a new page goes and the pages to link to it from. */
+  path?: string;
+  newPage?: NewPage;
   source: string;
   priority: 'high' | 'medium' | 'low';
   effort: 'low' | 'medium' | 'high';
@@ -50,7 +54,8 @@ const figure = (
   } = {},
 ): GrowthFigure => ({
   label: text(`growth.figure.${label}`, extra.labelParams),
-  value,
+  value:
+    extra.estimate && typeof value === 'number' ? roundEstimate(value) : value,
   ...(extra.format ? { format: extra.format } : {}),
   ...(extra.detail ? { detail: extra.detail } : {}),
   ...(extra.estimate ? { estimate: true } : {}),
@@ -314,9 +319,10 @@ function competitorGap(
 function rising(months: number[], end: string): Growth {
   const mean = (list: number[]) =>
     list.reduce((total, v) => total + v, 0) / list.length;
+  // Searched as often as it is now, the last 3 months (growth-signals.ts risingKeywordSignals).
   const last = mean(months.slice(-3)),
     before = mean(months.slice(-6, -3)),
-    volume = Math.round(mean(months));
+    volume = Math.round(last);
   const [year, month] = end.split('-').map(Number);
   return growth(
     'rising',
@@ -546,18 +552,17 @@ function topicHeat(
     last,
   );
 }
-function newRepo(topic: string, repos: Repo[]): Growth {
-  const [, stars, created, language] = repos[0];
+function newRepo(topic: string, topicTotal: number, repos: Repo[]): Growth {
+  const [, stars] = repos[0];
   return growth(
     'new-repo',
     [
       figure('starsWeek', stars),
       figure('topicRank', 1, {
-        format: 'position',
-        detail: text('growth.detail.inTopic', { 0: topic }),
+        detail: text('growth.detail.ofNewRepositories', { 0: repos.length }),
       }),
-      figure('created', created, { format: 'date' }),
-      figure('language', language),
+      figure('topic', topic),
+      figure('topicRepositories', topicTotal),
     ],
     REPO_COLUMNS,
     repoRows(repos),
@@ -584,8 +589,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         "Get the Excel import guide into Google's top 3",
       ),
       reason: t(
-        '6 个搜索词近 28 天曝光 2,140 次，平均排第 9.3；进前 3 预计每月多 211 次点击。',
-        '6 searches, 2,140 impressions in 28 days at position 9.3 on average; in the top 3, an estimated 211 more clicks a month.',
+        '6 个搜索词近 28 天曝光 2,140 次，平均排第 9.3；进前 3 预计每月多 210 次点击。',
+        '6 searches, 2,140 impressions in 28 days at position 9.3 on average; in the top 3, an estimated 210 more clicks a month.',
       ),
       meaning: t(
         '从 Excel 导入是试用团队迁移的第一步，搜这些词的人正准备换工具。页面已经在第一页末尾，排在前面的教程都讲了日期格式和子任务，这两点本站还没写。',
@@ -648,7 +653,10 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         '用一篇甘特图指南拿下这组关键词',
         'Win this keyword group with a Gantt chart guide',
       ),
-      path: '/blog/gantt-chart-guide',
+      newPage: {
+        section: '/blog/',
+        linkFrom: ['/features/timeline', '/templates'],
+      },
       source: 'keywords',
       priority: 'high',
       effort: 'medium',
@@ -715,7 +723,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         '让 AI 回答协作工具问题时提到 Acme',
         'Have AI answers on collaboration tools name Acme',
       ),
-      path: '/features/collaboration',
+      newPage: { section: '/blog/', linkFrom: ['/', '/docs/guests'] },
       source: 'ai-search',
       priority: 'high',
       effort: 'medium',
@@ -907,8 +915,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         'Write a page while searches for “ai project management” rise',
       ),
       reason: t(
-        '近 3 个月搜索量涨了 126%，平均每月 2,750 次；竞品里只有 Nimbus 有对应页面。',
-        'Searches are up 126% over the last 3 months to 2,750 a month on average; among competitors only Nimbus has a page for it.',
+        '近 3 个月搜索量涨了 126%，现在每月 2,750 次；竞品里只有 Nimbus 有对应页面。',
+        'Searches are up 126% over the last 3 months to 2,750 a month now; among competitors only Nimbus has a page for it.',
       ),
       meaning: t(
         '这个词还在上升期，排在前面的多是新闻，工具页很少；Acme 的自动排期和周报摘要正好对应这个需求，早一点写更容易排上。',
@@ -922,7 +930,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         '在“AI 專案管理”上升期排进前 10',
         'Reach the top 10 for “ai project management” while it rises',
       ),
-      path: '/features/ai',
+      newPage: { section: '/features/', linkFrom: ['/', '/features/workload'] },
       source: 'keywords',
       priority: 'medium',
       effort: 'medium',
@@ -951,7 +959,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         'Create a client portal use-case page covering what clients can see and approve and how to invite them, with an agency’s full workflow; link to it from the guest access docs.',
       ),
       objective: t('拿下客户门户这组关键词', 'Win the client portal keywords'),
-      path: '/use-cases/client-portal',
+      newPage: { section: '/use-cases/', linkFrom: ['/docs/guests'] },
       source: 'competitors',
       priority: 'medium',
       effort: 'medium',
@@ -993,8 +1001,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         "Rewrite the Kanban page's title and snippet to win back clicks",
       ),
       reason: t(
-        '近 28 天曝光 3,860 次、点击率 0.9%，同排名常见是 7.6%；改好标题和摘要预计每月多 279 次点击。',
-        '3,860 impressions in 28 days at 0.9% CTR against the usual 7.6% at this position; a better title and snippet would bring an estimated 279 more clicks a month.',
+        '近 28 天曝光 3,860 次、点击率 0.9%，同排名常见是 7.6%；改好标题和摘要预计每月多 280 次点击。',
+        '3,860 impressions in 28 days at 0.9% CTR against the usual 7.6% at this position; a better title and snippet would bring an estimated 280 more clicks a month.',
       ),
       meaning: t(
         '看板页排在第 4 名左右，但搜索结果里的标题只有“看板 - Acme”，摘要是导航文字，看不出能做什么，搜索的人都点了前后的教程。',
@@ -1040,8 +1048,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         'The recurring tasks guide is found by new searches; add the sections they ask for',
       ),
       reason: t(
-        '近 28 天有 7 个搜索词新出现或成倍增长，合计曝光 1,180 次；进前 3 预计每月多 125 次点击。',
-        '7 searches appeared or multiplied in 28 days with 1,180 impressions in all; in the top 3, an estimated 125 more clicks a month.',
+        '近 28 天有 7 个搜索词新出现或成倍增长，合计曝光 1,180 次；进前 3 预计每月多 130 次点击。',
+        '7 searches appeared or multiplied in 28 days with 1,180 impressions in all; in the top 3, an estimated 130 more clicks a month.',
       ),
       meaning: t(
         '新出现的词多在问“每月最后一个工作日”和“跳过假日”，文档里只讲了每天和每周，搜到的人找不到答案。',
@@ -1252,14 +1260,14 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         'Most new repositories are self-hosted boards and board components, so developers are looking for board data to connect to; Acme has a board API but no example project on GitHub to find.',
       ),
       suggestion: t(
-        '发布一个用 Acme API 读写看板的示例仓库（TypeScript），加上 kanban 话题标签，并在 API 文档里链接。',
-        'Publish an example repository (TypeScript) that reads and writes boards through the Acme API, tag it with the kanban topic and link it from the API docs.',
+        '发布一个用 Acme API 读写看板的示例仓库（TypeScript），加上 kanban 话题标签，并在快速上手文档里链接。',
+        'Publish an example repository (TypeScript) that reads and writes boards through the Acme API, tag it with the kanban topic and link it from the getting-started guide.',
       ),
       objective: t(
         '让 GitHub 上找看板方案的开发者找到 Acme',
         'Let developers looking for boards on GitHub find Acme',
       ),
-      path: '/docs/integrations',
+      path: '/docs/getting-started',
       source: 'github',
       priority: 'low',
       effort: 'medium',
@@ -1294,12 +1302,12 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         '借 openboard 的热度让开发者知道 Acme',
         'Reach developers through openboard’s momentum',
       ),
-      path: '/docs/integrations',
+      newPage: { section: '/blog/', linkFrom: ['/docs/getting-started'] },
       source: 'github',
       priority: 'low',
       effort: 'medium',
       growth: () =>
-        newRepo('project-management', [
+        newRepo('project-management', 9_600, [
           ['openboard/openboard', 1240, dayBefore(now, 6), 'TypeScript'],
           ['planr/planr', 520, dayBefore(now, 5), 'TypeScript'],
           ['sprintly/sprintly', 330, dayBefore(now, 3), 'Go'],
@@ -1334,8 +1342,8 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         'Get the small-team CRM article onto Google’s first page',
       ),
       reason: t(
-        '5 个搜索词近 28 天曝光 3,240 次，平均排第 10.2；进前 3 预计每月多 342 次点击。',
-        '5 searches, 3,240 impressions in 28 days at position 10.2 on average; in the top 3, an estimated 342 more clicks a month.',
+        '5 个搜索词近 28 天曝光 3,240 次，平均排第 10.2；进前 3 预计每月多 340 次点击。',
+        '5 searches, 3,240 impressions in 28 days at position 10.2 on average; in the top 3, an estimated 340 more clicks a month.',
       ),
       meaning: t(
         '搜“小团队 CRM”的多是 5 到 20 人的销售团队，正是 Acme CRM 的目标用户。文章停在第二页开头，排在前面的文章都有价格表和上手时间。',
@@ -1396,7 +1404,10 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         '用报价单指南拿下这组关键词',
         'Win the quote keywords with a template guide',
       ),
-      path: '/blog/quote-template',
+      newPage: {
+        section: '/blog/',
+        linkFrom: ['/features/quotes', '/docs/quotes'],
+      },
       source: 'keywords',
       priority: 'high',
       effort: 'medium',
@@ -1450,7 +1461,7 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         '让 AI 回答开源 CRM 问题时提到 Acme CRM',
         'Have AI answers on open-source CRMs name Acme CRM',
       ),
-      path: '/',
+      newPage: { section: '/blog/', linkFrom: ['/', '/docs/permissions'] },
       source: 'ai-search',
       priority: 'high',
       effort: 'medium',
@@ -1553,7 +1564,10 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         '拿下销售预测这组关键词',
         'Win the sales forecasting keywords',
       ),
-      path: '/use-cases/sales-forecast',
+      newPage: {
+        section: '/use-cases/',
+        linkFrom: ['/docs/forecast', '/features/pipeline'],
+      },
       source: 'competitors',
       priority: 'medium',
       effort: 'medium',
@@ -1591,8 +1605,8 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         'Write a page while searches for “ai crm” rise',
       ),
       reason: t(
-        '近 3 个月搜索量涨了 129%，平均每月 2,400 次；竞品里只有 Example Sales 有对应页面。',
-        'Searches are up 129% over the last 3 months to 2,400 a month on average; among competitors only Example Sales has a page for it.',
+        '近 3 个月搜索量涨了 129%，现在每月 2,400 次；竞品里只有 Example Sales 有对应页面。',
+        'Searches are up 129% over the last 3 months to 2,400 a month now; among competitors only Example Sales has a page for it.',
       ),
       meaning: t(
         '这个词的前 10 名里还有 6 个是新闻和概念文章，工具页很少；Acme CRM 的线索打分和跟进提醒可以直接回答“AI 在 CRM 里能做什么”。',
@@ -1606,7 +1620,7 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         '在“AI CRM”上升期排进前 10',
         'Reach the top 10 for “ai crm” while it rises',
       ),
-      path: '/features/ai',
+      newPage: { section: '/features/', linkFrom: ['/', '/features/pipeline'] },
       source: 'keywords',
       priority: 'medium',
       effort: 'medium',
@@ -1623,8 +1637,8 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         "Rewrite the sales pipeline page's title and snippet to win back clicks",
       ),
       reason: t(
-        '近 28 天曝光 3,030 次、点击率 0.9%，同排名常见是 8.0%；改好标题和摘要预计每月多 233 次点击。',
-        '3,030 impressions in 28 days at 0.9% CTR against the usual 8.0% at this position; a better title and snippet would bring an estimated 233 more clicks a month.',
+        '近 28 天曝光 3,030 次、点击率 0.9%，同排名常见是 8.0%；改好标题和摘要预计每月多 230 次点击。',
+        '3,030 impressions in 28 days at 0.9% CTR against the usual 8.0% at this position; a better title and snippet would bring an estimated 230 more clicks a month.',
       ),
       meaning: t(
         '销售漏斗页排在第 4 名左右，但搜索结果里显示的是“功能 - Acme CRM”，摘要是 Cookie 提示，看不出页面讲什么。',
@@ -1683,7 +1697,6 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         '被 AI 常引用的开源 CRM 榜单收录',
         'Be listed in the open-source CRM roundups AI cites',
       ),
-      path: '/',
       source: 'ai-search',
       priority: 'medium',
       effort: 'low',

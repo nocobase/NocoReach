@@ -1,6 +1,10 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
-import { EVIDENCE_ROWS, GROWTH_KINDS } from '../../shared/growth.js';
+import {
+  EVIDENCE_ROWS,
+  GROWTH_KINDS,
+  roundEstimate,
+} from '../../shared/growth.js';
 import { keepGap, hostOf, marketOf } from './competitor-research.js';
 import { gained } from './github-trends.js';
 // Growth points (2026-11-10 user decision, shared/growth.ts): the changes Opportunities is made of, found in data that
@@ -64,7 +68,8 @@ const pathOf = (u) => {
 const text = (key, params) => ({ key, ...(params ? { params } : {}) });
 const figure = (label, value, extra = {}) => ({
   label: text(`growth.figure.${label}`, extra.labelParams),
-  value,
+  value:
+    extra.estimate && typeof value === 'number' ? roundEstimate(value) : value,
   ...(extra.format ? { format: extra.format } : {}),
   ...(extra.detail ? { detail: extra.detail } : {}),
   ...(extra.estimate ? { estimate: true } : {}),
@@ -468,8 +473,10 @@ function risingKeywordSignals({ ks, gaps, V }) {
         (last - before) / before < V('keyword-rising', 'changePct') / 100
       )
         continue;
+      // A rising keyword is searched as often as it is now (the last 3 months), not as its yearly average says.
       const change = (last - before) / before,
-        gain = extraVisits(i.metrics.volume, 3, i.site?.position),
+        now = Math.round(last),
+        gain = extraVisits(now, 3, i.site?.position),
         rivals = ranksOf(ranks, i.keyword);
       out.push(
         signal({
@@ -500,7 +507,7 @@ function risingKeywordSignals({ ks, gaps, V }) {
           growth: growth(
             'rising',
             [
-              figure('monthlySearches', i.metrics.volume),
+              figure('monthlySearches', now),
               figure('threeMonthChange', change, { format: 'change' }),
               figure(
                 'ourPosition',
@@ -575,7 +582,7 @@ function competitorGapSignals({ gaps, V }) {
           facts: [
             systemMessageText('growthSignals.competitorGapFacts', {
               0: g.name,
-              1: n(traffic),
+              1: n(roundEstimate(traffic)),
               2: items.length,
               3: n(volume),
             }),
@@ -956,10 +963,14 @@ const REPO_COLUMNS = [
   col('created', 'date'),
   col('language'),
 ];
+/** How many repositories a followed topic has, as the latest daily read counted them. */
+const topicSize = (ght, topic) => {
+  const h = ght.heat?.[topic] || {};
+  return h[Object.keys(h).sort().at(-1)]?.total ?? null;
+};
 /** A followed GitHub topic heating up: new repositories last week against the four weeks before. */
 function topicHeatGrowth(ght, topic, last, avg) {
-  const h = ght.heat?.[topic] || {},
-    total = h[Object.keys(h).sort().at(-1)]?.total ?? null;
+  const total = topicSize(ght, topic);
   return growth(
     'topic-heat',
     [
@@ -1030,14 +1041,19 @@ function newRepoSignals({ ght, gh, now, V }) {
         action: 'create',
         growth: growth(
           'new-repo',
+          // The size of the chance: its stars, where it stands among the topic's new repositories, and the topic with
+          // its size. When it was created and its language are in the evidence.
           [
             figure('starsWeek', r.gained),
             figure('topicRank', r.rank, {
-              format: 'position',
-              detail: text('growth.detail.inTopic', { 0: r.topic }),
+              detail: text('growth.detail.ofNewRepositories', {
+                0: r.rows.length,
+              }),
             }),
-            r.created ? figure('created', r.created, { format: 'date' }) : null,
-            r.language ? figure('language', r.language) : null,
+            figure('topic', r.topic),
+            topicSize(ght, r.topic) === null
+              ? null
+              : figure('topicRepositories', topicSize(ght, r.topic)),
           ],
           table(REPO_COLUMNS, r.rows, 'repositories', '/data/github?view=hot'),
         ),

@@ -8185,8 +8185,6 @@
   "growth.figure.topicRepositories": "Repositórios do tópico",
   "growth.figure.starsWeek": "Estrelas, últimos 7 dias",
   "growth.figure.topicRank": "Posição entre novos repositórios",
-  "growth.figure.created": "Criado em",
-  "growth.figure.language": "Linguagem",
   "growth.figure.newPagesWeek": "Páginas novas, últimos 7 dias",
   "growth.figure.latestRelease": "Versão mais recente",
   "growth.figure.rivalStarsWeek": "Estrelas de {0}, últimos 7 dias",
@@ -8202,7 +8200,6 @@
   "growth.detail.platformSplit": "ChatGPT {0} · Visões de IA {1}",
   "growth.detail.questions": "perguntas",
   "growth.detail.perWeek": "por semana",
-  "growth.detail.inTopic": "em {0}",
   "growth.level.easy": "Fácil",
   "growth.level.medium": "Média",
   "growth.level.hard": "Difícil",
@@ -8248,5 +8245,9 @@
   "strategy.situationStarSpike": "Pico de estrelas no seu repositório",
   "strategy.situationDigest": "Tópicos da comunidade sem solução · últimos 30 dias",
   "strategy.situationAuditWarnings": "Avisos de auditoria",
-  "insightSummary.topicActivity": "{0} respostas · {1} visualizações"
+  "insightSummary.topicActivity": "{0} respostas · {1} visualizações",
+  "growth.figure.topic": "Tópico",
+  "growth.detail.ofNewRepositories": "de {0} repositórios novos",
+  "growth.where.newPage": "Página nova · sugerida em {0}",
+  "growth.where.linkFrom": "Adicionar link a partir de: {0}"
 }

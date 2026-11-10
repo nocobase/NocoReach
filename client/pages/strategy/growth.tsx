@@ -108,24 +108,29 @@ export function GrowthRow({ growth }: { growth: Growth }): ReactElement {
             )}
           >
             <dt className='text-xs text-muted-foreground'>{say(f.label)}</dt>
-            <dd className='flex min-w-0 items-baseline gap-1'>
-              {/* A number never shrinks; a name (a domain, a version) is set smaller and cut short, as is the unit. */}
+            <dd className='flex min-w-0 flex-wrap items-baseline gap-x-1'>
+              {/* Nothing is cut short: a name (a domain, a version) is set smaller, and it and the unit wrap. */}
               <span
                 className={cn(
                   typeof f.value === 'number'
                     ? 'shrink-0 text-lg font-semibold tabular-nums'
-                    : 'min-w-0 truncate text-sm font-medium leading-7',
+                    : 'max-w-full py-1 text-sm leading-5 font-medium break-words',
                 )}
-                title={figureValue(f)}
               >
                 {figureValue(f)}
               </span>
               {f.detail ? (
-                <span
-                  className='min-w-0 truncate text-xs text-muted-foreground'
-                  title={say(f.detail)}
-                >
-                  {say(f.detail)}
+                <span className='max-w-full text-xs text-muted-foreground break-words'>
+                  {/* A list ("ChatGPT 15 · AI Overviews 11") wraps between its items, not inside one. */}
+                  {say(f.detail)
+                    .split(' · ')
+                    .map((part, j) => (
+                      // eslint-disable-next-line @eslint-react/no-array-index-key -- the parts of one fixed string
+                      <Fragment key={j}>
+                        {j > 0 ? ' · ' : ''}
+                        <span className='inline-block max-w-full'>{part}</span>
+                      </Fragment>
+                    ))}
                 </span>
               ) : null}
             </dd>
