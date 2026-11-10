@@ -8117,5 +8117,6 @@
   "backlinks.watchHelp": "Once a month the overview and broken pages of our site are looked up again, and the daily analysis reads them: referring domains lost on balance, and broken pages that still have links, which become opportunities to fix.",
   "backlinks.watchCost": "About ${0} a month from the project's DataForSEO budget",
   "backlinks.watchSince": "on since {0}",
-  "backlinks.watchFailed": "The last check didn't complete: {0} It is tried again after {1}."
+  "backlinks.watchFailed": "The last check didn't complete: {0} It is tried again after {1}.",
+  "backlinks.watchUncertain": "The last lookup's outcome is uncertain and it may have been billed, so it isn't asked again until {0}."
 }

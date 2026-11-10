@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { VisibilityError } from './research-helpers.js';
 import { projectId, requireAccess } from './policy.js';
-import { DataForSeo } from './dataforseo.js';
+import { DataForSeo, REUSE_MS } from './dataforseo.js';
 import { host } from './domain-service.js';
 import { GAP_COMPETITORS } from '../../shared/backlinks.js';
 // Backlinks (Search & market › Backlinks): after every-app/open-seo db8bde1 src/server/features/backlinks/ and
@@ -571,11 +571,18 @@ class BacklinksService {
       );
     return this.watch(id);
   }
-  /** Looks up whatever of our site's overview and broken pages has no saved lookup within the reuse time. */
-  async check(id, saved) {
-    const state = saved ?? (await this.watchSaved(id)).saved;
-    if (state.enabled !== true || !this.d4s.config(id)?.verifiedAt)
-      return { checked: 0 };
+  /**
+   * Looks up whatever of our site's overview and broken pages has no saved lookup within the reuse time. The switch is
+   * read again before each lookup and before the result is written, so turning it off during a check sticks and stops
+   * the lookups not yet started.
+   */
+  async check(id) {
+    const on = async () => {
+      const { saved } = await this.watchSaved(id);
+      return saved.enabled === true ? saved : null;
+    };
+    const state = await on();
+    if (!state || !this.d4s.config(id)?.verifiedAt) return { checked: 0 };
     const last = state.lastCheck;
     if (last?.error && Date.now() - Date.parse(last.at) < CHECK_RETRY_MS)
       return { checked: 0, waiting: true };
@@ -583,9 +590,11 @@ class BacklinksService {
     if (!target) return { checked: 0 };
     let checked = 0,
       error = null,
+      uncertain = null,
       asked = false;
     for (const view of ['overview', 'broken']) {
       if (await this.saved(id, { view, target })) continue;
+      if (asked && !(await on())) break;
       asked = true;
       try {
         const run = await this.run(id, {
@@ -593,8 +602,21 @@ class BacklinksService {
           target,
           requestKey: randomUUID().replace(/-/g, ''),
         });
+        // A run still going (another lookup of the same query) or whose outcome is uncertain (it may have been billed)
+        // is no failure: the uncertain one blocks the same query until the reuse time is over, and asking again until
+        // then returns it without a request, so the check says when it can look up again instead of failing daily.
+        if (run.status === 'running') continue;
+        if (run.status === 'unknown') {
+          uncertain = {
+            view,
+            until: new Date(
+              Date.parse(run.createdAt || new Date().toISOString()) + REUSE_MS,
+            ).toISOString(),
+          };
+          continue;
+        }
         if (run.status !== 'completed') {
-          error = { view, code: run.errorCode || run.status };
+          error = { view, code: run.errorCode || 'failed' };
           break;
         }
         if (!run.reused) checked++;
@@ -603,10 +625,15 @@ class BacklinksService {
         break;
       }
     }
-    if (asked)
+    const now = asked ? await on() : null;
+    if (now)
       await this.writeWatch(id, {
-        ...state,
-        lastCheck: { at: new Date().toISOString(), error },
+        ...now,
+        lastCheck: {
+          at: new Date().toISOString(),
+          error,
+          ...(uncertain ? { uncertain } : {}),
+        },
       });
     if (error)
       this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
@@ -614,7 +641,11 @@ class BacklinksService {
         view: error.view,
         code: error.code,
       });
-    return { checked, ...(error ? { error } : {}) };
+    return {
+      checked,
+      ...(error ? { error } : {}),
+      ...(uncertain ? { uncertain } : {}),
+    };
   }
   /** Every hour: the projects with the check on, read in one query, each checked in turn. */
   async tick() {
@@ -627,12 +658,12 @@ class BacklinksService {
             filter: { key: { $in: ids.map((id) => this.watchKey(id)) } },
           })
         : [];
+      // The batch only picks the projects; check() reads each switch again, so one turned off meanwhile is skipped.
       for (const row of rows) {
-        const saved = row.get('payload') || {};
-        if (saved.enabled !== true) continue;
+        if (row.get('payload')?.enabled !== true) continue;
         const id = String(row.get('key')).slice('backlinks-watch:'.length);
         try {
-          await this.check(id, saved);
+          await this.check(id);
         } catch (e) {
           // One project failing never stops the others.
           this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {

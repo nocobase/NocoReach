@@ -8117,5 +8117,6 @@
   "backlinks.watchHelp": "Una vez al mes se vuelven a consultar la vista general y las páginas rotas de nuestro sitio, y el análisis diario las lee: los dominios de referencia perdidos y las páginas rotas con enlaces se convierten en oportunidades que resolver.",
   "backlinks.watchCost": "Unos ${0} al mes del presupuesto de DataForSEO del proyecto",
   "backlinks.watchSince": "activo desde {0}",
-  "backlinks.watchFailed": "La última revisión no se completó: {0} Se volverá a intentar después de {1}."
+  "backlinks.watchFailed": "La última revisión no se completó: {0} Se volverá a intentar después de {1}.",
+  "backlinks.watchUncertain": "El resultado de la última consulta es incierto y puede que se haya cobrado, así que no se repetirá hasta el {0}."
 }

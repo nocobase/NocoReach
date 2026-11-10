@@ -8117,5 +8117,6 @@
   "backlinks.watchHelp": "Einmal im Monat werden Übersicht und defekte Seiten unserer Website neu abgefragt, und die tägliche Analyse liest sie: netto verlorene verweisende Domains und defekte Seiten mit Links werden zu Chancen, die man beheben kann.",
   "backlinks.watchCost": "Etwa ${0} pro Monat aus dem DataForSEO-Budget des Projekts",
   "backlinks.watchSince": "an seit {0}",
-  "backlinks.watchFailed": "Die letzte Prüfung wurde nicht abgeschlossen: {0} Sie wird nach {1} erneut versucht."
+  "backlinks.watchFailed": "Die letzte Prüfung wurde nicht abgeschlossen: {0} Sie wird nach {1} erneut versucht.",
+  "backlinks.watchUncertain": "Das Ergebnis der letzten Abfrage ist unklar und wurde möglicherweise berechnet, daher wird sie erst nach {0} wiederholt."
 }

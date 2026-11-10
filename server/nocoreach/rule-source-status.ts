@@ -63,23 +63,23 @@ export async function sourceStatuses(
   } catch {
     /* Unknown is distinct from disconnected. */
   }
-  // Backlinks has no Data health row: disconnected while its monthly check is off, ready once our site's lookup is
-  // saved, in error when the last check failed, waiting for its first check otherwise.
+  // Backlinks has no Data health row: disconnected while its monthly check is off, in error when the last check failed
+  // (even with an older lookup saved, since a rule may be missing its data), ready once our site's lookup is saved,
+  // waiting for its first check otherwise.
   if ('backlinks' in out)
     try {
       const data = await host.backlinks?.analysisData(id);
-      out.backlinks = data?.overview
-        ? {
-            state: 'ready',
-            collectedAt: data.overview.completedAt || data.overview.createdAt,
-          }
-        : {
-            state: !data?.enabled
-              ? 'disconnected'
-              : data.failed
-                ? 'error'
-                : 'waiting',
-          };
+      out.backlinks = !data?.enabled
+        ? { state: 'disconnected' }
+        : data.failed
+          ? { state: 'error' }
+          : data.overview
+            ? {
+                state: 'ready',
+                collectedAt:
+                  data.overview.completedAt || data.overview.createdAt,
+              }
+            : { state: 'waiting' };
     } catch {
       /* Unknown. */
     }

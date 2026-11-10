@@ -2220,6 +2220,7 @@ type Watch = {
   lastCheck: {
     at: string;
     error: { view: string; code?: string; message?: string } | null;
+    uncertain?: { view: string; until: string };
   } | null;
   retryAt: string | null;
 };
@@ -2250,6 +2251,7 @@ function WatchSwitch() {
   }, [project?.id]);
   if (!watch?.target || !watch.verified) return null;
   const failure = watch.enabled ? watch.lastCheck?.error : null;
+  const uncertain = watch.enabled ? watch.lastCheck?.uncertain : null;
   const toggle = async (enabled: boolean) => {
     const asked = project?.id;
     setBusy(true);
@@ -2294,6 +2296,14 @@ function WatchSwitch() {
               : $legacyText(failure.message || ''),
             1: fmtTime(watch.retryAt),
           })}
+        </p>
+      ) : null}
+      {uncertain && !failure ? (
+        <p
+          className='text-xs text-muted-foreground'
+          data-backlinks-watch-uncertain=''
+        >
+          {$t('backlinks.watchUncertain', { 0: fmtTime(uncertain.until) })}
         </p>
       ) : null}
       {error ? (

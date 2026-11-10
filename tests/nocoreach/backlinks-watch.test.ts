@@ -258,6 +258,20 @@ describe('backlinks source status', () => {
         )
       ).backlinks,
     ).toEqual({ state: 'ready', collectedAt: '2026-11-01T00:00:00Z' });
+    // A failed last check shows even when an older lookup is saved: a rule may be missing its data.
+    expect(
+      (
+        await sourceStatuses(
+          host({
+            enabled: true,
+            failed: true,
+            overview: { createdAt: '2026-11-01T00:00:00Z' },
+          }),
+          '1',
+          snapshot,
+        )
+      ).backlinks,
+    ).toEqual({ state: 'error' });
   });
 });
 
@@ -308,6 +322,62 @@ describe('monthly check failures and state', () => {
     expect(on.lastCheck).toMatchObject({ error: null });
     const again = await s.setWatch('1', { enabled: true });
     expect(again.since).toBe(on.since);
+    expect(s.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the switch off when it is turned off during a check, and starts no further lookup', async () => {
+    const { s, rows } = service({ watch: { enabled: true } });
+    (s.run as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      // The user turns the check off while the overview lookup is running.
+      await s.setWatch('1', { enabled: false });
+      return { id: 10, status: 'completed' };
+    });
+    await s.check('1');
+    expect(s.run).toHaveBeenCalledTimes(1);
+    expect(rows.get('backlinks-watch:1')?.payload).toMatchObject({
+      enabled: false,
+    });
+    expect((await s.watch('1')).enabled).toBe(false);
+  });
+
+  it('skips a project turned off after the hourly batch read it', async () => {
+    const { s, rows } = service({ watch: { enabled: true } });
+    rows.set('backlinks-watch:2', {
+      id: 3,
+      key: 'backlinks-watch:2',
+      payload: { enabled: true },
+    });
+    (s.run as ReturnType<typeof vi.fn>).mockImplementation(async (id) => {
+      if (id === '1')
+        rows.get('backlinks-watch:2')!.payload = { enabled: false };
+      return { id: 10, status: 'completed' };
+    });
+    await s.tick();
+    expect(
+      (s.run as ReturnType<typeof vi.fn>).mock.calls.map(([id]) => id),
+    ).toEqual(['1', '1']);
+  });
+
+  it('treats an uncertain lookup as no failure and says when it can be asked again', async () => {
+    const { s } = service({ watch: { enabled: true } });
+    (s.run as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 12,
+      status: 'unknown',
+      errorCode: 'The result is uncertain and may have been charged.',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      reused: true,
+    });
+    const out = await s.check('1');
+    expect(out.error).toBeUndefined();
+    expect(out.uncertain).toEqual({
+      view: 'overview',
+      until: '2026-12-01T00:00:00.000Z',
+    });
+    const w = await s.watch('1');
+    expect(w.lastCheck.error).toBeNull();
+    expect(w.retryAt).toBeNull();
+    expect(w.lastCheck.uncertain.view).toBe('overview');
+    // The broken pages are still looked up.
     expect(s.run).toHaveBeenCalledTimes(2);
   });
 

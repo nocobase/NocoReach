@@ -8117,5 +8117,6 @@
   "backlinks.watchHelp": "每月自動重新查詢本站的外部連結概況和失效頁面，每日分析會讀取結果：引用網域淨流失、仍有外部連結的失效頁面，會變成可以處理的機會。",
   "backlinks.watchCost": "每月約 ${0}，計入專案的 DataForSEO 預算",
   "backlinks.watchSince": "{0} 起開啟",
-  "backlinks.watchFailed": "上次檢查沒有完成：{0} 將在 {1} 後再試。"
+  "backlinks.watchFailed": "上次檢查沒有完成：{0} 將在 {1} 後再試。",
+  "backlinks.watchUncertain": "上次查詢結果不確定，可能已經扣費，因此 {0} 之前不會再查。"
 }
