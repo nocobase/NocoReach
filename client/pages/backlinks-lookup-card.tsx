@@ -65,8 +65,8 @@ export function BacklinksLookupCard({
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    void call<Run | null>(projectId, 'saved', query).then(
-      (r) => alive.current && setRun(r),
+    void call<{ run: Run | null }>(projectId, 'saved', query).then(
+      (r) => alive.current && setRun(r?.run ?? null),
       () => alive.current && setRun(null),
     );
     return () => {

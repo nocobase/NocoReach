@@ -581,6 +581,23 @@ test('DataForSEO verifies fake credentials, persists keyword/domain/Lighthouse r
   expect((await data(call('nrBacklinks', 'sites'))).own.length).toBeGreaterThan(
     0,
   );
+  // What a new lookup would reuse, as the agent's proposal card reads it: the gap just run, none for an unknown target.
+  expect(
+    (
+      await data(
+        call('nrBacklinks', 'saved', {
+          target: FIXTURE_PRODUCT.domain,
+          view: 'gap',
+          competitors: ['rival.example'],
+        }),
+      )
+    ).run.id,
+  ).toBe(gap.id);
+  expect(
+    await data(
+      call('nrBacklinks', 'saved', { target: 'never.example', view: 'links' }),
+    ),
+  ).toEqual({ run: null });
   expect(
     await data(
       call('nrLighthouse', 'run', {

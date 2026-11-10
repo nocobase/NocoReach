@@ -487,7 +487,8 @@ class BacklinksService {
       list: wrap((id) => this.list(id)),
       getRun: wrap((id, v) => this.getRun(id, v)),
       sites: wrap((id) => this.sites(id)),
-      saved: wrap((id, v) => this.saved(id, v)),
+      // Wrapped: a bare null would come back to the client as the whole response (its unwrap falls back on `data ?? payload`).
+      saved: wrap(async (id, v) => ({ run: await this.saved(id, v) })),
     };
     this.p.app.resourceManager.define({ name: 'nrBacklinks', actions });
     this.p.app.acl.allow('nrBacklinks', Object.keys(actions), 'loggedIn');

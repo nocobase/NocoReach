@@ -88,7 +88,8 @@ beforeEach(() => {
   saved = null;
   action.mockImplementation(async (_resource: string, op: string) =>
     op === 'saved'
-      ? saved
+      ? // As the API client hands it over: `{ data: { run } }` unwrapped to `{ run }`.
+        { run: saved }
       : op === 'run'
         ? {
             id: 42,
