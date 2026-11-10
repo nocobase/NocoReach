@@ -284,6 +284,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   analyze: [
     ...list('nrAiQuestions', ['suggest', 'topics']),
     'nrAiSearch.ask',
+    'nrAiSearch.trend',
     ...list('nrAnalysis', ['run', 'judge', 'judgeMissing']),
     'nrAudit.recheck',
     'nrBacklinks.run',
