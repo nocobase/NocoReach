@@ -38,6 +38,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'hn-story',
   'packages-downloads',
   'rank-drop',
+  'backlinks-broken',
   'rank-lost',
   'rank-top10',
   'site-stale',

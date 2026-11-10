@@ -4,7 +4,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { linkProspectsDraft } from '#pages/seo-hand-off';
+import { brokenPagesDraft, linkProspectsDraft } from '#pages/seo-hand-off';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 import BacklinksPage, {
@@ -13,10 +13,16 @@ import BacklinksPage, {
   SPAM_THRESHOLD,
 } from '#pages/backlinks';
 
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+const { action, current } = vi.hoisted(() => ({
+  action: vi.fn(),
+  current: { project: { id: 1, domains: ['acme.example'] } },
+}));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
+vi.mock('#hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true }),
+}));
 vi.mock('#pages/reach-data', () => ({
-  useProject: () => ({ project: { id: 1, domains: ['acme.example'] } }),
+  useProject: () => ({ project: current.project }),
 }));
 
 const spec = (view: string) => ({
@@ -143,6 +149,7 @@ const gap = {
 let recent: unknown[] = [];
 beforeEach(() => {
   recent = [];
+  current.project = { id: 1, domains: ['acme.example'] };
   action.mockReset();
   action.mockImplementation(
     async (
@@ -441,4 +448,203 @@ it('Query again on the same overview keeps the tabs already looked up', async ()
   expect(router.state.location.search).toContain('l=2');
   await userEvent.click(screen.getByRole('tab', { name: /外链 3/ }));
   expect(await screen.findByText('good.example')).toBeTruthy();
+});
+
+it('the Broken backlinks tile opens Broken pages, whose pages on our site go to the agent as a Technical fix', async () => {
+  const broken = {
+    id: 20,
+    status: 'completed',
+    spec: spec('broken'),
+    createdAt: '2026-11-01T00:00:00Z',
+    completedAt: '2026-11-01T00:00:00Z',
+    result: {
+      items: [
+        {
+          id: '0',
+          url: 'https://acme.example/blog/old',
+          status: 404,
+          title: 'Old post',
+          backlinks: 37,
+          referringDomains: 9,
+          rank: 12,
+          firstSeen: null,
+        },
+      ],
+      totalCount: 1,
+    },
+  };
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { runId?: string } },
+    ) =>
+      resource === 'nrBacklinks' &&
+      act === 'getRun' &&
+      options.body.runId === '20'
+        ? broken
+        : base(resource, act, options),
+  );
+  const router = createMemoryRouter(
+    [{ path: '/backlinks', element: <BacklinksPage /> }],
+    { initialEntries: ['/backlinks?t=acme.example&o=1&b=20'] },
+  );
+  render(<RouterProvider router={router} />);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '查看这些外链指向的失效页面' }),
+  );
+  expect(router.state.location.search).toContain('bt=broken');
+  expect(await screen.findByText('/blog/old')).toBeTruthy();
+  expect(screen.getByText('404')).toBeTruthy();
+  await userEvent.click(screen.getByRole('checkbox', { name: '选择这一行' }));
+  expect(
+    await screen.findByRole('button', { name: /交给 Agent/ }),
+  ).toBeTruthy();
+});
+
+it('a broken-pages brief lists each address with its links and says how to win them back', () => {
+  const draft = brokenPagesDraft(
+    'acme.example',
+    [
+      {
+        url: 'https://acme.example/blog/old',
+        status: 404,
+        backlinks: 37,
+        referringDomains: 9,
+      },
+    ],
+    '2026-11-01T00:00:00Z',
+  );
+  expect(draft.pages).toEqual(['https://acme.example/blog/old']);
+  // A page on a subdomain is named with its host.
+  expect(
+    brokenPagesDraft(
+      'acme.example',
+      [
+        {
+          url: 'https://docs.acme.example/intro',
+          status: 404,
+          backlinks: 3,
+          referringDomains: 1,
+        },
+      ],
+      '2026-11-01T00:00:00Z',
+    ).title,
+  ).toContain('docs.acme.example/intro');
+  expect(draft.title).toContain('/blog/old');
+  expect(draft.brief).toContain('状态码 404');
+  expect(draft.brief).toContain('301');
+});
+
+it('the monthly check of our site is off until someone switches it on, with its cost shown', async () => {
+  let watch = {
+    enabled: false,
+    since: null as string | null,
+    target: 'acme.example',
+    verified: true,
+    monthlyUsd: 0.08,
+  };
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { enabled?: boolean } },
+    ) => {
+      if (resource === 'nrBacklinks' && act === 'watch') return watch;
+      if (resource === 'nrBacklinks' && act === 'setWatch') {
+        watch = {
+          ...watch,
+          enabled: Boolean(options.body.enabled),
+          since: '2026-11-10T00:00:00Z',
+        };
+        return watch;
+      }
+      return base(resource, act, options as never);
+    },
+  );
+  open('/backlinks');
+  const toggle = await screen.findByRole('switch', {
+    name: /每月自动检查 acme\.example 的外链/,
+  });
+  expect(screen.getByText(/每月约 \$0\.08/)).toBeTruthy();
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  await userEvent.click(toggle);
+  const sets = action.mock.calls.filter(([, act]) => act === 'setWatch');
+  expect(sets).toHaveLength(1);
+  expect(sets[0][2].body).toMatchObject({ enabled: true });
+  expect(await screen.findByText(/起开启/)).toBeTruthy();
+});
+
+it('a failed monthly check says why under the switch and when it is tried again', async () => {
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (resource: string, act: string, options: never) =>
+      resource === 'nrBacklinks' && act === 'watch'
+        ? {
+            enabled: true,
+            since: '2026-11-01T00:00:00Z',
+            target: 'acme.example',
+            verified: true,
+            monthlyUsd: 0.08,
+            lastCheck: {
+              at: '2026-11-10T00:00:00Z',
+              error: { view: 'overview', code: 'backlinks_balance' },
+            },
+            retryAt: '2026-11-11T00:00:00Z',
+          }
+        : base(resource, act, options),
+  );
+  open('/backlinks');
+  const note = await screen.findByRole('alert');
+  expect(note.textContent).toContain('上次检查没有完成');
+  expect(note.textContent).toContain('余额');
+});
+
+it("switching project never shows the last project's switch, even when its answer comes late", async () => {
+  let answerA: (w: unknown) => void = () => undefined;
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (resource: string, act: string, options: never) => {
+      if (resource === 'nrBacklinks' && act === 'watch')
+        return current.project.id === 1
+          ? new Promise((r) => (answerA = r))
+          : {
+              enabled: false,
+              since: null,
+              target: 'beta.example',
+              verified: true,
+              monthlyUsd: 0.08,
+              lastCheck: null,
+              retryAt: null,
+            };
+      return base(resource, act, options);
+    },
+  );
+  const router = createMemoryRouter(
+    [{ path: '/backlinks', element: <Backlinks /> }],
+    {
+      initialEntries: ['/backlinks'],
+    },
+  );
+  const view = render(<RouterProvider router={router} />);
+  current.project = { id: 2, domains: ['beta.example'] };
+  view.rerender(<RouterProvider router={router} />);
+  expect(
+    await screen.findByRole('switch', { name: /beta\.example/ }),
+  ).toBeTruthy();
+  // Project 1's answer arrives late: it is dropped.
+  answerA({
+    enabled: true,
+    since: '2026-11-01T00:00:00Z',
+    target: 'acme.example',
+    verified: true,
+    monthlyUsd: 0.08,
+    lastCheck: null,
+    retryAt: null,
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.queryByRole('switch', { name: /acme\.example/ })).toBeNull();
+  expect(screen.getByRole('switch', { name: /beta\.example/ })).toBeTruthy();
 });

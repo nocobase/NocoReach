@@ -6,7 +6,8 @@ export const GAP_COMPETITORS = 3;
 /** OpenSEO's DEFAULT_BACKLINKS_SPAM_THRESHOLD: rows scoring this or more count as spam. */
 export const SPAM_THRESHOLD = 40;
 
-export type BacklinksView = 'overview' | 'links' | 'domains' | 'pages' | 'gap';
+export type BacklinksView =
+  'overview' | 'links' | 'domains' | 'pages' | 'broken' | 'gap';
 
 /**
  * A backlinks lookup the online agent proposed (tool `backlinks`, when nothing is saved) and the user confirms on the
@@ -33,7 +34,9 @@ export const isBacklinksLookupProposal = (
     p &&
     typeof p.projectId === 'string' &&
     typeof p.target === 'string' &&
-    ['overview', 'links', 'domains', 'pages', 'gap'].includes(String(p.view)) &&
+    ['overview', 'links', 'domains', 'pages', 'broken', 'gap'].includes(
+      String(p.view),
+    ) &&
     typeof p.estimatedUsd === 'number',
   );
 };
@@ -51,7 +54,13 @@ export function backlinksPath(
     if (runId != null) params.set('gap', String(runId));
   } else {
     params.set('t', target);
-    const key = { overview: 'o', links: 'l', domains: 'r', pages: 'g' }[view];
+    const key = {
+      overview: 'o',
+      links: 'l',
+      domains: 'r',
+      pages: 'g',
+      broken: 'b',
+    }[view];
     if (runId != null) params.set(key, String(runId));
     if (view !== 'overview') {
       params.set('bt', view);
@@ -59,4 +68,23 @@ export function backlinksPath(
     }
   }
   return `/backlinks?${params.toString()}`;
+}
+
+/**
+ * A page's name wherever Backlinks shows or keys it (the Broken pages table, the analysis signal, the task brief): its
+ * path on our site itself, with its host on a subdomain (docs.example.com/intro), so it is not taken for the main
+ * site's page of the same path. An address that does not parse is shown as it is.
+ */
+export function pagePlace(url: string, site: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    // The query string stays: /index.php?p=12 and ?p=34 are different pages, and so are /a and /a/.
+    const path = `${u.pathname}${u.search}`;
+    return host !== site.toLowerCase().replace(/^www\./, '')
+      ? `${host}${path}`
+      : path;
+  } catch {
+    return url;
+  }
 }

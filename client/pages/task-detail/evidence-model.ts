@@ -38,6 +38,7 @@ export const getSourceNames = (): Record<string, string> => ({
   discord: 'Discord',
   slack: 'Slack',
   rank: $t('common.rankTracking'),
+  backlinks: $t('backlinks.pageTitle'),
   'ai-search': $t('common.aiSearch'),
 });
 

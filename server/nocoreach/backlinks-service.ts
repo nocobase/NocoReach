@@ -1,8 +1,9 @@
 // @ts-nocheck
+import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { VisibilityError } from './research-helpers.js';
 import { projectId, requireAccess } from './policy.js';
-import { DataForSeo } from './dataforseo.js';
+import { DataForSeo, REUSE_MS } from './dataforseo.js';
 import { host } from './domain-service.js';
 import { GAP_COMPETITORS } from '../../shared/backlinks.js';
 // Backlinks (Search & market › Backlinks): after every-app/open-seo db8bde1 src/server/features/backlinks/ and
@@ -18,7 +19,7 @@ import { GAP_COMPETITORS } from '../../shared/backlinks.js';
 const error = (message, status = 400) => {
   throw new VisibilityError(message, status);
 };
-const VIEWS = ['overview', 'links', 'domains', 'pages', 'gap'];
+const VIEWS = ['overview', 'links', 'domains', 'pages', 'broken', 'gap'];
 const LIMIT = 100;
 // dataforseo.com/pricing/backlinks, as OpenSEO's src/server/lib/dataforseo/pricing.ts charges it: per task plus per
 // returned row, uniform across endpoints.
@@ -29,6 +30,16 @@ const TASK_USD = 0.024,
   HISTORY_ROWS = 96,
   HISTORY_SHOWN = 12;
 const usd = (n) => Number(n.toFixed(6));
+const DAY_MS = 86400000;
+// A failed monthly check (a refusal, the month's budget, an unreadable reply) is tried again a day later.
+const CHECK_RETRY_MS = DAY_MS;
+const STALE_RUN_MS = 3600000;
+const bareDomain = (d) =>
+  String(d || '')
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/[/:].*$/, '');
 // A site (hostname, subdomains included) or one exact page. A page keeps an explicit http:// scheme, as the API
 // matches page addresses exactly; a query string or fragment would point at another page, so it is refused.
 function target(input) {
@@ -106,8 +117,14 @@ function specification(v) {
       schemaVersion: 'backlinks-2026-11-09',
     };
   }
-  if (view === 'pages' && t.scope === 'page')
-    error(systemMessageText('backlinks.topPagesNeedSite'));
+  if ((view === 'pages' || view === 'broken') && t.scope === 'page')
+    error(
+      systemMessageText(
+        view === 'broken'
+          ? 'backlinks.brokenPagesNeedSite'
+          : 'backlinks.topPagesNeedSite',
+      ),
+    );
   const base = {
     kind: 'backlinks',
     view,
@@ -143,14 +160,30 @@ function specification(v) {
     links: 'backlinks/backlinks/live',
     domains: 'backlinks/referring_domains/live',
     pages: 'backlinks/domain_pages_summary/live',
+    broken: 'backlinks/domain_pages/live',
   }[view];
-  const request = {
-    ...common(t.target),
-    limit: LIMIT,
-    offset: 0,
-    order_by: [view === 'links' ? 'rank,desc' : 'backlinks,desc'],
-    ...(view === 'links' ? { mode: 'one_per_domain' } : {}),
-  };
+  // Broken pages: the site's pages that answer 4xx or 5xx yet still have live links pointing at them, most linked first;
+  // one row per page, with its own link counts.
+  const request =
+    view === 'broken'
+      ? {
+          ...common(t.target),
+          limit: LIMIT,
+          offset: 0,
+          filters: [
+            ['status_code', '>=', 400],
+            'and',
+            ['page_summary.backlinks', '>', 0],
+          ],
+          order_by: ['page_summary.backlinks,desc'],
+        }
+      : {
+          ...common(t.target),
+          limit: LIMIT,
+          offset: 0,
+          order_by: [view === 'links' ? 'rank,desc' : 'backlinks,desc'],
+          ...(view === 'links' ? { mode: 'one_per_domain' } : {}),
+        };
   return {
     ...base,
     path,
@@ -250,6 +283,14 @@ const rows = {
     spam: num(i.backlinks_spam_score),
     firstSeen: day(i.first_seen),
     brokenBacklinks: num(i.broken_backlinks),
+  }),
+  broken: (i, n) => ({
+    id: String(n),
+    url: str(i.page),
+    status: num(i.status_code),
+    title: str(i.meta?.title),
+    backlinks: num(i.page_summary?.backlinks),
+    referringDomains: num(i.page_summary?.referring_domains),
   }),
   pages: (i, n) => ({
     id: String(n),
@@ -437,12 +478,7 @@ class BacklinksService {
   // What the lookups start from: our site and the competitors listed on Competitors (by their websites).
   async sites(id) {
     const project = await this.p.project(id);
-    const bare = (d) =>
-      String(d || '')
-        .toLowerCase()
-        .replace(/^https?:\/\//, '')
-        .replace(/^www\./, '')
-        .replace(/[/:].*$/, '');
+    const bare = bareDomain;
     const state = await this.p.competitors?.state?.(id).catch(() => null);
     return {
       own: [...new Set((project?.domains || []).map(bare).filter(Boolean))],
@@ -457,6 +493,229 @@ class BacklinksService {
    */
   async saved(id, v) {
     return (await this.d4s.preview(id, 'backlinks', v)).existing;
+  }
+  // Monthly check (2026-11-10 user request): our own site's overview and broken pages looked up again once their
+  // saved lookups pass the 30-day reuse time, while the person keeps it switched on — like Keywords › Tracking, the
+  // only paid lookups that run on their own, because someone switched them on. Kept in nrSnapshots
+  // (backlinks-watch:<project>); the daily analysis reads the saved lookups (analysisData) and never asks for one.
+  watchKey(id) {
+    return `backlinks-watch:${id}`;
+  }
+  snapshots() {
+    return this.p.db.getRepository('nrSnapshots');
+  }
+  /** Our own site: the project's first domain, bare. */
+  /** Our site as a lookup target; a first domain the lookups refuse (localhost, a bad name) counts as none. */
+  async ownTarget(id) {
+    const project = await this.p.project(id);
+    const t = bareDomain((project?.domains || [])[0]) || null;
+    if (!t) return null;
+    try {
+      specification({ view: 'overview', target: t });
+      return t;
+    } catch {
+      return null;
+    }
+  }
+  async watchSaved(id) {
+    const row = await this.snapshots().findOne({
+      filter: { key: this.watchKey(id) },
+    });
+    return { row, saved: row?.get('payload') || {} };
+  }
+  async writeWatch(id, payload) {
+    const { row } = await this.watchSaved(id);
+    if (row)
+      await this.snapshots().update({
+        filterByTk: row.id,
+        values: { payload },
+      });
+    else
+      await this.snapshots().create({
+        values: { key: this.watchKey(id), payload },
+      });
+  }
+  async watch(id) {
+    const { saved } = await this.watchSaved(id);
+    const target = await this.ownTarget(id);
+    const estimate = (view) =>
+      target ? specification({ view, target }).estimatedUsd : 0;
+    return {
+      enabled: saved.enabled === true,
+      since: saved.since || null,
+      target,
+      verified: Boolean(this.d4s.config(id)?.verifiedAt),
+      monthlyUsd: usd(estimate('overview') + estimate('broken')),
+      // The last check that asked for a lookup: when, and why it failed if it did. A failed one is tried again after
+      // CHECK_RETRY_MS, never every hour (a failed run does not block the same query, and each try may be billed).
+      lastCheck: saved.lastCheck || null,
+      retryAt:
+        saved.lastCheck?.error && saved.lastCheck.at
+          ? new Date(
+              Date.parse(saved.lastCheck.at) + CHECK_RETRY_MS,
+            ).toISOString()
+          : null,
+    };
+  }
+  async setWatch(id, v) {
+    const enabled = v.enabled === true;
+    const { saved } = await this.watchSaved(id);
+    // Asking for the state it already has (a retry, another tab) changes nothing: the switch keeps its time and no
+    // second check starts.
+    if ((saved.enabled === true) === enabled) return this.watch(id);
+    await this.writeWatch(id, {
+      enabled,
+      since: enabled ? new Date().toISOString() : null,
+      lastCheck: null,
+    });
+    // Switched on: the first check runs before answering, so a refusal (the month's budget) shows on the switch.
+    if (enabled)
+      await this.check(id).catch((e) =>
+        this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
+          projectId: String(id),
+          message: e?.message,
+        }),
+      );
+    return this.watch(id);
+  }
+  /**
+   * Looks up whatever of our site's overview and broken pages has no saved lookup within the reuse time. The switch is
+   * read again before each lookup and before the result is written, so turning it off during a check sticks and stops
+   * the lookups not yet started.
+   */
+  async check(id) {
+    const on = async () => {
+      const { saved } = await this.watchSaved(id);
+      return saved.enabled === true ? saved : null;
+    };
+    const state = await on();
+    if (!state || !this.d4s.config(id)?.verifiedAt) return { checked: 0 };
+    const target = await this.ownTarget(id);
+    if (!target) return { checked: 0 };
+    const missing = [];
+    for (const view of ['overview', 'broken'])
+      if (!(await this.saved(id, { view, target }))) missing.push(view);
+    const last = state.lastCheck;
+    // Both lookups saved (a later check, or someone looked them up on the page): an earlier failure or uncertain lookup
+    // no longer stands, so the switch and Analysis rules stop showing it.
+    if (!missing.length) {
+      if (last?.error || last?.uncertain)
+        await this.writeWatch(id, {
+          ...state,
+          lastCheck: { at: new Date().toISOString(), error: null },
+        });
+      return { checked: 0 };
+    }
+    if (last?.error && Date.now() - Date.parse(last.at) < CHECK_RETRY_MS)
+      return { checked: 0, waiting: true };
+    let checked = 0,
+      error = null,
+      uncertain = null,
+      asked = false;
+    for (const view of missing) {
+      if (asked && !(await on())) break;
+      asked = true;
+      try {
+        const run = await this.run(id, {
+          view,
+          target,
+          requestKey: randomUUID().replace(/-/g, ''),
+        });
+        // A run still going (another lookup of the same query) or whose outcome is uncertain (it may have been billed)
+        // is no failure: the uncertain one blocks the same query until the reuse time is over, and asking again until
+        // then returns it without a request, so the check says when it can look up again instead of failing daily.
+        // A running one older than an hour was cut off (the server restarted mid-request) and blocks the query the same.
+        const stale =
+          run.status === 'running' &&
+          Date.now() - Date.parse(run.createdAt || '') > STALE_RUN_MS;
+        if (run.status === 'running' && !stale) continue;
+        if (run.status === 'unknown' || stale) {
+          uncertain = {
+            view,
+            until: new Date(
+              Date.parse(run.createdAt || new Date().toISOString()) + REUSE_MS,
+            ).toISOString(),
+          };
+          continue;
+        }
+        if (run.status !== 'completed') {
+          error = { view, code: run.errorCode || 'failed' };
+          break;
+        }
+        if (!run.reused) checked++;
+      } catch (e) {
+        error = { view, message: e?.message || 'failed' };
+        break;
+      }
+    }
+    const now = asked ? await on() : null;
+    if (now)
+      await this.writeWatch(id, {
+        ...now,
+        lastCheck: {
+          at: new Date().toISOString(),
+          error,
+          ...(uncertain ? { uncertain } : {}),
+        },
+      });
+    if (error)
+      this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
+        projectId: String(id),
+        view: error.view,
+        code: error.code,
+      });
+    return {
+      checked,
+      ...(error ? { error } : {}),
+      ...(uncertain ? { uncertain } : {}),
+    };
+  }
+  /** Every hour: the projects with the check on, read in one query, each checked in turn. */
+  async tick() {
+    if (this.busy) return;
+    this.busy = true;
+    try {
+      const ids = (await this.p.projectIds()).map(String);
+      const rows = ids.length
+        ? await this.snapshots().find({
+            filter: { key: { $in: ids.map((id) => this.watchKey(id)) } },
+          })
+        : [];
+      // The batch only picks the projects; check() reads each switch again, so one turned off meanwhile is skipped.
+      for (const row of rows) {
+        if (row.get('payload')?.enabled !== true) continue;
+        const id = String(row.get('key')).slice('backlinks-watch:'.length);
+        try {
+          await this.check(id);
+        } catch (e) {
+          // One project failing never stops the others.
+          this.p.app?.logger?.warn?.('NocoReach backlinks check failed', {
+            projectId: id,
+            message: e?.message,
+          });
+        }
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+  /**
+   * What the daily analysis reads while the check is on: our site's saved overview and broken pages, never a new
+   * lookup. With the check off it reads nothing, and Analysis rules shows the source disconnected.
+   */
+  async analysisData(id) {
+    const { saved } = await this.watchSaved(id);
+    if (saved.enabled !== true)
+      return { enabled: false, overview: null, broken: null };
+    const failed = Boolean(saved.lastCheck?.error);
+    const target = await this.ownTarget(id);
+    if (!target) return { enabled: true, failed, overview: null, broken: null };
+    const [overview, broken] = await Promise.all(
+      ['overview', 'broken'].map((view) =>
+        this.saved(id, { view, target }).catch(() => null),
+      ),
+    );
+    return { target, enabled: true, failed, overview, broken };
   }
   /** This month's DataForSEO spending and budget, for a lookup's cost note. */
   spend(id) {
@@ -494,6 +753,8 @@ class BacklinksService {
       sites: wrap((id) => this.sites(id)),
       // Wrapped: a bare null would come back to the client as the whole response (its unwrap falls back on `data ?? payload`).
       saved: wrap(async (id, v) => ({ run: await this.saved(id, v) })),
+      watch: wrap((id) => this.watch(id)),
+      setWatch: wrap((id, v) => this.setWatch(id, v)),
     };
     this.p.app.resourceManager.define({ name: 'nrBacklinks', actions });
     this.p.app.acl.allow('nrBacklinks', Object.keys(actions), 'loggedIn');

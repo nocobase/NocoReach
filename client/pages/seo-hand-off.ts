@@ -5,6 +5,7 @@ import { getCurrentLocale, $t } from "#i18n";
 import type { TaskDraft } from "./keyword-hand-off";
 import { countOf, subjectOf } from './task-subject';
 import { distinctPages } from '../../shared/task-start.js';
+import { pagePlace } from '../../shared/backlinks.js';
 
 const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 const pos = (v: number | null | undefined) => (v == null || !v ? "—" : v.toFixed(1));
@@ -102,6 +103,22 @@ export function linkProspectsDraft(own: string, competitors: string[], rows: Lin
     subject: clip(subjectOf(rows[0].domain, rows.length, 'sites'), 160),
     objective: clip($t('seoHandOff.linkProspectsObjective', { 0: own, 1: joinList(rows.map((r) => r.domain)) }), 1000),
     brief: clip([$t(checked ? 'seoHandOff.linkProspectsIntro' : 'seoHandOff.linkProspectsUncheckedIntro', { 0: joinList(competitors), 1: own, 2: formatDate(at) }), ...lines, ...(rows.length > 60 ? [$t('seoHandOff.linkProspectsMore', { 0: rows.length - 60 })] : []), "", $t('seoHandOff.linkProspectsAdvice')].join("\n"), 20000),
+  };
+}
+
+// Backlinks › Broken pages: our pages that no longer open while other sites still link to them, to redirect or restore
+// with the Technical fix playbook so the links count again.
+export type BrokenPage = { url: string; status: number | null; backlinks: number | null; referringDomains: number | null };
+export function brokenPagesDraft(site: string, rows: BrokenPage[], at: string): TaskDraft {
+  const place = (u: string) => pagePlace(u, site);
+  const head = place(rows[0].url);
+  const lines = rows.slice(0, 60).map((r) => $t('seoHandOff.brokenPageLine', { 0: r.url, 1: r.status ?? "—", 2: n(r.backlinks), 3: n(r.referringDomains) }));
+  return {
+    pages: pagesOf(rows.map((r) => r.url)),
+    title: clip(rows.length === 1 ? $t('seoHandOff.brokenPageTitle', { 0: head }) : $t('seoHandOff.brokenPagesTitle', { 0: rows.length, 1: site }), 200),
+    subject: clip(subjectOf(head, rows.length, 'pages'), 160),
+    objective: clip($t('seoHandOff.brokenPagesObjective', { 0: joinList(rows.map((r) => place(r.url))) }), 1000),
+    brief: clip([$t('seoHandOff.brokenPagesIntro', { 0: site, 1: formatDate(at) }), ...lines, ...(rows.length > 60 ? [$t('seoHandOff.linkProspectsMore', { 0: rows.length - 60 })] : []), "", $t('seoHandOff.brokenPagesAdvice')].join("\n"), 20000),
   };
 }
 

@@ -9,14 +9,21 @@ import {
   type BacklinksLookupProposal,
 } from '../../../shared/backlinks.js';
 
-const VIEWS = ['overview', 'links', 'domains', 'pages', 'gap'] as const;
+const VIEWS = [
+  'overview',
+  'links',
+  'domains',
+  'pages',
+  'broken',
+  'gap',
+] as const;
 const ROWS = 50;
 const input = z.strictObject({
   view: z
     .enum(VIEWS)
     .default('overview')
     .describe(
-      'Which view. overview: authority, backlink and referring-domain counts, spam score, broken links and 12 months of history; links: backlinks (one per linking site); domains: referring domains; pages: the site pages with the most links; gap: sites linking to competitors but not to target.',
+      'Which view. overview: authority, backlink and referring-domain counts, spam score, broken links and 12 months of history; links: backlinks (one per linking site); domains: referring domains; pages: the site pages with the most links; broken: pages of the site that no longer open (4xx/5xx) yet still have links pointing at them, worth a redirect; gap: sites linking to competitors but not to target.',
     ),
   target: z
     .string()

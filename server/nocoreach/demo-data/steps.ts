@@ -577,12 +577,15 @@ async function connectSources(
             requestKey: randomUUID(),
           });
         // Backlinks › Link profile: the site's overview and each of its tabs, already looked up.
-        for (const view of ['overview', 'links', 'domains', 'pages'])
+        for (const view of ['overview', 'links', 'domains', 'pages', 'broken'])
           await p.backlinks.run(id, {
             target: spec.domain,
             view,
             requestKey: randomUUID(),
           });
+        // The main project has the monthly check on (its lookups are saved, so switching it on looks up nothing);
+        // the second shows it off.
+        if (which === 'main') await p.backlinks.setWatch(id, { enabled: true });
         for (const strategy of ['mobile', 'desktop'])
           await new Lighthouse(p).run(id, {
             url: origin,

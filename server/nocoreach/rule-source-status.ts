@@ -24,6 +24,13 @@ type Host = Parameters<typeof contentInputs>[0] & {
   youtube?: Pick<YouTubeSource, 'analysisData' | 'state'>;
 } & {
   automaticSources?: AutomaticSources;
+  backlinks?: {
+    analysisData(id: string): Promise<{
+      enabled: boolean;
+      failed?: boolean;
+      overview: { completedAt?: string | null; createdAt: string } | null;
+    } | null>;
+  };
   health?: {
     list(
       id: string,
@@ -56,6 +63,26 @@ export async function sourceStatuses(
   } catch {
     /* Unknown is distinct from disconnected. */
   }
+  // Backlinks has no Data health row: disconnected while its monthly check is off, in error when the last check failed
+  // (even with an older lookup saved, since a rule may be missing its data), ready once our site's lookup is saved,
+  // waiting for its first check otherwise.
+  if ('backlinks' in out)
+    try {
+      const data = await host.backlinks?.analysisData(id);
+      out.backlinks = !data?.enabled
+        ? { state: 'disconnected' }
+        : data.failed
+          ? { state: 'error' }
+          : data.overview
+            ? {
+                state: 'ready',
+                collectedAt:
+                  data.overview.completedAt || data.overview.createdAt,
+              }
+            : { state: 'waiting' };
+    } catch {
+      /* Unknown. */
+    }
   const content = await contentInputs(host, id);
   for (const source of content) {
     try {
