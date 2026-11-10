@@ -89,7 +89,7 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label={$t('common.aboutData')} side="bottom"><p>{$t('aiSearch.questionsAiAnswerSamplesDataforseo')}</p><p>{$t('aiSearch.billingNote')}</p></InfoTip>} title={$t('common.aiSearch')} description={$t('aiSearch.whatPeopleAskChatgptGoogle')} />
+      <PageHeader info={<InfoTip label={$t('common.aboutData')} side="bottom"><p>{$t('aiSearch.topicQuestionSamplesNote')}</p><p>{$t('aiSearch.billingNote')}</p></InfoTip>} title={$t('common.aiSearch')} description={$t('aiSearch.questionsTopicsDescription')} />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">

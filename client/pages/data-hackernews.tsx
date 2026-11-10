@@ -43,7 +43,7 @@ export default function DataHackerNews() {
   const comments = useTickedList("hn-comments", view?.connected ? view.comments : undefined, (c) => c.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('dataHackernews.commentsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.comments'), ticked.map((c) => ({ title: c.title || $t('common.comments'), url: c.hnUrl, meta: c.date, excerpt: c.excerpt }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description={$t('dataHackernews.postsCommentsMentioningProductHacker')} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description={$t('dataHackernews.productTopicsDescription')} />
       <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataHackernews.notLoadHackerNewsMentions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}

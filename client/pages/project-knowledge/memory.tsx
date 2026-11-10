@@ -61,7 +61,11 @@ export default function MemoryTab(): ReactElement {
   const { project, updates } = context;
   const memory = memoryOf(project),
     sections = getMemorySections();
-  const filled = sections.filter(([k]) => memory[k]).length,
+  // Followed topics is one more item; the characters stay the sections', which is what the length limit is about.
+  const filled =
+      sections.filter(([k]) => memory[k]).length +
+      (topicsOf(project).length ? 1 : 0),
+    items = sections.length + 1,
     total = Object.values(memory).reduce((n, t) => n + t.length, 0);
   const { can: canDraft } = useBusinessAccess('nrMemory.draft', project.id),
     { can: canSave } = useBusinessAccess('nrKnowledge.saveMemory', project.id);
@@ -72,7 +76,7 @@ export default function MemoryTab(): ReactElement {
         <p className='flex items-center gap-1.5 text-sm text-muted-foreground'>
           {$tj('projectKnowledge.memorySummary', {
             0: filled,
-            1: sections.length,
+            1: items,
             2: total.toLocaleString(getCurrentLocale()),
           })}
           <InfoTip label={$t('projectKnowledge.whatMemory')}>

@@ -376,12 +376,12 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
 
 test('the tabs and their dialogs follow a language change in place', async () => {
   await mountProjectKnowledge('/project/memory/edit');
-  expect(await screen.findByText(/已填 2 \/ 9 项/)).toBeInTheDocument();
+  expect(await screen.findByText(/已填 2 \/ 10 项/)).toBeInTheDocument();
   expect(
     await screen.findByRole('dialog', { name: '编辑记忆' }),
   ).toBeInTheDocument();
   act(() => setDictionary(english));
-  expect(await screen.findByText(/2 of 9 filled/)).toBeInTheDocument();
+  expect(await screen.findByText(/2 of 10 filled/)).toBeInTheDocument();
   expect(
     screen.getByRole('dialog', { name: 'Edit memory' }),
   ).toBeInTheDocument();
@@ -445,8 +445,8 @@ test('Followed topics sit below Competitors as chips, with the sources that sear
       'Reddit、Hacker News、YouTube、趋势、GitHub 热点、AI 问题都按这些话题找讨论和热点 · 每个话题每月约 $0.62 的 DataForSEO 费用',
     );
     expect(within(row).queryByText('请删减到 10 个')).not.toBeInTheDocument();
-    // Still nine sections filled or not: the topics are a list beside them.
-    expect(screen.getByText(/已填 2 \/ 9 项/)).toBeInTheDocument();
+    // The topics count as one more item beside the nine sections.
+    expect(screen.getByText(/已填 3 \/ 10 项/)).toBeInTheDocument();
   } finally {
     restore();
   }

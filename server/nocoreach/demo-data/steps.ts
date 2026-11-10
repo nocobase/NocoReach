@@ -29,6 +29,7 @@ import {
 } from './content.js';
 import { writeActivity } from './activity.js';
 import { backdateYouTube } from './youtube-history.js';
+import { backdateGitHubStars } from './github-history.js';
 import { ACME_TOPICS, CRM_TOPICS } from './world/script/topics.js';
 import { memoryOf } from '../execution/memory.js';
 import type { DemoHost } from './host.js';
@@ -441,10 +442,11 @@ async function connectSources(
       },
     ],
     [
-      // GitHub hot topics on the followed topics, as the daily read leaves them.
+      // GitHub hot topics on the followed topics, as a month of daily reads leaves them.
       'github-hot',
       async () => {
         await p.githubTrends.refresh(id);
+        await backdateGitHubStars(p.githubTrends, id);
       },
     ],
     [

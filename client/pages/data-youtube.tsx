@@ -55,6 +55,7 @@ import {
   useTickedList,
 } from '#components/reach/hand-off-slot';
 import { EditTopicsLink, TopicGroupTabs } from './followed-topics';
+import { TOPIC_PRICES } from '../../shared/followed-topics';
 import {
   topicMarks,
   topicScopeText,
@@ -168,12 +169,15 @@ export default function DataYouTube() {
     <PageContainer className='nr-data-page'>
       <PageHeader
         title='YouTube'
-        description={$t('collectorPage.youtubeDescription')}
+        description={$t('collectorPage.youtubeTopicsDescription')}
         info={
           hasData ? (
             <NotesTip
               notes={[
                 $t('youtube.researchLimits'),
+                $t('youtube.topicResearchLimits', {
+                  0: TOPIC_PRICES.youtubeVideos,
+                }),
                 $t('collectorPage.datesNote'),
                 $t('collectorPage.unknownNote'),
               ]}

@@ -374,10 +374,17 @@ export const ACME_MEDIA: Media[] = ACME_STORIES.slice(0, 15).map((s, i) => ({
   ],
 }));
 export const ACME_AI: AiQuestion[] = ACME_PAGES.slice(0, 10).map((p, i) => ({
-  question: t(
-    `Acme 如何处理${p.title.zh}？`,
-    `How does Acme handle ${p.title.en.toLowerCase()}?`,
-  ),
+  // The one a competitor answers for asks without naming Acme: an answer to a question naming the product names it.
+  question:
+    i === 8
+      ? t(
+          `哪个项目管理工具的${p.title.zh}做得好？`,
+          `Which project management tool handles ${p.title.en.toLowerCase()} best?`,
+        )
+      : t(
+          `Acme 如何处理${p.title.zh}？`,
+          `How does Acme handle ${p.title.en.toLowerCase()}?`,
+        ),
   answer: t(
     `虚构演示资料说明：${p.description.zh}`,
     `The fictional demo explains: ${p.description.en}`,
