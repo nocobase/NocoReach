@@ -242,7 +242,7 @@ function MentionTrend({ spec }: { spec: BrandSpec }) {
               {months.length ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 font-normal">{$t('common.date')}</th><th className="py-2 text-right font-normal">{$t('aiSearch.trendNew')}</th><th className="py-2 text-right font-normal">{$t('aiSearch.trendLost')}</th></tr></thead>
+                    <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 font-normal">{$t('aiSearch.trendMonth')}</th><th className="py-2 text-right font-normal">{$t('aiSearch.trendNew')}</th><th className="py-2 text-right font-normal">{$t('aiSearch.trendLost')}</th></tr></thead>
                     <tbody>{months.map((m) => <tr key={m.date} className="border-b last:border-0"><td className="py-1.5 tabular-nums">{m.date.slice(0, 7)}</td><td className="py-1.5 text-right tabular-nums">{metric(m.newMentions)}</td><td className="py-1.5 text-right tabular-nums">{metric(m.lostMentions)}</td></tr>)}</tbody>
                   </table>
                   <p className="pt-2 text-xs text-muted-foreground">{$t('aiSearch.trendMonthlyNote')}</p>
