@@ -91,6 +91,7 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'serp/youtube/video_info/live/advanced',
       'keywords_data/google_ads/keywords_for_keywords/live',
       'keywords_data/google_trends/explore/live',
+      'ai_optimization/llm_mentions/timeseries_new_lost',
       'ai_optimization/llm_mentions/aggregated_metrics',
       'ai_optimization/llm_mentions/cross_aggregated_metrics',
       'ai_optimization/llm_mentions/search',
@@ -1699,6 +1700,21 @@ function dataforseo(
     );
   if (operation.startsWith('ai_optimization/llm_mentions/')) {
     const platform = string(b.platform, 'chat_gpt');
+    if (operation === 'ai_optimization/llm_mentions/timeseries_new_lost/live') {
+      const from = new Date(`${string(b.date_from, '2025-08-01')}T00:00:00Z`);
+      const until = string(b.date_to, '2026-10-31').slice(0, 7);
+      const rows: ObjectValue[] = [];
+      if (!Number.isNaN(from.getTime())) {
+        for (let i = 0; i < 12; i++) {
+          const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + i, 1));
+          const ym = d.toISOString().slice(0, 7);
+          if (ym > until) break;
+          const n = fixtureNumber(c, `ai-mention-history:${platform}:${ym}`, 20);
+          rows.push({ date: d.toISOString().slice(0, 10), new_mentions: 8 + n, lost_mentions: 2 + Math.floor(n / 3), new_ai_search_volume: 120 + n * 9, lost_ai_search_volume: 30 + n * 4 });
+        }
+      }
+      return result(empty(c) ? [] : rows);
+    }
     if (operation === 'ai_optimization/llm_mentions/aggregated_metrics/live')
       return wrap([
         {
