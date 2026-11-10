@@ -457,3 +457,44 @@ describe('link gap', () => {
     ]);
   });
 });
+
+describe('link gap prospects', () => {
+  it('never lists a compared site and counts a competitor once per site', () => {
+    const spec = specification({
+      view: 'gap',
+      target: 'acme.example',
+      competitors: ['a.example', 'b.example'],
+    });
+    const reply = (domains: string[]) =>
+      ok(
+        domains.map((d) => ({
+          domain_intersection: { 1: { target: d, rank: 10 } },
+        })),
+      );
+    const parsed = result(
+      [
+        // a.example's linking sites include the other competitor, its blog, our docs and one site twice.
+        reply([
+          'b.example',
+          'blog.b.example',
+          'docs.acme.example',
+          'www.twice.example',
+          'twice.example',
+        ]),
+        reply(['a.example', 'twice.example', 'other.example']),
+      ],
+      spec,
+    );
+    expect(
+      parsed.result.items.map(
+        (r: { domain: string; competitors: string[] }) => [
+          r.domain,
+          r.competitors,
+        ],
+      ),
+    ).toEqual([
+      ['twice.example', ['a.example', 'b.example']],
+      ['other.example', ['b.example']],
+    ]);
+  });
+});

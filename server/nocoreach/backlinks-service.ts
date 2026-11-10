@@ -260,9 +260,14 @@ const rows = {
     brokenBacklinks: num(i.broken_backlinks),
   }),
 };
-// Merges the per-competitor replies: one row per linking site with the competitors it links to.
+// Merges the per-competitor replies: one row per linking site with the competitors it links to. The sites compared
+// (our own and every competitor, subdomains included) are never prospects, and a competitor counts once per site even
+// when the provider lists the site twice (www and bare).
 function gap(replies, spec) {
   const by = new Map();
+  const compared = [spec.target, ...spec.competitors];
+  const isCompared = (d) =>
+    compared.some((c) => d === c || d.endsWith(`.${c}`));
   replies.forEach((reply, i) => {
     const rival = spec.competitors[i];
     for (const item of page(reply)?.items || []) {
@@ -270,7 +275,7 @@ function gap(replies, spec) {
       const domain = str(link.domain || item.domain || link.target)
         .toLowerCase()
         .replace(/^www\./, '');
-      if (!domain || domain === rival) continue;
+      if (!domain || isCompared(domain)) continue;
       const row = by.get(domain) || {
         domain,
         competitors: [],
@@ -279,7 +284,7 @@ function gap(replies, spec) {
         spam: null,
         firstSeen: null,
       };
-      row.competitors.push(rival);
+      if (!row.competitors.includes(rival)) row.competitors.push(rival);
       const rank = num(link.rank ?? item.rank);
       if (rank !== null) row.rank = Math.max(row.rank ?? rank, rank);
       row.backlinks += num(link.backlinks) ?? 0;

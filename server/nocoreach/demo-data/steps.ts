@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { GAP_COMPETITORS } from '../../../shared/backlinks.js';
 
 import type {
   DemoImportContext,
@@ -674,9 +675,10 @@ async function connectSources(
         await p.backlinks.run(id, {
           view: 'gap',
           target: spec.domain,
-          competitors: sites.competitors.map(
-            (c: { domain: string }) => c.domain,
-          ),
+          // The gap compares with up to GAP_COMPETITORS, as the page and the agent do.
+          competitors: sites.competitors
+            .map((c: { domain: string }) => c.domain)
+            .slice(0, GAP_COMPETITORS),
           requestKey: randomUUID(),
         });
       },

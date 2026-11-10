@@ -376,14 +376,23 @@ export function Backlinks() {
         requestKey: requestKey(),
         ...(forceRefresh ? { forceRefresh: true } : {}),
       });
+      // Another target's overview drops the tabs opened for the last one; the same target's (Query again) keeps them,
+      // as their saved lookups still hold and dropping them would offer to pay for them again.
+      const sameTarget =
+        view === 'overview' && runs.overview?.spec.target === r.spec.target;
       setRuns((s) =>
-        view === 'overview' ? { overview: r } : { ...s, [view]: r },
+        view === 'overview'
+          ? sameTarget
+            ? { ...s, overview: r }
+            : { overview: r }
+          : { ...s, [view]: r },
       );
       const p = new URLSearchParams(params);
       p.set('t', r.spec.target);
       p.set(RUN_PARAMS[view], String(r.id));
-      if (view === 'overview') for (const v of TABS) p.delete(RUN_PARAMS[v]);
-      else p.set('bt', view);
+      if (view === 'overview') {
+        if (!sameTarget) for (const v of TABS) p.delete(RUN_PARAMS[v]);
+      } else p.set('bt', view);
       setParams(p, { replace: true });
       void loadRecent();
     } catch (e) {
@@ -1553,14 +1562,19 @@ function LinkGap() {
       .catch(() => undefined);
   }, [gapId]);
   const chosen = [...new Set(rivals.map((r) => bare(r)).filter(Boolean))];
-  const query = async (forceRefresh = false) => {
+  // Find the gap asks for what the form holds; Query again (`shown`) refreshes the lookup on screen, whatever the form
+  // has been edited to since.
+  const query = async (
+    forceRefresh = false,
+    shown?: { target: string; competitors?: string[] },
+  ) => {
     setBusy(true);
     setError('');
     try {
       const r = await call<Run<GapRow>>('run', {
         view: 'gap',
-        target: own,
-        competitors: chosen,
+        target: shown ? shown.target : own,
+        competitors: shown ? (shown.competitors ?? []) : chosen,
         requestKey: requestKey(),
         ...(forceRefresh ? { forceRefresh: true } : {}),
       });
@@ -1720,7 +1734,7 @@ function LinkGap() {
                   size='sm'
                   className='h-auto p-0'
                   disabled={busy}
-                  onClick={() => void query(true)}
+                  onClick={() => void query(true, run.spec)}
                 >
                   {$t('common.queryAgain')}
                 </Button>

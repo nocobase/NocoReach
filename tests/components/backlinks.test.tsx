@@ -1,7 +1,7 @@
 // Search & market › Backlinks (client/pages/backlinks.tsx): an opened lookup shows the overview tiles and, on a tab that was
 // looked up, its rows; Hide spam hides the rows already read without another lookup, and a tab not looked up yet offers
 // its own lookup.
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { linkProspectsDraft } from '#pages/seo-hand-off';
@@ -380,4 +380,65 @@ it('Query again on Link gap starts the new result with nothing ticked', async ()
   expect(await screen.findByText('other-first.example')).toBeTruthy();
   expect(screen.queryAllByRole('checkbox', { checked: true })).toHaveLength(0);
   expect(screen.queryByRole('button', { name: /交给 Agent/ })).toBeNull();
+});
+
+it("Query again on Link gap refreshes the lookup on screen, not the form's edits", async () => {
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { runId?: string } },
+    ) =>
+      resource === 'nrBacklinks' &&
+      act === 'getRun' &&
+      options.body.runId === '9'
+        ? { ...gap, reused: true }
+        : resource === 'nrBacklinks' && act === 'run'
+          ? { ...gap, id: 12 }
+          : base(resource, act, options),
+  );
+  const router = createMemoryRouter(
+    [{ path: '/backlinks', element: <BacklinksPage /> }],
+    { initialEntries: ['/backlinks?view=gap&gap=9'] },
+  );
+  render(<RouterProvider router={router} />);
+  expect(await screen.findByText('both.example')).toBeTruthy();
+  const second = screen.getByLabelText('竞品 2');
+  await userEvent.clear(second);
+  await userEvent.type(second, 'zzz.example');
+  await userEvent.click(screen.getByRole('button', { name: '重新查询' }));
+  const run = action.mock.calls.find(([, act]) => act === 'run');
+  expect(run?.[2].body).toMatchObject({
+    target: 'acme.example',
+    competitors: ['other.example', 'rival.example'],
+    forceRefresh: true,
+  });
+});
+
+it('Query again on the same overview keeps the tabs already looked up', async () => {
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { runId?: string } },
+    ) =>
+      resource === 'nrBacklinks' &&
+      act === 'getRun' &&
+      options.body.runId === '1'
+        ? { ...overview, reused: true }
+        : resource === 'nrBacklinks' && act === 'run'
+          ? { ...overview, id: 11 }
+          : base(resource, act, options),
+  );
+  // On a tab not looked up yet, the overview's Query again shows; the Backlinks tab's lookup is open beside it.
+  const router = open('/backlinks?t=acme.example&o=1&l=2&bt=domains');
+  await userEvent.click(
+    await screen.findByRole('button', { name: '重新查询' }),
+  );
+  await waitFor(() => expect(router.state.location.search).toContain('o=11'));
+  expect(router.state.location.search).toContain('l=2');
+  await userEvent.click(screen.getByRole('tab', { name: /外链 3/ }));
+  expect(await screen.findByText('good.example')).toBeTruthy();
 });
