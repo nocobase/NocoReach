@@ -7,6 +7,7 @@ import { agentsOverridesZhCN } from './overrides/agents.js';
 
 const zhCN: AppResource = {
   'nocoreach.nav.apiKeys': 'API 密钥',
+  'aiSearch.trendMonth': '月份',
   'aiSearch.trendTitle': 'AI 提及新增与流失',
   'aiSearch.trendHelp': '按需付费查询 DataForSEO 的 LLM Mentions 历史数据，按平台分别查询，最多显示最近 12 个完整自然月。',
   'aiSearch.trendCheck': '查看历史',
