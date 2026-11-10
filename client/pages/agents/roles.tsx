@@ -333,11 +333,11 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   // Every on-demand use of the default chat model (OnlineProvider.complete or .stream outside the daily analysis) is
   // this row's work (2026-11-10 user decision), so it shares the analysis's model and Settings dialog: rewriting a
   // selected passage in the review editor (article-rewrite), New task › Organize with AI (task-draft), Keywords' AI
-  // suggestions (keyword-seeds, keyword-curate, keyword-names), suggested competitors (competitor-suggest), AI search
-  // questions (ai-question-suggest), Knowledge › Add (knowledge-suggest), Analysis rules' proposals and new rules
-  // (analysis-rules-propose, analysis-rule-draft) and New playbook's draft. Add a new feature on that model to this list.
-  // Its scheduled and background uses are Daily analysis's: the analysis with its custom rules (analysis-rule-evaluate),
-  // Project knowledge's first draft and weekly check (memory-draft, memory-check) and source mapping
+  // suggestions (keyword-seeds, keyword-curate, keyword-names), suggested competitors (competitor-suggest), Knowledge ›
+  // Add (knowledge-suggest), Analysis rules' proposals and new rules (analysis-rules-propose, analysis-rule-draft) and
+  // New playbook's draft. Add a new feature on that model to this list. Its scheduled and background uses are Daily
+  // analysis's: the analysis with its custom rules (analysis-rule-evaluate), Project knowledge's first draft and weekly
+  // check with its topic suggestions (memory-draft, memory-check, memory-topics) and source mapping
   // (content-source-map).
   const editingRow: Row = {
     key: 'editing',

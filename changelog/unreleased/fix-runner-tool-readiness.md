@@ -1,6 +1,6 @@
 ## Agent: Editing and suggestions, and why an agent cannot start
 
-- The Agent page's Who does the work table has an Editing and suggestions row under Cloud models, between Daily analysis and Chat panel: rewriting selected text, New task's draft, keyword, competitor and AI question suggestions and the other on-demand helpers. It runs on the same model as the daily analysis, says so, and its Settings opens the same dialog, now titled Daily analysis, editing and suggestions.
+- The Agent page's Who does the work table has an Editing and suggestions row under Cloud models, between Daily analysis and Chat panel: rewriting selected text, New task's draft, keyword and competitor suggestions and the other on-demand helpers. It runs on the same model as the daily analysis, says so, and its Settings opens the same dialog, now titled Daily analysis, editing and suggestions.
 - The page and Model services descriptions, quick setup step 1 and the glossary name editing and suggestions too, and Daily analysis reads "Finds opportunities daily and reviews project knowledge weekly".
 - Model services without an enabled chat model now say so and link to Model services, instead of saying no model service is connected.
 - The error for an article image that does not belong to the task points to Add image in the article's toolbar, no longer to the removed Edit directly.
