@@ -9,6 +9,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import OpportunityLibrary from '../../client/pages/strategy/library';
+import {
+  GROWTH_KINDS,
+  type Growth,
+  type GrowthKind,
+} from '../../shared/growth';
 import type {
   Opportunity,
   Signal,
@@ -624,4 +629,201 @@ it('shows the shared skeleton while the opportunities load', () => {
       .getByRole('status', { name: 'strategy.loadingOpportunities' })
       .querySelectorAll('[data-slot="skeleton"]'),
   ).toHaveLength(6);
+});
+
+// A growth opportunity (2026-11-10): its category and kind as tags, Growth potential where What happened was, and the rows
+// behind it with "View all" to the page listing them. The figures are the server's, never the model's.
+it('reads a growth opportunity as its tags, growth potential and evidence', async () => {
+  const growth: Growth = {
+    kind: 'demand-gap',
+    category: 'new-content',
+    figures: [
+      {
+        label: { key: 'growth.figure.monthlySearchesTotal' },
+        value: 8900,
+      },
+      {
+        label: { key: 'growth.figure.extraVisits' },
+        value: 640,
+        estimate: true,
+      },
+    ],
+    evidence: {
+      columns: [
+        { key: 'keyword', label: 'growth.column.keyword', format: 'text' },
+        { key: 'volume', label: 'growth.column.volume', format: 'count' },
+      ],
+      rows: [
+        { keyword: 'gantt chart', volume: 5400 },
+        { keyword: 'gantt chart template', volume: 3500 },
+      ],
+      total: 14,
+      unit: 'growth.unit.keywords',
+      link: '/keywords?tab=suggest',
+    },
+  };
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [{ ...card, growth }],
+    },
+  };
+  show();
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(
+    brief.querySelector('[data-growth-category="new-content"]')!.textContent,
+  ).toBe('growth.category.newContent');
+  expect(brief.querySelector('[data-growth-kind]')!.textContent).toBe(
+    'growth.kind.demandGap',
+  );
+  const potential = within(brief).getByRole('region', { name: 'growth.title' });
+  expect(potential.textContent).toContain('growth.figure.monthlySearchesTotal');
+  expect(potential.textContent).toContain('8,900');
+  expect(potential.textContent).toContain('640');
+  const evidence = within(brief).getByRole('region', {
+    name: 'growth.evidence(growth.unit.keywords(14))',
+  });
+  expect(within(evidence).getAllByRole('row')).toHaveLength(3);
+  expect(evidence.textContent).toContain('gantt chart template');
+  expect(
+    within(evidence)
+      .getByRole('link', { name: /growth\.viewAll/ })
+      .getAttribute('href'),
+  ).toBe('/keywords?tab=suggest');
+  // Growth potential takes the place of What happened; the rest of the detail is as before.
+  expect(brief.textContent).not.toContain('strategy.briefWhatHappened');
+  expect(brief.textContent).not.toContain(card.observation);
+  expect(brief.textContent).toContain('strategy.briefWhyWorthDoing');
+  // The list shows the same two tags in place of the signal chip and sources.
+  const listed = screen.getByRole('button', { current: true });
+  expect(listed.querySelector('[data-growth-kind="demand-gap"]')).toBeTruthy();
+});
+
+// A page that does not exist yet has no address to show: Where to change says it is a new page, the section it goes
+// under and the existing pages to link to it from (2026-11-10 review).
+it('says where a new page goes instead of an address that does not exist yet', async () => {
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        {
+          ...card,
+          category: 'create',
+          target: '',
+          newPage: {
+            section: '/blog/',
+            linkFrom: ['/features/timeline', '/templates'],
+          },
+        },
+      ],
+    },
+  };
+  show();
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(brief.textContent).toContain('growth.where.newPage(/blog/)');
+  expect(brief.textContent).toContain(
+    'growth.where.linkFrom(/features/timeline · /templates)',
+  );
+  expect(brief.textContent).not.toContain(card.target);
+});
+
+// Where to change says which of the three it is (2026-11-10): an existing page or off the site (a new page above).
+it('says whether the change is on an existing page or off the site', async () => {
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        card,
+        {
+          ...other,
+          target: '',
+          offsite: 'Submit to the saas-review.example roundup author',
+        },
+      ],
+    },
+  };
+  show();
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(brief.querySelector('[data-where="existing"]')!.textContent).toBe(
+    `growth.where.existing(${card.target})`,
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: new RegExp(other.title) }),
+  );
+  const offsite = await screen.findByRole('article', { name: other.title });
+  expect(offsite.querySelector('[data-where="offsite"]')!.textContent).toBe(
+    'growth.where.offsite(Submit to the saas-review.example roundup author)',
+  );
+});
+
+// The four categories filter every tab (2026-11-10), kept in the address (?category=): each counts the tab's own items.
+it('filters the opportunities by category on every tab, from the address', async () => {
+  const growth = (kind: GrowthKind): Growth => ({
+    kind,
+    category: GROWTH_KINDS[kind],
+    figures: [{ label: { key: 'growth.figure.clicks28' }, value: 1 }],
+  });
+  const third: Opportunity = {
+    ...card,
+    id: 'o38',
+    no: 38,
+    title: 'Older opportunity without a growth',
+    objective: 'other',
+  };
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        { ...card, growth: growth('rising') },
+        { ...other, growth: growth('rank-drop') },
+        third,
+      ],
+    },
+  };
+  show('/opportunities?category=optimize');
+  await screen.findByRole('article', { name: other.title });
+  const filter = screen.getByRole('group', {
+    name: 'growth.category.filter',
+  });
+  expect(
+    within(filter)
+      .getAllByRole('button')
+      .map((b) => [b.textContent, b.getAttribute('aria-pressed')]),
+  ).toEqual([
+    ['growth.category.all 3', 'false'],
+    ['growth.category.trending 1', 'false'],
+    ['growth.category.newContent 0', 'false'],
+    ['growth.category.competitorGaps 0', 'false'],
+    ['growth.category.optimize 1', 'true'],
+  ]);
+  const listed = () =>
+    screen
+      .getAllByRole('button', { current: undefined })
+      .filter((b) => b.hasAttribute('aria-current'))
+      .map((b) => b.textContent);
+  expect(listed()).toEqual([expect.stringContaining(other.title)]);
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'growth.category.trending 1' }),
+  );
+  await screen.findByRole('article', { name: card.title });
+  expect(listed()).toEqual([expect.stringContaining(card.title)]);
+  // All shows the one without a category too.
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'growth.category.all 3' }),
+  );
+  expect(listed()).toHaveLength(3);
+  // Another tab keeps the filter and counts its own items.
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'growth.category.trending 1' }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: /^strategy\.handled/ }));
+  expect(
+    within(
+      screen.getByRole('group', { name: 'growth.category.filter' }),
+    ).getByRole('button', { name: 'growth.category.trending 0' }),
+  ).toHaveAttribute('aria-pressed', 'true');
 });

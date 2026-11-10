@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { demoContent } from '../../server/nocoreach/demo-data/content';
+import {
+  acmeGrowthBriefs,
+  crmGrowthBriefs,
+} from '../../server/nocoreach/demo-data/growth-briefs';
+import { GROWTH_CATEGORIES, GROWTH_KINDS } from '../../shared/growth';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
 import { World } from '../../server/nocoreach/demo-data/world/world';
 import {
@@ -79,10 +84,67 @@ describe.each(['zh-CN', 'en-US'])(
           }
         }
         expect(documents.length).toBeGreaterThanOrEqual(8);
-        expect(opportunities.briefs).toHaveLength(which === 'main' ? 16 : 12);
+        // Two handed off and two ignored; the pending ones are growth points of the four categories (2026-11-10).
+        expect(opportunities.briefs).toHaveLength(4);
         expect(opportunities.watches).toHaveLength(6);
         for (const brief of opportunities.briefs)
           expect(world.page(brief[6])).toBeDefined();
+        const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
+          new Date(now),
+        );
+        expect(growth).toHaveLength(which === 'main' ? 18 : 10);
+        const lang = language === 'en-US' ? 'en' : 'zh';
+        const kinds = growth.map((brief) => brief.growth(lang).kind);
+        // Acme has two or more of each category; with Acme CRM every kind is shown.
+        if (which === 'main') {
+          const categories = growth.map((brief) => brief.growth(lang).category);
+          for (const category of GROWTH_CATEGORIES)
+            expect(
+              categories.filter((c) => c === category).length,
+            ).toBeGreaterThanOrEqual(2);
+          // To do keeps about the proportion of the approved mockup, not mostly Content optimization; the rest are
+          // under Handled (2026-11-10 review).
+          const todo = growth.filter((brief) => !brief.ignored),
+            count = (category: string) =>
+              todo.filter((brief) => brief.growth(lang).category === category)
+                .length;
+          expect(count('trending')).toBeGreaterThanOrEqual(4);
+          expect(count('new-content')).toBe(3);
+          expect(count('competitor-gaps')).toBeGreaterThanOrEqual(3);
+          expect(count('competitor-gaps')).toBeLessThanOrEqual(4);
+          expect(count('optimize')).toBeLessThanOrEqual(3);
+          // Most worth a look today is a trending one of high priority, as is another, so both lead To do.
+          const leading = todo.filter(
+            (brief) =>
+              brief.priority === 'high' &&
+              brief.growth(lang).category === 'trending',
+          );
+          expect(leading.map((brief) => brief.key)).toContain(
+            opportunities.lead,
+          );
+          expect(leading.length).toBeGreaterThanOrEqual(2);
+          const crm = crmGrowthBriefs(new Date(now)).map(
+            (brief) => brief.growth(lang).kind,
+          );
+          expect([...new Set([...kinds, ...crm])].sort()).toEqual(
+            Object.keys(GROWTH_KINDS).sort(),
+          );
+        }
+        for (const brief of growth) {
+          const g = brief.growth(lang);
+          expect(g.figures.length).toBeGreaterThanOrEqual(1);
+          expect(g.figures.length).toBeLessThanOrEqual(4);
+          expect(g.evidence!.rows.length).toBeLessThanOrEqual(10);
+          expect(g.evidence!.total).toBeGreaterThanOrEqual(
+            g.evidence!.rows.length,
+          );
+          // The list's line states the size of the growth; a title never says to keep traffic (2026-11-10 review).
+          expect(brief.reason[lang]).toMatch(/\d/u);
+          expect(brief.title[lang]).not.toMatch(/保住|留住|守住|\bkeep\b/iu);
+        }
+        expect(JSON.stringify(growth.map((b) => b.growth(lang)))).not.toMatch(
+          /nocobase|nococrm/i,
+        );
         expect(world.queries.length).toBeGreaterThanOrEqual(50);
         expect(world.research.length).toBeGreaterThanOrEqual(40);
         for (const query of world.queries)
@@ -125,7 +187,9 @@ describe.each(['zh-CN', 'en-US'])(
       expect(imports.filter((topic) => topic.posts.length === 1)).toHaveLength(
         3,
       );
-      expect(content.opportunities.briefs[0][6]).toBe('/docs/import-excel');
+      expect(acmeGrowthBriefs(new Date(now))[0].path).toBe(
+        '/docs/import-excel',
+      );
       const query = world.queries.find(
         (q) =>
           q.q ===

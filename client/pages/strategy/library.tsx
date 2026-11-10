@@ -16,7 +16,7 @@ import {cn} from '#lib/utils';
 import {useProject,type Project} from '../reach-data';
 import {request} from './service';
 import type {StrategyState} from './model';
-import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
+import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,reasonLine,pendingOrder,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
 import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
 import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {taskRecords} from '../reach-data';
@@ -30,6 +30,10 @@ import {placesOf,severalTag,standingOf,type HandOffDone} from './places-model';
 import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
+import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
+import {CATEGORY} from './growth-category';
+import {GROWTH_CATEGORIES,categoryOf,growthOf,isGrowthCategory,newPageOf,type GrowthCategory} from '../../../shared/growth.js';
+import {Segmented} from '#components/reach/segmented';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
@@ -44,8 +48,15 @@ type Item=Row&{state:OpportunityState;reason?:string;task?:TaskStanding;/** Wher
 const destOf=(r:Item):Dest=>r.state==='task'?(!r.task||r.task==='todo'?'task':r.task):r.state==='archived'?(r.reason==='ignored'?'ignored':'expired'):'pending';
 /** A handed-off opportunity's tag text: where its task stands, with its number when known. */
 const taskLine=(r:Item)=>`${TASK_TAG[r.task??'todo'][1]()}${r.taskNo?` · ${taskNo(r.taskNo)}`:''}`;
-// The coloured fact of an opportunity: its strongest cited signal's tag (as on 洞察).
+// The coloured fact of an opportunity: its strongest cited signal's tag (as on Insights). A growth opportunity says instead
+// its category and kind (2026-11-10); an older one keeps its fact and sources.
 const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
+// The category filter (2026-11-10, `?category=`) works on all three tabs: an opportunity or a change goes by its growth's
+// category; one without a growth shows under All only.
+const signalCategory=(s:Signal):GrowthCategory|undefined=>growthOf(s.growth)?.category;
+function CategoryFilter({value,categories,onChange}:{value:GrowthCategory|null;categories:(GrowthCategory|undefined)[];onChange:(c:GrowthCategory|null)=>void}){
+ const count=(c:GrowthCategory)=>categories.filter(x=>x===c).length;
+ return <Segmented label={$t('growth.category.filter')} options={[{id:'all',label:<>{$t('growth.category.all')} <span>{categories.length}</span></>},...GROWTH_CATEGORIES.map(c=>({id:c,label:<>{CATEGORY[c][1]()} <span>{count(c)}</span></>}))]} value={value??'all'} onChange={c=>onChange(isGrowthCategory(c)?c:null)}/>;}
 const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">{oppNo(row.card)}</span>:null;
 // 机会 (SPEC §5): 待处理 — the undecided ones, list left and a read-only detail right (2026-10-21); 观察中 — the changes the AI advised watching
 // (2026-10-08), with the days watched; 已处理 — the opportunities decided (handed off, ignored, expired) and the latest
@@ -68,21 +79,24 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const asked=params.get('tab');
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
  usePageTab(getTabs().find(([k])=>k===tab)?.[1]);
- const pending=rows.filter(r=>r.state==='pending').sort((a,b)=>(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
+ const askedCategory=params.get('category'),category=isGrowthCategory(askedCategory)?askedCategory:null,inCategory=(c?:GrowthCategory)=>!category||c===category;
+ const allPending=rows.filter(r=>r.state==='pending').sort(pendingOrder),pending=allPending.filter(r=>inCategory(categoryOf(r.card)));
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='done'?linked:undefined;
  // 观察中: the latest analysis's changes the AI advised watching (not already an opportunity or a task), biggest first, as on 洞察.
  const judged=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})):[];
- const watching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)}));
+ const allWatching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)})),watching=allWatching.filter(x=>inCategory(signalCategory(x.s)));
  const ended=state?recentlyEnded(state):[];
  // 忽略 / 恢复 a watched change.
  async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);refreshNavBadges();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 已处理 also lists the latest analysis's changes that need nothing — 无需处理, ignored, or handed off without an
  // opportunity — except those an opportunity already stands for (that one is listed instead).
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(x=>x.key)));
- const settled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored)));
+ const allSettled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored))),settled=allSettled.filter(x=>inCategory(signalCategory(x.s)));
  const watched=watching.find(x=>x.s.key===watchKey)||settled.find(x=>x.s.key===watchKey);
- function go(next:{tab?:string;item?:string;sort?:string;order?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
+ // What the category filter counts: the tab's own items, before the filter.
+ const counted=tab==='pending'?allPending.map(r=>categoryOf(r.card)):tab==='watch'?allWatching.map(x=>signalCategory(x.s)):[...rows.filter(r=>r.state!=='pending').map(r=>categoryOf(r.card)),...allSettled.map(x=>signalCategory(x.s))];
+ function go(next:{tab?:string;item?:string;sort?:string;order?:string;category?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts. An
  // opportunity with several places asks which ones first, makes a task for each and stays here on its task list.
@@ -94,20 +108,22 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
   setNotice({ok:true,text:()=>$t('opportunityTasks.created',{0:r.taskIds.length})});if(project)void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else go({item:r.card.id});}
  const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
- return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.thingsWorthDoingWhatChanged')}/>
+ return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
-  <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length-pending.length+settled.length}`:''}</button>)}</nav>
-  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
+  <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?allPending.length:k==='watch'?allWatching.length:rows.length-allPending.length+allSettled.length}`:''}</button>)}</nav>
+  {state&&<CategoryFilter value={category} categories={counted} onChange={c=>go({category:c??'',item:''})}/>}
+  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>inCategory(categoryOf(r.card)))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
-  :!pending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
-  :<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+  :!allPending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
+  :!pending.length?<p className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>{$t('strategy.nothingMatches')}</p>
+  :<div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
    <div className="flex flex-col gap-2">
-    {pending.map(r=>{const c=leadChip(r);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
+    {pending.map(r=>{const c=leadChip(r),g=growthOf(r.card.growth);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
      className="flex flex-col gap-1.5 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
      <span className="line-clamp-2 text-sm font-medium"><No row={r}/>{r.card.no?' ':''}{r.card.title}</span>
      <span className="line-clamp-2 text-xs text-muted-foreground">{reasonLine(r)}</span>
-     <span className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(r).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{r.card.change==='new'&&<Tag tone="blue">{$t('strategy.new')}</Tag>}</span>
+     <span className="flex flex-wrap items-center gap-1">{g?<GrowthTags growth={g}/>:<>{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(r).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</>}{r.card.change==='new'&&<Tag tone="blue">{$t('strategy.new')}</Tag>}</span>
     </button>;})}
    </div>
    {selected&&detail(selected)}
@@ -238,27 +254,34 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
 // with which 做法 is settled on the task after 交给 Agent; the list stays on the left so every opportunity is in sight):
 // what happened, why it is worth doing, what to do and where, with the AI's priority, effort and confidence as tags and
 // its limits behind ⓘ. A pending one is handed off or ignored, a handed-off one opens its task, an archived one is restored.
+// A growth opportunity (2026-11-10) shows its growth potential where what happened was, and under why it is worth doing
+// the rows the growth rests on. One that writes a new page says where it would go instead of an address it has not got.
 const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.priorityHigh')],medium:['amber',()=>$t('strategy.priorityMedium')],low:['grey',()=>$t('strategy.priorityLow')]};
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
 function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
- const card=row.card,c=leadChip(row),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
+ const card=row.card,c=leadChip(row),growth=growthOf(card.growth),newPage=newPageOf(card.newPage),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
  const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
  const priority=PRIORITY[row.priority],effort=EFFORT[card.effort||''],confidence=CONFIDENCE[card.confidence||''];
- const happened=card.observation||card.reason||card.evidenceText;
+ const happened=growth?'':card.observation||card.reason||card.evidenceText;
  return <article data-opportunity-id={card.id} aria-label={card.title} className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
   <div className="flex flex-col gap-1.5">
    {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
-   <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
+   <div className="flex flex-wrap items-center gap-1">{growth?<GrowthTags growth={growth}/>:<>{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</>}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
    <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?several?$t('strategy.handedOffAgent'):`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
   </div>
+  {growth&&<GrowthRow growth={growth}/>}
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
+  {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
-  {card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
+  {/* Where says which of the three it is (2026-11-10): a new page, an existing page or off the site. */}
+  {newPage?<Block title={$t('strategy.briefWhere')}><span className="block break-words">{$t('growth.where.newPage',{0:newPage.section})}</span>{newPage.linkFrom.length>0&&<span className="block break-words">{$t('growth.where.linkFrom',{0:newPage.linkFrom.join(' · ')})}</span>}</Block>
+   :card.target?.trim()?<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='existing'>{$t('growth.where.existing',{0:card.target})}</span></Block>
+   :card.offsite?.trim()&&<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='offsite'>{$t('growth.where.offsite',{0:card.offsite})}</span></Block>}
   {several&&<OpportunityTasks row={row} tasks={tasks}/>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}

@@ -162,6 +162,8 @@ function cardFor(s: Signal, review: SignalReview, locale: string) {
     confidence: 'verify',
     effort: 'unknown',
     lifecycle: 'persistent',
+    // A growth change's opportunity carries its growth, as one the analysis wrote does (strategy-service.ts).
+    ...(s.growth ? { growth: s.growth } : {}),
   };
 }
 

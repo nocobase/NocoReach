@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest';
 import {
   insightPending,
+  leadPriority,
   opportunityState,
+  pendingOrder,
   rowsFor,
   signalDisposition,
   todaySuggestions,
@@ -323,4 +325,45 @@ it('an opportunity ignored from an earlier analysis keeps its changes off Insigh
   expect(signalDisposition({ key: 'commercial' }, s, [])).toMatchObject({
     next: 'opportunity',
   });
+});
+
+// Insights' first note and Opportunities agree on what comes first (2026-11-10 review): the list goes by priority, then
+// Trending now, then the note's opportunity, and the note's opportunity takes the highest priority of its trending peers.
+it('the opportunity of the first note is the first trending one in the list', () => {
+  const growth = (kind: 'rising' | 'new-repo' | 'near-first') => ({
+    kind,
+    category: kind === 'near-first' ? 'optimize' : 'trending',
+    figures: [{ label: { key: 'growth.figure.clicks28' }, value: 1 }],
+  });
+  const items = [
+    card('near', { priority: 'high', growth: growth('near-first') }),
+    card('repo', {
+      priority: 'high',
+      growth: growth('new-repo'),
+      firstSeenAt: '2026-10-12',
+    }),
+    card('rising', {
+      priority: 'medium',
+      growth: growth('rising'),
+      firstSeenAt: '2026-10-01',
+    }),
+  ];
+  // A trending lead takes the highest priority among trending opportunities only; one already there keeps its own.
+  expect(leadPriority(items[2], items)).toBe('high');
+  expect(leadPriority(items[1], items)).toBeUndefined();
+  // Not trending (none was): the highest of all.
+  expect(
+    leadPriority(card('x', { priority: 'low' }), [
+      card('y', { priority: 'medium' }),
+    ]),
+  ).toBe('medium');
+  items[2].priority = 'high';
+  const s = state(items);
+  s.insights!.leadId = 'rising';
+  // At the same priority Trending now first, the lead before a newer trending one, then the rest.
+  expect(
+    rowsFor(s)
+      .sort(pendingOrder)
+      .map((r) => r.card.id),
+  ).toEqual(['rising', 'repo', 'near']);
 });
