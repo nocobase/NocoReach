@@ -24,9 +24,9 @@ const unit = (text: string) =>
 /**
  * Demo and mock data only: GitHub hot topics as if it had recorded stars daily for `days` days, rather than once just
  * now, so Gainers has a day, a week and a month to compare. A repository in today's Trending gained what Trending says
- * for today, this week and this month; any other gains a steady few a day. A repository created inside the window is
- * recorded from the day after it was created, as a daily read would first meet it. Records a read made stay as they
- * are, so running this again changes nothing.
+ * for today, this week and this month; any other gains a steady few a day. A repository created inside the window has
+ * no stars on the day it was created and is recorded from the day after, as a daily read would first meet it. Records a
+ * read made stay as they are, so running this again changes nothing.
  */
 export async function backdateGitHubStars(
   trends: HotStore,
@@ -61,20 +61,35 @@ export async function backdateGitHubStars(
       const age = Number.isFinite(created)
         ? Math.round((end - created) / DAY)
         : Infinity;
-      const rate = Math.max(1, Math.round(now * (0.0005 + unit(repo) * 0.002)));
-      // Stars gained by so many days back, never fewer than by a nearer day.
-      const anchors: [number, number][] = [
-        [0, 0],
-        [1, said('daily', repo) ?? rate],
-        [7, said('weekly', repo) ?? rate * 7],
-        [30, said('monthly', repo) ?? rate * 30],
-      ];
+      // A repository created inside the window gains its stars evenly from its first day; an older one a steady few.
+      const rate = Math.max(
+        1,
+        Math.round(
+          age <= days ? now / age : now * (0.0005 + unit(repo) * 0.002),
+        ),
+      );
+      // Stars gained by so many days back, never fewer than by a nearer day and never more than it has; all of
+      // them by the day it was created.
+      const anchors: [number, number][] = (
+        [
+          [0, 0],
+          [1, said('daily', repo) ?? rate],
+          [7, said('weekly', repo) ?? rate * 7],
+          [30, said('monthly', repo) ?? rate * 30],
+        ] as [number, number][]
+      ).filter(([at]) => at < age);
+      if (Number.isFinite(age)) anchors.push([age, now]);
       for (let i = 1; i < anchors.length; i++)
-        anchors[i][1] = Math.max(anchors[i][1], anchors[i - 1][1]);
+        anchors[i][1] = Math.min(
+          now,
+          Math.max(anchors[i][1], anchors[i - 1][1]),
+        );
       const gainedBy = (d: number) => {
         const next = anchors.findIndex(([at]) => at >= d);
-        if (next === -1)
-          return anchors[3][1] + Math.round(((d - 30) * anchors[3][1]) / 30);
+        if (next === -1) {
+          const [dl, gl] = anchors[anchors.length - 1];
+          return gl + Math.round(((d - dl) * gl) / dl);
+        }
         const [d1, g1] = anchors[next];
         if (d1 === d || next === 0) return g1;
         const [d0, g0] = anchors[next - 1];

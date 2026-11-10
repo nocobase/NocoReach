@@ -54,6 +54,10 @@ test('a month of daily records: Trending repositories gained what Trending says,
   assert.ok(gained(stars['example-team/importer'], TODAY, 30) > 0);
   const days = Object.keys(stars['openboard/openboard']).sort();
   assert.equal(days[0], '2026-11-05', 'from the day after it was created');
+  assert.ok(
+    stars['openboard/openboard']['2026-11-05'] < 1240 / 3,
+    'it grew from none since it was created, not all at once',
+  );
   assert.ok(gained(stars['openboard/openboard'], TODAY, 1) > 0);
   assert.equal(
     gained(stars['openboard/openboard'], TODAY, 7),

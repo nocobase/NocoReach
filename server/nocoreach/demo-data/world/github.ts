@@ -472,11 +472,13 @@ function trending(world: World, u: URL): Response {
         world.seeded.unit(`tr:${since}:${b[0]}`),
     )
     .slice(0, 10)
-    .map(([repo, description, language, , stars], i) => {
+    .map(([repo, description, language, , stars, age], i) => {
       const [owner, name] = repo.split('/');
-      // Never more than the repository has: a new one gained at most all its stars.
+      // Never more than the repository has, and one created this week gained its stars evenly since: all of them
+      // this week or month, a share of them today.
+      const days = since === 'daily' ? 1 : 7;
       const gained = Math.min(
-        stars,
+        age < 7 ? Math.round((stars * Math.min(days, age)) / age) : stars,
         Math.round(
           (60 + world.seeded.int(`gain:${since}:${repo}`, 400)) * scale,
         ),
