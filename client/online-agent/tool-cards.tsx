@@ -7,6 +7,8 @@ import {
 } from '../pages/analysis-rules/proposal-card.js';
 import { KeywordRunCard } from '../pages/keyword-run-card.js';
 import { isKeywordRunProposal } from '../../shared/keyword-run.js';
+import { BacklinksLookupCard } from '../pages/backlinks-lookup-card.js';
+import { isBacklinksLookupProposal } from '../../shared/backlinks.js';
 
 export type ToolCardProps = { run: OnlineRun; output: unknown };
 /**
@@ -24,6 +26,8 @@ export const TOOL_CARDS: Readonly<
 > = {
   propose_rule_changes: { applies: isRuleProposal, Card: RuleProposalCard },
   propose_keyword_run: { applies: isKeywordRunProposal, Card: KeywordRunCard },
+  // A saved lookup the tool read stays a folded tool call; only a proposed lookup is a card.
+  backlinks: { applies: isBacklinksLookupProposal, Card: BacklinksLookupCard },
 };
 
 /** The card for a tool call's result, with the parsed result; null when it stays a folded tool call. */
@@ -58,8 +62,10 @@ export const toolLabel = (name: string) =>
               ? $t('onlineAgent.proposeRules')
               : name === 'propose_keyword_run'
                 ? $t('onlineAgent.proposeKeywordRun')
-                : name === 'query_data'
-                  ? $t('onlineAgent.queryData')
-                  : name === 'task_execute'
-                    ? $t('onlineAgent.runTask')
-                    : name;
+                : name === 'backlinks'
+                  ? $t('onlineAgent.readBacklinks')
+                  : name === 'query_data'
+                    ? $t('onlineAgent.queryData')
+                    : name === 'task_execute'
+                      ? $t('onlineAgent.runTask')
+                      : name;

@@ -8074,5 +8074,11 @@
   "seoHandOff.linkProspectsAdvice": "Bukti: otoritas (0–100) dan skor spam adalah perkiraan DataForSEO. Mulailah dari situs yang menautkan ke beberapa pesaing: mereka sudah menautkan produk seperti milik kita.",
   "playbooks.linkBuildingInstruction": "Rencanakan pembangunan tautan dari situs dalam brief, yaitu situs yang menautkan ke pesaing tetapi tidak ke kita (atau ke pesaing yang disebut di sana). Buka setiap situs dan halamannya yang menautkan ke pesaing; lewati situs dengan skor spam 40 ke atas, situs yang tidak relevan, dan skema jual-beli tautan. Untuk setiap situs yang layak didekati, sebutkan jenis halaman yang memuat tautan (daftar sumber, ulasan atau perbandingan, direktori, tulisan tamu, berita, forum atau komunitas, mitra), mengapa situs itu akan menautkan kita, halaman kita mana yang paling cocok, dan cara menghubunginya (halaman kontak, penulis, formulir kiriman). Tulis satu bagian per situs: baris pertama \"## domain\", lalu \"- Linking page: alamat\", \"- Type: …\", \"- Our page: alamat\", \"- Contact: …\" dan \"- Priority: high, medium atau low\", kemudian di bawah \"### Message\" tulis pesan penjangkauan yang singkat dan spesifik dalam bahasa situs itu. Pertahankan nama kolom Linking page, Type, Our page, Contact, Priority serta judul Message dan Summary apa adanya. Setelah semua situs, tulis \"## Summary\": situs menurut prioritas dan konten yang kita perlukan untuk mendapatkan tautan yang kini belum terjangkau. Hanya draf: jangan mengirim apa pun, jangan mendaftar ke mana pun, dan jangan mengubah repositori.",
   "backlinks.noHistory": "Tidak ada tren 12 bulan: {0}",
-  "seoHandOff.linkProspectsUncheckedIntro": "Situs yang menautkan ke {0} (indeks tautan DataForSEO, dicari {2}). Belum dicocokkan dengan {1}, jadi sebagian mungkin sudah menautkan kita; periksa sebelum menghubungi:"
+  "seoHandOff.linkProspectsUncheckedIntro": "Situs yang menautkan ke {0} (indeks tautan DataForSEO, dicari {2}). Belum dicocokkan dengan {1}, jadi sebagian mungkin sudah menautkan kita; periksa sebelum menghubungi:",
+  "backlinks.proposalTitle": "Pencarian backlink",
+  "backlinks.proposalAgainst": "dibandingkan dengan {0}",
+  "backlinks.proposalCost": "Sekitar {0} · bulan ini terpakai ${1} dari ${2}",
+  "backlinks.proposalOverBudget": "Pencarian ini akan melebihi anggaran DataForSEO bulan ini; naikkan dulu di Sumber data.",
+  "backlinks.proposalDone": "Dicari pada {0}",
+  "onlineAgent.readBacklinks": "Baca backlink"
 }

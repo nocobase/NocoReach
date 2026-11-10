@@ -1,7 +1,9 @@
-// The online agent's backlinks tool: it reads saved lookups for free, runs a lookup only with lookUp and the user's
-// run permission, fills the gap's competitors from Competitors, and refuses without the page's read permission.
+// The online agent's backlinks tool: it reads saved lookups for free and never runs one; without a saved lookup it
+// proposes one (with its cost and this month's spending) for the user to confirm on a card, fills the gap's
+// competitors from Competitors, and refuses without the page's read permission.
 import { describe, expect, it, vi } from 'vitest';
 import { backlinksTool } from '../../server/nocoreach/online-agent/backlinks-tool.js';
+import { isBacklinksLookupProposal } from '../../shared/backlinks.js';
 
 const sites = {
   own: ['acme.example'],
@@ -33,7 +35,8 @@ function tool(
   const s = {
     sites: vi.fn(async () => sites),
     saved: vi.fn(async () => null),
-    run: vi.fn(async (_id: string, v: { view: string }) => run(v.view)),
+    spend: vi.fn(async () => ({ monthUsd: 1.2, budgetUsd: 5 })),
+    run: vi.fn(),
     ...source,
   };
   const t = backlinksTool(
@@ -47,12 +50,41 @@ function tool(
 }
 
 describe('backlinks tool', () => {
-  it('reads nothing new without lookUp and says what a lookup would cost', async () => {
+  it('proposes a lookup with its cost and the month spending instead of running one', async () => {
     const { t, s } = tool(() => true);
     const out = (await t.execute({ view: 'links' })) as Record<string, unknown>;
-    expect(out).toMatchObject({ saved: false, target: 'acme.example' });
-    expect(out.estimatedUsd).toBeGreaterThan(0);
+    expect(out.saved).toBe(false);
+    expect(isBacklinksLookupProposal(out)).toBe(true);
+    expect(out.proposal).toMatchObject({
+      projectId: '1',
+      view: 'links',
+      target: 'acme.example',
+      competitors: null,
+      monthUsd: 1.2,
+      budgetUsd: 5,
+      withinBudget: true,
+    });
+    expect(
+      (out.proposal as { estimatedUsd: number }).estimatedUsd,
+    ).toBeGreaterThan(0);
     expect(s.run).not.toHaveBeenCalled();
+    // Asking for a lookup does not make it run: the input has no such switch.
+    await expect(t.execute({ view: 'links', lookUp: true })).rejects.toThrow();
+    expect(s.run).not.toHaveBeenCalled();
+  });
+
+  it('proposes a gap against the listed competitors and says when the budget is short', async () => {
+    const { t } = tool(() => true, {
+      spend: vi.fn(async () => ({ monthUsd: 4.99, budgetUsd: 5 })),
+    });
+    const out = (await t.execute({ view: 'gap' })) as {
+      proposal: Record<string, unknown>;
+    };
+    expect(out.proposal).toMatchObject({
+      view: 'gap',
+      competitors: ['a.example', 'b.example'],
+      withinBudget: false,
+    });
   });
 
   it('returns a saved lookup in pages of 50 rows with a link that opens its tab beside the saved overview', async () => {
@@ -66,34 +98,13 @@ describe('backlinks tool', () => {
     >;
     expect(out.rows).toHaveLength(50);
     expect(out.nextOffset).toBe(50);
+    expect(out.proposal).toBeUndefined();
     expect(out.url).toBe('/app/backlinks?t=acme.example&r=7&bt=domains&o=3');
     const overview = (await t.execute({ view: 'overview' })) as Record<
       string,
       unknown
     >;
     expect(overview.url).toBe('/app/backlinks?t=acme.example&o=3');
-  });
-
-  it('runs a gap lookup against the listed competitors only with lookUp and the run permission', async () => {
-    const denied = tool((_r, a) => a !== 'run');
-    expect(await denied.t.execute({ view: 'gap', lookUp: true })).toEqual({
-      accessDenied: true,
-    });
-    expect(denied.s.run).not.toHaveBeenCalled();
-    const { t, s } = tool(() => true);
-    const out = (await t.execute({ view: 'gap', lookUp: true })) as Record<
-      string,
-      unknown
-    >;
-    expect(s.run).toHaveBeenCalledWith(
-      '1',
-      expect.objectContaining({
-        view: 'gap',
-        target: 'acme.example',
-        competitors: ['a.example', 'b.example'],
-      }),
-    );
-    expect(String(out.url)).toContain('view=gap');
   });
 
   it('refuses without the read permission', async () => {

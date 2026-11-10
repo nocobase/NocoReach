@@ -8074,5 +8074,11 @@
   "seoHandOff.linkProspectsAdvice": "Éléments : l’autorité (0 à 100) et le score de spam sont des estimations de DataForSEO. Commencez par les sites qui pointent vers plusieurs concurrents : ils citent déjà des produits comme le nôtre.",
   "playbooks.linkBuildingInstruction": "Planifiez le netlinking à partir des sites de la description, qui pointent vers des concurrents mais pas vers nous (ou vers le concurrent qui y est nommé). Ouvrez chaque site et sa page qui pointe vers le concurrent ; écartez les sites au score de spam de 40 ou plus, les sites sans rapport et les ventes de liens. Pour chaque site à solliciter, indiquez le type de page qui contient le lien (liste de ressources, test ou comparatif, annuaire, article invité, actualité, forum ou communauté, partenaire), pourquoi il nous citerait, laquelle de nos pages convient le mieux et comment le contacter (page de contact, auteur, formulaire de soumission). Écrivez une section par site : la première ligne est « ## domaine », puis « - Linking page: adresse », « - Type: … », « - Our page: adresse », « - Contact: … » et « - Priority: high, medium ou low », puis sous « ### Message » un message de prise de contact court et ciblé, dans la langue du site. Gardez tels quels les noms de champs Linking page, Type, Our page, Contact, Priority et les titres Message et Summary. Après tous les sites, écrivez « ## Summary » : les sites par ordre de priorité et les contenus qu’il nous faudrait pour obtenir les liens hors de portée aujourd’hui. Brouillons uniquement : n’envoyez rien, ne vous inscrivez nulle part et ne modifiez pas le dépôt.",
   "backlinks.noHistory": "Pas de tendance sur 12 mois : {0}",
-  "seoHandOff.linkProspectsUncheckedIntro": "Sites qui pointent vers {0} (index de liens DataForSEO, recherche du {2}). Ils n’ont pas été comparés avec {1} : certains nous citent peut-être déjà, vérifiez avant de les contacter :"
+  "seoHandOff.linkProspectsUncheckedIntro": "Sites qui pointent vers {0} (index de liens DataForSEO, recherche du {2}). Ils n’ont pas été comparés avec {1} : certains nous citent peut-être déjà, vérifiez avant de les contacter :",
+  "backlinks.proposalTitle": "Recherche de backlinks",
+  "backlinks.proposalAgainst": "comparé à {0}",
+  "backlinks.proposalCost": "Environ {0} · ce mois-ci ${1} sur ${2} dépensés",
+  "backlinks.proposalOverBudget": "Cette recherche dépasserait le budget DataForSEO du mois ; augmentez-le d’abord dans Sources de données.",
+  "backlinks.proposalDone": "Recherché le {0}",
+  "onlineAgent.readBacklinks": "Lire les backlinks"
 }

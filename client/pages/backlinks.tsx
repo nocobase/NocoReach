@@ -822,9 +822,16 @@ function useTable<
   columns: ColumnDef<T>[],
   text: (r: T) => string,
   sort: string,
-  options: { spam?: boolean; dofollow?: boolean; select?: boolean } = {},
+  options: {
+    spam?: boolean;
+    dofollow?: boolean;
+    select?: boolean;
+    /** The run on screen: ticked rows are its positions, so a new run (Query again) starts with none ticked. */
+    run?: string | number;
+  } = {},
 ) {
   const [rowSelection, setRowSelection] = useState({});
+  useEffect(() => setRowSelection({}), [options.run]);
   const [filter, setFilter] = useState({
     include: '',
     exclude: '',
@@ -1211,6 +1218,7 @@ function DomainsTable({ run, own }: { run: Run<DomainRow>; own: boolean }) {
   const t = useTable(items, columns, (r) => r.domain, 'backlinks', {
     spam: true,
     select: !own,
+    run: run.id,
   });
   // A competitor's referring domains were not checked against our links, and the brief says so.
   const handOff = useLinkHandOff({
@@ -1847,7 +1855,7 @@ function GapTable({ run }: { run: Run<GapRow> }) {
     columns,
     (r) => `${r.domain} ${r.competitors.join(' ')}`,
     'linksTo',
-    { spam: true, select: true },
+    { spam: true, select: true, run: run.id },
   );
   // The gap excluded the domain it was looked up for, which the brief names as ours.
   const handOff = useLinkHandOff({

@@ -1,19 +1,15 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
 import { toolInput } from '../../online-agent/errors.js';
 import { VisibilityError } from '../research-helpers.js';
 import { specification } from '../backlinks-service.js';
-import { GAP_COMPETITORS } from '../../../shared/backlinks.js';
+import {
+  GAP_COMPETITORS,
+  backlinksPath,
+  type BacklinksLookupProposal,
+} from '../../../shared/backlinks.js';
 
 const VIEWS = ['overview', 'links', 'domains', 'pages', 'gap'] as const;
-// Which URL parameter of Search & market › Backlinks holds each view's run.
-const RUN_PARAMS = {
-  overview: 'o',
-  links: 'l',
-  domains: 'r',
-  pages: 'g',
-} as const;
 const ROWS = 50;
 const input = z.strictObject({
   view: z
@@ -39,12 +35,6 @@ const input = z.strictObject({
     .describe(
       'gap only: competitor domains; the competitors listed on Competitors when left out.',
     ),
-  lookUp: z
-    .boolean()
-    .default(false)
-    .describe(
-      'true runs a new DataForSEO lookup, charged to the project; only when the user asks for one. The same lookup within 30 days returns the saved result without a charge.',
-    ),
   offset: z.number().int().min(0).max(1000).default(0),
 });
 
@@ -56,20 +46,21 @@ type Run = Obj & {
   result?: Obj | null;
 };
 export interface BacklinksSource {
-  run(id: string, v: object): Promise<Run>;
   saved(id: string, v: object): Promise<Run | null>;
   sites(id: string): Promise<{
     own: string[];
     competitors: { name: string; domain: string }[];
   }>;
+  spend(id: string): Promise<{ monthUsd: number; budgetUsd: number }>;
 }
 
 const list = (v: unknown): Obj[] => (Array.isArray(v) ? (v as Obj[]) : []);
 
 /**
  * Backlinks from the online agent (2026-11-09 user request): reads the saved lookups of Search & market › Backlinks for
- * free, and runs a new one only with lookUp, which the instructions keep to a user's request. A lookup goes through the
- * page's own service (budget, 30-day reuse, uncertain runs not retried) under the user's nrBacklinks.run permission.
+ * free. It never runs a paid lookup: when nothing is saved it returns a proposal, drawn in the conversation as a card
+ * (client/pages/backlinks-lookup-card.tsx) whose Look up runs it through the page's own action under the user's
+ * permission, as propose_keyword_run does for keywords.
  */
 export function backlinksTool(
   source: BacklinksSource,
@@ -81,7 +72,7 @@ export function backlinksTool(
   return {
     name: 'backlinks',
     description:
-      "Backlinks of any site or page from DataForSEO's link index, as Search & market › Backlinks shows them: the overview, its backlinks, referring domains, top pages, or the link gap (sites that link to competitors but not to us, the outreach prospects). Reads the latest saved lookup without a charge; when there is none it says so with the estimated cost, and lookUp true runs one (charged, about $0.03–0.09, against the project's monthly DataForSEO budget). Rows come 50 at a time; follow nextOffset.",
+      "Backlinks of any site or page from DataForSEO's link index, as Search & market › Backlinks shows them: the overview, its backlinks, referring domains, top pages, or the link gap (sites that link to competitors but not to us, the outreach prospects). Reads the latest saved lookup without a charge. It never runs a lookup: when none is saved it returns a proposal the user sees as a card with the estimated cost and confirms there. Rows come 50 at a time; follow nextOffset.",
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
@@ -102,72 +93,58 @@ export function backlinksTool(
           note: 'No competitor has a website on Competitors; name the competitors to compare with.',
         };
       const query = { view: v.view, target, competitors };
-      let estimatedUsd: number;
+      let spec: {
+        target: string;
+        competitors?: string[];
+        estimatedUsd: number;
+        reservationUsd: number;
+      };
       try {
-        estimatedUsd = Number(
-          (specification(query) as { estimatedUsd: number }).estimatedUsd,
-        );
+        spec = specification(query) as typeof spec;
       } catch (e) {
         if (e instanceof VisibilityError) return { error: e.message };
         throw e;
       }
-      let run: Run | null;
-      if (v.lookUp) {
-        if (!(await allowed('nrBacklinks', 'run')))
-          return { accessDenied: true };
-        try {
-          run = await source.run(projectId, {
-            ...query,
-            requestKey: randomUUID().replace(/-/g, ''),
-          });
-        } catch (e) {
-          if (e instanceof VisibilityError) return { error: e.message };
-          throw e;
-        }
-      } else run = await source.saved(projectId, query);
-      const spec = (run?.spec ?? {}) as Obj;
-      // The page's own parameters (client/pages/backlinks.tsx): a gap opens on Link gap; a tab's run opens that tab of
-      // Link profile, beside the target's latest saved overview when there is one.
-      const params = new URLSearchParams();
-      if (v.view === 'gap') {
-        params.set('view', 'gap');
-        if (run) params.set('gap', String(run.id));
-      } else {
-        params.set('t', String(spec.target ?? target));
-        if (run) params.set(RUN_PARAMS[v.view], String(run.id));
-        if (v.view !== 'overview') {
-          params.set('bt', v.view);
-          const overview = await source.saved(projectId, {
-            view: 'overview',
-            target: spec.target ?? target,
-          });
-          if (overview) params.set('o', String(overview.id));
-        }
-      }
-      const where = {
-        page: 'Search & market › Backlinks',
-        url: link(`/backlinks?${params.toString()}`),
-        view: v.view,
-        target: spec.target ?? target,
-        ...(competitors
-          ? { competitors: spec.competitors ?? competitors }
-          : {}),
-      };
-      if (!run)
-        return {
-          ...where,
-          saved: false,
-          estimatedUsd,
-          note: 'Not looked up yet. Offer a lookup with its estimated cost; run it with lookUp true only when the user asks.',
+      const run = await source.saved(projectId, query);
+      if (!run) {
+        const spend = await source.spend(projectId);
+        const proposal: BacklinksLookupProposal = {
+          projectId,
+          view: v.view,
+          target: spec.target,
+          competitors: spec.competitors ?? null,
+          estimatedUsd: spec.estimatedUsd,
+          monthUsd: spend.monthUsd,
+          budgetUsd: spend.budgetUsd,
+          withinBudget: spend.monthUsd + spec.reservationUsd <= spend.budgetUsd,
         };
+        return {
+          page: 'Search & market › Backlinks',
+          saved: false,
+          proposal,
+          note: 'Not looked up yet. The user sees this lookup as a card with its estimated cost and decides there; it has not run, so never say it did.',
+        };
+      }
+      const overview =
+        v.view !== 'overview' && v.view !== 'gap'
+          ? await source.saved(projectId, {
+              view: 'overview',
+              target: spec.target,
+            })
+          : null;
       const result = (run.result ?? {}) as Obj;
       const items = list(result.items);
       return {
-        ...where,
+        page: 'Search & market › Backlinks',
+        url: link(backlinksPath(v.view, spec.target, run.id, overview?.id)),
+        view: v.view,
+        target: spec.target,
+        ...(competitors
+          ? { competitors: spec.competitors ?? competitors }
+          : {}),
         status: run.status,
         errorCode: run.errorCode ?? null,
         lookedUpAt: run.completedAt ?? run.createdAt,
-        reused: Boolean(run.reused),
         costUsd: run.costUsd ?? null,
         summary: result.summary ?? null,
         history: list(result.history).slice(-12),

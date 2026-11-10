@@ -1,8 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BacklinksService,
   result,
-  since,
   specification,
   target,
 } from '../../server/nocoreach/backlinks-service.js';
@@ -50,17 +49,39 @@ describe('backlinks lookups', () => {
       backlinks_status_type: 'live',
       rank_scale: 'one_hundred',
     });
+    // No dates: the specification is the lookup's reuse key, and a month-start date moved it at every month boundary.
     expect(spec.requests[1].body).toEqual({
       target: 'example.com',
-      date_from: since(),
       rank_scale: 'one_hundred',
     });
     expect(spec.reservationUsd).toBeGreaterThanOrEqual(spec.estimatedUsd);
-    // A page has no history; the same month keeps the same specification, so the lookup is reused.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-31T23:00:00Z'));
+      const october = JSON.stringify(
+        specification({ view: 'overview', target: 'example.com' }),
+      );
+      vi.setSystemTime(new Date('2026-11-01T01:00:00Z'));
+      expect(
+        JSON.stringify(
+          specification({ view: 'overview', target: 'example.com' }),
+        ),
+      ).toBe(october);
+    } finally {
+      vi.useRealTimers();
+    }
+    // A page has no history.
     expect(
       specification({ view: 'overview', target: 'example.com/a' }).requests,
     ).toHaveLength(1);
-    expect(since(new Date('2026-11-30T23:00:00Z'))).toBe('2025-11-01');
+    // Every month since 2019 comes back; the last 12 are kept.
+    const months = Array.from({ length: 30 }, (_, i) => ({
+      date: `${2024 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}-01 00:00:00 +00:00`,
+      backlinks: i,
+    }));
+    const parsed = result([ok(undefined, { rank: 1 }), ok(months)], spec);
+    expect(parsed.result.history).toHaveLength(12);
+    expect(parsed.result.history.at(-1).date).toBe('2026-06-01');
   });
 
   it('reads 100 rows per tab, unfiltered by spam, and refuses top pages of a single page', () => {

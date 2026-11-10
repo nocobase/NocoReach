@@ -248,7 +248,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrAnalysisRules.view',
     'nrAnalysis.status',
     'nrAudit.report',
-    ...list('nrBacklinks', ['list', 'getRun', 'sites']),
+    ...list('nrBacklinks', ['list', 'getRun', 'sites', 'saved']),
     'nrAutomaticSources.list',
     'nrCompetitorResearch.view',
     'nrContentIndex.list',

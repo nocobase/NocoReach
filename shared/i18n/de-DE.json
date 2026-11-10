@@ -8074,5 +8074,11 @@
   "seoHandOff.linkProspectsAdvice": "Belege: Autorität (0–100) und Spam-Score sind Schätzungen von DataForSEO. Beginnen Sie mit Websites, die auf mehrere Wettbewerber verlinken: Sie verlinken bereits auf Produkte wie unseres.",
   "playbooks.linkBuildingInstruction": "Planen Sie den Linkaufbau anhand der Websites in der Beschreibung, die auf Wettbewerber, aber nicht auf uns verlinken (oder auf den dort genannten Wettbewerber). Öffnen Sie jede Website und ihre Seite mit dem Link auf den Wettbewerber; überspringen Sie Websites mit einem Spam-Score ab 40, fachfremde Websites und Linkkauf-Angebote. Nennen Sie für jede lohnende Website die Art der verlinkenden Seite (Ressourcenliste, Test oder Vergleich, Verzeichnis, Gastbeitrag, News, Forum oder Community, Partner), warum sie auf uns verlinken würde, welche unserer Seiten am besten passt und wie man sie erreicht (Kontaktseite, Autor, Einreichungsformular). Schreiben Sie je Website einen Abschnitt: erste Zeile \"## Domain\", dann \"- Linking page: Adresse\", \"- Type: …\", \"- Our page: Adresse\", \"- Contact: …\" und \"- Priority: high, medium oder low\", danach unter \"### Message\" eine kurze, gezielte Kontaktnachricht in der Sprache der Website. Die Feldnamen Linking page, Type, Our page, Contact, Priority und die Überschriften Message und Summary bleiben unverändert. Schreiben Sie nach allen Websites \"## Summary\": die Websites nach Priorität und die Inhalte, die wir für die derzeit unerreichbaren Links bräuchten. Nur Entwürfe: nichts senden, nirgends registrieren und das Repository nicht ändern.",
   "backlinks.noHistory": "Kein 12-Monats-Verlauf: {0}",
-  "seoHandOff.linkProspectsUncheckedIntro": "Websites, die auf {0} verlinken (DataForSEO-Linkindex, abgefragt am {2}). Sie wurden nicht mit {1} abgeglichen; manche verlinken vielleicht schon auf uns, also vor der Kontaktaufnahme prüfen:"
+  "seoHandOff.linkProspectsUncheckedIntro": "Websites, die auf {0} verlinken (DataForSEO-Linkindex, abgefragt am {2}). Sie wurden nicht mit {1} abgeglichen; manche verlinken vielleicht schon auf uns, also vor der Kontaktaufnahme prüfen:",
+  "backlinks.proposalTitle": "Backlink-Abfrage",
+  "backlinks.proposalAgainst": "verglichen mit {0}",
+  "backlinks.proposalCost": "Etwa {0} · diesen Monat ${1} von ${2} verbraucht",
+  "backlinks.proposalOverBudget": "Diese Abfrage würde das DataForSEO-Budget dieses Monats überschreiten; erhöhen Sie es zuerst unter Datenquellen.",
+  "backlinks.proposalDone": "Abgefragt am {0}",
+  "onlineAgent.readBacklinks": "Backlinks lesen"
 }

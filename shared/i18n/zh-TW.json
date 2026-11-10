@@ -8074,5 +8074,11 @@
   "seoHandOff.linkProspectsAdvice": "依據說明：權威度（0–100）和垃圾分數是 DataForSEO 的估算。先看連結了多個競品的網站：它們已經在連結同類產品。",
   "playbooks.linkBuildingInstruction": "根據任務說明裡的網站規劃外部連結拓展：這些網站連結了競品，卻沒有連結我們（或連結了說明裡提到的競品）。逐一打開網站和它連結競品的那個頁面；跳過垃圾分數 40 及以上、內容不相關或買賣連結的網站。對值得聯絡的網站，說明連結所在的是哪類頁面（資源列表、評測或比較、目錄、投稿、新聞、論壇社群、合作夥伴），它為什麼會連結我們，我們哪個頁面最合適，以及怎麼聯絡（聯絡頁面、作者、提交表單）。每個網站單獨寫一節：第一行是「## 網域」，接著是「- Linking page: 網址」「- Type: …」「- Our page: 網址」「- Contact: …」「- Priority: high、medium 或 low」，然後在「### Message」下寫一封簡短、有針對性的聯絡信，使用該網站的語言。欄位名稱 Linking page、Type、Our page、Contact、Priority 和小標題 Message、Summary 必須保持原樣。所有網站之後寫「## Summary」：按優先順序排列的網站，以及要拿到現在拿不到的連結還需要補充哪些內容。只寫草稿：不傳送任何訊息、不註冊任何帳號、不修改儲存庫。",
   "backlinks.noHistory": "沒有取得近 12 個月的趨勢：{0}",
-  "seoHandOff.linkProspectsUncheckedIntro": "連結了 {0} 的網站（DataForSEO 外部連結索引，查詢於 {2}）。這些網站沒有和 {1} 的外部連結核對過，其中可能有已經連結我們的，聯絡前先確認："
+  "seoHandOff.linkProspectsUncheckedIntro": "連結了 {0} 的網站（DataForSEO 外部連結索引，查詢於 {2}）。這些網站沒有和 {1} 的外部連結核對過，其中可能有已經連結我們的，聯絡前先確認：",
+  "backlinks.proposalTitle": "外部連結查詢",
+  "backlinks.proposalAgainst": "對比 {0}",
+  "backlinks.proposalCost": "預計約 {0} · 本月已用 ${1} / ${2}",
+  "backlinks.proposalOverBudget": "這次查詢會超出本月 DataForSEO 預算，請先在資料接入裡調高預算。",
+  "backlinks.proposalDone": "已於 {0} 查詢",
+  "onlineAgent.readBacklinks": "讀取外部連結"
 }

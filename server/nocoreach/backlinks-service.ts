@@ -24,7 +24,10 @@ const LIMIT = 100;
 // returned row, uniform across endpoints.
 const TASK_USD = 0.024,
   ROW_USD = 0.000036,
-  HISTORY_MONTHS = 13;
+  // history/live without a range returns every month from 2019-01, billed per month returned; the page keeps the last
+  // year of them.
+  HISTORY_ROWS = 96,
+  HISTORY_SHOWN = 12;
 const usd = (n) => Number(n.toFixed(6));
 // A site (hostname, subdomains included) or one exact page. A page keeps an explicit http:// scheme, as the API
 // matches page addresses exactly; a query string or fragment would point at another page, so it is refused.
@@ -54,13 +57,6 @@ const common = (t) => ({
   backlinks_status_type: 'live',
   rank_scale: 'one_hundred',
 });
-// History by month from the first day of the month a year back, so the same lookup asked again this month has the
-// same specification (and reuses its result); without date_to the provider reads up to today.
-function since(now = new Date()) {
-  return new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1))
-    .toISOString()
-    .slice(0, 10);
-}
 // The competitors of a gap lookup: bare domains, never our own, in a fixed order so the same set reuses its result.
 function rivals(list, own) {
   const out = [
@@ -124,20 +120,17 @@ function specification(v) {
     const requests = [
       { path: 'backlinks/summary/live', body: common(t.target) },
     ];
-    // history/live takes a hostname only, so a page has no trend.
+    // history/live takes a hostname only, so a page has no trend. It is asked without dates: a date in the request
+    // would move the lookup's reuse key at every month boundary and bill the same lookup again.
     if (t.scope === 'domain')
       requests.push({
         path: 'backlinks/history/live',
-        body: {
-          target: t.target,
-          date_from: since(),
-          rank_scale: 'one_hundred',
-        },
+        body: { target: t.target, rank_scale: 'one_hundred' },
       });
     const estimatedUsd = usd(
       TASK_USD +
         ROW_USD +
-        (requests.length > 1 ? TASK_USD + HISTORY_MONTHS * ROW_USD : 0),
+        (requests.length > 1 ? TASK_USD + HISTORY_ROWS * ROW_USD : 0),
     );
     return {
       ...base,
@@ -349,7 +342,9 @@ function result(raw, spec) {
       result: {
         summary: summary(s),
         history:
-          replies[1] && !historyFailed ? history(page(replies[1])?.items) : [],
+          replies[1] && !historyFailed
+            ? history(page(replies[1])?.items).slice(-HISTORY_SHOWN)
+            : [],
         historyError: historyFailed,
         items: [],
         totalCount: null,
@@ -458,6 +453,10 @@ class BacklinksService {
   async saved(id, v) {
     return (await this.d4s.preview(id, 'backlinks', v)).existing;
   }
+  /** This month's DataForSEO spending and budget, for a lookup's cost note. */
+  spend(id) {
+    return this.d4s.spend(id);
+  }
   register() {
     const wrap = (fn) => async (ctx, next) => {
       await requireAccess(ctx);
@@ -488,9 +487,10 @@ class BacklinksService {
       list: wrap((id) => this.list(id)),
       getRun: wrap((id, v) => this.getRun(id, v)),
       sites: wrap((id) => this.sites(id)),
+      saved: wrap((id, v) => this.saved(id, v)),
     };
     this.p.app.resourceManager.define({ name: 'nrBacklinks', actions });
     this.p.app.acl.allow('nrBacklinks', Object.keys(actions), 'loggedIn');
   }
 }
-export { BacklinksService, specification, result, target, since, rivals };
+export { BacklinksService, specification, result, target, rivals };

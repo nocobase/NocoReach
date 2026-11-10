@@ -319,3 +319,65 @@ it("says a competitor's referring domains were not checked against our links", (
   expect(gap.brief).toContain('但没有链接 docs.acme.example');
   expect(gap.title).toContain('ref.example');
 });
+
+it('Query again on Link gap starts the new result with nothing ticked', async () => {
+  const fresh = {
+    ...gap,
+    id: 10,
+    reused: false,
+    result: {
+      ...gap.result,
+      items: [
+        {
+          id: '0',
+          domain: 'other-first.example',
+          competitors: ['rival.example'],
+          rank: 40,
+          backlinks: 2,
+          spam: 1,
+          firstSeen: null,
+        },
+        {
+          id: '1',
+          domain: 'other-second.example',
+          competitors: ['rival.example'],
+          rank: 30,
+          backlinks: 1,
+          spam: 1,
+          firstSeen: null,
+        },
+      ],
+    },
+  };
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(
+    async (
+      resource: string,
+      act: string,
+      options: { body: { runId?: string } },
+    ) =>
+      resource === 'nrBacklinks' &&
+      act === 'getRun' &&
+      options.body.runId === '9'
+        ? { ...gap, reused: true }
+        : resource === 'nrBacklinks' && act === 'run'
+          ? fresh
+          : base(resource, act, options),
+  );
+  const router = createMemoryRouter(
+    [{ path: '/backlinks', element: <BacklinksPage /> }],
+    {
+      initialEntries: ['/backlinks?view=gap&gap=9'],
+    },
+  );
+  render(<RouterProvider router={router} />);
+  expect(await screen.findByText('both.example')).toBeTruthy();
+  await userEvent.click(screen.getAllByRole('checkbox', { name: /选择/ })[1]);
+  expect(
+    screen.getAllByRole('checkbox', { checked: true }).length,
+  ).toBeGreaterThan(0);
+  await userEvent.click(screen.getByRole('button', { name: '重新查询' }));
+  expect(await screen.findByText('other-first.example')).toBeTruthy();
+  expect(screen.queryAllByRole('checkbox', { checked: true })).toHaveLength(0);
+  expect(screen.queryByRole('button', { name: /交给 Agent/ })).toBeNull();
+});
