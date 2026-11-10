@@ -50,6 +50,9 @@ type AnswerSpec = { kind: "ai-answer"; model: Model; modelName: string; question
 // reused: the server returned a saved run instead of asking again (server/nocoreach/dataforseo.ts).
 type Run<S, R> = { id: string | number; status: string; spec: S; result?: R | null; errorCode?: string | null; createdAt: string; completedAt?: string | null; reused?: boolean };
 type BrandRun = Run<BrandSpec, BrandResult>;
+type TrendSpec = { kind: "ai-mentions-trend"; platform: Platform; target: string; locationCode: number; language: string; dateFrom: string; dateTo: string };
+type TrendResult = { months: { date: string; newMentions: number | null; lostMentions: number | null; newAiSearchVolume: number | null; lostAiSearchVolume: number | null }[] };
+type TrendRun = Run<TrendSpec, TrendResult>;
 type AnswerRun = Run<AnswerSpec, AnswerResult>;
 type Recent = { kind: "brand" | "answer"; group: string; label: string; competitors: string[]; createdAt: string; runs: Record<string, { id: string; status: string; mentioned: boolean | null }> };
 
@@ -184,6 +187,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
             </div>
           ) : null}
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
+          {shown ? <MentionTrend spec={shown} /> : null}
           {shown && shown.competitors.length ? <CompetitorGaps spec={shown} projectId={projectId} /> : null}
         </>
       ) : null}
@@ -197,6 +201,61 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
 // for the AI answers that mention that competitor and not you, on both platforms (about $0.3; kept 30 days). The paid
 // test that day showed several competitors in one request must all be mentioned, so each competitor is asked on its own;
 // answers that still name you are left out on the server and counted. Ticked questions go to the Agent (竞品对比).
+// On-demand paid history: unlike a daily watch, merely opening this page never spends credits.
+function MentionTrend({ spec }: { spec: BrandSpec }) {
+  const [runs, setRuns] = useState<Partial<Record<Platform, TrendRun>>>({});
+  const [busy, setBusy] = useState<Platform | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<Platform, string>>>({});
+  useEffect(() => { setRuns({}); setErrors({}); }, [spec.target, spec.locationCode, spec.language]);
+  const check = async (platform: Platform) => {
+    setBusy(platform);
+    setErrors((e) => ({ ...e, [platform]: undefined }));
+    try {
+      const r = await ai<TrendRun>("trend", { target: spec.target, platform, locationCode: spec.locationCode, language: spec.language, requestKey: requestKey(), ...(runs[platform] ? { forceRefresh: true } : {}) });
+      setRuns((all) => ({ ...all, [platform]: r }));
+    } catch (e) {
+      setErrors((all) => ({ ...all, [platform]: message(e) }));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <Card className="gap-3 px-4" data-ai-mention-history="">
+      <div className="flex items-center gap-1.5">
+        <h3 className="text-sm font-semibold">{$t('aiSearch.trendTitle')}</h3>
+        <InfoTip>{$t('aiSearch.trendHelp')}</InfoTip>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {PLATFORMS.map((platform) => {
+          const run = runs[platform], months = run?.status === "completed" ? run.result?.months ?? [] : [];
+          return (
+            <section key={platform} className="min-w-0 space-y-2 rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium">{getPlatform()[platform]}</span>
+                <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void check(platform)}>
+                  {busy === platform ? $t('common.querying') : run ? $t('aiSearch.trendRefresh') : $t('aiSearch.trendCheck')}
+                </Button>
+              </div>
+              {run?.reused ? <p className="text-xs text-muted-foreground">{$t('aiSearch.trendReused')}</p> : null}
+              {errors[platform] ? <p role="alert" className="nr-error">{errors[platform]}</p> : null}
+              {run && run.status !== "completed" ? <p role="alert" className="nr-error">{runProblem(run)}</p> : null}
+              {months.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-2 font-normal">{$t('common.date')}</th><th className="py-2 text-right font-normal">{$t('aiSearch.trendNew')}</th><th className="py-2 text-right font-normal">{$t('aiSearch.trendLost')}</th></tr></thead>
+                    <tbody>{months.map((m) => <tr key={m.date} className="border-b last:border-0"><td className="py-1.5 tabular-nums">{m.date.slice(0, 7)}</td><td className="py-1.5 text-right tabular-nums">{metric(m.newMentions)}</td><td className="py-1.5 text-right tabular-nums">{metric(m.lostMentions)}</td></tr>)}</tbody>
+                  </table>
+                  <p className="pt-2 text-xs text-muted-foreground">{$t('aiSearch.trendMonthlyNote')}</p>
+                </div>
+              ) : run?.status === "completed" ? <p className="text-sm text-muted-foreground">{$t('aiSearch.trendNoData')}</p> : null}
+            </section>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 type GapQuestion = { question: string; volume: number | null; sources: { url: string; title: string; domain: string }[]; brands: string[]; excerpt: string; at: string | null };
 type GapRun = Run<{ kind: "ai-competitor-gap"; platform: Platform; target: string; competitor: string }, { platform: Platform; competitor: string; totalCount: number | null; questions: GapQuestion[]; removed: number }>;
 type GapRow = GapQuestion & { id: string; platform: Platform };
