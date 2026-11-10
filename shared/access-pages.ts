@@ -17,6 +17,7 @@ export const REACH_PAGES = [
   'saved-keywords',
   'data-trends',
   'domain-overview',
+  'backlinks',
   'ai-search',
   'data-community',
   'data-hackernews',

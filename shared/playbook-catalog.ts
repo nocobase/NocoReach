@@ -235,6 +235,19 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.releaseNotesInstruction'),
     ['launch'],
   ),
+  // Link building (2026-11-09 user request): from the sites that link to competitors (Backlinks › Link gap or a
+  // competitor's referring domains), a plan and a draft message per site worth approaching. Drafts only: the person
+  // sends them; NocoReach contacts nobody.
+  doc(
+    'link-building',
+    systemMessageText('playbooks.linkBuilding'),
+    'optimize',
+    systemMessageText('playbooks.linkBuildingDescription'),
+    systemMessageText('playbooks.linkBuildingInstruction'),
+    ['blog-post', 'new-doc'],
+    ['research-report', 'competitors', 'ai-seo'],
+    systemMessageText('playbooks.linkBuildingStep'),
+  ),
   work(
     'optimize-page',
     systemMessageText('playbooks.improveExistingPage'),

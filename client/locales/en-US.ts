@@ -76,6 +76,7 @@ const enUS = {
   'nocoreach.nav.keywords': 'Keywords',
   'nocoreach.nav.trends': 'Trends',
   'nocoreach.nav.competitors': 'Competitors',
+  'nocoreach.nav.backlinks': 'Backlinks',
   'nocoreach.nav.aiSearch': 'AI search',
   'nocoreach.nav.seoTag': 'SEO',
   'nocoreach.nav.geoTag': 'GEO',

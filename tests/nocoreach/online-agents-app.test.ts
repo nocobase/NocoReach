@@ -707,6 +707,7 @@ test('online agents cannot be task executors and chat exposes scoped task tools'
   expect(stream.mock.calls[0][0].tools.map((tool) => tool.name).sort()).toEqual(
     [
       'analysis_rules',
+      'backlinks',
       'daily_analysis',
       'project_data',
       'propose_keyword_run',

@@ -34,6 +34,7 @@ import { DailyAnalysis } from './daily-analysis.js';
 import { DataHealth } from './data-health.js';
 import { DataViews, windowFor } from './data-views.js';
 import { DomainService } from './domain-service.js';
+import { BacklinksService } from './backlinks-service.js';
 import { GitHubSource } from './github-source.js';
 import { HackerNewsSource } from './hackernews-source.js';
 import { InsightSummary } from './insight-summary.js';
@@ -84,6 +85,7 @@ export class Connections{
  taskExecution: TaskService;
  knowledge: Knowledge;
  keywordSuggest: KeywordSuggest;
+ backlinks: BacklinksService;
  skills: Skills;
  taskData: TaskData;
  strategy: StrategyService;
@@ -141,6 +143,7 @@ export class Connections{
   this.keywordService=new KeywordService(this);this.keywordService.register();
   this.keywordSuggest=new KeywordSuggest(this);this.keywordSuggest.register();
   new DomainService(this).register();
+  this.backlinks=new BacklinksService(this);this.backlinks.register();
   this.rankTracking=new RankTracking(this);this.rankTracking.register();
   this.aiSearch=new AiSearch(this);this.aiSearch.register();
   this.sync=new SyncService(this);

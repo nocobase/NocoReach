@@ -88,7 +88,8 @@ class DataForSeo{
    const reuseMs=this.kind(kind).reuseMs??REUSE_MS;
    if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<(v.forceRefresh===true?Math.min(RECENT_MS,reuseMs):reuseMs))return completed;
    const month=new Date().toISOString().slice(0,7)+'-01';
-   const previous=await this.repo().find({filter:{projectId:id,createdAt:{$gte:month}},limit:10001,transaction});
+   // Only what spent() and the count read: the month's runs' result JSON (large keyword lists) stays in the database.
+   const previous=await this.repo().find({filter:{projectId:id,createdAt:{$gte:month}},fields:['id','costUsd','reservedUsd'],limit:10001,transaction});
    const used=previous.reduce((sum,r)=>sum+spent(r),0);
    if(previous.length>10000||used+spec.reservationUsd>c.budget)throw Object.assign(new VisibilityError(systemMessageText('messages.monthDataforseoBudgetUsedUp', { 0: used.toFixed(2), 1: c.budget }),409),{safeCode:'budget_exceeded'});
    owns=true;return this.repo().create({values:{projectId:id,requestKey,queryHash:preview.queryHash,status:'running',spec,reservedUsd:spec.reservationUsd,costUsd:null},transaction});

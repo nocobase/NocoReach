@@ -238,6 +238,7 @@ describe('app client routes', () => {
         ['search-growth', '/seo-opportunities', undefined],
         ['data-trends', '/trends', undefined],
         ['domain-overview', '/research/domain', undefined],
+        ['backlinks', '/backlinks', undefined],
       ].map(([name, path, tag]) => ({
         name,
         path,

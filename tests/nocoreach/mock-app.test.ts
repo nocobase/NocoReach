@@ -546,6 +546,58 @@ test('DataForSEO verifies fake credentials, persists keyword/domain/Lighthouse r
       ).toEqual(domain.result.summary);
     }
   }
+  for (const view of ['overview', 'links', 'domains', 'pages']) {
+    const backlinks = await data(
+      call('nrBacklinks', 'run', {
+        target: FIXTURE_PRODUCT.domain,
+        view,
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(backlinks).toMatchObject({ status: 'completed', costUsd: 0 });
+    if (view === 'overview') {
+      expect(backlinks.result.summary).toMatchObject({
+        backlinks: 384,
+        referringDomains: 63,
+        rank: 42,
+      });
+      expect(backlinks.result.history.length).toBeGreaterThan(1);
+      const recent = await data(call('nrBacklinks', 'list'));
+      expect(
+        recent.find((item) => String(item.id) === String(backlinks.id)).summary,
+      ).toEqual({ rank: 42, backlinks: 384, referringDomains: 63 });
+    } else expect(backlinks.result.items.length).toBeGreaterThan(0);
+  }
+  const gap = await data(
+    call('nrBacklinks', 'run', {
+      target: FIXTURE_PRODUCT.domain,
+      view: 'gap',
+      competitors: ['rival.example'],
+      requestKey: randomUUID(),
+    }),
+  );
+  expect(gap).toMatchObject({ status: 'completed', costUsd: 0 });
+  expect(gap.result.items[0].competitors).toEqual(['rival.example']);
+  expect((await data(call('nrBacklinks', 'sites'))).own.length).toBeGreaterThan(
+    0,
+  );
+  // What a new lookup would reuse, as the agent's proposal card reads it: the gap just run, none for an unknown target.
+  expect(
+    (
+      await data(
+        call('nrBacklinks', 'saved', {
+          target: FIXTURE_PRODUCT.domain,
+          view: 'gap',
+          competitors: ['rival.example'],
+        }),
+      )
+    ).run.id,
+  ).toBe(gap.id);
+  expect(
+    await data(
+      call('nrBacklinks', 'saved', { target: 'never.example', view: 'links' }),
+    ),
+  ).toEqual({ run: null });
   expect(
     await data(
       call('nrLighthouse', 'run', {

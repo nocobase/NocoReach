@@ -1079,6 +1079,9 @@ export function dataforseo(
       url_to: world.origin + l.target,
     }));
     const live = links.filter((l) => l.lost === undefined);
+    // One linking site scores as spam, so Search & market › Backlinks has a row its Hide spam switch hides.
+    const spam = (l: (typeof links)[number]) =>
+      l.rank === 24 ? 72 : 2 + world.seeded.int(`spam:${l.domain}`, 12);
     if (op === 'summary')
       return wrap(
         [
@@ -1086,9 +1089,12 @@ export function dataforseo(
             target,
             first_seen: dfsTime(world.now - 1080 * DAY),
             lost_date: null,
-            rank: 412,
+            // Ranks are on DataForSEO's 0-100 scale, which every request asks for (rank_scale one_hundred).
+            rank: 41,
             backlinks: 18_420,
             backlinks_spam_score: 6,
+            referring_pages: 9_310,
+            info: { target_spam_score: 3 },
             crawled_pages: 4_220,
             broken_backlinks: 86,
             broken_pages: 2,
@@ -1113,8 +1119,9 @@ export function dataforseo(
         ],
         0.02,
       );
+    // Like the real history/live, the months are the items of the one result.
     if (op === 'history')
-      return wrap(
+      return page(
         Array.from({ length: 12 }, (_, i) => {
           const d = new Date(world.now);
           d.setUTCDate(1);
@@ -1122,7 +1129,7 @@ export function dataforseo(
           return {
             type: 'backlinks_history',
             date: dfsTime(d.getTime()),
-            rank: 380 + i * 3,
+            rank: 36 + Math.round(i / 2),
             backlinks: 14_200 + i * 380,
             new_backlinks: 700 + world.seeded.int(`nb:${i}`, 400),
             lost_backlinks: 300 + world.seeded.int(`lb:${i}`, 250),
@@ -1131,39 +1138,44 @@ export function dataforseo(
             lost_referring_domains: 12 + world.seeded.int(`lr:${i}`, 15),
           };
         }),
-        0.02,
+        { target },
       );
-    const rows = links.map((l) => ({
-      type: 'backlink',
-      domain_from: l.domain,
-      domain: l.domain,
-      url_from: l.url_from,
-      url_to: l.url_to,
-      page_address: l.url_to,
-      title: world.text(l.title),
-      anchor: world.text(l.anchor),
-      dofollow: l.dofollow,
-      is_lost: l.lost !== undefined,
-      lost_date:
-        l.lost !== undefined ? dfsTime(world.now - l.lost * DAY) : null,
-      is_new: l.firstSeen <= 30,
-      rank: l.rank,
-      domain_from_rank: l.rank,
-      backlink_spam_score:
-        l.rank < 10 ? 72 : 2 + world.seeded.int(`spam:${l.domain}`, 12),
-      first_seen: dfsTime(world.now - l.firstSeen * DAY),
-      last_seen: dfsTime(world.now - (l.lost ?? 1) * DAY),
-      backlinks: 1 + world.seeded.int(`bc:${l.domain}`, 30),
-      referring_domains: 1,
-      date: iso(world.now - l.firstSeen * DAY).slice(0, 10),
-      domain_intersection: {
-        '1': {
-          domain: l.domain,
-          backlinks: 2 + world.seeded.int(`di:${l.domain}`, 12),
-          rank: l.rank,
+    // Like the real API, a request for live links only (backlinks_status_type live) gets no lost ones.
+    const rows = (b.backlinks_status_type === 'live' ? live : links).map(
+      (l) => ({
+        type: 'backlink',
+        domain_from: l.domain,
+        domain: l.domain,
+        url_from: l.url_from,
+        url_to: l.url_to,
+        page_address: l.url_to,
+        title: world.text(l.title),
+        anchor: world.text(l.anchor),
+        dofollow: l.dofollow,
+        is_lost: l.lost !== undefined,
+        lost_date:
+          l.lost !== undefined ? dfsTime(world.now - l.lost * DAY) : null,
+        is_new: l.firstSeen <= 30,
+        rank: l.rank,
+        domain_from_rank: l.rank,
+        backlink_spam_score: spam(l),
+        first_seen: dfsTime(world.now - l.firstSeen * DAY),
+        last_seen: dfsTime(world.now - (l.lost ?? 1) * DAY),
+        backlinks: 1 + world.seeded.int(`bc:${l.domain}`, 30),
+        referring_pages: 1 + world.seeded.int(`rp:${l.domain}`, 8),
+        backlinks_spam_score: spam(l),
+        is_broken: false,
+        referring_domains: 1,
+        date: iso(world.now - l.firstSeen * DAY).slice(0, 10),
+        domain_intersection: {
+          '1': {
+            domain: l.domain,
+            backlinks: 2 + world.seeded.int(`di:${l.domain}`, 12),
+            rank: l.rank,
+          },
         },
-      },
-    }));
+      }),
+    );
     if (
       op === 'backlinks' ||
       op === 'referring_domains' ||
@@ -1171,7 +1183,15 @@ export function dataforseo(
     )
       return page(
         op === 'domain_intersection'
-          ? rows.filter((_, i) => i % 2 === 0)
+          ? // Each competitor has its own share of the sites, some shared with another, so Backlinks › Link gap
+            // merges them.
+            rows.filter(
+              (r) =>
+                world.seeded.int(
+                  `gap:${text(object(b.targets)['1'], '')}:${r.domain}`,
+                  3,
+                ) !== 0,
+            )
           : rows,
       );
     if (op === 'domain_pages_summary') {

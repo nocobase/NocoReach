@@ -138,7 +138,7 @@ beforeEach(() => {
 
 describe('which source puts each page in the menu', () => {
   it('names a source for every data page and for nothing else, and finds each page by its path', () => {
-    expect(dataPages.length).toBe(19);
+    expect(dataPages.length).toBe(20);
     expect(Object.keys(PAGE_SOURCES).sort()).toEqual(
       dataPages.map((p) => p.name).sort(),
     );

@@ -16,6 +16,7 @@ const NOUNS = [
   'topics',
   'repositories',
   'activities',
+  'sites',
 ] as const;
 export type SubjectNoun = (typeof NOUNS)[number];
 

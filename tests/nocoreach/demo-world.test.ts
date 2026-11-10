@@ -4,6 +4,10 @@ import { demoContent } from '../../server/nocoreach/demo-data/content';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
 import { World } from '../../server/nocoreach/demo-data/world/world';
 import {
+  result as backlinksResult,
+  specification as backlinksSpec,
+} from '../../server/nocoreach/backlinks-service';
+import {
   compare,
   type Partition,
 } from '../../server/nocoreach/execution/effect';
@@ -137,6 +141,64 @@ describe.each(['zh-CN', 'en-US'])(
         'nimbus.example',
         'tasks.example',
       ]);
+    });
+
+    it('answers every Search & market › Backlinks lookup the way the service reads it', async () => {
+      const project = { id: 'main', ...content.projects.main, language };
+      const ask = async (path: string, body: unknown) =>
+        (
+          await worldResponse(
+            project,
+            `https://api.dataforseo.com/v3/${path}`,
+            { method: 'POST', body: JSON.stringify([body]) },
+            now,
+          )
+        ).json();
+      const target = new URL(new World(project, now).origin).hostname;
+      const runs: Record<string, any> = {};
+      for (const view of ['overview', 'links', 'domains', 'pages']) {
+        const spec = backlinksSpec({ view, target });
+        const raw = spec.requests
+          ? await Promise.all(
+              spec.requests.map((q: { path: string; body: unknown }) =>
+                ask(q.path, q.body),
+              ),
+            )
+          : await ask(spec.path, spec.request);
+        runs[view] = backlinksResult(raw, spec);
+        expect(runs[view].status, view).toBe('completed');
+      }
+      expect(runs.overview.result.summary.rank).toBeLessThanOrEqual(100);
+      expect(runs.overview.result.history.length).toBeGreaterThan(6);
+      expect(runs.links.result.items.some((r: any) => r.spam >= 40)).toBe(true);
+      expect(runs.links.result.items.some((r: any) => r.isLost)).toBe(false);
+      expect(
+        runs.links.result.items.some((r: any) => r.dofollow === false),
+      ).toBe(true);
+      expect(runs.domains.result.items.length).toBeGreaterThan(0);
+      // Link gap against the demo's competitors: each has its own sites, some shared.
+      const gapSpec = backlinksSpec({
+        view: 'gap',
+        target,
+        competitors: ['nimbus.example', 'tasks.example'],
+      });
+      const gap = backlinksResult(
+        await Promise.all(
+          gapSpec.requests.map((q: { path: string; body: unknown }) =>
+            ask(q.path, q.body),
+          ),
+        ),
+        gapSpec,
+      );
+      expect(gap.status).toBe('completed');
+      expect(gap.result.items.length).toBeGreaterThan(0);
+      expect(
+        gap.result.items.some((r: any) => r.competitors.length === 2),
+      ).toBe(true);
+      expect(
+        gap.result.items.some((r: any) => r.competitors.length === 1),
+      ).toBe(true);
+      expect(runs.pages.result.items.length).toBeGreaterThan(0);
     });
 
     it('keeps CRM sources and GitHub scoped to CRM, offline and in the imported language', async () => {
