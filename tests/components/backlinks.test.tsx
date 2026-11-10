@@ -513,6 +513,21 @@ it('a broken-pages brief lists each address with its links and says how to win t
     '2026-11-01T00:00:00Z',
   );
   expect(draft.pages).toEqual(['https://acme.example/blog/old']);
+  // A page on a subdomain is named with its host.
+  expect(
+    brokenPagesDraft(
+      'acme.example',
+      [
+        {
+          url: 'https://docs.acme.example/intro',
+          status: 404,
+          backlinks: 3,
+          referringDomains: 1,
+        },
+      ],
+      '2026-11-01T00:00:00Z',
+    ).title,
+  ).toContain('docs.acme.example/intro');
   expect(draft.title).toContain('/blog/old');
   expect(draft.brief).toContain('状态码 404');
   expect(draft.brief).toContain('301');

@@ -2040,6 +2040,15 @@ function RecentGaps({
   );
 }
 
+// A page's address as a row shows it: the path on the site itself, with the host on a subdomain (docs.example.com).
+const placeOf = (url: string, site: string) => {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    return host !== site ? `${host}${pathOf(url)}` : pathOf(url);
+  } catch {
+    return url;
+  }
+};
 const bHelper = createColumnHelper<BrokenRow>();
 /**
  * Broken pages: the site's pages that no longer open (4xx or 5xx) while other sites still link to them, most linked
@@ -2060,7 +2069,11 @@ function BrokenTable({ run, own }: { run: Run<BrokenRow>; own: boolean }) {
         header: () => $t('common.page'),
         cell: ({ row }) => (
           <div className='min-w-0'>
-            {link(row.original.url, pathOf(row.original.url), 'max-w-xl')}
+            {link(
+              row.original.url,
+              placeOf(row.original.url, bare(run.spec.target)),
+              'max-w-xl',
+            )}
             {row.original.title ? (
               <span className='block max-w-xl truncate text-xs text-muted-foreground'>
                 {row.original.title}

@@ -103,6 +103,23 @@ describe('backlinks signals', () => {
     expect(off).toEqual([]);
   });
 
+  it("name a page on a subdomain with its host, so it is neither the main site's page nor merged with it", () => {
+    const signals = backlinksSignals({
+      bl: data(
+        [],
+        [
+          { ...page('/intro', 20), url: 'https://docs.acme.example/intro' },
+          { ...page('/intro', 10), url: 'https://www.acme.example/intro' },
+        ],
+      ),
+    });
+    expect(signals.map((s: { key: string }) => s.key)).toEqual([
+      'backlinks-broken:docs.acme.example/intro',
+      'backlinks-broken:/intro',
+    ]);
+    expect(signals[0].title).toContain('docs.acme.example/intro');
+  });
+
   it('are two rules on the backlinks source', () => {
     expect(
       RULES.filter((r: { source: string }) => r.source === 'backlinks').map(
