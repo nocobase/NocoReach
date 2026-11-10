@@ -122,8 +122,9 @@ function trendResult(raw){
  const task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},c=num(raw?.cost)??num(task.cost),costUsd=c!==null&&c>=0?c:null;
  if(raw?.status_code!==20000||task.status_code!==20000)return {costUsd,status:'failed',errorCode:`provider_status_${task.status_code||raw?.status_code||'unknown'}`,result:null};
  const result=Array.isArray(task.result)?task.result[0]:null;
- if(!result||!Array.isArray(result.items))return {costUsd,status:'failed',errorCode:'research_schema_invalid',result:null};
- const months=result.items.map(i=>({date:str(i?.date,10),newMentions:num(i?.new_mentions),lostMentions:num(i?.lost_mentions),newAiSearchVolume:num(i?.new_ai_search_volume),lostAiSearchVolume:num(i?.lost_ai_search_volume)}))
+ const rows=Array.isArray(result?.items)?result.items:result?.items_count===0?[]:null;
+ if(!rows)return {costUsd,status:'failed',errorCode:'research_schema_invalid',result:null};
+ const months=rows.map(i=>({date:str(i?.date,10),newMentions:num(i?.new_mentions),lostMentions:num(i?.lost_mentions),newAiSearchVolume:num(i?.new_ai_search_volume),lostAiSearchVolume:num(i?.lost_ai_search_volume)}))
   .filter(i=>/^\d{4}-\d{2}-\d{2}$/.test(i.date)).sort((a,b)=>a.date.localeCompare(b.date)).slice(-12);
  return {costUsd,status:'completed',errorCode:null,result:{months}};
 }
