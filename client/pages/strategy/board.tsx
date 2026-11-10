@@ -1,6 +1,6 @@
 import {citedSignals,type Row} from '../../../shared/strategy-pending.js';
 // eslint-disable-next-line react-refresh/only-export-components -- retain the existing public predicate exports
-export {rowsFor,opportunityState,opportunityKeepDays,citedSignals,todaySuggestions,priorityRank,overviewPeriodDays,type Row,type OpportunityState} from '../../../shared/strategy-pending.js';
+export {rowsFor,opportunityState,opportunityKeepDays,citedSignals,todaySuggestions,priorityRank,pendingOrder,overviewPeriodDays,type Row,type OpportunityState} from '../../../shared/strategy-pending.js';
 import { getCurrentLocale, $t, $tj } from "#i18n";
 import { joinList, withDetail } from '#lib/format';
 import {useState} from 'react';

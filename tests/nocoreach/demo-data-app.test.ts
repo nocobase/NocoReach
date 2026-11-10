@@ -367,7 +367,7 @@ test('imports the demo through the API and clears all business data while preser
       );
     expect((await read('knowledge')).items).toHaveLength(8);
     const strategy = await read('strategy');
-    expect(strategy.insights.items).toHaveLength(id === main ? 16 : 12);
+    expect(strategy.insights.items).toHaveLength(id === main ? 21 : 14);
     expect(strategy.proposals).toHaveLength(14);
     const timeline = strategy as StrategyState;
     const watches = Object.values(timeline.watch!).filter(

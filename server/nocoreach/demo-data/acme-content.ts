@@ -2236,11 +2236,30 @@ export function acmeOpportunities(
     observations: [
       copy(
         t(
-          '本周增长空间最大的是甘特图这组关键词和 Excel 导入指南；AI 回答协作工具问题时还很少提到 Acme。负荷页继续积累样本。',
-          'The largest growth this week is in the Gantt chart keywords and the Excel import guide; AI answers on collaboration tools still rarely name Acme. The workload page keeps gathering evidence.',
+          '“AI 專案管理”近 3 个月搜索量涨了 126%，现在每月 2,750 次；排在前面的多是新闻，竞品里只有 Nimbus 有对应页面，现在写能赶在多数竞品前面。',
+          'Searches for “ai project management” rose 126% over the last 3 months to 2,750 a month; the top results are mostly news and only Nimbus has a page, so writing one now gets ahead of most competitors.',
+        ),
+      ),
+      copy(
+        t(
+          '甘特图这组 12 个词每月搜索 9,750 次，本站都没排上；AI 推荐协作工具的 26 个问题里，19 个的回答提到 Nimbus 等产品，只有 3 个提到 Acme。',
+          'The 12 Gantt chart keywords are searched 9,750 times a month and we rank for none; of 26 questions where AI recommends collaboration tools, 19 answers name Nimbus and others and only 3 name Acme.',
+        ),
+      ),
+      copy(
+        t(
+          '已有内容里，Excel 导入指南进前 3 预计每月多 210 次点击；迁移文档 15 个月没更新，每月仍有约 1,800 次访问。',
+          'Among existing pages, the Excel import guide would bring an estimated 210 more clicks a month in the top 3; the migration docs have not been updated for 15 months and still get about 1,800 visits a month.',
+        ),
+      ),
+      copy(
+        t(
+          '要留意的下降：权限文档 5 个跟踪的关键词排名下降，近 28 天点击从 1,810 次降到 1,020 次；ChatGPT 上 6 个问题的回答不再提到 Acme。',
+          'Drops to watch: the permissions docs fell for 5 tracked keywords, with clicks down from 1,810 to 1,020 over 28 days; ChatGPT answers to 6 questions no longer name Acme.',
         ),
       ),
     ],
+    lead: 'acme-growth-ai-pm',
     doReason: copy(
       t(
         '增长空间明确，和产品相关，投入可控。',

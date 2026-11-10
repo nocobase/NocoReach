@@ -19,6 +19,7 @@ import type {
   StrategyState,
 } from '../../shared/strategy-model';
 import { insightPending } from '../../shared/strategy-pending';
+import { GROWTH_KINDS, type GrowthKind } from '../../shared/growth';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 
 const fixture = vi.hoisted(() => ({
@@ -278,26 +279,6 @@ const metric = (
   change,
   previous,
 });
-// A period of an analysis's evidence (Search Console or GA4): each metric's total against the period before.
-const period = (metrics: Record<string, [number, number]>) => ({
-  from: '2026-09-23',
-  through: '2026-10-20',
-  availableFrom: '2026-08-01',
-  availableDays: 80,
-  days: 28,
-  metrics: Object.fromEntries(
-    Object.entries(metrics).map(([key, [current, previous]]) => [
-      key,
-      {
-        current,
-        previous,
-        comparable: true,
-        change: current - previous,
-        percent: previous ? ((current - previous) / previous) * 100 : null,
-      },
-    ]),
-  ),
-});
 function BadgeProbe() {
   const insights = useNavBadge('insights');
   return <output>badge:{insights.count ?? 'unknown'}</output>;
@@ -426,12 +407,15 @@ it('lists every waiting opportunity in the message of the day, most important fi
   setup();
   await decisionGroup(7);
   expect(screen.getByText('strategy.briefHeadline:7')).toBeTruthy();
-  // The analysis notes stay folded until asked for.
-  expect(screen.queryByText('Search clicks held steady this week.')).toBeNull();
-  fireEvent.click(
-    screen.getByRole('button', { name: /strategy.analysisNotes:1/ }),
-  );
-  expect(screen.getByText('Search clicks held steady this week.')).toBeTruthy();
+  // The first analysis note is shown at once, under Most worth a look today (2026-11-10); with no other, nothing folds.
+  expect(
+    screen
+      .getByText('Search clicks held steady this week.')
+      .closest('[data-lead-note]')!.textContent,
+  ).toContain('strategy.mostWorthSeeing');
+  expect(
+    screen.queryByRole('button', { name: /strategy.otherAnalysisNotes/ }),
+  ).toBeNull();
   // High first (the newer of the two ahead), unrated last.
   expect(decisions()).toEqual(['b', 'e', 'd', 'a', 'g']);
   // Those of today's analysis already decided stay in the day, after the rest, with where they went.
@@ -511,7 +495,7 @@ it('Hand off to agent turns the opportunity into a task and takes it off the lis
   expect(await screen.findByText('strategy.handedCount:2')).toBeTruthy();
 });
 
-it('the tiles show at most five numbers that have data, the summary names the ones that moved, and the current situation sits beside the day', async () => {
+it('the tiles show at most five numbers that have data, the summary names none of them, and the current situation sits beside the day', async () => {
   fixture.cards = [
     {
       id: 'gsc',
@@ -537,11 +521,6 @@ it('the tiles show at most five numbers that have data, the summary names the on
     days: 7,
     previousStart: '2026-10-12',
     previousEnd: '2026-10-18',
-  };
-  // What the analysis read over its 28 days: clicks fell 31%, sessions rose 12%, impressions held.
-  fixture.state.insights!.evidence.summary = {
-    search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
-    web: period({ sessions: [900, 804], conversions: [0, 0] }),
   };
   fixture.areas = [
     {
@@ -608,16 +587,14 @@ it('the tiles show at most five numbers that have data, the summary names the on
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
   expect(within(tiles).getByText('+30')).toBeTruthy();
+  // The day's message counts the waiting opportunities by category, not the numbers that moved (2026-11-10); these
+  // have none.
   const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
   expect(
     within(brief)
       .getAllByRole('link')
       .map((l) => l.textContent),
-  ).toEqual([
-    'common.searchClicks ↓ 31%',
-    'strategy.sessions ↑ 12%',
-    'strategy.watchingChip:1',
-  ]);
+  ).toEqual(['strategy.watchingChip:1']);
   const situation = screen.getByRole('region', {
     name: 'strategy.currentSituation',
   });
@@ -634,7 +611,7 @@ it('the tiles show at most five numbers that have data, the summary names the on
   expect(screen.queryByText('strategy.allData')).toBeNull();
 });
 
-it('a number with fewer than 10 in the week before shows its change as a count, and the summary leaves it out', async () => {
+it('a number with fewer than 10 in the week before shows its change as a count', async () => {
   fixture.cards = [
     {
       id: 'gsc',
@@ -647,11 +624,6 @@ it('a number with fewer than 10 in the week before shows its change as a count, 
     { id: 'github', metrics: [metric('stars', 3, 2, 1)], series: [] },
     { id: 'discourse', metrics: [metric('topics', 4, null, 0)], series: [] },
   ];
-  // The analysis's own figures: key events 6 → 9 is a small base, left out of the day's chips.
-  fixture.state.insights!.evidence.summary = {
-    search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
-    web: period({ sessions: [900, 890], conversions: [9, 6] }),
-  };
   setup();
   const tiles = await screen.findByRole('region', {
     name: 'strategy.keyMetrics',
@@ -670,46 +642,69 @@ it('a number with fewer than 10 in the week before shows its change as a count, 
     within(brief)
       .getAllByRole('link')
       .map((l) => l.textContent),
-  ).toEqual(['common.searchClicks ↓ 31%', 'strategy.watchingChip:1']);
+  ).toEqual(['strategy.watchingChip:1']);
 });
 
-it('the day’s chips follow the figures its analysis read, not the 7-day tiles, even when they point the other way', async () => {
-  // The tiles' last 7 days: impressions up 35%, new stars up 16%.
-  fixture.cards = [
-    {
-      id: 'gsc',
-      metrics: [
-        metric('clicks', 4500, -0.02, 4590),
-        metric('impressions', 28214, 0.35, 20900),
-      ],
-      series: [],
-    },
-    { id: 'github', metrics: [metric('stars', 50, 0.16, 43)], series: [] },
-  ];
-  // The analysis's 28 days, which its notes quote: impressions down 21.3%.
-  fixture.state.insights!.observations = [
-    'Search impressions 759,132 over the last 28 days (-21.3%).',
-  ];
-  fixture.state.insights!.evidence.summary = {
-    search: period({ clicks: [18904, 19712], impressions: [759132, 964590] }),
-    web: period({ sessions: [17229, 17239], conversions: [1171, 1168] }),
-  };
-  setup();
-  const tiles = await screen.findByRole('region', {
-    name: 'strategy.keyMetrics',
+it('the day’s message counts the waiting opportunities by category and leads with the finding most worth seeing', async () => {
+  const growth = (kind: GrowthKind) => ({
+    kind,
+    category: GROWTH_KINDS[kind],
+    figures: [{ label: { key: 'growth.figure.clicks28' }, value: 1 }],
   });
-  await within(tiles).findByText('28,214');
-  expect(within(tiles).getByText('↑ 35%')).toBeTruthy();
+  const insights = fixture.state.insights!;
+  for (const [id, kind] of [
+    ['a', 'rising'],
+    ['b', 'new-query'],
+    ['c', 'rank-drop'],
+    ['ignored', 'demand-gap'],
+  ] as const)
+    insights.items.find((c) => c.id === id)!.growth = growth(kind);
+  insights.items.find((c) => c.id === 'b')!.no = 7;
+  insights.observations = [
+    'Searches for ai project management rose 126%.',
+    'Clicks to the permissions docs fell.',
+  ];
+  insights.leadId = 'b';
+  setup();
+  await decisionGroup(7);
   const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
-  const chips = within(brief).getAllByRole('link');
-  // Impressions as the analysis read them; new stars are not in its figures, so no chip rather than the tiles' 7 days.
-  expect(chips.map((l) => l.textContent)).toEqual([
-    'common.searchImpressions ↓ 21%',
+  // Only the categories with a waiting opportunity, each opening Opportunities on it; the ignored one is not counted.
+  const links = within(brief).getAllByRole('link');
+  expect(links.map((l) => l.textContent)).toEqual([
+    'growth.category.trending 2',
+    'growth.category.optimize 1',
     'strategy.watchingChip:1',
+    'strategy.seeOpportunity:O-7',
   ]);
-  expect(chips[0].getAttribute('href')).toBe('/seo-opportunities?days=28');
-  expect(chips[0].getAttribute('title')).toBe('strategy.metricWindow:28');
-  expect(within(brief).queryByText(/↑ 35%|↑ 16%/)).toBeNull();
+  expect(links.map((l) => l.getAttribute('href'))).toEqual([
+    '/opportunities?category=trending',
+    '/opportunities?category=optimize',
+    '/opportunities?tab=watch',
+    '/opportunities?item=b',
+  ]);
+  // The first note is shown with the opportunity it is about; the rest fold.
+  const lead = brief.querySelector('[data-lead-note]')!;
+  expect(lead.textContent).toContain('strategy.mostWorthSeeing');
+  expect(lead.textContent).toContain(
+    'Searches for ai project management rose 126%.',
+  );
+  expect(screen.queryByText('Clicks to the permissions docs fell.')).toBeNull();
+  fireEvent.click(
+    within(brief).getByRole('button', {
+      name: /strategy.otherAnalysisNotes:1/,
+    }),
+  );
+  expect(screen.getByText('Clicks to the permissions docs fell.')).toBeTruthy();
+  // Each waiting line starts with its category, as on Opportunities; one without a growth has none.
+  const group = screen.getByRole('group', { name: 'strategy.decideCount:7' });
+  expect(
+    group
+      .querySelector('[data-opportunity-id=b] [data-growth-category]')!
+      .getAttribute('data-growth-category'),
+  ).toBe('trending');
+  expect(
+    group.querySelector('[data-opportunity-id=d] [data-growth-category]'),
+  ).toBeNull();
 });
 
 it('a card, chip or line whose page the menu leaves out shows its number without leading there', async () => {
@@ -723,9 +718,6 @@ it('a card, chip or line whose page the menu leaves out shows its number without
     },
     { id: 'github', metrics: [metric('stars', 30)], series: [] },
   ];
-  fixture.state.insights!.evidence.summary = {
-    search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
-  };
   fixture.areas = [
     {
       id: 'site',
@@ -761,7 +753,6 @@ it('a card, chip or line whose page the menu leaves out shows its number without
   );
   expect(within(tiles).getByText('1,200')).toBeTruthy();
   const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
-  expect(within(brief).getByText('common.searchClicks ↓ 31%')).toBeTruthy();
   expect(
     within(brief)
       .getAllByRole('link')

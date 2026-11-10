@@ -4669,5 +4669,11 @@
   "没提到我们的 AI 回答里反复引用的页面（榜单、评测、论坛讨论），不含本站和竞品官网。": "analysisRules.aiCitedHelp",
   "被引用至少": "analysisRules.citationsLeast",
   "目标排名": "analysisRules.targetPosition",
-  "预计每月多的点击至少": "analysisRules.extraClicksLeast"
+  "预计每月多的点击至少": "analysisRules.extraClicksLeast",
+  "预计每月能找回的点击至少": "analysisRules.recoverClicksLeast",
+  "近 3 个月上升至少（归当下热点）": "analysisRules.trendingRiseLeast",
+  "每月访问至少": "analysisRules.monthlyVisitsLeast",
+  "涉及页面每月点击至少": "analysisRules.affectedClicksLeast",
+  "AI 回答不再提到我们": "analysisRules.aiDropped",
+  "AI 搜索 › 品牌提及里，两周或更早之前的查询提到我们、最新一次不再提到的问题。": "analysisRules.aiDroppedHelp"
 }

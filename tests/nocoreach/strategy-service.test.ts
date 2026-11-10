@@ -159,7 +159,22 @@ test('signal-based analysis keeps only suggestions that cite a current growth ch
  await service.saveInsights(1,{insights:[{...base,growth:{kind:'demand-gap',figures:[{value:1e9}]},signalIds:['gsc-click-drop:/docs/b','gsc-near-first:/docs/a','invented']},{...base,title:'Made up',objective:'other',signalIds:['invented']},{...base,title:'A fix, not growth',objective:'fix',signalIds:['gsc-click-drop:/docs/b']}],observations:['搜索曝光上升 18%',' ','x'.repeat(400),'a','b','c']});
  assert.equal(state.insights.items.length,1);assert.deepEqual(state.insights.items[0].signalIds,['gsc-click-drop:/docs/b','gsc-near-first:/docs/a']);
  assert.deepEqual(state.insights.items[0].growth,growth);
- assert.equal(state.insights.observations.length,4);assert.equal(state.insights.observations[1].length,300);
+ assert.equal(state.insights.observations.length,5);assert.equal(state.insights.observations[1].length,300);
+ assert.equal(state.insights.leadId,undefined);
+});
+// The first observation is the finding most worth seeing; the opportunity it is about is kept beside it, and a change
+// made off the site says where (2026-11-10).
+test('the first observation names its opportunity, and an off-site change says where',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[]};
+ const cited={kind:'cited-sources',category:'competitor-gaps',figures:[{label:{key:'growth.figure.citations'},value:41}]},near={kind:'near-first',figures:[{label:{key:'growth.figure.clicks28'},value:12}]};
+ service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'ai-cited:pm',source:'ai-search',actionable:true,growth:cited},{key:'gsc-near-first:/a',source:'gsc',actionable:true,growth:near}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const base={observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',source:'mixed',sources:['gsc']};
+ await service.saveInsights(1,{insights:[
+  {...base,title:'Near',objective:'a',signalIds:['gsc-near-first:/a'],target:'https://ex.com/a',offsite:'not when there is a page'},
+  {...base,title:'Roundups',objective:'b',signalIds:['ai-cited:pm'],offsite:' Submit to the saas-review.example author ',lead:true}],observations:['Roundups first','b']});
+ const [first,second]=state.insights.items;
+ assert.deepEqual([first.offsite,second.offsite],[undefined,'Submit to the saas-review.example author']);
+ assert.equal(state.insights.leadId,second.id);assert.ok(state.insights.items.every(c=>!('lead' in c)));
 });
 // A new page has no address: the model says the section it goes under and the pages to link from (2026-11-10 review).
 test('an opportunity that writes a new page keeps where it goes instead of an address',async()=>{

@@ -5,7 +5,7 @@ import {
   acmeGrowthBriefs,
   crmGrowthBriefs,
 } from '../../server/nocoreach/demo-data/growth-briefs';
-import { GROWTH_KINDS } from '../../shared/growth';
+import { GROWTH_CATEGORIES, GROWTH_KINDS } from '../../shared/growth';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
 import { World } from '../../server/nocoreach/demo-data/world/world';
 import {
@@ -84,7 +84,7 @@ describe.each(['zh-CN', 'en-US'])(
           }
         }
         expect(documents.length).toBeGreaterThanOrEqual(8);
-        // Two handed off and two ignored; the pending ones are growth points, one of each kind for Acme.
+        // Two handed off and two ignored; the pending ones are growth points of the four categories (2026-11-10).
         expect(opportunities.briefs).toHaveLength(4);
         expect(opportunities.watches).toHaveLength(6);
         for (const brief of opportunities.briefs)
@@ -92,12 +92,23 @@ describe.each(['zh-CN', 'en-US'])(
         const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
           new Date(now),
         );
-        expect(growth).toHaveLength(which === 'main' ? 12 : 8);
+        expect(growth).toHaveLength(which === 'main' ? 17 : 10);
         const lang = language === 'en-US' ? 'en' : 'zh';
         const kinds = growth.map((brief) => brief.growth(lang).kind);
-        expect(new Set(kinds).size).toBe(kinds.length);
-        if (which === 'main')
-          expect(kinds.sort()).toEqual(Object.keys(GROWTH_KINDS).sort());
+        // Acme has two or more of each category; with Acme CRM every kind is shown.
+        if (which === 'main') {
+          const categories = growth.map((brief) => brief.growth(lang).category);
+          for (const category of GROWTH_CATEGORIES)
+            expect(
+              categories.filter((c) => c === category).length,
+            ).toBeGreaterThanOrEqual(2);
+          const crm = crmGrowthBriefs(new Date(now)).map(
+            (brief) => brief.growth(lang).kind,
+          );
+          expect([...new Set([...kinds, ...crm])].sort()).toEqual(
+            Object.keys(GROWTH_KINDS).sort(),
+          );
+        }
         for (const brief of growth) {
           const g = brief.growth(lang);
           expect(g.figures.length).toBeGreaterThanOrEqual(1);

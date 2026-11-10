@@ -87,7 +87,11 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             Boolean(s.growth),
         )
         .slice(0, 3);
-      const cited = new Set(actionable.map((s) => s.key));
+      const cited = new Set(actionable.map((s) => s.key)),
+        // The finding most worth seeing comes first, Trending now preferred, and marks its opportunity (2026-11-10).
+        lead =
+          actionable.find((s) => object(s.growth).category === 'trending') ??
+          actionable[0];
       const figures = (s: Value) => {
         const raw = object(s.growth).figures;
         return (Array.isArray(raw) ? (raw as unknown[]) : [])
@@ -97,12 +101,22 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       };
       return {
         observations: [
+          lead
+            ? t(
+                `${str(lead.title, 120)}：${figures(lead).join('；')}。（演示模型生成）`,
+                `${str(lead.title, 120)}. (Written by the demo model.)`,
+              )
+            : t(
+                `今天没有新的增长机会：读取的 ${signals.length} 条信号里没有带增长空间的变化。（演示模型生成）`,
+                `No new growth opportunity today: none of the ${signals.length} signals read carries a growth. (Written by the demo model.)`,
+              ),
           t(
-            `本次分析读取了 ${signals.length} 条信号，挑出 ${actionable.length} 条值得跟进的变化。（演示模型生成）`,
-            `This analysis read ${signals.length} signals and picked ${actionable.length} changes worth following up. (Written by the demo model.)`,
+            `本次分析读取了 ${signals.length} 条信号，挑出 ${actionable.length} 条值得跟进的变化。`,
+            `This analysis read ${signals.length} signals and picked ${actionable.length} changes worth following up.`,
           ),
         ],
         insights: actionable.map((s) => ({
+          ...(s === lead ? { lead: true } : {}),
           title: t(
             `抓住增长点：${str(s.title, 120)}`,
             `Growth point: ${str(s.title, 120)}`,

@@ -14,7 +14,7 @@ import {
 
 const DEFAULTS = {
   'gsc-new-query': { minImpressions: 50, risePct: 200, minQueries: 2 },
-  'keyword-demand': { minKeywords: 3, minVolume: 500 },
+  'keyword-demand': { minKeywords: 3, minVolume: 500, risingPct: 50 },
   'keyword-rising': { changePct: 50, minVolume: 300 },
   'competitor-gap': { minKeywords: 3, minVolume: 300 },
   'ai-missing': { minQuestions: 2 },
@@ -42,7 +42,7 @@ test('the click-through curve is the cited one, and estimates are impressions ×
   );
 });
 
-test('near page one and low CTR carry their growth; a click drop is left to Insights', () => {
+test('near page one, low CTR and a click drop carry their growth', () => {
   const rows = [
     {
       page: 'https://ex.com/a',
@@ -78,9 +78,29 @@ test('near page one and low CTR carry their growth; a click drop is left to Insi
     },
   ];
   const s = searchSignals({ queries: rows, history: [], end: '2026-09-27' });
+  // A page that lost clicks can win them back (2026-11-10): Content optimization, what it lost a month.
   const drop = s.find((x) => x.key === 'gsc-click-drop:/d');
-  expect(drop.actionable).toBe(false);
-  expect(drop.growth).toBeUndefined();
+  expect(drop.actionable).toBe(true);
+  expect(drop.growth).toMatchObject({
+    kind: 'click-drop',
+    category: 'optimize',
+  });
+  expect(keys(drop.growth)).toEqual([
+    'clicks28',
+    'impressions28',
+    'averagePosition',
+    'recoverClicks',
+  ]);
+  expect(drop.growth.figures[3]).toMatchObject({
+    value: roundEstimate(35 * (30.4 / 28)),
+    estimate: true,
+  });
+  expect(drop.growth.evidence.rows[0]).toMatchObject({
+    query: 'd1',
+    clicks: 5,
+    previousClicks: 40,
+    clickChange: -35,
+  });
   const near = s.find((x) => x.key === 'gsc-near-first:/d');
   expect(near.growth.kind).toBe('near-first');
   expect(keys(near.growth)).toEqual([
@@ -258,7 +278,7 @@ test('demand without a page: one per AI suggestion group, with what the top 3 wo
   ]);
   const g = s.find((x) => x.key === 'keyword-demand:Use cases').growth;
   expect(g.kind).toBe('demand-gap');
-  expect(g.area).toBe('keywords');
+  expect(g.category).toBe('new-content');
   const volumes = Array.from({ length: 12 }, (_, i) => 1000 - i * 50);
   const volume = volumes.reduce((a, b) => a + b, 0);
   const gain = volumes.reduce((t, v) => t + growth.extraVisits(v, 3, null), 0);
@@ -423,13 +443,28 @@ test('a stored growth is trusted only with a known kind and figures; the model r
   expect(
     growthOf({ kind: 'made-up', figures: [{ label: { key: 'x' }, value: 1 }] }),
   ).toBeUndefined();
+  // An old stored growth has an area and no category: the category follows its kind.
   expect(
     growthOf({
       kind: 'uncited',
       area: 'keywords',
       figures: [{ label: { key: 'x' }, value: 1 }],
-    })?.area,
-  ).toBe('ai-search');
+    }),
+  ).toMatchObject({ kind: 'uncited', category: 'optimize' });
+  expect(
+    growthOf({
+      kind: 'demand-gap',
+      category: 'trending',
+      figures: [{ label: { key: 'x' }, value: 1 }],
+    })?.category,
+  ).toBe('trending');
+  expect(
+    growthOf({
+      kind: 'demand-gap',
+      category: 'made-up',
+      figures: [{ label: { key: 'x' }, value: 1 }],
+    })?.category,
+  ).toBe('new-content');
   const model = growth.growthForModel({
     kind: 'near-first',
     figures: [
@@ -444,6 +479,7 @@ test('a stored growth is trusted only with a known kind and figures; the model r
   });
   expect(model).toEqual({
     kind: 'near-first',
+    category: 'optimize',
     figures: ['进前 3 预计每月多 1,100 次点击'],
     evidenceRows: 14,
   });
@@ -460,6 +496,8 @@ test('every new growth point has an analysis rule with adjustable thresholds', a
     'ai-missing:team collaboration': 'ai-missing',
     'ai-cited:team collaboration': 'ai-cited',
     'github-new-repo:new/board': 'github-new-repo',
+    'rank-page:/docs/permissions': 'rank',
+    'ai-dropped:chat_gpt': 'ai-dropped',
   };
   for (const [key, id] of Object.entries(rules)) {
     expect(ruleOf(key)).toBe(id);
@@ -479,6 +517,17 @@ test('every new growth point has an analysis rule with adjustable thresholds', a
   );
   expect(set.value('gsc-near-first', 'minGain')).toBe(500);
   expect(resolver({}, RULES).value('gsc-near-first', 'minGain')).toBe(20);
+  // The content optimization opportunities (2026-11-10) have their least gain or traffic, and Trending now its rise.
+  for (const [id, key] of [
+    ['gsc-click-drop', 'minGain'],
+    ['rank', 'minGain'],
+    ['site-stale', 'minViews'],
+    ['site-thin', 'minViews'],
+    ['audit', 'minClicks'],
+    ['ai-dropped', 'minQuestions'],
+    ['keyword-demand', 'risingPct'],
+  ])
+    expect(resolver({}, RULES).value(id, key)).toBeGreaterThan(0);
 });
 
 test('estimates read to two significant figures; counted numbers are left alone', () => {
@@ -534,4 +583,333 @@ test('a rising keyword counts as often as it is searched now, the last three mon
   expect(g.figures[3].value).toBe(
     roundEstimate(growth.extraVisits(1400, 3, null)),
   );
+});
+
+// --- Four categories and content optimization (2026-11-10) ---------------------------------------------------------
+
+test('every kind has one of the four categories', async () => {
+  const { GROWTH_KINDS, GROWTH_CATEGORIES } =
+    await import('../../shared/growth.js');
+  expect(GROWTH_CATEGORIES).toEqual([
+    'trending',
+    'new-content',
+    'competitor-gaps',
+    'optimize',
+  ]);
+  const by = (c) =>
+    Object.entries(GROWTH_KINDS)
+      .filter(([, x]) => x === c)
+      .map(([k]) => k);
+  expect(by('trending')).toEqual([
+    'rising',
+    'new-query',
+    'topic-heat',
+    'new-repo',
+  ]);
+  expect(by('new-content')).toEqual(['demand-gap']);
+  expect(by('competitor-gaps')).toEqual([
+    'competitor-gap',
+    'not-mentioned',
+    'cited-sources',
+    'competitor-launch',
+  ]);
+  expect(by('optimize')).toEqual([
+    'near-first',
+    'low-ctr',
+    'uncited',
+    'rank-drop',
+    'click-drop',
+    'stale-page',
+    'thin-page',
+    'ai-dropped',
+    'page-issue',
+  ]);
+});
+
+test('searched and not written goes to Trending now when the last 3 months clearly rose, else New content', () => {
+  const months = (before, last) =>
+    Array.from({ length: 12 }, (_, i) => ({
+      year: 2026,
+      month: i + 1,
+      volume: i >= 9 ? last : before,
+    }));
+  const group = (monthlySearches) => ({
+    version: 2,
+    items: [1, 2, 3].map((i) => ({
+      keyword: `ai pm ${i}`,
+      group: 'AI',
+      metrics: { volume: 400, difficulty: 30, monthlySearches },
+    })),
+  });
+  const gaps = growth.competitorGaps({ cr, cw });
+  const [up] = growth.demandSignals({ ks: group(months(200, 400)), gaps, V });
+  expect(up.growth).toMatchObject({ kind: 'demand-gap', category: 'trending' });
+  expect(keys(up.growth)).toEqual([
+    'monthlySearchesTotal',
+    'ranking',
+    'threeMonthChange',
+    'topExtraVisits',
+  ]);
+  expect(up.growth.figures[2]).toMatchObject({ value: 1, format: 'change' });
+  // A rise under the rule's threshold, or fewer than 12 months to tell by, stays New content.
+  const [flat] = growth.demandSignals({ ks: group(months(300, 400)), gaps, V });
+  expect(flat.growth.category).toBe('new-content');
+  const [short] = growth.demandSignals({
+    ks: group(months(200, 400).slice(-6)),
+    gaps,
+    V,
+  });
+  expect(short.growth.category).toBe('new-content');
+});
+
+test('a page that fell in tracked rankings: the clicks it can win back, each keyword and the sites now above it', () => {
+  const page = 'https://ex.com/docs/permissions';
+  const g = growth.rankDropGrowth({
+    keywords: [
+      { keyword: 'permissions', before: 2, now: 6, ahead: ['nimbus.example'] },
+      { keyword: 'guest access', before: 1, now: null, ahead: ['a.example'] },
+      { keyword: 'roles', before: 4, now: 11, ahead: [] },
+    ],
+    page: { clicks: 400, previous: 1000 },
+    rows: [
+      { keyword: 'permissions', page, clicks: 300, previous: 700 },
+      { keyword: 'roles', page, clicks: 100, previous: 300 },
+    ],
+    path: '/docs/permissions',
+    volumes: new Map([['permissions', 1300]]),
+  });
+  expect(g.gain).toBeCloseTo(600 * (30.4 / 28));
+  expect(g.growth).toMatchObject({ kind: 'rank-drop', category: 'optimize' });
+  expect(keys(g.growth)).toEqual([
+    'clicks28',
+    'averagePosition',
+    'outOfTop3',
+    'recoverClicks',
+  ]);
+  // Out of the top 100 reads as 100 in the average and "100+" in the table.
+  expect(g.growth.figures[1].value).toBe(39);
+  expect(g.growth.figures[2].value).toBe(2);
+  expect(g.growth.figures[3].value).toBe(650);
+  expect(g.growth.evidence.columns.map((c) => c.key)).toEqual([
+    'keyword',
+    'volume',
+    'position',
+    'clickChange',
+    'ahead',
+  ]);
+  // The former position shows after the present one ("11 ← 4").
+  expect(g.growth.evidence.columns[2]).toMatchObject({
+    format: 'position',
+    from: 'previousPosition',
+  });
+  expect(g.growth.evidence.rows[0]).toMatchObject({
+    keyword: 'guest access',
+    position: '100+',
+    previousPosition: 1,
+    clickChange: null,
+  });
+  expect(
+    g.growth.evidence.rows.find((r) => r.keyword === 'permissions'),
+  ).toMatchObject({
+    volume: 1300,
+    clickChange: -400,
+    ahead: ['nimbus.example'],
+  });
+  // Without Search Console figures for the page, what the keywords' searches bring at the former positions.
+  const byKeywords = growth.rankDropGrowth({
+    keywords: [{ keyword: 'permissions', before: 2, now: 6, ahead: [] }],
+    page: null,
+    rows: [],
+    path: '/docs/permissions',
+    volumes: new Map([['permissions', 1300]]),
+  });
+  expect(byKeywords.gain).toBeCloseTo(
+    1300 * (growth.expectedCtr(2) - growth.expectedCtr(6)),
+  );
+});
+
+test('rank tracking: a page that fell for its keywords is one opportunity, and its click drop is not offered again', async () => {
+  const { computeAll } = await import('../../server/nocoreach/signals.js');
+  const url = 'https://ex.com/docs/permissions';
+  const check = (position) => ({ at: '2026-11-01', position, url });
+  const input = {
+    now: Date.parse('2026-11-10'),
+    queries: [
+      {
+        page: url,
+        keyword: 'permissions',
+        clicks: 300,
+        impressions: 9000,
+        previous: 900,
+        position: 6,
+      },
+    ],
+    rt: {
+      keywords: [
+        { id: 'k1', keyword: 'permissions' },
+        { id: 'k2', keyword: 'roles' },
+      ],
+      checks: { k1: [check(2), check(8)], k2: [check(3), check(5)] },
+      serps: {
+        k1: [
+          { position: 1, domain: 'www.nimbus.example' },
+          { position: 4, domain: 'saas-review.example' },
+          { position: 9, domain: 'late.example' },
+        ],
+      },
+    },
+  };
+  const { ranked } = computeAll(input, {});
+  const fell = ranked.find((s) => s.key === 'rank-page:/docs/permissions');
+  expect(fell).toMatchObject({ actionable: true, action: 'optimize' });
+  expect(fell.growth.kind).toBe('rank-drop');
+  expect(fell.growth.evidence.rows.map((r) => r.keyword)).toEqual([
+    'permissions',
+    'roles',
+  ]);
+  expect(fell.growth.evidence.rows[0].ahead).toEqual([
+    'nimbus.example',
+    'saas-review.example',
+  ]);
+  const drop = ranked.find((s) => s.key === 'gsc-click-drop:/docs/permissions');
+  expect(drop.actionable).toBe(false);
+  expect(drop.growth).toBeUndefined();
+});
+
+test('outdated and thin pages are opportunities only with the visits the rule asks for', async () => {
+  const { computeAll } = await import('../../server/nocoreach/signals.js');
+  const page = (path, extra) => ({
+    url: `https://ex.com${path}`,
+    title: path,
+    type: 'docs',
+    fetchedAt: '2026-11-01',
+    words: 900,
+    ...extra,
+  });
+  const input = {
+    now: Date.parse('2026-11-10'),
+    site: {
+      pages: [
+        page('/docs/old', { lastmod: '2025-06-01' }),
+        page('/docs/quiet', { lastmod: '2025-06-01' }),
+        page('/docs/short', { lastmod: '2026-10-01', words: 80 }),
+      ],
+    },
+    pages: [
+      { page: 'https://ex.com/docs/old', sessions: 1660, views: 2000 },
+      { page: 'https://ex.com/docs/quiet', sessions: 40, views: 60 },
+      { page: 'https://ex.com/docs/short', sessions: 300, views: 320 },
+    ],
+    queries: [
+      {
+        page: 'https://ex.com/docs/old',
+        keyword: 'old guide',
+        clicks: 400,
+        impressions: 6000,
+        previous: 380,
+        position: 4,
+      },
+    ],
+  };
+  const { ranked } = computeAll(input, {});
+  const old = ranked.find((s) => s.key === 'site-stale:/docs/old');
+  expect(old.actionable).toBe(true);
+  expect(old.growth).toMatchObject({
+    kind: 'stale-page',
+    category: 'optimize',
+  });
+  expect(keys(old.growth)).toEqual([
+    'monthlyVisits',
+    'lastUpdated',
+    'clicks28',
+    'impressions28',
+  ]);
+  expect(old.growth.figures[0].value).toBe(roundEstimate(1660 * (30.4 / 28)));
+  expect(old.growth.evidence.rows[0].query).toBe('old guide');
+  const quiet = ranked.find((s) => s.key === 'site-stale:/docs/quiet');
+  expect(quiet?.actionable ?? false).toBe(false);
+  const short = ranked.find((s) => s.key === 'site-thin:/docs/short');
+  expect(short.actionable).toBe(true);
+  expect(keys(short.growth)).toEqual(['monthlyVisits', 'bodyWords']);
+  expect(short.growth.figures[1].value).toBe(80);
+});
+
+test("AI answers that stopped naming us: the questions of the lookup before, past the sample's cut-off", () => {
+  const q = (question, volume) => ({
+    question,
+    volume,
+    sources: [{ domain: 'nimbus.example' }],
+  });
+  const before = [q('a', 900), q('b', 500), q('c', 300), q('d', 40)];
+  // The newer lookup is as full: "d" is searched less than its least, so it may only have been pushed out.
+  const now = [q('a', 900), q('e', 200), q('f', 100), q('g', 80)];
+  expect(growth.aiDropped(before, now).map((x) => x.question)).toEqual([
+    'b',
+    'c',
+  ]);
+  const g = growth.aiDroppedGrowth({
+    platform: 'chat_gpt',
+    dropped: growth.aiDropped(before, now),
+    before: 4,
+    after: 4,
+    at: '2026-10-09T08:00:00Z',
+  });
+  expect(g).toMatchObject({ kind: 'ai-dropped', category: 'optimize' });
+  expect(keys(g)).toEqual([
+    'droppedQuestions',
+    'mentionedBefore',
+    'mentionedNow',
+    'aiSearches',
+  ]);
+  expect(g.figures[0].value).toBe(2);
+  expect(g.figures[1].detail).toEqual({
+    key: 'growth.detail.onDay',
+    params: { 0: '10-09' },
+  });
+  expect(g.figures[3].value).toBe(800);
+  expect(g.evidence.rows[0]).toMatchObject({
+    question: 'b',
+    platform: 'chat_gpt',
+    aiVolume: 500,
+    cited: ['nimbus.example'],
+  });
+});
+
+test('a site audit issue counts the pages with search clicks, and what they get a month', () => {
+  const { gain, growth: g } = growth.pageIssueGrowth({
+    issue: 'Duplicate title',
+    pages: [
+      {
+        path: '/t/a',
+        url: 'https://ex.com/t/a',
+        clicks: 620,
+        impressions: 9800,
+        position: 4.6,
+      },
+      {
+        path: '/t/b',
+        url: 'https://ex.com/t/b',
+        clicks: 280,
+        impressions: 5100,
+        position: 7.94,
+      },
+    ],
+    total: 7,
+  });
+  expect(gain).toBeCloseTo(900 * (30.4 / 28));
+  expect(g).toMatchObject({ kind: 'page-issue', category: 'optimize' });
+  expect(g.figures.map((f) => f.value)).toEqual([
+    'Duplicate title',
+    2,
+    roundEstimate(900 * (30.4 / 28)),
+    14900,
+  ]);
+  expect(g.figures[1].detail).toEqual({
+    key: 'growth.detail.ofPages',
+    params: { 0: 7 },
+  });
+  expect(g.evidence.rows.map((r) => [r.page, r.position])).toEqual([
+    ['/t/a', 4.6],
+    ['/t/b', 7.9],
+  ]);
 });

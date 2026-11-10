@@ -61,7 +61,9 @@ export interface DemoContent {
     priorityHigh: string;
     priorityOther: string;
     audience: string;
+    /** The finding most worth seeing comes first; `lead` is the growth brief it is about. */
     observations: readonly string[];
+    lead: string;
     doReason: string;
     skipReason: string;
     briefs: readonly Brief[];

@@ -129,6 +129,8 @@ export type Opportunity = {
   target?: string;
   /** A page that does not exist yet: the section it would go under and existing pages to link to it from (paths). */
   newPage?: NewPage;
+  /** Where the change is made off the site (a list, a review, a community), when neither `target` nor `newPage`. */
+  offsite?: string;
   audience?: string;
   sources?: string[];
   firstSeenAt?: string;
@@ -178,6 +180,8 @@ export type WatchRecord = {
   };
 };
 export type InsightBatch = {
+  /** The first observation is the finding most worth seeing today; this is the opportunity it is about, if any. */
+  leadId?: string;
   observations?: string[];
   sourceReviews?: SourceReview[];
   signalReviews?: Record<string, SignalReview>;

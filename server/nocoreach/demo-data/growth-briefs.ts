@@ -10,12 +10,21 @@ import {
   type NewPage,
   roundEstimate,
 } from '../../../shared/growth.js';
-import { expectedCtr, extraClicks, extraVisits } from '../growth-signals.js';
+import {
+  aiDroppedGrowth,
+  clickDropGrowth,
+  expectedCtr,
+  extraClicks,
+  extraVisits,
+  pageGrowth,
+  pageIssueGrowth,
+  rankDropGrowth,
+} from '../growth-signals.js';
 
-// The demo's growth opportunities (2026-11-10): one hand-authored growth point of each kind for Acme and eight for Acme
-// CRM, in the shapes server/nocoreach/growth-signals.ts computes, with every estimate made by its formulas. Keywords
-// are those of the demo's markets (Taiwan for Chinese, the United States for English); products, sites and numbers
-// are fictional.
+// The demo's growth opportunities (2026-11-10): hand-authored growth points of the four categories, every kind among
+// them, for Acme and Acme CRM, in the shapes server/nocoreach/growth-signals.ts computes, with every estimate made by
+// its formulas (the content optimization ones by its own builders). Keywords are those of the demo's markets (Taiwan
+// for Chinese, the United States for English); products, sites and numbers are fictional.
 
 type Lang = 'zh' | 'en';
 type L = { zh: string; en: string };
@@ -30,9 +39,10 @@ export interface GrowthBrief {
   meaning: L;
   suggestion: L;
   objective: L;
-  /** The existing page to change, or where a new page goes and the pages to link to it from. */
+  /** The existing page to change, where a new page goes and the pages to link to it from, or where off the site. */
   path?: string;
   newPage?: NewPage;
+  offsite?: L;
   source: string;
   priority: 'high' | 'medium' | 'low';
   effort: 'low' | 'medium' | 'high';
@@ -74,7 +84,7 @@ const growth = (
   total = rows.length,
 ): Growth => ({
   kind,
-  area: GROWTH_KINDS[kind],
+  category: GROWTH_KINDS[kind],
   figures,
   evidence: {
     columns,
@@ -850,7 +860,10 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
         '被 AI 常引用的榜单收录',
         'Be listed in the roundups AI cites',
       ),
-      path: '/compare/nimbus',
+      offsite: t(
+        '提交给 saas-review.example、pm-weekly.example 的榜单作者，并在 forum.example 的讨论里回复',
+        'Submit to the authors of the saas-review.example and pm-weekly.example roundups, and reply in the forum.example thread',
+      ),
       source: 'ai-search',
       priority: 'high',
       effort: 'low',
@@ -1314,6 +1327,298 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
           ['roadmap-kit/roadmap-kit', 140, dayBefore(now, 6), 'TypeScript'],
         ]),
     },
+    {
+      key: 'acme-growth-okr',
+      title: t(
+        '写一篇 OKR 范本指南，拿下 8 个还没排上的词',
+        'Write an OKR template guide to win 8 keywords we do not rank for',
+      ),
+      reason: t(
+        '这 8 个词每月搜索 5,230 次，本站都没排进前 20；Example Tasks 有 4 个排在前 10。',
+        'These 8 keywords are searched 5,230 times a month and we rank in the top 20 for none; Example Tasks has 4 in the top 10.',
+      ),
+      meaning: t(
+        '对应 Acme 的项目组合视图：每个目标可以挂到对应的项目上看进度，但网站上没有讲 OKR 的内容。这组词一直有稳定的搜索，前 10 名多是范本下载页，Example Tasks 靠一篇范本文章拿到了大部分流量。',
+        'This fits Acme’s portfolio view, where each goal links to the projects that move it, yet the site has nothing on OKRs. These terms are searched steadily, the top 10 are mostly template downloads, and Example Tasks takes most of the traffic with one template article.',
+      ),
+      suggestion: t(
+        '写一篇“OKR 范本与写法”的指南，给出产品、市场、工程三个团队的范例和一个可下载的范本，讲清怎么在项目组合里跟进；从项目组合功能页链接过来。',
+        'Write a guide to OKR templates and how to write them, with examples for product, marketing and engineering teams and a downloadable template, showing how to follow them in the portfolio view; link to it from the portfolio feature page.',
+      ),
+      objective: t(
+        '用一篇 OKR 指南拿下这组关键词',
+        'Win this keyword group with an OKR guide',
+      ),
+      newPage: { section: '/blog/', linkFrom: ['/features/portfolio'] },
+      source: 'keywords',
+      priority: 'medium',
+      effort: 'medium',
+      growth: (lang) =>
+        demandGap(
+          pick<Keyword[]>(
+            lang,
+            [
+              ['OKR 範本', 1900, 29, [tasks(3)]],
+              ['OKR 是什麼', 1300, 18, []],
+              ['OKR 範例', 720, 24, [tasks(6)]],
+              ['團隊 OKR', 480, 31, [tasks(5), nimbus(8)]],
+              ['OKR 管理工具', 390, 44, [tasks(4), nimbus(6)]],
+              ['OKR excel', 210, 22, []],
+              ['OKR 追蹤', 140, 35, [nimbus(9)]],
+              ['個人 OKR 範例', 90, 16, []],
+            ],
+            [
+              ['okr template', 1900, 29, [tasks(3)]],
+              ['what is okr', 1300, 18, []],
+              ['okr examples', 720, 24, [tasks(6)]],
+              ['team okrs', 480, 31, [tasks(5), nimbus(8)]],
+              ['okr software', 390, 44, [tasks(4), nimbus(6)]],
+              ['okr excel template', 210, 22, []],
+              ['okr tracking', 140, 35, [nimbus(9)]],
+              ['personal okr examples', 90, 16, []],
+            ],
+          ),
+          '/keywords?tab=suggest',
+        ),
+    },
+    {
+      key: 'acme-growth-permissions',
+      title: t(
+        '找回权限文档每月约 860 次点击',
+        'Win back about 860 clicks a month on the permissions docs',
+      ),
+      reason: t(
+        '5 个跟踪的关键词排名下降，3 个掉出前 3；近 28 天点击 1,020 次，之前 28 天 1,810 次。',
+        '5 tracked keywords fell, 3 of them out of the top 3; 1,020 clicks in the last 28 days against 1,810 before.',
+      ),
+      meaning: t(
+        '对应 Acme 的角色和访客权限，是团队开始邀请成员时必看的一页。现在排到前面的是 Nimbus 新写的权限指南和一篇评测站文章，它们都有按角色列的权限表，本站这页只有文字说明。',
+        'This covers Acme’s roles and guest access, the page teams read when they start inviting people. Nimbus’s new permissions guide and a review-site article now rank above it; both have a table of permissions by role, while ours is text only.',
+      ),
+      suggestion: t(
+        '加一张按角色（所有者、管理员、成员、访客）列的权限表，补上“访客能看到什么”和常见问答；标题改为“Acme 权限设置：角色与访客权限一览”。',
+        'Add a table of permissions by role (owner, admin, member, guest), a section on what guests can see and an FAQ; retitle the page “Acme permissions: roles and guest access at a glance”.',
+      ),
+      objective: t(
+        '让权限文档回到前 3 名',
+        'Bring the permissions docs back into the top 3',
+      ),
+      path: '/docs/permissions',
+      source: 'rank',
+      priority: 'high',
+      effort: 'low',
+      growth: (lang) => {
+        const page = '/docs/permissions',
+          keywords = pick<[string, number, number, number, number, number][]>(
+            lang,
+            [
+              ['專案管理 權限設定', 1300, 2, 6, 410, 820],
+              ['團隊成員 權限', 880, 3, 8, 190, 380],
+              ['訪客 權限 專案', 720, 1, 4, 160, 300],
+              ['專案 角色 權限', 480, 4, 11, 40, 70],
+              ['Acme 權限', 260, 1, 2, 220, 240],
+            ],
+            [
+              ['project permissions settings', 1300, 2, 6, 410, 820],
+              ['team member permissions', 880, 3, 8, 190, 380],
+              ['guest access project management', 720, 1, 4, 160, 300],
+              ['project roles and permissions', 480, 4, 11, 40, 70],
+              ['acme permissions', 260, 1, 2, 220, 240],
+            ],
+          ),
+          ahead = [
+            'nimbus.example',
+            'saas-review.example',
+            'docs.example-tasks.example',
+          ];
+        return rankDropGrowth({
+          keywords: keywords.map(([keyword, , before, now]) => ({
+            keyword,
+            before,
+            now,
+            ahead: ahead.slice(0, Math.min(3, now - 1)),
+          })),
+          page: { clicks: 1020, previous: 1810 },
+          rows: keywords.map(([keyword, , , position, clicks, previous]) => ({
+            keyword,
+            page,
+            clicks,
+            previous,
+            position,
+          })),
+          path: page,
+          volumes: new Map(
+            keywords.map(([keyword, volume]) => [
+              keyword.toLowerCase(),
+              volume,
+            ]),
+          ),
+        }).growth;
+      },
+    },
+    {
+      key: 'acme-growth-migrate',
+      title: t(
+        '更新迁移文档，保住每月约 1,800 次访问',
+        'Update the migration docs to keep about 1,800 visits a month',
+      ),
+      reason: t(
+        '这页 15 个月没更新，每月仍有约 1,800 次访问，是从其他工具迁移过来的团队最常看的文档之一。',
+        'The page has not been updated for 15 months and still gets about 1,800 visits a month, one of the docs teams moving from other tools read most.',
+      ),
+      meaning: t(
+        '对应 Acme 的导入功能，迁移是试用团队的常见第一步。文档里的截图还是旧版界面，步骤里也没提到新加的看板列映射，读者照着做会卡住。',
+        'This covers Acme’s import feature, and moving over is a common first step for trial teams. The screenshots still show the old interface and the steps miss the new board column mapping, so readers following them get stuck.',
+      ),
+      suggestion: t(
+        '按现在的导入流程重写步骤并换新截图，补上看板列和标签怎么对应、导入后怎么检查；在页首写明更新日期。',
+        'Rewrite the steps for the current import flow with new screenshots, add how board columns and labels map and how to check the result, and show the update date at the top.',
+      ),
+      objective: t(
+        '让迁移文档和现在的产品一致',
+        'Bring the migration docs in line with the product',
+      ),
+      path: '/docs/migrate',
+      source: 'site',
+      priority: 'medium',
+      effort: 'low',
+      growth: (lang) => {
+        const page = '/docs/migrate';
+        return pageGrowth('stale-page', {
+          path: page,
+          visits: 1660,
+          q: { clicks: 1240, impressions: 18400 },
+          rows: pick<[string, number, number, number][]>(
+            lang,
+            [
+              ['專案管理工具 搬家', 6200, 4.2, 520],
+              ['看板 匯入 其他工具', 4800, 5.1, 330],
+              ['任務 從試算表 匯入', 3900, 6.3, 220],
+              ['專案資料 轉移', 2100, 7.8, 110],
+              ['匯入 看板 標籤', 1400, 8.5, 60],
+            ],
+            [
+              ['migrate project management tool', 6200, 4.2, 520],
+              ['import boards from another tool', 4800, 5.1, 330],
+              ['import tasks from spreadsheet', 3900, 6.3, 220],
+              ['move project data to new tool', 2100, 7.8, 110],
+              ['import board labels', 1400, 8.5, 60],
+            ],
+          ).map(([keyword, impressions, position, clicks]) => ({
+            keyword,
+            page,
+            impressions,
+            position,
+            clicks,
+          })),
+          updated: dayBefore(now, 456),
+          months: 15,
+        });
+      },
+    },
+    {
+      key: 'acme-growth-ai-dropped',
+      title: t(
+        '让 ChatGPT 回答这 6 个问题时重新提到 Acme',
+        'Get ChatGPT to name Acme again in these 6 questions',
+      ),
+      reason: t(
+        '上次查询有 15 个问题的回答提到 Acme，这次只有 9 个；不再提到的 6 个问题每月在 AI 里约被问 2,400 次。',
+        'Answers to 15 questions named Acme in the lookup before, 9 now; the 6 that stopped are asked about 2,400 times a month in AI search.',
+      ),
+      meaning: t(
+        '这 6 个问题都在比较小团队的项目管理工具，对应 Acme 的看板和访客协作。新的回答引用的是 Nimbus 4.0 的发布文章和一篇新评测，Acme 被挤了出去。',
+        'All 6 questions compare project management tools for small teams, where Acme’s boards and guest collaboration fit. The new answers cite the Nimbus 4.0 launch post and a new review, which pushed Acme out.',
+      ),
+      suggestion: t(
+        '在对比页和看板功能页直接回答这几个问题（适合多大的团队、访客怎么协作、价格），并把评测站上的产品资料更新到最新版本。',
+        'Answer these questions directly on the comparison page and the board feature page (team size, guest collaboration, pricing), and bring the review site’s product profile up to the latest version.',
+      ),
+      objective: t(
+        '让 AI 回答小团队选工具的问题时重新提到 Acme',
+        'Be named again when AI answers small teams choosing a tool',
+      ),
+      path: '/compare/nimbus',
+      source: 'ai-search',
+      priority: 'medium',
+      effort: 'medium',
+      growth: (lang) =>
+        aiDroppedGrowth({
+          platform: 'chat_gpt',
+          dropped: pick<[string, number][]>(
+            lang,
+            [
+              ['小團隊適合用哪個專案管理工具？', 720],
+              ['有沒有適合 10 人團隊的看板工具？', 520],
+              ['哪個專案管理軟體可以讓客戶一起看進度？', 430],
+              ['從試算表換到專案管理工具，選哪個好？', 330],
+              ['遠端團隊用什麼工具追蹤任務？', 250],
+              ['有沒有免費的專案管理工具推薦？', 150],
+            ],
+            [
+              ['which project management tool is best for a small team', 720],
+              ['kanban tool for a 10 person team', 520],
+              ['project management software clients can follow', 430],
+              ['switching from spreadsheets to a project management tool', 330],
+              ['what do remote teams use to track tasks', 250],
+              ['free project management tool recommendations', 150],
+            ],
+          ).map(([question, volume], i) => ({
+            question,
+            volume,
+            sources: [
+              { domain: 'nimbus.example' },
+              { domain: i % 2 ? 'pm-weekly.example' : 'saas-review.example' },
+            ],
+          })),
+          before: 15,
+          after: 9,
+          at: dayBefore(now, 31),
+        }),
+    },
+    {
+      key: 'acme-growth-template-titles',
+      title: t(
+        '改掉模板页的重复标题，保住每月约 1,500 次点击',
+        'Fix the duplicate titles on template pages to keep about 1,500 clicks a month',
+      ),
+      reason: t(
+        '7 个模板页用了同一个标题，其中 3 个有搜索流量，近 28 天点击 1,380 次。',
+        '7 template pages share one title; 3 of them get search traffic, 1,380 clicks in the last 28 days.',
+      ),
+      meaning: t(
+        '对应 Acme 的项目模板，模板页是新用户试用前常看的页面。标题相同时，搜索引擎只挑其中一页显示，另外几页的点击会被分走。',
+        'This covers Acme’s project templates, pages new users often read before a trial. With one title for all, search engines show one of them and split the clicks of the others.',
+      ),
+      suggestion: t(
+        '给每个模板页写不同的标题和描述，写明它适合的场景，例如“冲刺计划模板：两周迭代的任务拆分”。',
+        'Give each template page its own title and description saying what it is for, such as “Sprint planning template: breaking down a two-week iteration”.',
+      ),
+      objective: t(
+        '让每个模板页都能被单独搜到',
+        'Let each template page be found on its own',
+      ),
+      path: '/templates/sprint',
+      source: 'site',
+      priority: 'medium',
+      effort: 'low',
+      growth: (lang) =>
+        pageIssueGrowth({
+          issue: pick(lang, '标题重复', 'Duplicate title'),
+          pages: [
+            ['/templates/sprint', 620, 9800, 4.6],
+            ['/templates/sprint-retro', 480, 7400, 5.2],
+            ['/templates/sprint-review', 280, 5100, 7.9],
+          ].map(([path, clicks, impressions, position]) => ({
+            path,
+            url: `https://acme.example${path}`,
+            clicks,
+            impressions,
+            position,
+          })),
+          total: 7,
+        }).growth,
+    },
   ];
 }
 
@@ -1697,6 +2002,10 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         '被 AI 常引用的开源 CRM 榜单收录',
         'Be listed in the open-source CRM roundups AI cites',
       ),
+      offsite: t(
+        '给 GitHub 上的 awesome-crm 和自托管销售工具清单提 PR，并联系 crm-guide.example 的作者',
+        'Open pull requests on the awesome-crm and self-hosted sales lists on GitHub, and contact the crm-guide.example author',
+      ),
       source: 'ai-search',
       priority: 'medium',
       effort: 'low',
@@ -1844,6 +2153,122 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
             ],
           ),
         ),
+    },
+    {
+      key: 'crm-growth-pipeline-stages',
+      title: t(
+        '找回销售阶段文章每月约 250 次点击',
+        'Win back about 250 clicks a month on the sales stages article',
+      ),
+      reason: t(
+        '近 28 天点击 380 次，之前 28 天 610 次；曝光变化不大，平均排第 8.4。',
+        '380 clicks in the last 28 days against 610 before; impressions barely changed, at position 8.4 on average.',
+      ),
+      meaning: t(
+        '对应 Acme CRM 的管道看板，销售阶段是团队搭建销售管道时最先查的内容。这篇文章还停留在 5 个固定阶段，排到前面的文章都讲了怎么按自己的流程改阶段。',
+        'This covers Acme CRM’s pipeline board, and sales stages are what teams look up first when they set up a pipeline. The article still describes 5 fixed stages, while the ones above it explain how to fit the stages to your own process.',
+      ),
+      suggestion: t(
+        '补一段“按自己的流程调整阶段”，用两个行业的例子说明，配上管道看板的截图；把标题改成“销售阶段怎么定：模板与调整方法”。',
+        'Add a section on fitting the stages to your own process with examples from two industries and screenshots of the pipeline board, and retitle it “How to set sales stages: a template and how to adjust it”.',
+      ),
+      objective: t(
+        '让销售阶段文章找回点击',
+        'Win back the sales stages article’s clicks',
+      ),
+      path: '/blog/sales-pipeline-stages',
+      source: 'gsc',
+      priority: 'medium',
+      effort: 'low',
+      growth: (lang) => {
+        const page = '/blog/sales-pipeline-stages';
+        return clickDropGrowth(
+          {
+            path: page,
+            clicks: 380,
+            previous: 610,
+            impressions: 8900,
+            previousImpressions: 9400,
+            position: 8.4,
+          },
+          pick<[string, number, number, number][]>(
+            lang,
+            [
+              ['銷售階段', 170, 290, 7.6],
+              ['銷售管道 階段', 110, 180, 8.1],
+              ['B2B 銷售流程', 60, 85, 9.4],
+              ['銷售漏斗 階段', 40, 55, 10.2],
+            ],
+            [
+              ['sales pipeline stages', 170, 290, 7.6],
+              ['stages of a sales pipeline', 110, 180, 8.1],
+              ['b2b sales process', 60, 85, 9.4],
+              ['sales funnel stages', 40, 55, 10.2],
+            ],
+          ).map(([keyword, clicks, previous, position]) => ({
+            keyword,
+            page,
+            clicks,
+            previous,
+            position,
+          })),
+        ).growth;
+      },
+    },
+    {
+      key: 'crm-growth-email-sync',
+      title: t(
+        '把邮件同步文档写完整，留住每月约 830 次访问',
+        'Fill out the email sync docs to keep about 830 visits a month',
+      ),
+      reason: t(
+        '这页正文只有约 120 字，每月仍有约 830 次访问；读者要找的授权步骤和常见错误都没写。',
+        'The page has about 120 words of body text and still gets about 830 visits a month; the authorization steps and common errors readers look for are missing.',
+      ),
+      meaning: t(
+        '对应 Acme CRM 的邮件同步，是销售团队上手时最先配置的功能之一。这页只有一句说明和一张截图，读者看完还得去问客服。',
+        'This covers Acme CRM’s email sync, one of the first things a sales team sets up. The page has one sentence and a screenshot, so readers still end up asking support.',
+      ),
+      suggestion: t(
+        '补上邮箱授权的完整步骤、同步哪些邮件、常见错误和解决办法，各配一张截图。',
+        'Add the full mailbox authorization steps, which emails sync, and common errors with their fixes, each with a screenshot.',
+      ),
+      objective: t(
+        '让读者看完邮件同步文档就能配好',
+        'Let readers set up email sync from the docs alone',
+      ),
+      path: '/docs/email-sync',
+      source: 'site',
+      priority: 'low',
+      effort: 'low',
+      growth: (lang) => {
+        const page = '/docs/email-sync';
+        return pageGrowth('thin-page', {
+          path: page,
+          visits: 760,
+          q: { clicks: 540, impressions: 7200 },
+          rows: pick<[string, number, number, number][]>(
+            lang,
+            [
+              ['CRM 郵件同步', 3100, 5.4, 260],
+              ['CRM 郵箱 授權', 2200, 6.8, 170],
+              ['郵件同步 失敗', 1900, 7.2, 110],
+            ],
+            [
+              ['crm email sync', 3100, 5.4, 260],
+              ['crm mailbox authorization', 2200, 6.8, 170],
+              ['email sync failed crm', 1900, 7.2, 110],
+            ],
+          ).map(([keyword, impressions, position, clicks]) => ({
+            keyword,
+            page,
+            impressions,
+            position,
+            clicks,
+          })),
+          words: 120,
+        });
+      },
     },
   ];
 }

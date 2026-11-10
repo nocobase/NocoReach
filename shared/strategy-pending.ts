@@ -1,4 +1,5 @@
 import type { TaskPart } from './opportunity-parts.js';
+import { categoryOf } from './growth.js';
 import type {
   StrategyState,
   InsightBatch,
@@ -11,6 +12,19 @@ export const priorityRank: Record<string, number> = {
   low: 2,
   unrated: 3,
 };
+/**
+ * Pending opportunities in the order they are shown: by priority, which the AI set from the growth, the relevance to
+ * the product and the effort; at the same priority Trending now first, as it does not keep (2026-11-10); then the
+ * newest first.
+ */
+export function pendingOrder(a: Row, b: Row): number {
+  const trending = (r: Row) => Number(categoryOf(r.card) === 'trending');
+  return (
+    (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) ||
+    trending(b) - trending(a) ||
+    String(b.firstSeenAt).localeCompare(String(a.firstSeenAt))
+  );
+}
 export function citedSignals(row: Row) {
   const ids = new Set(row.card.signalIds || []);
   return (row.batch.evidence.signals?.items || []).filter((s) =>
@@ -163,10 +177,7 @@ export function todaySuggestions(state: StrategyState, limit = 5): Row[] {
         (r) =>
           r.batch === latest && opportunityState(r, state).state === 'pending',
       )
-      .sort(
-        (a, b) =>
-          (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3),
-      )
+      .sort(pendingOrder)
       .slice(0, limit);
   }
   const batches = [state.insights, ...(state.insightHistory || [])].filter(

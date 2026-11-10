@@ -2,7 +2,8 @@ import { $t } from '#i18n';
 import { Fragment, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from 'lucide-react';
-import { Tag, type Tone } from '#components/reach/tag';
+import { Tag } from '#components/reach/tag';
+import { CATEGORY } from './growth-category';
 import { InfoTip } from '#components/reach/info-tip';
 import { ScoreBadge } from '#components/seo/score-badge';
 import { useLinkInMenu } from '#components/app-shell/nav-sources';
@@ -18,46 +19,57 @@ import {
   type EvidenceColumn,
   type EvidenceTable,
   type Growth,
-  type GrowthArea,
+  type GrowthCategory,
   type GrowthFigure,
   type GrowthKind,
   type GrowthText,
 } from '../../../shared/growth.js';
 
-// A growth opportunity's parts on Opportunities (2026-11-10, ui-references/growth-opportunities-2026-11-10): where it
-// comes from and what kind it is as its two tags, its size as a row of figures (Growth potential), and the rows behind
-// it (Evidence) with the page that lists all of them. The server computed every number (shared/growth.ts).
+// A growth opportunity's parts on Opportunities (2026-11-10, ui-references/growth-opportunities-2026-11-10): its category
+// and kind as its two tags, its size as a row of figures (Growth potential), and the rows behind it (Evidence) with the
+// page that lists all of them. The server computed every number (shared/growth.ts).
 
-const AREA: Record<GrowthArea, [Tone, () => string]> = {
-  keywords: ['green', () => $t('common.keywords')],
-  'ai-search': ['violet', () => $t('common.aiSearch')],
-  github: ['slate', () => 'GitHub'],
-  competitors: ['orange', () => $t('competitors.title')],
-};
 const KIND: Record<GrowthKind, string> = {
-  'demand-gap': 'growth.kind.demandGap',
-  'competitor-gap': 'growth.kind.competitorGap',
-  'near-first': 'growth.kind.nearFirst',
-  'low-ctr': 'growth.kind.lowCtr',
   rising: 'growth.kind.rising',
   'new-query': 'growth.kind.newQuery',
-  'not-mentioned': 'growth.kind.notMentioned',
-  'cited-sources': 'growth.kind.citedSources',
-  uncited: 'growth.kind.uncited',
   'topic-heat': 'growth.kind.topicHeat',
   'new-repo': 'growth.kind.newRepo',
+  'demand-gap': 'growth.kind.demandGap',
+  'competitor-gap': 'growth.kind.competitorGap',
+  'not-mentioned': 'growth.kind.notMentioned',
+  'cited-sources': 'growth.kind.citedSources',
   'competitor-launch': 'growth.kind.competitorLaunch',
+  'near-first': 'growth.kind.nearFirst',
+  'low-ctr': 'growth.kind.lowCtr',
+  uncited: 'growth.kind.uncited',
+  'rank-drop': 'growth.kind.rankDrop',
+  'click-drop': 'growth.kind.clickDrop',
+  'stale-page': 'growth.kind.stalePage',
+  'thin-page': 'growth.kind.thinPage',
+  'ai-dropped': 'growth.kind.aiDropped',
+  'page-issue': 'growth.kind.pageIssue',
 };
 const say = (text?: GrowthText) => (text ? $t(text.key, text.params) : '');
 
-/** Where the growth point comes from, then its kind: "Keywords" "Demand without a page". */
+/** The category tag, as the list, the detail and Insights' decisions show it. */
+export function CategoryTag({
+  category,
+}: {
+  category: GrowthCategory;
+}): ReactElement {
+  const [tone, label] = CATEGORY[category];
+  return (
+    <Tag tone={tone} data-growth-category={category}>
+      {label()}
+    </Tag>
+  );
+}
+
+/** Its category, then its kind: "Trending now" "Rising searches". */
 export function GrowthTags({ growth }: { growth: Growth }): ReactElement {
-  const [tone, label] = AREA[growth.area];
   return (
     <>
-      <Tag tone={tone} data-growth-area={growth.area}>
-        {label()}
-      </Tag>
+      <CategoryTag category={growth.category} />
       <Tag tone='grey' data-growth-kind={growth.kind}>
         {$t(KIND[growth.kind])}
       </Tag>
@@ -143,6 +155,7 @@ export function GrowthRow({ growth }: { growth: Growth }): ReactElement {
 
 const NUMERIC = new Set([
   'count',
+  'delta',
   'percent',
   'position',
   'difficulty',
@@ -173,6 +186,8 @@ function cellText(value: EvidenceCell, column: EvidenceColumn): ReactNode {
       formatPercent(value)
     ) : column.format === 'change' ? (
       formatChange(value)
+    ) : column.format === 'delta' ? (
+      `${value > 0 ? '+' : ''}${formatCount(value)}`
     ) : column.format === 'position' ? (
       formatCount(value, 1)
     ) : column.format === 'difficulty' ? (
@@ -239,9 +254,11 @@ export function EvidenceTableView({
                       j > 0 &&
                         !NUMERIC.has(c.format) &&
                         'text-muted-foreground',
-                      // Tables keep the columns after the first on one line (reach.css); a list may wrap, so a
-                      // detail as narrow as this one shows every column.
+                      // Tables keep the columns after the first on one line and the first at least 160px wide
+                      // (reach.css); here a list may wrap and the first column narrows a little, so a detail as
+                      // narrow as this one shows every column.
                       Array.isArray(row[c.key]) && 'whitespace-normal!',
+                      j === 0 && 'min-w-28!',
                     )}
                   >
                     {j === 0 && row.url ? (
@@ -256,6 +273,11 @@ export function EvidenceTableView({
                     ) : (
                       cellText(row[c.key], c)
                     )}
+                    {c.from && row[c.from] != null ? (
+                      <span className='ml-1.5 text-xs text-muted-foreground'>
+                        ← {cellText(row[c.from], c)}
+                      </span>
+                    ) : null}
                   </td>
                 ))}
               </tr>

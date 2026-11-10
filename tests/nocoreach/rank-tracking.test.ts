@@ -34,7 +34,9 @@ test('Update now reuses results from the last 6 days and says how many, instead 
 });
 test('rank signals: drop of 5+, lost from the top 20, entered the top 10',()=>{
  const c=(at,position)=>({at,position,url:'https://x/'+position});const rt={keywords:[{id:'a',keyword:'a'},{id:'b',keyword:'b'},{id:'c',keyword:'c'},{id:'d',keyword:'d'}],checks:{a:[c('2026-09-20',4),c('2026-09-27',11)],b:[c('2026-09-20',15),c('2026-09-27',null)],c:[c('2026-09-20',14),c('2026-09-27',6)],d:[c('2026-09-20',5),c('2026-09-27',6)]}};
- assert.deepEqual(rankSignals({rt}).map(s=>s.key.split(':')[0]+':'+s.key.split(':')[1]),['rank-drop:a','rank-lost:b','rank-top10:c']);
+ assert.deepEqual(rankSignals({rt}).map(s=>s.key.split(':')[0]+':'+s.key.split(':')[1]),['rank-drop:a','rank-lost:b','rank-top10:c','rank-page:/11','rank-page:/15']);
+ // Each page that fell is one opportunity (2026-11-10); without Search Console figures or searches it has no clicks to win back.
+ assert.ok(rankSignals({rt}).filter(s=>s.key.startsWith('rank-page:')).every(s=>s.growth?.kind==='rank-drop'&&s.actionable===false));
 });
 test('an uncertain result is flagged for Data health and retried on purpose only when asked',async()=>{
  const {t,rows,runs}=harness(()=>8);

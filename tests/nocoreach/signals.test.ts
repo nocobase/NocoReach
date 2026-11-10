@@ -11,9 +11,9 @@ test('search rules: low CTR against the site median, near first page, click drop
  const rows=[{page:'https://ex.com/a',clicks:2,impressions:2000,previous:3,position:15},{page:'https://ex.com/b',clicks:60,impressions:1000,previous:50,position:4},{page:'https://ex.com/c',clicks:50,impressions:900,previous:40,position:3},{page:'https://ex.com/d',clicks:5,impressions:400,previous:40,position:11}];
  const s=searchSignals({queries:rows,history:[],end:'2026-09-27'});const keys=s.map(x=>x.key).sort();
  assert.deepEqual(keys,['gsc-click-drop:/d','gsc-low-ctr:/a','gsc-near-first:/a','gsc-near-first:/d']);assert.ok(s.every(x=>x.facts.length));
- // Only growth with a size is actionable (2026-11-10): a click drop stays in Insights, and a better snippet adds nothing
- // on page two, where the usual CTR is 0.
- assert.deepEqual(s.filter(x=>x.actionable).map(x=>x.key).sort(),['gsc-near-first:/a','gsc-near-first:/d']);assert.ok(s.filter(x=>x.actionable).every(x=>x.growth?.figures.length===4));
+ // Only growth with a size is actionable (2026-11-10): a click drop is, with the clicks it can win back; a better
+ // snippet adds nothing on page two, where the usual CTR is 0.
+ assert.deepEqual(s.filter(x=>x.actionable).map(x=>x.key).sort(),['gsc-click-drop:/d','gsc-near-first:/a','gsc-near-first:/d']);assert.ok(s.filter(x=>x.actionable).every(x=>x.growth?.figures.length===4));
  const many=Array.from({length:20},(_,i)=>({page:`https://ex.com/p${i}`,clicks:1,impressions:600+i,position:10}));assert.equal(searchSignals({queries:many,history:[],end:null}).filter(x=>x.key.startsWith('gsc-near-first')).length,8);
 });
 test('conversion rule skips home, locale roots and legal pages',()=>{

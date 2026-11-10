@@ -1,27 +1,49 @@
-// Growth opportunities (2026-11-10 user decision): Opportunities lists growth points only, found in data already
-// collected — keywords (SEO), AI search (GEO), GitHub and competitors — rather than in what dropped or broke, which stays
-// in Insights › Needs attention. Each growth change carries the size of the growth and the rows behind it, both computed
-// by the server from the data (server/nocoreach/growth-signals.ts); the model never writes these numbers. An opportunity
-// takes them from the first growth change it cites (server/nocoreach/strategy-service.ts saveInsights).
+// Growth opportunities (2026-11-10 user decisions): Opportunities lists what the site can gain, in four categories that
+// each answer one question a marketer asks — what people are talking about now (trending), what they keep searching
+// for that we have no content on (new content), where competitors are ahead (competitor gaps), and what our existing
+// pages could still win or are losing (content optimization). Each growth change carries the size of the growth and
+// the rows behind it, both computed by the server from data already collected (server/nocoreach/growth-signals.ts);
+// the model never writes these numbers. An opportunity takes them from the first growth change it cites
+// (server/nocoreach/strategy-service.ts saveInsights). Unanswered community posts, conversion and volume figures stay
+// in Insights › Current situation.
 
-/** Where a growth point comes from, as the opportunity's first tag says. */
-export type GrowthArea = 'keywords' | 'ai-search' | 'github' | 'competitors';
+/** The four categories, in the order the filter and the counts list them. */
+export const GROWTH_CATEGORIES = [
+  'trending',
+  'new-content',
+  'competitor-gaps',
+  'optimize',
+] as const;
+export type GrowthCategory = (typeof GROWTH_CATEGORIES)[number];
+export const isGrowthCategory = (value: unknown): value is GrowthCategory =>
+  typeof value === 'string' &&
+  (GROWTH_CATEGORIES as readonly string[]).includes(value);
 
-/** The kind of growth point, as the opportunity's second tag says. */
+/**
+ * The kind of growth point (the opportunity's second tag) and the category it belongs to. Trending looks at change and
+ * new content at the total: a keyword group without a page that is also clearly rising is trending instead
+ * (growth-signals.ts demandSignals), so a growth stores its own category.
+ */
 export const GROWTH_KINDS = {
-  'demand-gap': 'keywords',
-  'competitor-gap': 'keywords',
-  'near-first': 'keywords',
-  'low-ctr': 'keywords',
-  rising: 'keywords',
-  'new-query': 'keywords',
-  'not-mentioned': 'ai-search',
-  'cited-sources': 'ai-search',
-  uncited: 'ai-search',
-  'topic-heat': 'github',
-  'new-repo': 'github',
-  'competitor-launch': 'competitors',
-} as const satisfies Record<string, GrowthArea>;
+  rising: 'trending',
+  'new-query': 'trending',
+  'topic-heat': 'trending',
+  'new-repo': 'trending',
+  'demand-gap': 'new-content',
+  'competitor-gap': 'competitor-gaps',
+  'not-mentioned': 'competitor-gaps',
+  'cited-sources': 'competitor-gaps',
+  'competitor-launch': 'competitor-gaps',
+  'near-first': 'optimize',
+  'low-ctr': 'optimize',
+  uncited: 'optimize',
+  'rank-drop': 'optimize',
+  'click-drop': 'optimize',
+  'stale-page': 'optimize',
+  'thin-page': 'optimize',
+  'ai-dropped': 'optimize',
+  'page-issue': 'optimize',
+} as const satisfies Record<string, GrowthCategory>;
 export type GrowthKind = keyof typeof GROWTH_KINDS;
 export const isGrowthKind = (value: unknown): value is GrowthKind =>
   typeof value === 'string' && Object.hasOwn(GROWTH_KINDS, value);
@@ -57,7 +79,8 @@ export function roundEstimate(value: number): number {
 
 /**
  * How a column's values read: counts, ratios as percentages, positions, keyword difficulty, a change (a ratio, +1.8
- * reads "+180%"), a day, an AI platform (chat_gpt, google), lists, and message keys (`label`).
+ * reads "+180%"), a difference of counts ("+12", "-340"), a day, an AI platform (chat_gpt, google), lists, and
+ * message keys (`label`).
  */
 export type EvidenceFormat =
   | 'text'
@@ -67,6 +90,7 @@ export type EvidenceFormat =
   | 'position'
   | 'difficulty'
   | 'change'
+  | 'delta'
   | 'date'
   | 'platform'
   | 'list';
@@ -74,6 +98,8 @@ export type EvidenceColumn = {
   key: string;
   label: string;
   format: EvidenceFormat;
+  /** A position's former value: the row key shown after it in grey ("11 ← 4"), as Search performance shows a move. */
+  from?: string;
 };
 /** A cell: a number or a text, a list (joined), or an item with its rank ("Nimbus #4"); null reads as "—". */
 export type EvidenceCell =
@@ -96,19 +122,30 @@ export const EVIDENCE_ROWS = 10;
 
 export type Growth = {
   kind: GrowthKind;
-  area: GrowthArea;
+  category: GrowthCategory;
   figures: GrowthFigure[];
   evidence?: EvidenceTable;
 };
 
-/** A stored growth as the pages may trust it: a known kind and between one and four figures. */
+/**
+ * A stored growth as the pages may trust it: a known kind and between one and four figures. Its category is the one
+ * the server gave it, else its kind's (growths stored before the categories had an `area` instead).
+ */
 export function growthOf(value: unknown): Growth | undefined {
   if (!value || typeof value !== 'object') return undefined;
-  const g = value as Partial<Growth>;
+  const g = value as Partial<Growth> & { area?: unknown };
   if (!isGrowthKind(g.kind) || !Array.isArray(g.figures) || !g.figures.length)
     return undefined;
-  return { ...(g as Growth), area: GROWTH_KINDS[g.kind] };
+  const { area: _area, ...rest } = g;
+  return {
+    ...(rest as Growth),
+    category: isGrowthCategory(g.category) ? g.category : GROWTH_KINDS[g.kind],
+  };
 }
+/** The category of an opportunity or a change, when it carries a growth. */
+export const categoryOf = (item: {
+  growth?: unknown;
+}): GrowthCategory | undefined => growthOf(item.growth)?.category;
 
 /**
  * Where an opportunity that writes a new page puts it (2026-11-10 review: a new page has no address to show yet): the

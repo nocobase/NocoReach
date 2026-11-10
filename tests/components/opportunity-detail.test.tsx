@@ -9,7 +9,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import OpportunityLibrary from '../../client/pages/strategy/library';
-import type { Growth } from '../../shared/growth';
+import {
+  GROWTH_KINDS,
+  type Growth,
+  type GrowthKind,
+} from '../../shared/growth';
 import type {
   Opportunity,
   Signal,
@@ -627,12 +631,12 @@ it('shows the shared skeleton while the opportunities load', () => {
   ).toHaveLength(6);
 });
 
-// A growth opportunity (2026-11-10): its area and kind as tags, Growth potential where What happened was, and the rows
+// A growth opportunity (2026-11-10): its category and kind as tags, Growth potential where What happened was, and the rows
 // behind it with "View all" to the page listing them. The figures are the server's, never the model's.
 it('reads a growth opportunity as its tags, growth potential and evidence', async () => {
   const growth: Growth = {
     kind: 'demand-gap',
-    area: 'keywords',
+    category: 'new-content',
     figures: [
       {
         label: { key: 'growth.figure.monthlySearchesTotal' },
@@ -668,8 +672,8 @@ it('reads a growth opportunity as its tags, growth potential and evidence', asyn
   show();
   const brief = await screen.findByRole('article', { name: card.title });
   expect(
-    brief.querySelector('[data-growth-area="keywords"]')!.textContent,
-  ).toBe('common.keywords');
+    brief.querySelector('[data-growth-category="new-content"]')!.textContent,
+  ).toBe('growth.category.newContent');
   expect(brief.querySelector('[data-growth-kind]')!.textContent).toBe(
     'growth.kind.demandGap',
   );
@@ -723,4 +727,103 @@ it('says where a new page goes instead of an address that does not exist yet', a
     'growth.where.linkFrom(/features/timeline · /templates)',
   );
   expect(brief.textContent).not.toContain(card.target);
+});
+
+// Where to change says which of the three it is (2026-11-10): an existing page or off the site (a new page above).
+it('says whether the change is on an existing page or off the site', async () => {
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        card,
+        {
+          ...other,
+          target: '',
+          offsite: 'Submit to the saas-review.example roundup author',
+        },
+      ],
+    },
+  };
+  show();
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(brief.querySelector('[data-where="existing"]')!.textContent).toBe(
+    `growth.where.existing(${card.target})`,
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: new RegExp(other.title) }),
+  );
+  const offsite = await screen.findByRole('article', { name: other.title });
+  expect(offsite.querySelector('[data-where="offsite"]')!.textContent).toBe(
+    'growth.where.offsite(Submit to the saas-review.example roundup author)',
+  );
+});
+
+// The four categories filter every tab (2026-11-10), kept in the address (?category=): each counts the tab's own items.
+it('filters the opportunities by category on every tab, from the address', async () => {
+  const growth = (kind: GrowthKind): Growth => ({
+    kind,
+    category: GROWTH_KINDS[kind],
+    figures: [{ label: { key: 'growth.figure.clicks28' }, value: 1 }],
+  });
+  const third: Opportunity = {
+    ...card,
+    id: 'o38',
+    no: 38,
+    title: 'Older opportunity without a growth',
+    objective: 'other',
+  };
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        { ...card, growth: growth('rising') },
+        { ...other, growth: growth('rank-drop') },
+        third,
+      ],
+    },
+  };
+  show('/opportunities?category=optimize');
+  await screen.findByRole('article', { name: other.title });
+  const filter = screen.getByRole('group', {
+    name: 'growth.category.filter',
+  });
+  expect(
+    within(filter)
+      .getAllByRole('button')
+      .map((b) => [b.textContent, b.getAttribute('aria-pressed')]),
+  ).toEqual([
+    ['growth.category.all 3', 'false'],
+    ['growth.category.trending 1', 'false'],
+    ['growth.category.newContent 0', 'false'],
+    ['growth.category.competitorGaps 0', 'false'],
+    ['growth.category.optimize 1', 'true'],
+  ]);
+  const listed = () =>
+    screen
+      .getAllByRole('button', { current: undefined })
+      .filter((b) => b.hasAttribute('aria-current'))
+      .map((b) => b.textContent);
+  expect(listed()).toEqual([expect.stringContaining(other.title)]);
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'growth.category.trending 1' }),
+  );
+  await screen.findByRole('article', { name: card.title });
+  expect(listed()).toEqual([expect.stringContaining(card.title)]);
+  // All shows the one without a category too.
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'growth.category.all 3' }),
+  );
+  expect(listed()).toHaveLength(3);
+  // Another tab keeps the filter and counts its own items.
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'growth.category.trending 1' }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: /^strategy\.handled/ }));
+  expect(
+    within(
+      screen.getByRole('group', { name: 'growth.category.filter' }),
+    ).getByRole('button', { name: 'growth.category.trending 0' }),
+  ).toHaveAttribute('aria-pressed', 'true');
 });

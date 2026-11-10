@@ -86,9 +86,9 @@ const table = (columns, rows, unit, link) => ({
   unit: `growth.unit.${unit}`,
   link,
 });
-const growth = (kind, figures, evidence) => ({
+const growth = (kind, figures, evidence, category = GROWTH_KINDS[kind]) => ({
   kind,
-  area: GROWTH_KINDS[kind],
+  category,
   figures: figures.filter(Boolean).slice(0, 4),
   ...(evidence ? { evidence } : {}),
 });
@@ -367,6 +367,10 @@ function demandSignals({ ks, gaps, V }) {
         .map((i) => i.metrics.difficulty)
         .filter((x) => Number.isFinite(x)),
       kd = mean(kds),
+      change = groupChange(list),
+      // Searched and not written, and clearly rising too: trending, which is time-bound (2026-11-10 user decision).
+      trending =
+        change !== null && change >= V('keyword-demand', 'risingPct') / 100,
       gain = sum(list, (i) =>
         extraVisits(i.metrics.volume, 3, i.site?.position),
       ),
@@ -413,11 +417,13 @@ function demandSignals({ ks, gaps, V }) {
             figure('ranking', 0, {
               detail: text('growth.detail.ofKeywords', { 0: list.length }),
             }),
-            kd === null
-              ? null
-              : figure('averageDifficulty', Math.round(kd), {
-                  detail: level(kd),
-                }),
+            trending
+              ? figure('threeMonthChange', change, { format: 'change' })
+              : kd === null
+                ? null
+                : figure('averageDifficulty', Math.round(kd), {
+                    detail: level(kd),
+                  }),
             figure('topExtraVisits', gain, {
               labelParams: { 0: 3 },
               detail: text('growth.detail.visits'),
@@ -444,11 +450,30 @@ function demandSignals({ ks, gaps, V }) {
               ? `/keywords?tab=suggest&group=${encodeURIComponent(g.id.slice(4))}`
               : '/keywords?tab=suggest',
           ),
+          trending ? 'trending' : 'new-content',
         ),
       }),
     );
   }
   return out.sort((a, b) => b.strength - a.strength).slice(0, 5);
+}
+/**
+ * A keyword group's searches over the last 3 months against the 3 months before, summed month by month, when the data
+ * has 12 months of them; otherwise none, and the group is new content.
+ */
+function groupChange(list) {
+  const months = new Map();
+  for (const i of list)
+    for (const m of i.metrics?.monthlySearches || [])
+      if (Number.isFinite(m?.volume)) {
+        const k = m.year * 12 + m.month;
+        months.set(k, (months.get(k) || 0) + m.volume);
+      }
+  const series = [...months].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+  if (series.length < 12) return null;
+  const last = mean(series.slice(-3)),
+    before = mean(series.slice(-6, -3));
+  return before ? (last - before) / before : null;
 }
 
 /** Rising searches: an AI suggestion whose monthly searches over the last 3 months clearly exceed the 3 months before. */
@@ -1105,6 +1130,294 @@ function launchGrowth({ c, events, ght, cr }) {
   );
 }
 
+// --- Content optimization: what existing pages are losing or could win back (2026-11-10 user decision) -----------
+// Falling rankings and clicks, outdated or thin pages with traffic, AI answers that stopped naming us and technical
+// issues on pages with traffic are opportunities again, each with what it can win back. Only pages with traffic count.
+
+const before28 = (value) => text('growth.detail.before28', { 0: n(value) });
+/** A page's queries with the clicks they had the 28 days before, those that lost most first. */
+function lostQueryRows(rows, path) {
+  return (rows || [])
+    .filter((r) => pathOf(r.page) === path)
+    .map((r) => ({
+      query: r.keyword,
+      clicks: r.clicks || 0,
+      previousClicks: r.previous || 0,
+      clickChange: (r.clicks || 0) - (r.previous || 0),
+      position: r.position || null,
+    }))
+    .sort((a, b) => a.clickChange - b.clickChange);
+}
+const LOST_COLUMNS = [
+  col('query'),
+  col('clicks', 'count'),
+  col('previousClicks', 'count'),
+  col('clickChange', 'delta'),
+  col('position', 'position'),
+];
+
+/** A page losing search clicks: what it had the 28 days before, which it can win back, a month. */
+function clickDropGrowth(p, rows) {
+  const gain = Math.max(0, p.previous - p.clicks) * MONTH;
+  return {
+    gain,
+    growth: growth(
+      'click-drop',
+      [
+        figure('clicks28', p.clicks, { detail: before28(p.previous) }),
+        figure('impressions28', p.impressions, {
+          detail: before28(p.previousImpressions),
+        }),
+        p.position === null
+          ? null
+          : figure('averagePosition', Number(p.position.toFixed(1)), {
+              format: 'position',
+            }),
+        figure('recoverClicks', gain, {
+          detail: text('growth.detail.clicks'),
+          estimate: true,
+        }),
+      ],
+      table(
+        LOST_COLUMNS,
+        lostQueryRows(rows, p.path),
+        'queries',
+        '/seo-opportunities',
+      ),
+    ),
+  };
+}
+
+/**
+ * A page that fell for tracked keywords (Keywords › Tracking), each `{ keyword, before, now, ahead }` with its positions
+ * (none: out of the top 100) and the sites above it now. What it can win back: the clicks the page lost in Search
+ * Console, a month; without them, what the keywords' searches bring at the former positions against the present ones.
+ */
+function rankDropGrowth({ keywords, page, rows, path, volumes }) {
+  const at = (x) => x ?? 100,
+    volumeOf = (k) => volumes.get(String(k.keyword).toLowerCase()) ?? null,
+    out = keywords.filter(
+      (k) => k.before && k.before <= 3 && !(k.now && k.now <= 3),
+    ).length,
+    byKeywords = sum(
+      keywords,
+      (k) =>
+        (volumeOf(k) || 0) *
+        Math.max(0, expectedCtr(k.before) - expectedCtr(k.now ?? 101)),
+    ),
+    gain =
+      page && page.previous > page.clicks
+        ? (page.previous - page.clicks) * MONTH
+        : byKeywords,
+    change = (k) => {
+      const r = (rows || []).find(
+        (x) =>
+          pathOf(x.page) === path &&
+          String(x.keyword).toLowerCase() === String(k.keyword).toLowerCase(),
+      );
+      return r ? (r.clicks || 0) - (r.previous || 0) : null;
+    };
+  return {
+    gain,
+    growth: growth(
+      'rank-drop',
+      [
+        page
+          ? figure('clicks28', page.clicks, { detail: before28(page.previous) })
+          : null,
+        figure(
+          'averagePosition',
+          Number(mean(keywords.map((k) => at(k.now))).toFixed(1)),
+          {
+            format: 'position',
+            detail: text('growth.detail.beforePosition', {
+              0: mean(keywords.map((k) => at(k.before))).toFixed(1),
+            }),
+          },
+        ),
+        figure('outOfTop3', out, {
+          detail: text('growth.detail.ofKeywords', { 0: keywords.length }),
+        }),
+        figure('recoverClicks', gain, {
+          detail: text('growth.detail.clicks'),
+          estimate: true,
+        }),
+      ],
+      table(
+        [
+          col('keyword'),
+          col('volume', 'count'),
+          { ...col('position', 'position'), from: 'previousPosition' },
+          col('clickChange', 'delta'),
+          col('ahead', 'list'),
+        ],
+        [...keywords]
+          .sort((a, b) => at(b.now) - at(b.before) - (at(a.now) - at(a.before)))
+          .map((k) => ({
+            keyword: k.keyword,
+            volume: volumeOf(k),
+            position: k.now ?? '100+',
+            previousPosition: k.before ?? null,
+            clickChange: change(k),
+            ahead: k.ahead || [],
+          })),
+        'keywords',
+        '/keywords?tab=tracking',
+      ),
+    ),
+  };
+}
+
+/**
+ * A page with traffic that is outdated (`updated`, months ago) or thin (`words` of body text): the visits it gets a
+ * month, which it keeps or loses with it, and the searches that bring them.
+ */
+function pageGrowth(
+  kind: 'stale-page' | 'thin-page',
+  {
+    path,
+    visits,
+    q,
+    rows,
+    updated,
+    months,
+    words,
+  }: {
+    path: string;
+    visits: number;
+    q?: { clicks: number; impressions: number } | null;
+    rows?: object[];
+    updated?: string;
+    months?: number;
+    words?: number;
+  },
+) {
+  const queries = queryRows(rows, path);
+  return growth(
+    kind,
+    [
+      figure('monthlyVisits', visits * MONTH, {
+        detail: text('growth.detail.visits'),
+        estimate: true,
+      }),
+      kind === 'stale-page'
+        ? figure('lastUpdated', updated, {
+            format: 'date',
+            detail: text('growth.detail.monthsAgo', { 0: months }),
+          })
+        : figure('bodyWords', words, { detail: text('growth.detail.words') }),
+      q ? figure('clicks28', q.clicks) : null,
+      q ? figure('impressions28', q.impressions) : null,
+    ],
+    queries.length
+      ? table(QUERY_COLUMNS, queries, 'queries', '/content')
+      : undefined,
+  );
+}
+
+/**
+ * Questions AI answers named us in at the lookup before and do not now (AI search › Brand mentions), on one platform.
+ * A lookup keeps a sample of the most searched questions: when the newer one is as full, a question less searched than
+ * the least searched in it may only have been pushed out, so it is not counted.
+ */
+function aiDropped(previous, current) {
+  const now = new Set(current.map((q) => String(q.question).toLowerCase())),
+    floor =
+      current.length && current.length >= previous.length
+        ? Math.min(...current.map((q) => q.volume || 0))
+        : 0;
+  return previous.filter(
+    (q) =>
+      !now.has(String(q.question).toLowerCase()) && (q.volume || 0) >= floor,
+  );
+}
+function aiDroppedGrowth({ platform, dropped, before, after, at }) {
+  const volume = sum(dropped, (q) => q.volume);
+  return growth(
+    'ai-dropped',
+    [
+      figure('droppedQuestions', dropped.length, {
+        detail: text('growth.detail.questions'),
+      }),
+      figure('mentionedBefore', before, {
+        detail: text('growth.detail.onDay', { 0: String(at).slice(5, 10) }),
+      }),
+      figure('mentionedNow', after, {
+        detail: text('growth.detail.questions'),
+      }),
+      volume ? figure('aiSearches', volume) : null,
+    ],
+    table(
+      [
+        col('question'),
+        col('platform', 'platform'),
+        col('aiVolume', 'count'),
+        col('cited', 'list'),
+      ],
+      [...dropped]
+        .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+        .map((q) => ({
+          question: q.question,
+          platform,
+          aiVolume: q.volume ?? null,
+          cited: [...new Set((q.sources || []).map((x) => x.domain))].slice(
+            0,
+            3,
+          ),
+        })),
+      'questions',
+      '/ai-search',
+    ),
+  );
+}
+
+/**
+ * A site audit issue on pages with search traffic (`pages`, each with its Search Console figures): the clicks those
+ * pages get a month, which the issue puts at risk.
+ */
+function pageIssueGrowth({ issue, pages, total }) {
+  const clicks = sum(pages, (p) => p.clicks) * MONTH;
+  return {
+    gain: clicks,
+    growth: growth(
+      'page-issue',
+      [
+        figure('issue', issue),
+        figure('pagesWithTraffic', pages.length, {
+          detail: text('growth.detail.ofPages', { 0: total }),
+        }),
+        figure('affectedClicks', clicks, {
+          detail: text('growth.detail.clicks'),
+          estimate: true,
+        }),
+        figure(
+          'impressions28',
+          sum(pages, (p) => p.impressions),
+        ),
+      ],
+      table(
+        [
+          col('page'),
+          col('clicks', 'count'),
+          col('impressions', 'count'),
+          col('position', 'position'),
+        ],
+        [...pages]
+          .sort((a, b) => b.clicks - a.clicks)
+          .map((p) => ({
+            page: p.path,
+            clicks: p.clicks,
+            impressions: p.impressions,
+            position: p.position ? Number(p.position.toFixed(1)) : null,
+            url: p.url,
+          })),
+        'pages',
+        '/audit',
+      ),
+    ),
+  };
+}
+
 /** A growth's figures as the model reads them, each a sentence in the stored language ("Est. extra a month in top 3 1,100 visits"). */
 function growthForModel(g) {
   const value = (f) =>
@@ -1120,6 +1433,7 @@ function growthForModel(g) {
   const say = (t) => (t ? systemMessageText(t.key, t.params || {}) : '');
   return {
     kind: g.kind,
+    category: g.category || GROWTH_KINDS[g.kind],
     figures: (g.figures || []).map((f) =>
       [say(f.label), value(f), say(f.detail)].filter(Boolean).join(' '),
     ),
@@ -1150,4 +1464,11 @@ export {
   topicHeatGrowth,
   newRepoSignals,
   launchGrowth,
+  clickDropGrowth,
+  rankDropGrowth,
+  pageGrowth,
+  aiDropped,
+  aiDroppedGrowth,
+  pageIssueGrowth,
+  MONTH,
 };

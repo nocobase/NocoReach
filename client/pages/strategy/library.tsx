@@ -16,7 +16,7 @@ import {cn} from '#lib/utils';
 import {useProject,type Project} from '../reach-data';
 import {request} from './service';
 import type {StrategyState} from './model';
-import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
+import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,reasonLine,pendingOrder,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
 import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
 import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {taskRecords} from '../reach-data';
@@ -31,7 +31,9 @@ import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
 import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
-import {growthOf,newPageOf} from '../../../shared/growth.js';
+import {CATEGORY} from './growth-category';
+import {GROWTH_CATEGORIES,categoryOf,growthOf,isGrowthCategory,newPageOf,type GrowthCategory} from '../../../shared/growth.js';
+import {Segmented} from '#components/reach/segmented';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
@@ -47,8 +49,14 @@ const destOf=(r:Item):Dest=>r.state==='task'?(!r.task||r.task==='todo'?'task':r.
 /** A handed-off opportunity's tag text: where its task stands, with its number when known. */
 const taskLine=(r:Item)=>`${TASK_TAG[r.task??'todo'][1]()}${r.taskNo?` · ${taskNo(r.taskNo)}`:''}`;
 // The coloured fact of an opportunity: its strongest cited signal's tag (as on Insights). A growth opportunity says instead
-// where it comes from and what kind it is (2026-11-10); an older one keeps its fact and sources.
+// its category and kind (2026-11-10); an older one keeps its fact and sources.
 const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
+// The category filter (2026-11-10, `?category=`) works on all three tabs: an opportunity or a change goes by its growth's
+// category; one without a growth shows under All only.
+const signalCategory=(s:Signal):GrowthCategory|undefined=>growthOf(s.growth)?.category;
+function CategoryFilter({value,categories,onChange}:{value:GrowthCategory|null;categories:(GrowthCategory|undefined)[];onChange:(c:GrowthCategory|null)=>void}){
+ const count=(c:GrowthCategory)=>categories.filter(x=>x===c).length;
+ return <Segmented label={$t('growth.category.filter')} options={[{id:'all',label:<>{$t('growth.category.all')} <span>{categories.length}</span></>},...GROWTH_CATEGORIES.map(c=>({id:c,label:<>{CATEGORY[c][1]()} <span>{count(c)}</span></>}))]} value={value??'all'} onChange={c=>onChange(isGrowthCategory(c)?c:null)}/>;}
 const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">{oppNo(row.card)}</span>:null;
 // 机会 (SPEC §5): 待处理 — the undecided ones, list left and a read-only detail right (2026-10-21); 观察中 — the changes the AI advised watching
 // (2026-10-08), with the days watched; 已处理 — the opportunities decided (handed off, ignored, expired) and the latest
@@ -71,21 +79,24 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const asked=params.get('tab');
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
  usePageTab(getTabs().find(([k])=>k===tab)?.[1]);
- const pending=rows.filter(r=>r.state==='pending').sort((a,b)=>(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
+ const askedCategory=params.get('category'),category=isGrowthCategory(askedCategory)?askedCategory:null,inCategory=(c?:GrowthCategory)=>!category||c===category;
+ const allPending=rows.filter(r=>r.state==='pending').sort(pendingOrder),pending=allPending.filter(r=>inCategory(categoryOf(r.card)));
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='done'?linked:undefined;
  // 观察中: the latest analysis's changes the AI advised watching (not already an opportunity or a task), biggest first, as on 洞察.
  const judged=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})):[];
- const watching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)}));
+ const allWatching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)})),watching=allWatching.filter(x=>inCategory(signalCategory(x.s)));
  const ended=state?recentlyEnded(state):[];
  // 忽略 / 恢复 a watched change.
  async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);refreshNavBadges();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 已处理 also lists the latest analysis's changes that need nothing — 无需处理, ignored, or handed off without an
  // opportunity — except those an opportunity already stands for (that one is listed instead).
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(x=>x.key)));
- const settled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored)));
+ const allSettled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored))),settled=allSettled.filter(x=>inCategory(signalCategory(x.s)));
  const watched=watching.find(x=>x.s.key===watchKey)||settled.find(x=>x.s.key===watchKey);
- function go(next:{tab?:string;item?:string;sort?:string;order?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
+ // What the category filter counts: the tab's own items, before the filter.
+ const counted=tab==='pending'?allPending.map(r=>categoryOf(r.card)):tab==='watch'?allWatching.map(x=>signalCategory(x.s)):[...rows.filter(r=>r.state!=='pending').map(r=>categoryOf(r.card)),...allSettled.map(x=>signalCategory(x.s))];
+ function go(next:{tab?:string;item?:string;sort?:string;order?:string;category?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts. An
  // opportunity with several places asks which ones first, makes a task for each and stays here on its task list.
@@ -100,10 +111,12 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
-  <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length-pending.length+settled.length}`:''}</button>)}</nav>
-  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
+  <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?allPending.length:k==='watch'?allWatching.length:rows.length-allPending.length+allSettled.length}`:''}</button>)}</nav>
+  {state&&<CategoryFilter value={category} categories={counted} onChange={c=>go({category:c??'',item:''})}/>}
+  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>inCategory(categoryOf(r.card)))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
-  :!pending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
+  :!allPending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
+  :!pending.length?<p className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>{$t('strategy.nothingMatches')}</p>
   :<div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
    <div className="flex flex-col gap-2">
     {pending.map(r=>{const c=leadChip(r),g=growthOf(r.card.growth);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
@@ -265,8 +278,10 @@ function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;task
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
   {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
+  {/* Where says which of the three it is (2026-11-10): a new page, an existing page or off the site. */}
   {newPage?<Block title={$t('strategy.briefWhere')}><span className="block break-words">{$t('growth.where.newPage',{0:newPage.section})}</span>{newPage.linkFrom.length>0&&<span className="block break-words">{$t('growth.where.linkFrom',{0:newPage.linkFrom.join(' · ')})}</span>}</Block>
-   :card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
+   :card.target?.trim()?<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='existing'>{$t('growth.where.existing',{0:card.target})}</span></Block>
+   :card.offsite?.trim()&&<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='offsite'>{$t('growth.where.offsite',{0:card.offsite})}</span></Block>}
   {several&&<OpportunityTasks row={row} tasks={tasks}/>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}

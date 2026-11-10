@@ -903,11 +903,24 @@ export function crmOpportunities(
     observations: [
       copy(
         t(
-          '本周增长空间最大的是小团队 CRM 文章和报价单这组关键词；AI 回答开源 CRM 问题时还很少提到 Acme CRM。续约指南继续积累样本。',
-          'The largest growth this week is in the small-team CRM article and the quote keywords; AI answers on open-source CRMs still rarely name Acme CRM. The renewal guide keeps gathering samples.',
+          '“AI CRM”近 3 个月搜索量涨了 129%，现在每月 2,400 次；前 10 名里 6 个还是新闻和概念文章，竞品里只有 Example Sales 有对应页面，现在写更容易排上。',
+          'Searches for “ai crm” rose 129% over the last 3 months to 2,400 a month; 6 of the top 10 results are still news and explainers and only Example Sales has a page, so a page now ranks more easily.',
+        ),
+      ),
+      copy(
+        t(
+          '报价单这组 8 个词每月搜索 6,570 次，本站都没排上；小团队 CRM 文章进前 3 预计每月多 340 次点击。',
+          'The 8 quote keywords are searched 6,570 times a month and we rank for none; the small-team CRM article would bring an estimated 340 more clicks a month in the top 3.',
+        ),
+      ),
+      copy(
+        t(
+          '要留意的下降：销售阶段文章近 28 天点击从 610 次降到 380 次；邮件同步文档正文只有约 120 字，每月仍有约 830 次访问。',
+          'Drops to watch: the sales stages article fell from 610 to 380 clicks over 28 days; the email sync docs have about 120 words and still get about 830 visits a month.',
         ),
       ),
     ],
+    lead: 'crm-growth-ai-crm',
     doReason: copy(
       t(
         '增长空间明确，和产品相关，投入可控。',

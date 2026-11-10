@@ -47,7 +47,9 @@ const whyInput=v=>{if(typeof v!=='string')return '';const t=v.replace(/[*_`#>]/g
 function proposalInput(v){const page=pageInput(v.page),pages=pagesInput(v.pages),why=whyInput(v.why),subject=subjectInput(v.subject);return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(why?{why}:{}),...(subject?{subject}:{}),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{}),...(page?{page}:{}),...(pages.length?{pages}:{}),...(typeof v.entry==='string'&&/^\/[\w\-/]{1,200}$/.test(v.entry)?{entry:v.entry}:{})};}
 // A new page has no address yet: it goes by the section and the pages to link from (shared/growth.ts newPageOf).
 const newPageInput=v=>{const page=newPageOf(v.newPage);return page?{newPage:page,target:''}:{};};
-function insightInput(v){return {...board.assessment(v),...newPageInput(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
+// A change made off the site (a list, a review, a community) says where, in a line (2026-11-10).
+const offsiteInput=v=>typeof v.offsite==='string'&&v.offsite.trim()&&!(typeof v.target==='string'&&v.target.trim())&&!newPageOf(v.newPage)?{offsite:v.offsite.trim().slice(0,200)}:{};
+function insightInput(v){return {...board.assessment(v),...newPageInput(v),...offsiteInput(v),...(v.lead===true?{lead:true}:{}),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
 function resultEvidence(source){return {capturedAt:source.capturedAt,availableThrough:null,periodDays:source.day||28,searchQueries:[],pages:[],industryCandidates:[],limitations:[systemMessageText('results.sourceEvidenceOnly')]};}
 function evidenceFrom(snapshots,candidates,now,requestedDays=28){
@@ -123,12 +125,14 @@ class StrategyService{
   if(context.evidence.signals){const growthBy=new Map((context.evidence.signals.items||[]).filter(s=>s.actionable&&s.growth).map(s=>[s.key,s.growth]));
    for(const c of cards){c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));const first=c.signalIds.find(k=>growthBy.has(k));if(first)c.growth=growthBy.get(first);}
    cards.splice(0,cards.length,...cards.filter(c=>c.growth));}
-  const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
+  const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,5).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
   const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards),maxDays=context.evidence.signals?.analysisSnapshot?.config?.watchDays??(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;
   return this.mutate(id,v,async(state,transaction)=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights){await this.archive(id,state.insights,transaction);state.insightHistory.unshift(slimBatch(state.insights));}
    const signals=context.evidence.signals?.items||[];watch.enforceDeadlines(state,signalReviews,now);
-   state.insights={generatedAt:now,evidence:withoutCatalog(context.evidence),items,sourceReviews:reviews,observations,signalReviews};
+   // The opportunity the first observation is about (the model marks it `lead`), shown beside it on Insights.
+   const lead=observations.length?items.find(c=>c.lead):null;for(const c of items)delete c.lead;
+   state.insights={generatedAt:now,evidence:withoutCatalog(context.evidence),items,sourceReviews:reviews,observations,signalReviews,...(lead?{leadId:lead.id}:{})};
    settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v),await this.pageIdentity(id,transaction));
    watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:state.insights.items,now,maxDays});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
  }

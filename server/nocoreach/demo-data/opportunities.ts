@@ -87,7 +87,8 @@ export function opportunityHistory(
     insightHistory: [],
   };
   // Pending opportunities are growth points (2026-11-10), each with its growth; the handled ones keep their briefs.
-  const lang = en ? 'en' : 'zh';
+  const lang = en ? 'en' : 'zh',
+    lead = `editorial-opportunity-${copy.lead}`;
   const entries: {
     key: string;
     title: string;
@@ -97,6 +98,7 @@ export function opportunityHistory(
     objective: string;
     path?: string;
     newPage?: NewPage;
+    offsite?: string;
     source: string;
     priority: Opportunity['priority'];
     priorityReason: string;
@@ -115,6 +117,7 @@ export function opportunityHistory(
       objective: brief.objective[lang],
       ...(brief.path ? { path: brief.path } : {}),
       ...(brief.newPage ? { newPage: brief.newPage } : {}),
+      ...(brief.offsite ? { offsite: brief.offsite[lang] } : {}),
       source: brief.source,
       priority: brief.priority,
       priorityReason:
@@ -182,6 +185,7 @@ export function opportunityHistory(
       // A new page has no address yet: it says where it would go (growth-briefs.ts).
       ...(path ? { target: origin + path } : {}),
       ...(entry.newPage ? { newPage: entry.newPage } : {}),
+      ...(entry.offsite ? { offsite: entry.offsite } : {}),
       firstSeenAt: at(discovered),
       updatedAt: at(0),
       ...(entry.growth ? { growth: entry.growth } : {}),
@@ -435,7 +439,9 @@ export function opportunityHistory(
         updatedAt: at(ago),
       })),
       evidence: evidence(ago, signals),
-      observations: [copy.notice, ...copy.observations],
+      // The first note is the finding most worth seeing, beside its opportunity (2026-11-10); the notice comes last.
+      observations: [...copy.observations, copy.notice],
+      ...(batchCards.some((card) => card.id === lead) ? { leadId: lead } : {}),
       signalReviews: {},
     };
     for (const card of batchCards) {

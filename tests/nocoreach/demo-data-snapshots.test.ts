@@ -21,6 +21,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'cover', // An article cover's error detail and upload idempotency key (`cover:<language or *>`), never stored.
   'ai-answer',
   'ai-cited',
+  'ai-dropped',
   'ai-missing',
   'ai-share',
   'ai-uncited',
@@ -46,6 +47,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'packages-downloads',
   'rank-drop',
   'rank-lost',
+  'rank-page',
   'rank-top10',
   'site-stale',
   'site-thin',
