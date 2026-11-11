@@ -165,3 +165,35 @@ export function localizeWorkSnapshots<
       : {}),
   };
 }
+
+type Replaced = {
+  id?: string;
+  name?: string;
+  system?: boolean;
+  edited?: boolean;
+  stages?: { key: string; name: string; kind: string }[];
+};
+// A record from before snapshots kept their origin is built-in when it bears a built-in's id and name.
+const builtInRecord = (p: Replaced) =>
+  p.system === true
+    ? p.edited !== true
+    : p.system === undefined &&
+      p.edited === undefined &&
+      SYSTEM_PLAYBOOKS.some(
+        (x) => x.id === p.id && sameText(x.name, p.name || ''),
+      );
+
+/** A playbook a change of playbook recorded (shared/playbook-change.ts), named in the reader's language. */
+export function recordedPlaybookName(p?: Replaced | null): string {
+  if (!p?.name) return '';
+  return builtInRecord(p) && names.has(p.name) ? $legacyText(p.name) : p.name;
+}
+
+/** The steps of the playbook a change replaced, so Activity names its steps as they were then. */
+export function recordedStages(p: Replaced) {
+  const builtIn = builtInRecord(p);
+  return (p.stages || []).map((s) => ({
+    ...s,
+    name: builtIn && stageNames.has(s.name) ? stepText(s.name) : s.name,
+  }));
+}

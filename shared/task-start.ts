@@ -412,8 +412,11 @@ export function deliveryPlan(
       (!translate && chosen.length === 1 && Boolean(choice.locales?.length)),
     locales = send ? { locales: chosen } : {};
   if (choice.mode === 'existing' || translate) {
+    // An article picked but not saved yet (a change of playbook links it with the new start) replaces the saved one.
     const saved = Boolean(
-        linked?.articleId && linked.targetId === choice.target,
+        linked?.articleId &&
+        linked.targetId === choice.target &&
+        (!choice.article || choice.article.articleId === linked.articleId),
       ),
       found =
         !saved && choice.article?.targetId === choice.target

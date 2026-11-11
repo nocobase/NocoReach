@@ -70,8 +70,9 @@ export function placeOf(w: Work | undefined, hasAgent: boolean): Placed | null {
     run = w.latestRun?.status;
   if (!st) return null;
   if (st.kind === 'agent') {
-    // Reopened after the closing stopped it or withdrew its change: the list's Start this step again, not a failure.
-    if (restartOf(w))
+    // Reopened after the closing stopped it or withdrew its change, or stopped by a person (2026-11-11): the list's
+    // Start this step again, not a failure.
+    if (restartOf(w) || w.latestRun?.stopped)
       return {
         lane: 'waiting',
         ask: { text: $t('taskList.waitingRestart'), tone: 'amber' },

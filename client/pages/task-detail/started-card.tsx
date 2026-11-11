@@ -58,11 +58,14 @@ export function StartedCard({
   list,
   projectId,
   taskId,
+  onChangePlaybook,
 }: {
   data: TaskData;
   list?: PlaybookList;
   projectId: number;
   taskId: string;
+  /** Change playbook (shared/playbook-change.ts), offered on the playbook's line while the playbook can change. */
+  onChangePlaybook?: () => void;
 }) {
   const w = data.work,
     [viewing, setViewing] = useState(false);
@@ -146,6 +149,20 @@ export function StartedCard({
             >
               {$t('taskDetail.viewSteps')}
             </Button>
+            {onChangePlaybook && (
+              <>
+                {' '}
+                ·{' '}
+                <Button
+                  variant='link'
+                  size='sm'
+                  className='h-auto p-0 align-baseline font-normal'
+                  onClick={onChangePlaybook}
+                >
+                  {$t('taskDetail.changePlaybook')}
+                </Button>
+              </>
+            )}
           </p>
           <PlaybookDrawer
             playbook={playbook}

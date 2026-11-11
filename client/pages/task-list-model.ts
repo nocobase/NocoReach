@@ -28,7 +28,8 @@ export function stepOf(w?:Work):Step|null{
  }
  if(!w.flow||w.stage==='done'||!st)return null;
  if(st.kind==='agent'){const who='Agent',run=w.latestRun?.status;
-  if(restartOf(w))return {text:$t('taskList.waitingRestart'),tone:'amber'};
+  // A step a person stopped (2026-11-11) waits to be started again, as one the closing stopped; it did not fail.
+  if(restartOf(w)||w.latestRun?.stopped)return {text:$t('taskList.waitingRestart'),tone:'amber'};
   if(run==='failed')return {text:$t('taskList.runFailed',{0:who}),tone:'red'};
   if(run==='queued')return {text:$t('taskList.waitingAgentPickUp')};
   return {text:$t('taskList.executorActivity',{0:who,1:stageName(st,w)})};}

@@ -69,6 +69,7 @@ export const TASK_COMMANDS = [
   'verify',
   'selectPlaybook',
   'startTask',
+  'restartWithPlaybook',
   'comment',
   'approveStage',
   'requestStageChanges',

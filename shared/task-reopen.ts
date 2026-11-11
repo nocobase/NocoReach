@@ -12,6 +12,8 @@
 // While the executor is still stopping (a run the closing asked to stop, or the pull request being closed), the task
 // is reopened once that has finished.
 
+import { sameAttempt } from './playbook-change.js';
+
 type ReopenStage = { key: string; kind: string; name?: string };
 export type ReopenWork = {
   stage?: string;
@@ -22,6 +24,7 @@ export type ReopenWork = {
   results?: ({ pr?: { number: number } } | null)[];
   release?: { state: string; mergedAt?: string; article?: unknown };
   prClose?: { number: number; state: 'closing' | 'closed' | 'failed' };
+  attempt?: number;
 };
 export type ReopenRun = {
   status: string;
@@ -31,6 +34,7 @@ export type ReopenRun = {
   createdAt?: string;
   endedAt?: string;
   error?: string;
+  attempt?: number;
 };
 export type Reopening = {
   /** The step it goes back to, as an index into the playbook's steps; left out when the task keeps its place. */
@@ -43,9 +47,13 @@ export type Reopening = {
   wait?: boolean;
 };
 
-const latestRun = (runs: readonly ReopenRun[], key: string) =>
+// The step's latest run in the task's current attempt (shared/playbook-change.ts).
+const latestRun = (w: ReopenWork, runs: readonly ReopenRun[], key: string) =>
   runs
-    .filter((r) => r.stepId === key && (r.planVersion ?? 0) === 0)
+    .filter(
+      (r) =>
+        sameAttempt(r, w) && r.stepId === key && (r.planVersion ?? 0) === 0,
+    )
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
 
 export function reopening(
@@ -71,7 +79,7 @@ export function reopening(
   if (stage?.kind === 'agent') {
     // A run the closing dropped or stopped ended when the task was closed or after it; one that failed earlier keeps
     // its own card.
-    const run = latestRun(runs, stage.key);
+    const run = latestRun(w, runs, stage.key);
     const stopped =
       run?.error === 'cancelled' &&
       String(run.endedAt || '') >= String(w.cancelledAt);

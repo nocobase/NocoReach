@@ -273,7 +273,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
         {editing && session && asking && (
           <RequestChangesBox
             session={session}
-            nextVersion={nextVersion(versionsList, out.stepId)}
+            nextVersion={nextVersion(versionsList, out)}
             busy={busy}
             onCancel={() => setAsking(false)}
             onSend={async (comment, imageIds) => {

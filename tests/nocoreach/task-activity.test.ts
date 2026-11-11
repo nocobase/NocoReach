@@ -217,7 +217,6 @@ it('the latest activity is the last line Activity shows, not the last write', ()
           { at: '2026-11-02T00:00:00Z', action: 'runStarted' },
           { at: '2026-11-02T00:00:00Z', action: 'runFailed' },
           { at: '2026-11-02T00:00:00Z', action: 'flowWaiting' },
-          { at: '2026-11-02T00:00:00Z', action: 'cancelRun' },
           { at: '2026-11-02T00:00:00Z', action: 'recoverResult' },
         ],
       },
@@ -225,6 +224,9 @@ it('the latest activity is the last line Activity shows, not the last write', ()
   };
   expect(lastActivityAt(quiet)).toBe('2026-10-29T14:44:47.656Z');
   expect(shownInActivity({ action: 'runStarted' })).toBe(false);
+  // A person stopping a step is a line (2026-11-11), as is a change of playbook.
+  expect(shownInActivity({ action: 'cancelRun' })).toBe(true);
+  expect(shownInActivity({ action: 'restartWithPlaybook' })).toBe(true);
   // Nothing in Activity yet: when the task was created, else its stored update time.
   expect(
     lastActivityAt({

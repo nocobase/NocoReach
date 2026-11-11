@@ -6,6 +6,7 @@ import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
 import {localeName} from './article-targets-api';
+import {recordedPlaybookName} from './playbook-snapshot';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
@@ -63,7 +64,7 @@ export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.your
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
 // What a task timeline says for each recorded event. Which events Activity shows is ACTIVITY_EVENTS in
 // shared/task-activity.ts, which also gives a task its latest activity time; each of them has words here.
-export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
+export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string;from?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;to?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
  const s=stageName(e.stageKey);
  const snoozeTime=()=>snooze&&snooze.at===e.at?formatDateTime(snooze.until):formatDate(e.note);
  switch(e.action){
@@ -71,6 +72,10 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   // An automatic title that followed the playbook chosen before the start (server task-title.ts).
   case 'retitle':return {who:$t('common.system'),text:$t('playbook.retitled',{0:e.note||''})};
   case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
+  // Change playbook after the start (2026-11-11, shared/playbook-change.ts): the playbook replaced and the one chosen.
+  case 'restartWithPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybookFromTo',{0:recordedPlaybookName(e.from)||EMPTY,1:recordedPlaybookName(e.to)||e.note||EMPTY})};
+  // A person stopped the Agent's step (2026-11-11): not a failure; it waits to be started again.
+  case 'cancelRun':return {who:$t('common.you'),text:$t('playbook.stoppedStep',{0:s})};
   // Snooze (2026-10-28, server execution/snooze.ts): the day and what it waits for, a new day, ended by hand, by acting
   // on the task, or come back on its day.
   case 'snoozeTask':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozedBecause',{0:snoozeTime(),1:e.comment}):$t('playbook.snoozed',{0:snoozeTime()})};
