@@ -188,6 +188,8 @@ export class Connections{
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   // Followed topics (2026-11-10): the sources' own topic lists move into Memory once; a failure is retried next start.
   this.followedTopics=new FollowedTopics(this);
+  // Rank checks saved while Google hid most result links (late October 2026) become uncertain once; see rank-tracking.ts.
+  await this.rankTracking.reviewHiddenLinks().then(marked=>{if(marked)this.app.logger.info('NocoReach marked rank checks with hidden result links uncertain',{checks:marked});},e=>this.app.logger.warn('NocoReach rank check review skipped',{message:e?.message}));
   await this.followedTopics.migrate().then(moved=>{if(moved)this.app.logger.info('NocoReach moved followed topics into Memory',{projects:moved});},e=>this.app.logger.warn('NocoReach followed topics move skipped',{message:e?.message}));
   this.dataViews=new DataViews(this);this.dataViews.register();
   new KeywordDetail(this).register();
@@ -224,7 +226,8 @@ export class Connections{
   this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(e=>this.app.logger.warn('NocoReach packages tick failed',{message:e?.message}))});
   // 搜索表现 · 索引: up to 25 pages every ten minutes, 500 a day per project (search-index.ts).
   this.searchIndexCron=this.app.cronJobManager.addJob({name:'searchIndexCron',cronTime:'40 */10 * * * *',onTick:()=>this.searchIndex.tick().catch(e=>this.app.logger.warn('NocoReach search index tick failed',{message:e?.message}))});
-  this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(e=>this.app.logger.warn('NocoReach rank tick failed',{message:e?.message}))});
+  // Rank tracking reads the checks DataForSEO's Standard queue has done every 10 minutes and posts due ones hourly.
+  this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5,15,25,35,45,55 * * * *',onTick:()=>this.rankTracking.tick().catch(e=>this.app.logger.warn('NocoReach rank tick failed',{message:e?.message}))});
   const youtubeApp=this.app as LegacyApp;
   this.youtubeCron=youtubeApp.cronJobManager.addJob({name:'youtubeCron',cronTime:'20 */10 * * * *',onTick:()=>this.youtube.tick().catch(()=>youtubeApp.logger.warn('NocoReach YouTube tick failed'))});
   // Collector sources: Bilibili's daily read, and the retry of a read a busy collector turned away (about ten minutes).

@@ -1,0 +1,584 @@
+{
+  "provenance": {
+    "description": "Synthetic replies in the shape of DataForSEO task_get/advanced for Google Organic (docs.dataforseo.com/v3/serp/google/organic/task_get/advanced). Not captured from DataForSEO: capturing needs a paid query. Hidden links follow the published format (https://www.google.com/goto?url=CAES..., some relative, some with a gsessionid tail; domain google.com, breadcrumb and website_name naming the real site) described by DataForSEO on 2026-11-02 and cloro.dev/blog/google-goto-url; tokens are fake.",
+    "written": "2026-11-11"
+  },
+  "rank": {
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "cost": 0,
+    "tasks_count": 1,
+    "tasks_error": 0,
+    "tasks": [
+      {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "status_code": 20000,
+        "status_message": "Ok.",
+        "cost": 0,
+        "result_count": 1,
+        "path": ["v3", "serp", "google", "organic", "task_get", "advanced"],
+        "data": {
+          "keyword": "open source crm",
+          "location_code": 2840,
+          "language_code": "en",
+          "device": "desktop",
+          "depth": 100
+        },
+        "result": [
+          {
+            "keyword": "open source crm",
+            "type": "organic",
+            "se_domain": "google.com",
+            "location_code": 2840,
+            "language_code": "en",
+            "check_url": "https://www.google.com/search?q=open+source+crm",
+            "datetime": "2026-11-10 06:12:40 +00:00",
+            "items_count": 12,
+            "items": [
+              {
+                "type": "organic",
+                "rank_group": 1,
+                "rank_absolute": 2,
+                "domain": "www.google.com",
+                "title": "Odoo CRM: Open Source CRM Software",
+                "url": "https://www.google.com/goto?url=CAESFAKE0001x",
+                "breadcrumb": "https://www.odoo.com \u203a app \u203a crm",
+                "website_name": "Odoo",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 2,
+                "rank_absolute": 3,
+                "domain": "suitecrm.com",
+                "title": "SuiteCRM | Open Source CRM",
+                "url": "https://suitecrm.com/",
+                "breadcrumb": "https://suitecrm.com",
+                "website_name": "SuiteCRM",
+                "description": ""
+              },
+              {
+                "type": "people_also_ask",
+                "rank_group": 1,
+                "rank_absolute": 4,
+                "items": [
+                  {
+                    "type": "people_also_ask_element",
+                    "title": "Is there a free open source CRM?"
+                  }
+                ]
+              },
+              {
+                "type": "organic",
+                "rank_group": 3,
+                "rank_absolute": 4,
+                "domain": "www.google.com",
+                "title": "Top 10 Open Source CRM Systems in 2026 - NocoBase",
+                "url": "https://www.google.com/goto?url=CAESFAKE0003x&gsessionid=AbC123",
+                "breadcrumb": "https://www.nocobase.com \u203a blog \u203a top-open-source-crm",
+                "website_name": "NocoBase",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 4,
+                "rank_absolute": 5,
+                "domain": "google.com",
+                "title": "Best open source CRM? : r/selfhosted",
+                "url": "/goto?url=CAESFAKE0004x",
+                "breadcrumb": "230+ comments \u00b7 1 year ago",
+                "website_name": "Reddit \u00b7 r/selfhosted",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 5,
+                "rank_absolute": 6,
+                "domain": "www.google.com",
+                "title": "twenty: Building a modern alternative to Salesforce ...",
+                "url": "https://www.google.com/goto?url=CAESFAKE0005x",
+                "breadcrumb": "https://github.com \u203a twentyhq \u203a twenty",
+                "website_name": "GitHub",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 6,
+                "rank_absolute": 7,
+                "domain": "www.espocrm.com",
+                "title": "EspoCRM \u2013 Open Source CRM Application",
+                "url": "https://www.espocrm.com/",
+                "breadcrumb": "https://www.espocrm.com",
+                "website_name": "EspoCRM",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 7,
+                "rank_absolute": 8,
+                "domain": "www.google.com",
+                "title": "Open source CRM - Wikipedia",
+                "url": "https://www.google.com/goto?url=CAESFAKE0007x",
+                "breadcrumb": "https://en.wikipedia.org \u203a wiki \u203a Customer_relations...",
+                "website_name": "Wikipedia",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 8,
+                "rank_absolute": 9,
+                "domain": "www.google.com",
+                "title": "The 8 best open source CRMs in 2026 | Zapier",
+                "url": "https://www.google.com/goto?url=CAESFAKE0008x",
+                "breadcrumb": "https://zapier.com \u203a blog \u203a best-open-source-crm",
+                "website_name": "Zapier",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 9,
+                "rank_absolute": 10,
+                "domain": "www.google.com",
+                "title": "Krayin \u2013 Free & Open Source Laravel CRM",
+                "url": "https://www.google.com/goto?url=CAESFAKE0009x",
+                "breadcrumb": "https://krayincrm.com",
+                "website_name": "Krayin CRM",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 10,
+                "rank_absolute": 11,
+                "domain": "www.google.com",
+                "title": "NocoBase CRM solution documentation",
+                "url": "https://www.google.com/goto?url=CAESFAKE0010x",
+                "breadcrumb": "https://docs.nocobase.com \u203a solution \u203a crm",
+                "website_name": "NocoBase",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 11,
+                "rank_absolute": 12,
+                "domain": "www.google.com",
+                "title": "Old style wrapper result",
+                "url": "https://www.google.com/url?q=https://www.vtiger.com/open-source-crm/&sa=U",
+                "breadcrumb": "https://www.vtiger.com \u203a open-source-crm",
+                "website_name": "Vtiger",
+                "description": ""
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "rankHidden": {
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "cost": 0,
+    "tasks_count": 1,
+    "tasks_error": 0,
+    "tasks": [
+      {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "status_code": 20000,
+        "status_message": "Ok.",
+        "cost": 0,
+        "result_count": 1,
+        "path": ["v3", "serp", "google", "organic", "task_get", "advanced"],
+        "data": {
+          "keyword": "open source internal tools",
+          "location_code": 2840,
+          "language_code": "en",
+          "device": "desktop",
+          "depth": 100
+        },
+        "result": [
+          {
+            "keyword": "open source internal tools",
+            "type": "organic",
+            "se_domain": "google.com",
+            "location_code": 2840,
+            "language_code": "en",
+            "check_url": "https://www.google.com/search?q=open+source+internal+tools",
+            "datetime": "2026-11-10 06:12:40 +00:00",
+            "items_count": 10,
+            "items": [
+              {
+                "type": "organic",
+                "rank_group": 1,
+                "rank_absolute": 2,
+                "domain": "www.google.com",
+                "title": "Result 1",
+                "url": "https://www.google.com/goto?url=CAESFAKE0101x",
+                "breadcrumb": "https://site1.example \u203a page",
+                "website_name": "Site 1",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 2,
+                "rank_absolute": 3,
+                "domain": "www.google.com",
+                "title": "Result 2",
+                "url": "https://www.google.com/goto?url=CAESFAKE0102x",
+                "breadcrumb": "https://site2.example \u203a page",
+                "website_name": "Site 2",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 3,
+                "rank_absolute": 4,
+                "domain": "www.google.com",
+                "title": "Result 3",
+                "url": "https://www.google.com/goto?url=CAESFAKE0103x",
+                "breadcrumb": "https://site3.example \u203a page",
+                "website_name": "Site 3",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 4,
+                "rank_absolute": 5,
+                "domain": "www.google.com",
+                "title": "Result 4",
+                "url": "https://www.google.com/goto?url=CAESFAKE0104x",
+                "breadcrumb": "https://site4.example \u203a page",
+                "website_name": "Site 4",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 5,
+                "rank_absolute": 6,
+                "domain": "www.google.com",
+                "title": "Result 5",
+                "url": "https://www.google.com/goto?url=CAESFAKE0105x",
+                "breadcrumb": "https://site5.example \u203a page",
+                "website_name": "Site 5",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 6,
+                "rank_absolute": 7,
+                "domain": "www.google.com",
+                "title": "Result 6",
+                "url": "https://www.google.com/goto?url=CAESFAKE0106x",
+                "breadcrumb": "https://site6.example \u203a page",
+                "website_name": "Site 6",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 7,
+                "rank_absolute": 8,
+                "domain": "www.google.com",
+                "title": "Result 7",
+                "url": "https://www.google.com/goto?url=CAESFAKE0107x",
+                "breadcrumb": "https://site7.example \u203a page",
+                "website_name": "Site 7",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 8,
+                "rank_absolute": 9,
+                "domain": "www.google.com",
+                "title": "Result 8",
+                "url": "https://www.google.com/goto?url=CAESFAKE0108x",
+                "breadcrumb": "https://site8.example \u203a page",
+                "website_name": "Site 8",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 9,
+                "rank_absolute": 10,
+                "domain": "resolved9.example",
+                "title": "Resolved one",
+                "url": "https://resolved9.example/",
+                "breadcrumb": "https://resolved9.example",
+                "website_name": "Resolved",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 10,
+                "rank_absolute": 11,
+                "domain": "www.google.com",
+                "title": "Truncated host",
+                "url": "https://www.google.com/goto?url=CAESFAKE0110x",
+                "breadcrumb": "https://www.a-very-long-domain-name-that-g...",
+                "website_name": "Long",
+                "description": ""
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "top10": {
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "cost": 0,
+    "tasks_count": 1,
+    "tasks_error": 0,
+    "tasks": [
+      {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "status_code": 20000,
+        "status_message": "Ok.",
+        "cost": 0,
+        "result_count": 1,
+        "path": ["v3", "serp", "google", "organic", "live", "advanced"],
+        "data": {
+          "keyword": "open source crm",
+          "location_code": 2840,
+          "language_code": "en",
+          "device": "desktop",
+          "depth": 100
+        },
+        "result": [
+          {
+            "keyword": "open source crm",
+            "type": "organic",
+            "se_domain": "google.com",
+            "location_code": 2840,
+            "language_code": "en",
+            "check_url": "https://www.google.com/search?q=open+source+crm",
+            "datetime": "2026-11-10 06:12:40 +00:00",
+            "items_count": 12,
+            "items": [
+              {
+                "type": "organic",
+                "rank_group": 1,
+                "rank_absolute": 2,
+                "domain": "www.google.com",
+                "title": "Odoo CRM: Open Source CRM Software",
+                "url": "https://www.google.com/goto?url=CAESFAKE0001x",
+                "breadcrumb": "https://www.odoo.com \u203a app \u203a crm",
+                "website_name": "Odoo",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 2,
+                "rank_absolute": 3,
+                "domain": "suitecrm.com",
+                "title": "SuiteCRM | Open Source CRM",
+                "url": "https://suitecrm.com/",
+                "breadcrumb": "https://suitecrm.com",
+                "website_name": "SuiteCRM",
+                "description": ""
+              },
+              {
+                "type": "people_also_ask",
+                "rank_group": 1,
+                "rank_absolute": 4,
+                "items": [
+                  {
+                    "type": "people_also_ask_element",
+                    "title": "Is there a free open source CRM?"
+                  }
+                ]
+              },
+              {
+                "type": "organic",
+                "rank_group": 3,
+                "rank_absolute": 4,
+                "domain": "www.google.com",
+                "title": "Top 10 Open Source CRM Systems in 2026 - NocoBase",
+                "url": "https://www.google.com/goto?url=CAESFAKE0003x&gsessionid=AbC123",
+                "breadcrumb": "https://www.nocobase.com \u203a blog \u203a top-open-source-crm",
+                "website_name": "NocoBase",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 4,
+                "rank_absolute": 5,
+                "domain": "google.com",
+                "title": "Best open source CRM? : r/selfhosted",
+                "url": "/goto?url=CAESFAKE0004x",
+                "breadcrumb": "230+ comments \u00b7 1 year ago",
+                "website_name": "Reddit \u00b7 r/selfhosted",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 5,
+                "rank_absolute": 6,
+                "domain": "www.google.com",
+                "title": "twenty: Building a modern alternative to Salesforce ...",
+                "url": "https://www.google.com/goto?url=CAESFAKE0005x",
+                "breadcrumb": "https://github.com \u203a twentyhq \u203a twenty",
+                "website_name": "GitHub",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 6,
+                "rank_absolute": 7,
+                "domain": "www.espocrm.com",
+                "title": "EspoCRM \u2013 Open Source CRM Application",
+                "url": "https://www.espocrm.com/",
+                "breadcrumb": "https://www.espocrm.com",
+                "website_name": "EspoCRM",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 7,
+                "rank_absolute": 8,
+                "domain": "www.google.com",
+                "title": "Open source CRM - Wikipedia",
+                "url": "https://www.google.com/goto?url=CAESFAKE0007x",
+                "breadcrumb": "https://en.wikipedia.org \u203a wiki \u203a Customer_relations...",
+                "website_name": "Wikipedia",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 8,
+                "rank_absolute": 9,
+                "domain": "www.google.com",
+                "title": "The 8 best open source CRMs in 2026 | Zapier",
+                "url": "https://www.google.com/goto?url=CAESFAKE0008x",
+                "breadcrumb": "https://zapier.com \u203a blog \u203a best-open-source-crm",
+                "website_name": "Zapier",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 9,
+                "rank_absolute": 10,
+                "domain": "www.google.com",
+                "title": "Krayin \u2013 Free & Open Source Laravel CRM",
+                "url": "https://www.google.com/goto?url=CAESFAKE0009x",
+                "breadcrumb": "https://krayincrm.com",
+                "website_name": "Krayin CRM",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 10,
+                "rank_absolute": 11,
+                "domain": "www.google.com",
+                "title": "NocoBase CRM solution documentation",
+                "url": "https://www.google.com/goto?url=CAESFAKE0010x",
+                "breadcrumb": "https://docs.nocobase.com \u203a solution \u203a crm",
+                "website_name": "NocoBase",
+                "description": ""
+              },
+              {
+                "type": "organic",
+                "rank_group": 11,
+                "rank_absolute": 12,
+                "domain": "www.google.com",
+                "title": "Old style wrapper result",
+                "url": "https://www.google.com/url?q=https://www.vtiger.com/open-source-crm/&sa=U",
+                "breadcrumb": "https://www.vtiger.com \u203a open-source-crm",
+                "website_name": "Vtiger",
+                "description": ""
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "reddit": {
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "cost": 0,
+    "tasks_count": 1,
+    "tasks_error": 0,
+    "tasks": [
+      {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "status_code": 20000,
+        "status_message": "Ok.",
+        "cost": 0,
+        "result_count": 1,
+        "path": ["v3", "serp", "google", "organic", "task_get", "advanced"],
+        "data": {
+          "keyword": "site:reddit.com \"NocoBase\"",
+          "location_code": 2840,
+          "language_code": "en",
+          "device": "desktop",
+          "depth": 100
+        },
+        "result": [
+          {
+            "keyword": "site:reddit.com \"NocoBase\"",
+            "type": "organic",
+            "se_domain": "google.com",
+            "location_code": 2840,
+            "language_code": "en",
+            "check_url": "https://www.google.com/search?q=site:reddit.com+\"NocoBase\"",
+            "datetime": "2026-11-10 06:12:40 +00:00",
+            "items_count": 4,
+            "items": [
+              {
+                "type": "organic",
+                "rank_group": 1,
+                "rank_absolute": 2,
+                "domain": "www.reddit.com",
+                "title": "NocoBase vs Appsmith for internal tools : r/selfhosted",
+                "url": "https://www.reddit.com/r/selfhosted/comments/1abc9x/nocobase_vs_appsmith/",
+                "breadcrumb": "230+ comments \u00b7 1 year ago",
+                "website_name": "Reddit \u00b7 r/selfhosted",
+                "description": "",
+                "timestamp": "2025-09-20 10:00:00 +00:00"
+              },
+              {
+                "type": "organic",
+                "rank_group": 2,
+                "rank_absolute": 3,
+                "domain": "www.google.com",
+                "title": "Anyone running NocoBase in production? : r/nocode",
+                "url": "https://www.google.com/goto?url=CAESFAKE0201x",
+                "breadcrumb": "45 comments \u00b7 3 months ago",
+                "website_name": "Reddit \u00b7 r/nocode",
+                "description": "We moved our CRM to NocoBase last spring.",
+                "timestamp": "2026-08-02 08:00:00 +00:00"
+              },
+              {
+                "type": "organic",
+                "rank_group": 3,
+                "rank_absolute": 4,
+                "domain": "www.google.com",
+                "title": "Open source Airtable alternatives with plugins and ... : r/opensource",
+                "url": "https://www.google.com/goto?url=CAESFAKE0202x",
+                "breadcrumb": "80+ comments \u00b7 2 weeks ago",
+                "website_name": "Reddit \u00b7 r/opensource",
+                "description": "",
+                "timestamp": "2026-10-28 08:00:00 +00:00"
+              },
+              {
+                "type": "discussions_and_forums",
+                "rank_group": 1,
+                "rank_absolute": 5,
+                "items": [
+                  {
+                    "type": "discussions_and_forums_element",
+                    "title": "Self hosted no-code with permissions?",
+                    "url": "https://www.google.com/goto?url=CAESFAKE0203x",
+                    "domain": "www.google.com",
+                    "breadcrumb": "r/selfhosted",
+                    "website_name": "Reddit",
+                    "timestamp": "2026-10-30 08:00:00 +00:00"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

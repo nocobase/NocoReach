@@ -31,7 +31,7 @@ import { topicMarks, topicScopeText, useTopicGroup } from './followed-topics-sco
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
 type TopicPost = Omit<Post, 'term'> & { topics: string[] };
-type TopicGroupView = { topics: string[]; lastRun: { at: string; searched: number; budgetUntil: string | null } | null; count: number; subreddits: { name: string; count: number }[]; posts: TopicPost[] };
+type TopicGroupView = { topics: string[]; lastRun: { at: string; searched: number; budgetUntil: string | null; unresolved?: number } | null; count: number; subreddits: { name: string; count: number }[]; posts: TopicPost[] };
 type View = RedditTimingState & { connected: boolean; topic?: TopicGroupView; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };
 
 export default function DataReddit() {
@@ -45,7 +45,8 @@ export default function DataReddit() {
   const check = async () => {
     setBusy(true);
     // Every term within its 6-day reuse comes back without a new search; the toast says so instead of "no new posts".
-    try { const r = await api.action<RedditTimingState & { added: number; errors: string[]; searched?: number; reused?: number }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:r.diagnostics?.find(d=>d.reason!=='success') ? $t(`redditDiagnostic.${r.diagnostics.find(d=>d.reason!=='success')!.reason}`) : $legacyText(r.errors[0])})); else toast.success(() => (r.searched && r.reused === r.searched ? $t('dataReddit.searchedRecently') : r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
+    // `queued`: searches DataForSEO is still running on its Standard queue, read on a later hourly pass.
+    try { const r = await api.action<RedditTimingState & { added: number; errors: string[]; searched?: number; reused?: number; queued?: number }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); const failure = r.diagnostics?.find((d) => d.reason !== 'success' && d.reason !== 'queued'); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:failure ? $t(`redditDiagnostic.${failure.reason}`) : $legacyText(r.errors[0])})); else toast.success(() => (r.searched && r.reused === r.searched ? $t('dataReddit.searchedRecently') : r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : r.queued ? $t('dataReddit.searchesQueued',{0:r.queued}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notFullyChecked'))); }
     finally { setBusy(false); }
   };
@@ -76,7 +77,7 @@ export default function DataReddit() {
                     {p.snippet ? <p className="line-clamp-2 text-sm text-muted-foreground">{p.snippet}</p> : null}
                     <p className="text-xs text-muted-foreground">r/{p.subreddit} · {topicMarks(p.topics)} · {p.postedAt ? $t('dataReddit.posted',{0:formatDate(p.postedAt)}) : $t('dataReddit.postDateUnknownFound',{0:formatDate(p.firstSeenAt)})}</p>
                   </div></div>
-                )) : <p className="px-4 py-3 text-sm text-muted-foreground">{!topic.topics.length ? $t('followedTopics.noTopics') : topic.lastRun ? $t('followedTopics.noTopicPosts') : $t('followedTopics.notSearchedYet')}</p>}
+                )) : <p className="px-4 py-3 text-sm text-muted-foreground">{!topic.topics.length ? $t('followedTopics.noTopics') : topic.lastRun ? <>{$t('followedTopics.noTopicPosts')}{topic.lastRun.unresolved ? <> {$t('redditTiming.unresolvedSkipped',{0:topic.lastRun.unresolved})}</> : null}</> : $t('followedTopics.notSearchedYet')}</p>}
               </Card>
               <Card className="gap-0 py-0">
                 <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{$t('dataReddit.subreddit')}</h2>

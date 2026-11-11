@@ -790,6 +790,69 @@ function questionRows(world: World, pool: readonly AiQuestion[], b: Json) {
   }));
 }
 
+// DataForSEO's Standard queue (rank checks and Reddit searches since 2026-11-11): a posted task is done at once, and its
+// id carries the request, so reading it answers what the live endpoint answers.
+const QUEUE =
+  /^serp\/google\/organic\/(?:task_post|task_get\/advanced\/([A-Za-z0-9_-]+))$/;
+const taskId = (b: Json) =>
+  Buffer.from(
+    JSON.stringify([
+      b.keyword,
+      b.location_code,
+      b.language_code,
+      b.depth,
+      b.search_param ?? null,
+    ]),
+  ).toString('base64url');
+function queuedTask(world: World, operation: string, b: Json, id: string) {
+  if (id) {
+    const [keyword, location_code, language_code, depth, search_param] =
+      JSON.parse(Buffer.from(id, 'base64url').toString('utf8')) as unknown[];
+    return dataforseo(
+      world,
+      new URL(
+        'https://api.dataforseo.com/v3/serp/google/organic/live/advanced',
+      ),
+      {
+        method: 'POST',
+        body: JSON.stringify([
+          {
+            keyword,
+            location_code,
+            language_code,
+            depth,
+            ...(search_param ? { search_param } : {}),
+          },
+        ]),
+      },
+    );
+  }
+  const pages = Math.ceil(Number(b.depth ?? 10) / 10),
+    cost = 0.0006 * pages * (text(b.keyword).includes('site:') ? 5 : 1);
+  return json({
+    version: '0.1.20261014',
+    status_code: 20000,
+    status_message: 'Ok.',
+    time: '0.0610 sec.',
+    cost,
+    tasks_count: 1,
+    tasks_error: 0,
+    tasks: [
+      {
+        id: taskId(b),
+        status_code: 20100,
+        status_message: 'Task Created.',
+        time: '0.0040 sec.',
+        cost,
+        result_count: 0,
+        path: ['v3', ...operation.split('/')],
+        data: b,
+        result: null,
+      },
+    ],
+  });
+}
+
 export function dataforseo(
   world: World,
   u: URL,
@@ -804,6 +867,8 @@ export function dataforseo(
       throw new WorldUnsupported('a DataForSEO request with several tasks');
     b = object(parsed[0]);
   }
+  const queued = operation.match(QUEUE);
+  if (queued) return queuedTask(world, operation, b, queued[1] ?? '');
   const wrap = (result: unknown[], cost?: number) =>
     envelope(world, operation, result, cost);
   const page = (rows: unknown[], extra: Json = {}) =>
