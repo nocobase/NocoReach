@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "Lihat {0} →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO tidak mengembalikan hasil pencarian ini dalam dua hari",
   "rankTracking.uncertain": "Tidak pasti",
-  "rankTracking.uncertainHelp": "Jika dalam satu pemeriksaan Google menyembunyikan sebagian besar tautan hasil dan situs kita tidak ada di antara hasil yang terlihat, pemeriksaan itu ditandai tidak pasti: situs mungkin masih ada di 100 teratas. Ini tidak dihitung sebagai penurunan, dan pemeriksaan berikutnya akan menanyakan lagi.",
+  "rankTracking.uncertainHelp": "Jika dalam satu pemeriksaan Google menyembunyikan tautan lebih dari 30% hasil dan situs kita tidak ada di antara hasil yang terlihat, pemeriksaan itu ditandai tidak pasti: situs mungkin masih ada di 100 teratas. Ini tidak dihitung sebagai penurunan, dan pemeriksaan berikutnya akan menanyakan lagi.",
   "rankTracking.keywordsQueued": "Memeriksa {0} kata kunci; peringkatnya muncul di sini setelah hasil Google siap, biasanya dalam satu jam.",
   "rankTracking.keywordsQueuedSomeReused": "Memeriksa {0} kata kunci; peringkatnya muncul di sini dalam sekitar satu jam. {1} lainnya sudah diperiksa dalam 6 hari terakhir dan peringkatnya dipakai ulang.",
   "keywordDetail.lastCheckUncertain": "Pemeriksaan terakhir ({0}): tidak pasti",

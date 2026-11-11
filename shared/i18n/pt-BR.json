@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "Ver {0} →",
   "dataforseo.queuedTaskNotFinished": "O DataForSEO não retornou os resultados desta pesquisa em dois dias",
   "rankTracking.uncertain": "Incerto",
-  "rankTracking.uncertainHelp": "Quando, em uma verificação, o Google oculta a maioria dos links dos resultados e nosso site não está entre os visíveis, a verificação é marcada como incerta: o site ainda pode estar entre as 100 primeiras posições. Ela não conta como queda, e a próxima verificação consulta de novo.",
+  "rankTracking.uncertainHelp": "Quando, em uma verificação, o Google oculta os links de mais de 30% dos resultados e nosso site não está entre os visíveis, a verificação é marcada como incerta: o site ainda pode estar entre as 100 primeiras posições. Ela não conta como queda, e a próxima verificação consulta de novo.",
   "rankTracking.keywordsQueued": "Verificando {0} palavras-chave; as posições aparecem aqui quando os resultados do Google estiverem prontos, geralmente em até uma hora.",
   "rankTracking.keywordsQueuedSomeReused": "Verificando {0} palavras-chave; as posições aparecem aqui em cerca de uma hora. Outras {1} foram verificadas nos últimos 6 dias e suas posições são reutilizadas.",
   "keywordDetail.lastCheckUncertain": "Última verificação ({0}): incerta",

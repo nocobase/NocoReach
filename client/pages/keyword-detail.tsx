@@ -1355,6 +1355,17 @@ function RankHistory({
 }) {
   const history = tracking.history;
   const last = history.at(-1);
+  const points = history.map((c) => (c.uncertain ? null : c.position));
+  // Each run of uncertain checks between two ranked checks is crossed by a dashed segment of its own, so the trend still
+  // reads; a check that was certainly outside the top 100 stays a gap.
+  const bridges: [number, number][] = [];
+  for (let i = 1; i < history.length; i++) {
+    if (!history[i].uncertain || history[i - 1].uncertain) continue;
+    let after = i;
+    while (history[after]?.uncertain) after++;
+    if (points[i - 1] != null && points[after] != null)
+      bridges.push([i - 1, after]);
+  }
   return (
     <Section
       title={$t('keywordDetail.rankHistory')}
@@ -1379,9 +1390,15 @@ function RankHistory({
         <div className='nr-chart-box'>
           <ResponsiveContainer width='100%' height={200}>
             <LineChart
-              data={history.map((c) => ({
+              data={history.map((c, i) => ({
                 date: formatDate(c.at, { withYear: false }),
-                position: c.uncertain ? null : c.position,
+                position: points[i],
+                ...Object.fromEntries(
+                  bridges.map(([from, to], n) => [
+                    `bridge${n}`,
+                    i === from || i === to ? points[i] : null,
+                  ]),
+                ),
               }))}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
             >
@@ -1424,6 +1441,21 @@ function RankHistory({
                 stroke='var(--chart-3)'
                 connectNulls={false}
               />
+              {bridges.map(([from], n) => (
+                <Line
+                  key={history[from].at}
+                  isAnimationActive={false}
+                  type='linear'
+                  dataKey={`bridge${n}`}
+                  stroke='var(--chart-3)'
+                  strokeDasharray='4 4'
+                  dot={false}
+                  activeDot={false}
+                  connectNulls
+                  tooltipType='none'
+                  legendType='none'
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>

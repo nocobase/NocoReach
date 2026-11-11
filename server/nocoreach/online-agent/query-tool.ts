@@ -835,7 +835,7 @@ const SOURCES: Record<string, Source> = {
               position: latest.position ?? null,
               url: latest.url ?? null,
               checkedAt: latest.at ?? null,
-              // Google hid most result links in that check: a null position there is unknown, not beyond 100.
+              // Google hid more than 30% of the result links in that check: a null position there is unknown, not beyond 100.
               ...(latest.uncertain ? { uncertain: true } : {}),
               previousPosition: previous.position ?? null,
               history: list(k.history).map((h) => ({

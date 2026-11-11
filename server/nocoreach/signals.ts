@@ -114,7 +114,7 @@ function hackernewsSignals({hn,now}){if(!hn?.retainedFrom)return [];const {daily
 // 排名跟踪: a tracked keyword that fell 5 or more places, dropped out of the top 100 from the top 20, or entered the top 10.
 // A page that fell so for one or more keywords is an opportunity (2026-11-10): the clicks it can win back, with every
 // keyword it fell for and the sites above it now (`rt.serps`, the latest results of those keywords).
-// An uncertain check (Google hid most result links, rank-tracking.ts) says nothing about the position and is skipped, so
+// An uncertain check (Google hid more than 30% of the result links, rank-tracking.ts) says nothing about the position and is skipped, so
 // it never reads as a drop or a loss.
 function rankSignals({rt,queries,identity,volumes=new Map()}){if(!rt?.keywords?.length)return [];const out=[],fell=new Map();
  for(const k of rt.keywords){const list=(rt.checks?.[k.id]||[]).filter(c=>!c.uncertain),now=list.at(-1),before=list.at(-2);if(!now||!before)continue;const a=before.position,b=now.position;

@@ -82,9 +82,9 @@ class RankTracking{
   if(post||read)await this.mutate(id,cur=>({...cur,lastRun:{at:new Date().toISOString(),ok:!errors.length,errors:errors.slice(0,5),checked,...(queued?{queued}:{}),...(uncertain?{uncertain:true}:{})}}));
   return {checked,reused,queued,errors};}
  async status(id){const s=await this.state(id);if(!s)return {keywords:[],lastRun:null};return {lastRun:s.lastRun||null,keywords:s.keywords.map(k=>{const list=s.checks?.[k.id]||[],last=list.at(-1),prev=certain(list.slice(0,-1)).at(-1);return {...k,latest:last||null,previous:prev||null,history:list.slice(-12),nextCheckAt:last?new Date(Date.parse(last.at)+WEEK).toISOString():null,checking:s.pending?.[k.id]?.at||null};})};}
- // Checks made while DataForSEO's Live answers hid most result links (late October to 2026-11-11) found no site and were
- // saved as "not in the top 100". Once per project (`linksReviewed`), those whose saved results are mostly hidden Google
- // links are marked uncertain, so they never read as a drop.
+ // Checks made while DataForSEO's Live answers hid result links (late October to 2026-11-11) found no site and were saved
+ // as "not in the top 100". Once per project (`linksReviewed`), those where more than UNRESOLVED_SHARE of the saved results
+ // are hidden Google links are marked uncertain, so they never read as a drop.
  async reviewHiddenLinks(){let marked=0;for(const id of await this.p.projectIds()){const s=await this.state(id);if(!s?.keywords?.length||s.linksReviewed)continue;
    const ids=[...new Set(Object.values(s.checks||{}).flat().filter(c=>c.position==null&&!c.uncertain&&c.runId&&String(c.at)>=HIDDEN_SINCE).map(c=>String(c.runId)))];
    const runs=ids.length?await this.p.db.getRepository('nrKeywordRuns').find({filter:{id:{$in:ids},projectId:id}}):[];

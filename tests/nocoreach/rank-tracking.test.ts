@@ -51,7 +51,7 @@ test('rank checks: the Standard queue, depth 100 priced as 10 pages of 10',()=>{
  assert.equal(s.queue,'serp/google/organic');assert.equal(s.path,'serp/google/organic/task_post');assert.equal(s.request.depth,100);assert.equal(s.estimatedUsd,0.006);
  assert.equal(result({status_code:20000,cost:0,tasks:[{status_code:40102,result:null}]},s).status,'completed','no results is an answer');
 });
-test('hidden result links: the site found by its breadcrumb, its page by title; a page mostly hidden without the site is uncertain',()=>{
+test('hidden result links: the site found by its breadcrumb, its page by title; more than 30% hidden without the site is uncertain',()=>{
  const spec=specification({target:'open source crm',locationCode:2840,language:'en'}),pages=[{url:'https://www.nocobase.com/en/blog/top-open-source-crm',title:'Top 10 Open Source CRM Systems in 2026'}];
  const r=result(fixture.rank,spec);assert.equal(r.status,'completed');assert.equal(r.result.items.length,11);
  assert.ok(!r.result.items.some(i=>/google\.com$/.test(i.domain)),'no result is credited to Google');
@@ -71,7 +71,7 @@ test('an uncertain check is shown as such, never counted as a drop, and the move
  rows['rank-tracking:1'].checks={[k]:[c('2026-10-20',4,{runId:'1'}),c('2026-10-27',6,{runId:'2'}),c('2026-11-10',null,{runId:'3',uncertain:true})]};
  const s=(await t.status('1')).keywords[0];assert.equal(s.latest.uncertain,true);assert.equal(s.previous.position,6,'the last known position');assert.equal(s.history.length,3);
 });
-test('checks saved while Google hid most links are marked uncertain once at start, others left alone',async()=>{
+test('checks saved with more than 30% of the links hidden are marked uncertain once at start, others left alone',async()=>{
  const {t,rows}=harness(()=>3);await t.add('1',{keywords:[{keyword:'crm',locationCode:2840,language:'en'}]});const k=rows['rank-tracking:1'].keywords[0].id;
  const legacy=Array.from({length:10},(_,i)=>({position:i+1,domain:'google.com',url:`https://google.com/goto?url=CAES${i}`,title:'T'+i})),plain=[{position:1,domain:'a.com',url:'https://a.com/'}];
  const runs={r1:plain,r2:legacy,r3:plain};t.p.db.getRepository=n=>n==='nrSnapshots'?t._snap:{find:async({filter})=>filter.id.$in.filter(id=>runs[id]).map(id=>({get:f=>f==='id'?id:{items:runs[id]}}))};

@@ -8362,7 +8362,7 @@
   "strategy.seeOpportunity": "{0} 보기 →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO가 이틀 안에 이 검색의 결과를 반환하지 않았습니다",
   "rankTracking.uncertain": "불확실",
-  "rankTracking.uncertainHelp": "한 번의 확인에서 Google이 결과 링크 대부분을 숨기고 표시된 결과에 우리 사이트가 없으면 그 확인은 '불확실'로 표시됩니다. 사이트가 여전히 상위 100위 안에 있을 수 있으므로 순위 하락으로 계산하지 않으며, 다음 확인에서 다시 조회합니다.",
+  "rankTracking.uncertainHelp": "한 번의 확인에서 Google이 30%가 넘는 결과의 링크를 숨기고 표시된 결과에 우리 사이트가 없으면 그 확인은 '불확실'로 표시됩니다. 사이트가 여전히 상위 100위 안에 있을 수 있으므로 순위 하락으로 계산하지 않으며, 다음 확인에서 다시 조회합니다.",
   "rankTracking.keywordsQueued": "키워드 {0}개를 확인하는 중입니다. Google 결과가 준비되면 순위가 여기에 표시되며, 보통 1시간 이내입니다.",
   "rankTracking.keywordsQueuedSomeReused": "키워드 {0}개를 확인하는 중이며 순위는 보통 1시간 이내에 표시됩니다. 나머지 {1}개는 6일 이내에 확인했으므로 그때의 순위를 재사용합니다.",
   "keywordDetail.lastCheckUncertain": "마지막 확인({0}): 불확실",

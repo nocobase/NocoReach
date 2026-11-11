@@ -31,8 +31,8 @@ import { formatDate } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 import { refreshNavSources } from '#components/app-shell/nav-badges';
 
-// `uncertain`: Google hid most result links in that check and our site was not among the rest (serp-links.ts), so a
-// missing position there is unknown rather than beyond 100; it is never drawn or compared as a drop.
+// `uncertain`: Google hid the links of more than 30% of the results in that check and our site was not among the rest
+// (serp-links.ts), so a missing position there is unknown rather than beyond 100; it is never drawn or compared as a drop.
 type Check = { at: string; position: number | null; url: string | null; runId: string; uncertain?: boolean };
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null; checking?: string | null };
 type Status = { keywords: Tracked[]; lastRun: { at: string; ok: boolean; errors: string[]; checked: number; queued?: number } | null };

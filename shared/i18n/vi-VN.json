@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "Xem {0} →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO không trả về kết quả của lượt tìm kiếm này trong vòng hai ngày",
   "rankTracking.uncertain": "Chưa chắc chắn",
-  "rankTracking.uncertainHelp": "Khi Google ẩn phần lớn liên kết kết quả trong một lần kiểm tra và trang của chúng ta không nằm trong các kết quả hiển thị, lần kiểm tra đó được đánh dấu là chưa chắc chắn: trang vẫn có thể nằm trong 100 kết quả đầu. Lần này không được tính là tụt hạng, và lần kiểm tra sau sẽ hỏi lại.",
+  "rankTracking.uncertainHelp": "Khi Google ẩn liên kết của hơn 30% kết quả trong một lần kiểm tra và trang của chúng ta không nằm trong các kết quả hiển thị, lần kiểm tra đó được đánh dấu là chưa chắc chắn: trang vẫn có thể nằm trong 100 kết quả đầu. Lần này không được tính là tụt hạng, và lần kiểm tra sau sẽ hỏi lại.",
   "rankTracking.keywordsQueued": "Đang kiểm tra {0} từ khóa; thứ hạng sẽ hiện ở đây khi kết quả Google sẵn sàng, thường trong vòng một giờ.",
   "rankTracking.keywordsQueuedSomeReused": "Đang kiểm tra {0} từ khóa; thứ hạng sẽ hiện ở đây trong khoảng một giờ. {1} từ khóa khác đã được kiểm tra trong 6 ngày qua và dùng lại thứ hạng đó.",
   "keywordDetail.lastCheckUncertain": "Lần kiểm tra gần nhất ({0}): chưa chắc chắn",

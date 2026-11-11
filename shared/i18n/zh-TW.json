@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "看 {0} →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO 兩天內沒有傳回這次查詢的結果",
   "rankTracking.uncertain": "不確定",
-  "rankTracking.uncertainHelp": "如果一次檢查裡 Google 隱藏了大部分結果的連結，而能辨識的結果裡沒有本站，這次檢查會標為「不確定」：本站可能仍在前 100 名。它不算排名下降，下次檢查會重新查詢。",
+  "rankTracking.uncertainHelp": "如果一次檢查裡 Google 隱藏了超過三成結果的連結，而能辨識的結果裡沒有本站，這次檢查會標為「不確定」：本站可能仍在前 100 名。它不算排名下降，下次檢查會重新查詢。",
   "rankTracking.keywordsQueued": "正在檢查 {0} 個關鍵字；Google 結果就緒後排名會顯示在這裡，通常在一小時內。",
   "rankTracking.keywordsQueuedSomeReused": "正在檢查 {0} 個關鍵字，排名通常在一小時內顯示；另有 {1} 個 6 天內查過，沿用那次的排名。",
   "keywordDetail.lastCheckUncertain": "最近一次檢查（{0}）結果不確定",

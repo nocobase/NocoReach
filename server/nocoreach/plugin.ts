@@ -188,7 +188,7 @@ export class Connections{
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   // Followed topics (2026-11-10): the sources' own topic lists move into Memory once; a failure is retried next start.
   this.followedTopics=new FollowedTopics(this);
-  // Rank checks saved while Google hid most result links (late October 2026) become uncertain once; see rank-tracking.ts.
+  // Rank checks saved while Google hid result links (late October 2026) become uncertain once; see rank-tracking.ts.
   await this.rankTracking.reviewHiddenLinks().then(marked=>{if(marked)this.app.logger.info('NocoReach marked rank checks with hidden result links uncertain',{checks:marked});},e=>this.app.logger.warn('NocoReach rank check review skipped',{message:e?.message}));
   await this.followedTopics.migrate().then(moved=>{if(moved)this.app.logger.info('NocoReach moved followed topics into Memory',{projects:moved});},e=>this.app.logger.warn('NocoReach followed topics move skipped',{message:e?.message}));
   this.dataViews=new DataViews(this);this.dataViews.register();

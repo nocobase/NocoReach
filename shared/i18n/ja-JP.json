@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "{0} を見る →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO から 2 日以内にこの検索の結果が返されませんでした",
   "rankTracking.uncertain": "不確定",
-  "rankTracking.uncertainHelp": "1 回のチェックで Google が結果のリンクの大半を隠し、表示された結果に自サイトがない場合、そのチェックは「不確定」になります。自サイトが上位 100 位以内にある可能性があるため、順位の低下とは見なさず、次回のチェックで再確認します。",
+  "rankTracking.uncertainHelp": "1 回のチェックで Google が 30% を超える結果のリンクを隠し、表示された結果に自サイトがない場合、そのチェックは「不確定」になります。自サイトが上位 100 位以内にある可能性があるため、順位の低下とは見なさず、次回のチェックで再確認します。",
   "rankTracking.keywordsQueued": "{0} 件のキーワードをチェック中です。Google の結果が揃うと順位がここに表示されます（通常 1 時間以内）。",
   "rankTracking.keywordsQueuedSomeReused": "{0} 件のキーワードをチェック中です（順位は通常 1 時間以内に表示されます）。ほか {1} 件は 6 日以内にチェック済みのため、その順位を再利用しました。",
   "keywordDetail.lastCheckUncertain": "最終確認 ({0}): 不確定",

@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "Ver {0} →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO no devolvió los resultados de esta búsqueda en dos días",
   "rankTracking.uncertain": "Incierto",
-  "rankTracking.uncertainHelp": "Si en una comprobación Google oculta la mayoría de los enlaces de los resultados y nuestro sitio no aparece entre los visibles, la comprobación se marca como incierta: el sitio puede seguir entre los 100 primeros. No cuenta como caída y la siguiente comprobación vuelve a consultarlo.",
+  "rankTracking.uncertainHelp": "Si en una comprobación Google oculta los enlaces de más del 30 % de los resultados y nuestro sitio no aparece entre los visibles, la comprobación se marca como incierta: el sitio puede seguir entre los 100 primeros. No cuenta como caída y la siguiente comprobación vuelve a consultarlo.",
   "rankTracking.keywordsQueued": "Comprobando {0} palabras clave; sus posiciones aparecerán aquí cuando los resultados de Google estén listos, normalmente en menos de una hora.",
   "rankTracking.keywordsQueuedSomeReused": "Comprobando {0} palabras clave; sus posiciones aparecerán aquí en aproximadamente una hora. Otras {1} se comprobaron en los últimos 6 días y se reutilizan sus posiciones.",
   "keywordDetail.lastCheckUncertain": "Última comprobación ({0}): incierta",

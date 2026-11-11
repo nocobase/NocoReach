@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "See {0} →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO did not return this search's results within two days",
   "rankTracking.uncertain": "Uncertain",
-  "rankTracking.uncertainHelp": "When Google hides most result links in a check and our site is not among the ones shown, the check is marked uncertain: our site may still be in the top 100. It is not counted as a drop, and the next check asks again.",
+  "rankTracking.uncertainHelp": "When Google hides the links of more than 30% of the results in a check and our site is not among the ones shown, the check is marked uncertain: our site may still be in the top 100. It is not counted as a drop, and the next check asks again.",
   "rankTracking.keywordsQueued": "Checking {0} keywords; their ranks show here when Google's results are ready, usually within an hour.",
   "rankTracking.keywordsQueuedSomeReused": "Checking {0} keywords; their ranks show here within about an hour. {1} more were checked in the last 6 days and their rankings are reused.",
   "keywordDetail.lastCheckUncertain": "Last check ({0}): uncertain",

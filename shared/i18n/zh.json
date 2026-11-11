@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "看 {0} →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO 两天内没有返回这次查询的结果",
   "rankTracking.uncertain": "不确定",
-  "rankTracking.uncertainHelp": "如果一次检查里 Google 隐藏了大部分结果的链接，而能认出的结果里没有本站，这次检查标为“不确定”：本站可能仍在前 100 名。它不算排名下降，下次检查会重新查。",
+  "rankTracking.uncertainHelp": "如果一次检查里 Google 隐藏了超过三成结果的链接，而能认出的结果里没有本站，这次检查标为“不确定”：本站可能仍在前 100 名。它不算排名下降，下次检查会重新查。",
   "rankTracking.keywordsQueued": "正在检查 {0} 个关键词；Google 结果就绪后排名会显示在这里，通常在一小时内。",
   "rankTracking.keywordsQueuedSomeReused": "正在检查 {0} 个关键词，排名通常在一小时内显示；另有 {1} 个 6 天内查过，沿用那次的排名。",
   "keywordDetail.lastCheckUncertain": "最近一次检查（{0}）结果不确定",

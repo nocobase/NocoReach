@@ -8360,7 +8360,7 @@
   "strategy.seeOpportunity": "{0} ansehen →",
   "dataforseo.queuedTaskNotFinished": "DataForSEO hat die Ergebnisse dieser Suche nicht innerhalb von zwei Tagen geliefert",
   "rankTracking.uncertain": "Unsicher",
-  "rankTracking.uncertainHelp": "Verbirgt Google bei einer Prüfung die meisten Ergebnislinks und ist unsere Website nicht unter den angezeigten, wird die Prüfung als unsicher markiert: Die Website kann trotzdem unter den Top 100 sein. Sie zählt nicht als Rückgang, und die nächste Prüfung fragt erneut ab.",
+  "rankTracking.uncertainHelp": "Verbirgt Google bei einer Prüfung die Links von mehr als 30 % der Ergebnisse und ist unsere Website nicht unter den angezeigten, wird die Prüfung als unsicher markiert: Die Website kann trotzdem unter den Top 100 sein. Sie zählt nicht als Rückgang, und die nächste Prüfung fragt erneut ab.",
   "rankTracking.keywordsQueued": "{0} Keywords werden geprüft; ihre Positionen erscheinen hier, sobald die Google-Ergebnisse vorliegen, meist innerhalb einer Stunde.",
   "rankTracking.keywordsQueuedSomeReused": "{0} Keywords werden geprüft; ihre Positionen erscheinen hier in etwa einer Stunde. {1} weitere wurden in den letzten 6 Tagen geprüft und ihre Rankings wiederverwendet.",
   "keywordDetail.lastCheckUncertain": "Letzte Prüfung ({0}): unsicher",
