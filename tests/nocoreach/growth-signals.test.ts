@@ -605,10 +605,21 @@ test('every kind has one of the four categories', async () => {
     'new-query',
     'topic-heat',
     'new-repo',
+    'topic-rise',
+    'new-topic',
+    'hot-discussion',
+    'hot-video',
   ]);
-  expect(by('new-content')).toEqual(['demand-gap']);
+  expect(by('new-content')).toEqual([
+    'demand-gap',
+    'asked-often',
+    'other-market',
+    'site-search',
+    'people-also-ask',
+  ]);
   expect(by('competitor-gaps')).toEqual([
     'competitor-gap',
+    'link-gap',
     'not-mentioned',
     'cited-sources',
     'competitor-launch',

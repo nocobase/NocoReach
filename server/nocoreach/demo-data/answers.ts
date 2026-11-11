@@ -64,6 +64,37 @@ const searchedAs = (direction: string): string[] => {
   return found.length ? found : [direction];
 };
 
+/** How the demo says the main keywords' words in a market's language (market-keywords); other words stay. */
+const MARKET_WORDS: Record<string, [RegExp, string][]> = {
+  ja: [
+    [/gantt charts?|甘特圖/u, 'ガントチャート'],
+    [/project management|專案管理/u, 'プロジェクト管理'],
+    [/task management|任務管理/u, 'タスク管理'],
+    [/kanban boards?|看板/u, 'カンバン'],
+    [/templates?|範本/u, 'テンプレート'],
+    [/tools?|工具/u, 'ツール'],
+    [/software|軟體/u, 'ソフト'],
+    [/free|免費/u, '無料'],
+  ],
+  de: [
+    [/gantt charts?|甘特圖/u, 'gantt diagramm'],
+    [/project management|專案管理/u, 'projektmanagement'],
+    [/task management|任務管理/u, 'aufgabenverwaltung'],
+    [/templates?|範本/u, 'vorlage'],
+    [/tools?|工具/u, 'tool'],
+    [/free|免費/u, 'kostenlos'],
+    [/crm/u, 'crm'],
+    [/sales pipeline|銷售漏斗/u, 'vertriebspipeline'],
+  ],
+  ko: [
+    [/gantt charts?|甘特圖/u, '간트 차트'],
+    [/project management|專案管理/u, '프로젝트 관리'],
+    [/task management|任務管理/u, '업무 관리'],
+    [/templates?|範本/u, '템플릿'],
+    [/tools?|工具/u, '툴'],
+  ],
+};
+
 /** What each business operation answers, written for people to read in the demo. */
 function business(operation: string, input: Value, en: boolean): Value | null {
   const t = (zh: string, enText: string) => (en ? enText : zh);
@@ -677,6 +708,73 @@ function business(operation: string, input: Value, en: boolean): Value | null {
                   : ['ai project manager', 'ai-agents'],
               },
             ],
+      };
+    }
+    // The weekly reading of the topics' discussions (topic-discovery.ts): the rising phrase Memory's topic check also
+    // names, and the forum topics that ask how clients see only their own work, grouped as one question.
+    case 'topic-discovery': {
+      const followed = (
+        Array.isArray(input.followedTopics) ? input.followedTopics : []
+      ).map((x) => String(x));
+      const forum = list(input.forum).filter((f) =>
+        /客户|client|guest|访客|external|外部/iu.test(str(f.title, 200)),
+      );
+      return {
+        newTopics: [
+          {
+            phrase: crm ? 'AI sales agents' : 'AI project assistant',
+            from: followed[0] ?? '',
+            terms: crm
+              ? ['ai sales agent', 'ai sdr', 'sales agent']
+              : ['ai assistant', 'ai project assistant', 'ai pm'],
+            reason: t(
+              '近几周的讨论标题里越来越多地提到它。（演示数据）',
+              'It comes up more and more in the last weeks’ discussion titles. (Demo data.)',
+            ),
+          },
+        ],
+        questions:
+          forum.length >= 3
+            ? [
+                {
+                  theme: t(
+                    '怎么让客户只看到自己的项目',
+                    'How to let clients see only their own projects',
+                  ),
+                  query: t('客户 权限', 'client access'),
+                  ids: forum.map((f) => str(f.id, 80)),
+                },
+              ]
+            : [],
+      };
+    }
+    // Other-language markets (growth-sources.ts): the markets the demo's products would try first.
+    case 'market-suggest': {
+      const offered = new Set(list(input.markets).map((m) => str(m.id, 10)));
+      return {
+        markets: (crm ? ['de', 'fr', 'br'] : ['jp', 'de', 'kr'])
+          .filter((id) => offered.has(id))
+          .map((id) => ({
+            id,
+            reason: t(
+              '这个市场有不少同类产品的用户，网站还没有这个语言。（演示数据）',
+              'Many users of similar products are there, and the site has no pages in the language. (Demo data.)',
+            ),
+          })),
+      };
+    }
+    case 'market-keywords': {
+      const language = str(object(input.market).language, 10);
+      const words = MARKET_WORDS[language] ?? [];
+      return {
+        keywords: (Array.isArray(input.keywords) ? input.keywords : []).map(
+          (k) => {
+            const source = str(k, 100);
+            let local = source.toLowerCase();
+            for (const [from, to] of words) local = local.replace(from, to);
+            return { source, local: local.slice(0, 80) };
+          },
+        ),
       };
     }
     case 'competitor-suggest':

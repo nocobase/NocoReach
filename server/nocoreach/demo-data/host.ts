@@ -24,6 +24,8 @@ import type { BilibiliSource } from '../bilibili-source.js';
 import type { XiaohongshuSource } from '../xiaohongshu-source.js';
 import type { YouTubeSource } from '../youtube-source.js';
 import type { CollectorConnections } from '../collector-connections.js';
+import type { TopicDiscovery } from '../topic-discovery.js';
+import type { GrowthSources } from '../growth-sources.js';
 import type { ReachAccess } from '../../access/service.js';
 import type { DemoProjects } from './upstream.js';
 
@@ -55,6 +57,8 @@ export type DemoHost = Connections & {
   xiaohongshu: XiaohongshuSource;
   youtube: YouTubeSource;
   collectors: CollectorConnections;
+  topicDiscovery: TopicDiscovery;
+  growthSources: GrowthSources;
   knowledge: Knowledge;
   demoProjects: DemoProjects;
 };

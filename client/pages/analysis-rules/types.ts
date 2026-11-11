@@ -16,6 +16,8 @@ export type Rule = {
   enabled: boolean;
   params: Param[];
   found: number | null;
+  /** The most a paid rule may spend a month (USD), from the DataForSEO budget. */
+  costUsd?: number;
   custom?: boolean;
   definition?: {
     id: string;
