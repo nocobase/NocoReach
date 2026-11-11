@@ -13,9 +13,10 @@ import { download, plain } from './public-sources.js';
 // on it that drew the most points and comments. They are kept apart (topicStories) from the mentions of the product.
 // Step 2b (2026-11-10): each topic's stories are also counted per week (Monday to Sunday) for Opportunities' trending
 // topics: the last 12 whole weeks once, then the latest two again each day, as GitHub hot topics counts new
-// repositories (`topicWeeks`, Algolia's hit count, free). For the week's busiest stories of each topic, the comments are
-// read once a day (Algolia's item, free) and the product and the competitors named in them are counted (`named`), with
-// a few of the comments that name them; only the counts and those excerpts are kept.
+// repositories (`topicWeeks`, Algolia's hit count, free; `topicCountFailed` holds the topics whose count failed on the
+// latest read, so a failed count is not taken for a week with no stories). For the week's busiest stories of each
+// topic, the comments are read once a day (Algolia's item, free) and the product and the competitors named in them are
+// counted (`named`), with a few of the comments that name them; only the counts and those excerpts are kept.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const API='https://hn.algolia.com/api/v1/search_by_date',MAX_TERMS=5,FIRST_DAYS=365,DAILY_DAYS=7,KEEP_DAYS=400,MAX_MENTIONS=5000,DAY=86400000;
 const TOPIC_API='https://hn.algolia.com/api/v1/search',TOPIC_DAYS=7,TOPIC_KEEP_DAYS=90,TOPIC_STORIES=10,MAX_TOPIC_STORIES=1000;
@@ -88,8 +89,8 @@ class HackerNewsSource{
   const topics=(await this.p.followedTopics?.of(String(id)))||[],topical=[],topicErrors=[];
   for(const t of topics){try{topical.push(...await this.topicSearch(t,clock-TOPIC_DAYS*DAY));}catch(e){topicErrors.push(`「${t}」：${e.message}`);}}
   // Each topic's weekly counts: the whole weeks not counted yet among the last TOPIC_WEEKS, and the latest two again.
-  const today=iso(clock),last=addDays(weekStart(today),-7),weeks=Array.from({length:TOPIC_WEEKS},(_,i)=>addDays(last,-7*(TOPIC_WEEKS-1-i))),counted={};
-  for(const t of topics){const had=s.topicWeeks?.[t]||{},w={...had};try{for(const week of weeks.filter(x=>!(x in had)||x>=addDays(last,-7))){const c=await this.topicCount(t,week);if(c!==null)w[week]=c;}}catch(e){topicErrors.push(`「${t}」：${e.message}`);}
+  const today=iso(clock),last=addDays(weekStart(today),-7),weeks=Array.from({length:TOPIC_WEEKS},(_,i)=>addDays(last,-7*(TOPIC_WEEKS-1-i))),counted={},countFailed={};
+  for(const t of topics){const had=s.topicWeeks?.[t]||{},w={...had};try{for(const week of weeks.filter(x=>!(x in had)||x>=addDays(last,-7))){const c=await this.topicCount(t,week);if(c!==null)w[week]=c;}}catch(e){countFailed[t]=at;topicErrors.push(`「${t}」：${e.message}`);}
    counted[t]=Object.fromEntries(Object.entries(w).sort(([a],[b])=>a.localeCompare(b)).slice(-KEEP_WEEKS));}
   // The comments of each topic's busiest stories of the week, read again after a day.
   const names=topics.length?await this.productNames(id):[],weekAgo=new Date(clock-TOPIC_DAYS*DAY).toISOString(),dayAgo=new Date(Date.now()-DAY).toISOString(),read={};
@@ -99,11 +100,11 @@ class HackerNewsSource{
   return this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;const ok=!errors.length;
    const topicStories=mergeTopics(cur.topicStories,topical,new Date(clock-TOPIC_KEEP_DAYS*DAY).toISOString()),topicSync=topics.length?{at,ok:!topicErrors.length,errors:topicErrors.slice(0,5),found:topical.length}:cur.topicSync||null;
    for(const [storyId,c] of Object.entries(read))if(topicStories[storyId])topicStories[storyId]={...topicStories[storyId],...c};
-   const topicWeeks=Object.fromEntries(topics.map(t=>[t,counted[t]||cur.topicWeeks?.[t]||{}]));
+   const topicWeeks=Object.fromEntries(topics.map(t=>[t,counted[t]||cur.topicWeeks?.[t]||{}])),topicCountFailed=Object.fromEntries(Object.entries(countFailed).filter(([t])=>topics.includes(t)));
    // When the first read hit the 1000-result cap, coverage starts at the oldest mention read, not a year ago.
    const oldest=found.map(m=>m.createdAt).sort()[0],start=deep?(complete?iso(since):(oldest?oldest.slice(0,10):iso(clock))):cur.retainedFrom;
    const keepDay=iso(Date.parse(keepFrom)),retainedFrom=deep&&ok?start:cur.retainedFrom&&cur.retainedFrom<keepDay?keepDay:cur.retainedFrom;
-   return {...cur,topicStories,topicSync,topicWeeks,mentions:merge(cur.mentions,found,keepFrom),...(deep&&ok?{backfilledAt:now}:{}),retainedFrom,lastSync:record(cur.lastSync,{at,ok,errors})};});}
+   return {...cur,topicStories,topicSync,topicWeeks,topicCountFailed,mentions:merge(cur.mentions,found,keepFrom),...(deep&&ok?{backfilledAt:now}:{}),retainedFrom,lastSync:record(cur.lastSync,{at,ok,errors})};});}
  async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false};const since30=new Date(businessNow(this.p,id,'hackernews')-30*DAY).toISOString(),list=Object.values(s.mentions||{}),recent=list.filter(m=>m.createdAt>=since30);
   return {connected:s.status!=='disconnected',syncing:this.runs.has(id),terms:s.terms,topicCount:((await this.p.followedTopics?.of(String(id)))||[]).length,lastSync:s.lastSync||null,retainedFrom:s.retainedFrom||null,total:list.length,last30:recent.length,stories30:recent.filter(m=>m.type==='story').length,
    top:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,5).map(m=>({title:m.title,points:m.points,comments:m.comments,hnUrl:m.hnUrl,createdAt:m.createdAt}))};}

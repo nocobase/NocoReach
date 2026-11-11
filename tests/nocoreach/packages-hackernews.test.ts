@@ -111,6 +111,20 @@ test('Hacker News topic weeks: each topic is counted per whole week, twelve week
  assert.equal(counts().length,2,'later, the latest two weeks again');
  assert.equal(calls.filter(u=>new URL(u).pathname.startsWith('/api/v1/items/')).length,0,'comments are read again only after a day');
 });
+test('Hacker News topic weeks: a count that fails is kept as failed, not as weeks with no stories',async()=>{
+ let failing=true;
+ const read=async url=>{const u=new URL(url);
+  if(u.pathname==='/api/v1/search'&&u.searchParams.get('hitsPerPage')==='0'){if(failing)throw new Error('Algolia unreachable');return {text:JSON.stringify({nbHits:2,hits:[]})};}
+  return {text:JSON.stringify({nbPages:1,hits:[]})};};
+ const p={...plugin(),followedTopics:{of:async()=>['ai project assistant']},projects:{get:async()=>({name:'Acme'})},competitors:{state:async()=>({list:[]})}};
+ const s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'acme'});await s.runs.wait('1');
+ let st=await s.state('1');
+ assert.deepEqual(st.topicWeeks['ai project assistant'],{});
+ assert.ok(st.topicCountFailed['ai project assistant']);
+ failing=false;await s.sync('1');st=await s.state('1');
+ assert.equal(Object.keys(st.topicWeeks['ai project assistant']).length,12);
+ assert.deepEqual(st.topicCountFailed,{});
+});
 test('Hacker News named products: whole words for Latin names, anywhere for CJK names',()=>{
  assert.equal(hn.occurrences('Acme, acme! Acmeville','Acme'),2);
  assert.equal(hn.occurrences('我们用了飞书和飞书文档','飞书'),2);

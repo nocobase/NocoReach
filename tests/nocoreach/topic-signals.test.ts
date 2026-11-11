@@ -3,8 +3,11 @@ import { expect, test } from 'vitest';
 import {
   tally,
   chartWeeks,
+  coverage,
   lastWholeWeek,
+  addDays,
 } from '../../server/nocoreach/topic-weeks.js';
+import { topicKey } from '../../shared/followed-topics.js';
 import * as topic from '../../server/nocoreach/topic-signals.js';
 import * as sources from '../../server/nocoreach/source-signals.js';
 import {
@@ -91,38 +94,154 @@ function world({ reddit = [], youtube = [], hn = [], github = [] } = {}) {
   };
 }
 
-test('topic weeks: each source counted per whole week from the week it covers the topic; a week counted keeps its larger count', () => {
+/**
+ * The tallies a project makes while its sources read the topics: Reddit's weekly search (and YouTube's, when the world
+ * has videos) from week `from` on, each made in the week after the one it reads, then today's. `failed` lists the weeks
+ * whose Reddit search failed.
+ */
+function history(w, { from = 0, failed = [], topics = [TOPIC] } = {}) {
+  const youtube = Object.keys(w.yt.topicVideos).length > 0;
+  let stored = null,
+    rd = w.rd,
+    yt = w.yt;
+  for (let i = from; i < WEEKS.length; i++) {
+    const ran = addDays(WEEKS[i], 7),
+      at = `${ran}T08:00:00.000Z`;
+    rd = {
+      ...w.rd,
+      topicChecks: Object.fromEntries(
+        topics.map((t) => [
+          topicKey(t),
+          {
+            topic: t,
+            week: ran,
+            at,
+            status: failed.includes(i) ? 'attention' : 'completed',
+          },
+        ]),
+      ),
+    };
+    yt = youtube
+      ? {
+          ...w.yt,
+          topicReads: Object.fromEntries(topics.map((t) => [topicKey(t), at])),
+        }
+      : w.yt;
+    stored = tally({
+      topics,
+      ...w,
+      rd,
+      yt,
+      stored,
+      now: Date.parse(`${ran}T12:00:00Z`),
+    });
+  }
+  return { tw: tally({ topics, ...w, rd, yt, stored, now: NOW }), rd, yt };
+}
+
+test('topic weeks: a week has a count only when the source read it; 0 is a week read with nothing found', () => {
   expect(lastWholeWeek(NOW)).toBe('2026-11-02');
   const w = world({
       reddit: [1, 1, 0, 1, 2, 3, 4, 6],
       hn: [2, 1, 2, 1, 3, 5, 6, 8],
       github: [0, 1, 0, 0, 1, 1, 2, 2],
     }),
-    t = tally({ topics: [TOPIC], ...w, stored: null, now: NOW }),
+    { tw: t, rd } = history(w),
     entry = t.topics.aiprojectassistant;
   expect(entry.name).toBe(TOPIC);
-  expect(entry.since).toEqual({
-    reddit: '2026-09-07',
-    hackernews: '2026-09-14',
-    github: '2026-09-14',
-  });
   expect(entry.weeks['2026-11-02']).toEqual({
     reddit: 6,
     hackernews: 8,
     github: 2,
   });
+  // A week Reddit read with nothing found is 0; YouTube never read the topic, so no week has a YouTube count.
+  expect(entry.weeks['2026-09-28']).toEqual({
+    reddit: 0,
+    hackernews: 2,
+    github: 0,
+  });
   // The current week (11-09) is not whole yet.
   expect(entry.weeks['2026-11-09']).toBeUndefined();
   // Threads no longer kept do not lower a week already counted.
-  const pruned = { ...w, rd: { topicPosts: {} } },
-    again = tally({ topics: [TOPIC], ...pruned, stored: t, now: NOW });
+  const again = tally({
+    topics: [TOPIC],
+    ...w,
+    rd: { ...rd, topicPosts: {} },
+    stored: t,
+    now: NOW,
+  });
   expect(again.topics.aiprojectassistant.weeks['2026-11-02'].reddit).toBe(6);
   // A topic no longer followed is dropped.
   expect(tally({ topics: [], ...w, stored: t, now: NOW }).topics).toEqual({});
-  // The chart: eight weeks, a source only from the week it covers.
   const weeks = chartWeeks(entry, t.until);
   expect(weeks.map((x) => x.week)).toEqual(WEEKS);
   expect(weeks[0].counts).toEqual({ reddit: 1, hackernews: 2, github: 0 });
+  expect(coverage(entry, t.until)).toEqual({
+    reddit: { weeks: 8, failed: false },
+    hackernews: { weeks: 8, failed: false },
+    youtube: { weeks: 0, failed: false },
+    github: { weeks: 8, failed: false },
+  });
+});
+
+test('topic weeks: threads found before Reddit read a week do not count, and a failed search leaves its week without a count', () => {
+  // Reddit searched only from 10-19 on (its first search ran on 10-26), and that one failed.
+  const w = world({ reddit: [4, 4, 4, 4, 4, 4, 4, 4] }),
+    { tw } = history(w, { from: 5, failed: [5] }),
+    entry = tw.topics.aiprojectassistant;
+  expect(
+    chartWeeks(entry, tw.until).map((x) => x.counts.reddit ?? null),
+  ).toEqual([null, null, null, null, null, null, 4, 4]);
+  expect(coverage(entry, tw.until).reddit).toEqual({
+    weeks: 2,
+    failed: false,
+  });
+  // The latest search failed: told apart from a source that has not read the topic yet.
+  const { tw: failing } = history(w, { from: 6, failed: [7] });
+  expect(coverage(failing.topics.aiprojectassistant, failing.until)).toEqual({
+    reddit: { weeks: 1, failed: true },
+    hackernews: { weeks: 0, failed: false },
+    youtube: { weeks: 0, failed: false },
+    github: { weeks: 0, failed: false },
+  });
+  // Hacker News and GitHub say which topics they could not count.
+  const counted = tally({
+    topics: [TOPIC],
+    ...w,
+    hn: {
+      topicWeeks: { [TOPIC]: { '2026-11-02': 3 } },
+      topicCountFailed: { [TOPIC]: '2026-11-11T06:00:00.000Z' },
+      topicSync: { at: '2026-11-11T06:00:00.000Z' },
+    },
+    ght: {
+      weekly: {},
+      topicFailed: { [TOPIC]: '2026-11-11T05:00:00.000Z' },
+      lastRun: { at: '2026-11-11T05:00:00.000Z' },
+    },
+    stored: null,
+    now: NOW,
+  }).topics.aiprojectassistant;
+  expect(counted.failed).toEqual({
+    hackernews: '2026-11-11T06:00:00.000Z',
+    github: '2026-11-11T05:00:00.000Z',
+  });
+  // A later read that succeeds clears the failure (each source keeps its own until then).
+  const cleared = tally({
+    topics: [TOPIC],
+    ...w,
+    hn: {
+      topicWeeks: { [TOPIC]: { '2026-11-02': 3 } },
+      topicCountFailed: {},
+      topicSync: { at: '2026-11-12T06:00:00.000Z' },
+    },
+    ght: {
+      weekly: {},
+      topicFailed: { [TOPIC]: '2026-11-11T05:00:00.000Z' },
+    },
+    stored: { topics: { aiprojectassistant: counted } },
+    now: NOW,
+  }).topics.aiprojectassistant;
+  expect(cleared.failed).toEqual({ github: '2026-11-11T05:00:00.000Z' });
 });
 
 test('topic rise: the last 4 weeks clearly up on the 4 before on two sources; one source alone is watched', () => {
@@ -131,15 +250,17 @@ test('topic rise: the last 4 weeks clearly up on the 4 before on two sources; on
       hn: [2, 1, 2, 1, 3, 5, 6, 8],
       github: [1, 1, 1, 1, 1, 1, 1, 1],
     }),
-    tw = tally({ topics: [TOPIC], ...w, stored: null, now: NOW }),
-    [s] = topic.topicRiseSignals({
+    { tw, rd } = history(w),
+    [s, ...rest] = topic.topicRiseSignals({
       tw,
       ...w,
+      rd,
       tr: null,
       volumes: new Map(),
       serps: {},
       V,
     });
+  expect(rest).toEqual([]);
   expect(s.key).toBe('topic-rise:aiprojectassistant');
   expect(s.actionable).toBe(true);
   const g = growthOf(s.growth);
@@ -170,35 +291,96 @@ test('topic rise: the last 4 weeks clearly up on the 4 before on two sources; on
       reddit: [2, 2, 2, 2, 2, 2, 2, 2],
       hn: [1, 1, 1, 1, 5, 6, 7, 8],
     }),
-    tw1 = tally({ topics: [TOPIC], ...one, stored: null, now: NOW }),
-    [watched] = topic.topicRiseSignals({ tw: tw1, ...one, V });
+    h1 = history(one),
+    [watched] = topic.topicRiseSignals({ tw: h1.tw, ...one, rd: h1.rd, V });
   expect(watched.actionable).toBe(false);
   expect(watched.watchOnly).toBe(true);
-  expect(watched.waitingFor).toBeTruthy();
+  expect(watched.waitingFor).toBe('再有一个来源一起变多');
   // Flat: nothing.
   const flat = world({
     hn: [3, 3, 3, 3, 3, 3, 3, 3],
     github: [2, 2, 2, 2, 2, 2, 2, 2],
   });
-  expect(
-    topic.topicRiseSignals({
-      tw: tally({ topics: [TOPIC], ...flat, stored: null, now: NOW }),
-      ...flat,
-      V,
-    }),
-  ).toEqual([]);
+  expect(topic.topicRiseSignals({ tw: history(flat).tw, ...flat, V })).toEqual(
+    [],
+  );
 });
 
-test('topic rise: a source that started reading the topic inside the window is not judged', () => {
+test('topic rise: a week a source did not read is never taken for 0, so its first weeks are no rise', () => {
+  // Reddit read only the last four weeks: compared as 0 → 26, it would be a rise of its own.
   const w = world({
-    reddit: [0, 0, 0, 0, 3, 5, 8, 9],
-    hn: [1, 1, 1, 1, 1, 1, 1, 2],
+      reddit: [0, 0, 0, 0, 5, 6, 7, 8],
+      hn: [3, 3, 3, 3, 3, 3, 3, 3],
+      github: [1, 1, 1, 1, 1, 1, 1, 1],
+    }),
+    late = history(w, { from: 4 });
+  expect(topic.topicRiseSignals({ tw: late.tw, ...w, rd: late.rd, V })).toEqual(
+    [],
+  );
+  // Reddit read all eight weeks but its search failed in one: the gap keeps Reddit out of the comparison.
+  const gap = world({
+      reddit: [1, 1, 1, 1, 5, 6, 7, 8],
+      hn: [1, 1, 1, 1, 3, 4, 5, 6],
+    }),
+    h = history(gap, { failed: [1] }),
+    [watched] = topic.topicRiseSignals({ tw: h.tw, ...gap, rd: h.rd, V });
+  expect(watched.watchOnly).toBe(true);
+  expect(growthOf(watched.growth).figures[1].detail.params[0]).toBe(
+    'Hacker News',
+  );
+  // Only the sources compared are drawn.
+  expect(Object.keys(watched.growth.weeks[0].counts)).toEqual(['hackernews']);
+  // Reddit is still reading: the watch waits for its eight weeks rather than for any other source.
+  expect(watched.waitingFor).toBe('Reddit 也读满 8 周');
+});
+
+test('topic baseline: topics with fewer than two sources read for eight weeks are one Watching item, never an opportunity', () => {
+  // As on a project whose topics were followed this week: Reddit read one week (and found plenty), YouTube's search
+  // failed, Hacker News and GitHub have not read the topics yet.
+  const w = world({ reddit: [0, 0, 0, 0, 0, 0, 0, 30] });
+  const h = history(w, { from: 7, topics: [TOPIC, 'kanban'] });
+  h.tw = tally({
+    topics: [TOPIC, 'kanban'],
+    ...w,
+    rd: h.rd,
+    yt: {
+      topicVideos: {},
+      topicMisses: {
+        aiprojectassistant: '2026-11-10T08:00:00.000Z',
+        kanban: '2026-11-10T08:00:00.000Z',
+      },
+    },
+    stored: h.tw,
+    now: NOW,
   });
-  for (const p of Object.values(w.rd.topicPosts))
-    p.firstSeenAt = '2026-10-14T08:00:00.000Z';
-  const tw = tally({ topics: [TOPIC], ...w, stored: null, now: NOW });
-  expect(tw.topics.aiprojectassistant.since.reddit).toBe('2026-10-12');
-  expect(topic.topicRiseSignals({ tw, ...w, V })).toEqual([]);
+  const out = topic.topicRiseSignals({ tw: h.tw, ...w, rd: h.rd, V });
+  expect(out.map((s) => s.key)).toEqual(['topic-baseline']);
+  const [b] = out;
+  expect(b.actionable).toBe(false);
+  expect(b.watchOnly).toBe(true);
+  expect(b.growth).toBeUndefined();
+  expect(b.title).toBe('关注的话题还在积累数据（2 个），暂不比较讨论是否变多');
+  expect(b.facts).toEqual([
+    '话题：AI project assistant、kanban',
+    'Reddit：已读 1/8 周',
+    'Hacker News：还没读过',
+    'YouTube：最近一次读取失败，已读 0/8 周',
+    'GitHub：还没读过',
+  ]);
+  expect(b.waitingFor).toBe('至少 2 个来源读满 8 周');
+  // Hacker News and GitHub count twelve weeks back at once: with them the topic is compared the same day.
+  const backfilled = world({
+      reddit: [0, 0, 0, 0, 0, 0, 0, 30],
+      hn: [1, 1, 1, 1, 3, 4, 5, 6],
+      github: [0, 0, 1, 0, 2, 2, 3, 3],
+    }),
+    hb = history(backfilled, { from: 7 }),
+    [rise] = topic.topicRiseSignals({ tw: hb.tw, ...backfilled, rd: hb.rd, V });
+  expect(rise.key).toBe('topic-rise:aiprojectassistant');
+  expect(rise.actionable).toBe(true);
+  expect(growthOf(rise.growth).figures[1].detail.params[0]).toBe(
+    'Hacker News · GitHub',
+  );
 });
 
 test('topic rise: Google interest over 3 months and the dedicated pages of the top 10 when known', () => {
@@ -206,7 +388,7 @@ test('topic rise: Google interest over 3 months and the dedicated pages of the t
       reddit: [1, 1, 0, 1, 2, 3, 4, 6],
       hn: [2, 1, 2, 1, 3, 5, 6, 8],
     }),
-    tw = tally({ topics: [TOPIC], ...w, stored: null, now: NOW }),
+    { tw } = history(w),
     points = Array.from({ length: 52 }, (_, i) => ({
       date: `w${i}`,
       value: i < 39 ? 20 : 56,

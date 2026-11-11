@@ -3,7 +3,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { topicKey } from '../../shared/followed-topics.js';
 import { TOPIC_SOURCES } from '../../shared/growth.js';
 import { kit } from './growth-signals.js';
-import { chartWeeks, weekOf } from './topic-weeks.js';
+import { chartWeeks, coverage, weekOf } from './topic-weeks.js';
 import { occurrences } from './hackernews-source.js';
 // Trending topics and what people keep asking (2026-11-10 step 2b): growth points read from what the followed topics'
 // sources already found (Reddit threads, Hacker News stories, YouTube videos, GitHub repositories), the weekly counts
@@ -11,7 +11,9 @@ import { occurrences } from './hackernews-source.js';
 // function reads saved state only; the numbers are counted here and the model never writes them.
 //
 // - topic-rise: a followed topic discussed clearly more in the last 4 weeks than the 4 before, on at least two sources.
-//   A rise on one source alone waits in Watching (watchOnly) until another source follows.
+//   A rise on one source alone waits in Watching (watchOnly) until another source follows. Only a source that read all
+//   eight weeks is compared (topic-weeks.ts: a week not read has no count, never 0); topics with too few such sources
+//   are listed in one Watching item (topic-baseline) that says how far each source has got.
 // - new-topic: a phrase the AI found more and more often in the topics' discussions, not followed yet.
 // - topic-hot: this week's hottest Hacker News stories (points, comments, products named in the comments) and Reddit
 //   threads (Google's order among the week's threads, products named in what Google shows). Reddit's votes and comment
@@ -47,13 +49,15 @@ const holds = (item, terms) => {
 };
 
 /**
- * Whether a topic is rising over eight whole weeks: each source counted from the week it covers the whole window, the
- * last four weeks against the four before (rise `risePct`, at least `minDiscussions` in all), and the sources that rose.
+ * Whether a topic is rising over eight whole weeks: only the sources with a count for every week are compared (a source
+ * still gathering data, or with a week it could not read, is left out), the last four weeks against the four before
+ * (rise `risePct`, at least `minDiscussions` in all), and the sources that rose.
  */
-function judge(weeks, since, V, rule) {
-  const start = weeks[0]?.week,
-    rise = 1 + V(rule, 'risePct') / 100,
-    judged = TOPIC_SOURCES.filter((s) => since?.[s] && since[s] <= start),
+function judge(weeks, V, rule) {
+  const rise = 1 + V(rule, 'risePct') / 100,
+    judged = TOPIC_SOURCES.filter((s) =>
+      weeks.every((w) => w.counts[s] !== undefined),
+    ),
     per = judged.map((s) => {
       const prev = sum(weeks.slice(0, 4), (w) => w.counts[s]),
         last = sum(weeks.slice(4), (w) => w.counts[s]);
@@ -218,15 +222,33 @@ function riseGrowth({ kind, j, weeks, rows, topic, tr, volumes, serps, link }) {
   };
 }
 
+/** The weeks of the compared sources only: a source still gathering data is neither counted nor drawn. */
+const judgedWeeks = (weeks, judged) =>
+  weeks.map((w) => ({
+    week: w.week,
+    counts: Object.fromEntries(judged.map((s) => [s, w.counts[s]])),
+  }));
+
 /** Followed topics discussed clearly more in the last four weeks; a rise on one source alone is watched. */
 function topicRiseSignals({ tw, rd, hn, yt, ght, tr, volumes, serps, V }) {
   if (!tw?.topics || !tw.until) return [];
-  const out = [];
+  const out = [],
+    gathering = [],
+    need = V('topic-rise', 'minSources');
   for (const [key, entry] of Object.entries(tw.topics)) {
-    const weeks = chartWeeks(entry, tw.until, 8),
-      j = judge(weeks, entry.since, V, 'topic-rise');
-    if (!j.up || !j.rising.length) continue;
-    const watchOnly = j.rising.length < V('topic-rise', 'minSources'),
+    const all = chartWeeks(entry, tw.until, 8),
+      j = judge(all, V, 'topic-rise'),
+      cover = coverage(entry, tw.until, 8),
+      // The sources reading the topic but short of eight weeks: compared once they have them.
+      pending = TOPIC_SOURCES.filter(
+        (s) => !j.judged.includes(s) && cover[s].weeks > 0,
+      );
+    if (!j.up || !j.rising.length) {
+      if (j.judged.length < need) gathering.push({ name: entry.name, cover });
+      continue;
+    }
+    const weeks = judgedWeeks(all, j.judged),
+      watchOnly = j.rising.length < need,
       rows = discussionRows({
         match: (x) => onTopic(x, key),
         from: weeks[4].week,
@@ -264,7 +286,12 @@ function topicRiseSignals({ tw, rd, hn, yt, ght, tr, volumes, serps, V }) {
         ...(watchOnly
           ? {
               watchOnly: true,
-              waitingFor: systemMessageText('growthSignals.topicRiseWaiting'),
+              waitingFor:
+                j.judged.length < need && pending.length
+                  ? systemMessageText('growthSignals.topicRiseWaitingData', {
+                      0: pending.map((s) => NAME[s]).join('、'),
+                    })
+                  : systemMessageText('growthSignals.topicRiseWaiting'),
             }
           : {}),
         growth: riseGrowth({
@@ -281,7 +308,53 @@ function topicRiseSignals({ tw, rd, hn, yt, ght, tr, volumes, serps, V }) {
       }),
     );
   }
+  if (gathering.length) out.push(baselineSignal(gathering, need));
   return out;
+}
+
+/**
+ * The followed topics that cannot be compared yet, as one Watching item: for each source, the fewest weeks read among
+ * them, or that it has not read them yet, or that its latest read failed. Never an opportunity.
+ */
+function baselineSignal(gathering, need) {
+  const line = (s) => {
+    const weeks = Math.min(...gathering.map((g) => g.cover[s].weeks)),
+      failed = gathering.some((g) => g.cover[s].failed);
+    return failed
+      ? systemMessageText('growthSignals.topicBaselineFailed', {
+          0: NAME[s],
+          1: weeks,
+        })
+      : gathering.every((g) => !g.cover[s].weeks)
+        ? systemMessageText('growthSignals.topicBaselineNotRead', {
+            0: NAME[s],
+          })
+        : systemMessageText('growthSignals.topicBaselineWeeks', {
+            0: NAME[s],
+            1: weeks,
+          });
+  };
+  return signal({
+    key: 'topic-baseline',
+    type: 'timing',
+    source: 'topics',
+    title: systemMessageText('growthSignals.topicBaselineTitle', {
+      0: n(gathering.length),
+    }),
+    facts: [
+      systemMessageText('growthSignals.topicBaselineTopics', {
+        0: gathering.map((g) => g.name).join('、'),
+      }),
+      ...TOPIC_SOURCES.map(line),
+    ],
+    strength: 1,
+    action: 'create',
+    actionable: false,
+    watchOnly: true,
+    waitingFor: systemMessageText('growthSignals.topicBaselineWaiting', {
+      0: n(need),
+    }),
+  });
 }
 
 /**
@@ -307,46 +380,36 @@ function newTopicSignals({
     const key = topicKey(t.phrase);
     if (!key || taken.has(key)) continue;
     const terms = (t.terms || []).map((x) => String(x).toLowerCase()),
-      fromKey = topicKey(t.from || ''),
-      cover = tw.topics?.[fromKey]?.since || {},
-      since = {},
+      // The weeks the followed topic it came from was read on Reddit and YouTube: the phrase is counted in those only.
+      read = tw.topics?.[topicKey(t.from || '')]?.weeks || {},
       counts = {};
     const count = (source, items, dayOf) => {
+      for (const [w, row] of Object.entries(read))
+        if (row[source] !== undefined) (counts[w] ||= {})[source] = 0;
       for (const item of items) {
         if (!holds(item, terms)) continue;
-        const d = dayOf(item);
-        if (!d) continue;
-        const w = weekOf(d);
-        (counts[w] ||= {})[source] = (counts[w][source] || 0) + 1;
+        const d = dayOf(item),
+          w = d ? weekOf(d) : null;
+        if (w && counts[w]?.[source] !== undefined) counts[w][source]++;
       }
     };
-    if (cover.reddit) {
-      since.reddit = cover.reddit;
-      count(
-        'reddit',
-        Object.values(rd?.topicPosts || {}),
-        (p) => day(p.postedAt) || day(p.firstSeenAt),
-      );
-    }
-    if (cover.youtube) {
-      since.youtube = cover.youtube;
-      count(
-        'youtube',
-        Object.values(yt?.topicVideos || {}),
-        (v) => day(v.publishedAt) || day(v.firstSeenAt),
-      );
-    }
-    const hnWeeks = Object.entries(t.hnWeeks || {}).filter(([, c]) =>
-      Number.isFinite(c),
+    count(
+      'reddit',
+      Object.values(rd?.topicPosts || {}),
+      (p) => day(p.postedAt) || day(p.firstSeenAt),
     );
-    if (hnWeeks.length) {
-      since.hackernews = hnWeeks.map(([w]) => w).sort()[0];
-      for (const [w, c] of hnWeeks) (counts[w] ||= {}).hackernews = c;
-    }
-    const weeks = chartWeeks({ since, weeks: counts }, tw.until, 8),
-      j = judge(weeks, since, V, 'topic-new');
+    count(
+      'youtube',
+      Object.values(yt?.topicVideos || {}),
+      (v) => day(v.publishedAt) || day(v.firstSeenAt),
+    );
+    for (const [w, c] of Object.entries(t.hnWeeks || {}))
+      if (Number.isFinite(c)) (counts[w] ||= {}).hackernews = c;
+    const all = chartWeeks({ weeks: counts }, tw.until, 8),
+      j = judge(all, V, 'topic-new');
     if (!j.up || !j.rising.length) continue;
-    const rows = discussionRows({
+    const weeks = judgedWeeks(all, j.judged),
+      rows = discussionRows({
         match: (x) => holds(x, terms),
         from: weeks[4].week,
         rd,

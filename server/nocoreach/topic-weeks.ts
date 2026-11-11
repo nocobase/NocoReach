@@ -6,8 +6,14 @@ import { TOPIC_SOURCES } from '../../shared/growth.js';
 // new Reddit threads and YouTube videos (by the day they were posted, among those found on the topic), Hacker News
 // stories (Algolia's weekly count, hackernews-source.ts) and new GitHub repositories (GitHub hot topics' weekly count).
 //
-// A source counts from the week it started reading the topic (`since`): Hacker News and GitHub look back twelve weeks
-// at once, Reddit and YouTube only see from their first search on, so a week before that has no count rather than 0.
+// A week has a count for a source only when the source read that week; a week it did not read has none, never 0, so
+// a source that starts reading (or misses a week) is not taken for a sudden rise. Hacker News and GitHub count the
+// last twelve weeks at once by date, and fill a week they missed on their next read. Reddit (Google's past week) and
+// YouTube (DataForSEO, no date filter) cannot look back: the search made in a week reads the week before it, so they
+// build up from their first search on and a week whose search failed stays without a count. 0 is a week read with
+// nothing found. `failed` is, per source, when its latest read of the topic failed, as the source keeps it until a
+// read succeeds (Reddit's topicChecks, YouTube's topicMisses, Hacker News' topicCountFailed, GitHub's topicFailed), so
+// "not read yet" and "the read failed" are told apart (coverage()).
 // The counts are kept (nrSnapshots `topic-weeks:<id>`, 26 weeks) because Reddit and YouTube keep only their latest
 // threads and videos: a week counted once keeps its count when its threads are no longer kept (the larger count wins).
 
@@ -25,20 +31,18 @@ const weekOf = (d) => {
 };
 /** The Monday of the last whole week before `now`. */
 const lastWholeWeek = (now) => addDays(weekOf(iso(now)), -7);
-const earliest = (...days) => days.filter(Boolean).sort()[0] || null;
 const onTopic = (item, key) =>
   (item?.topics || []).some((t) => topicKey(t) === key);
 const pick = (o, key) =>
   o?.[Object.keys(o || {}).find((k) => topicKey(k) === key)];
 
 /** Weekly counts from items found on a topic, by the day each was posted (or first found). */
-function countItems(items, key, dayOf, until) {
+function countItems(items, key, dayOf) {
   const out = {};
   for (const item of items || []) {
     if (!onTopic(item, key)) continue;
     const week = weekOf(dayOf(item) || '');
-    if (!week || week > until) continue;
-    out[week] = (out[week] || 0) + 1;
+    if (week) out[week] = (out[week] || 0) + 1;
   }
   return out;
 }
@@ -52,83 +56,99 @@ function tally({ topics, rd, hn, yt, ght, stored, now }) {
     out = {};
   for (const name of topics || []) {
     const key = topicKey(name),
-      prev = stored?.topics?.[key] || { since: {}, weeks: {} },
-      since = { ...(prev.since || {}) },
+      prev = stored?.topics?.[key] || { weeks: {} },
+      failed = {},
       weeks = Object.fromEntries(
         Object.entries(prev.weeks || {}).map(([w, c]) => [w, { ...c }]),
       ),
       put = (source, week, value, keepLarger) => {
-        if (week > until || value === null || value === undefined) return;
+        if (week > until || !Number.isFinite(value)) return;
         const row = (weeks[week] ||= {});
-        row[source] = keepLarger ? Math.max(row[source] || 0, value) : value;
+        row[source] = keepLarger ? Math.max(row[source] ?? 0, value) : value;
+      },
+      fail = (source, at) => {
+        if (at) failed[source] = at;
       };
-    // Reddit: from the week of the topic's first thread found on, as found by the weekly searches.
-    const threads = Object.values(rd?.topicPosts || {}).filter((p) =>
-      onTopic(p, key),
+    // Reddit and YouTube: the week before the one their latest weekly search ran in, and every week read before, counted
+    // again from the threads and videos kept (a thread found later still counts in the week it was posted).
+    const fromSearches = (source, items, readWeek, dayOf) => {
+      if (readWeek) put(source, readWeek, 0, true);
+      const counts = countItems(items, key, dayOf);
+      for (const [week, row] of Object.entries(weeks))
+        if (row[source] !== undefined)
+          put(source, week, counts[week] || 0, true);
+    };
+    const check = pick(rd?.topicChecks, key),
+      redditRead =
+        check?.status === 'completed' && check.week
+          ? addDays(check.week, -7)
+          : null;
+    fromSearches(
+      'reddit',
+      Object.values(rd?.topicPosts || {}),
+      redditRead,
+      (p) => p.postedAt || p.firstSeenAt,
     );
-    since.reddit = earliest(
-      since.reddit,
-      weekOf(threads.map((p) => p.firstSeenAt).sort()[0] || ''),
+    fail('reddit', check?.status === 'attention' ? check.at : null);
+    const ytAt = pick(yt?.topicReads, key) || null;
+    fromSearches(
+      'youtube',
+      Object.values(yt?.topicVideos || {}),
+      ytAt ? addDays(weekOf(ytAt), -7) : null,
+      (v) => v.publishedAt || v.firstSeenAt,
     );
-    if (since.reddit)
-      for (const [week, c] of Object.entries(
-        countItems(threads, key, (p) => p.postedAt || p.firstSeenAt, until),
-      ))
-        if (week >= since.reddit) put('reddit', week, c, true);
-    // Hacker News: Algolia's count for each week read.
+    fail('youtube', pick(yt?.topicMisses, key));
+    // Hacker News and GitHub: their count for each week read; a week they could not count has none.
     const hnWeeks = pick(hn?.topicWeeks, key) || {};
     for (const [week, c] of Object.entries(hnWeeks))
-      if (Number.isFinite(c)) put('hackernews', week, c, false);
-    since.hackernews = earliest(
-      since.hackernews,
-      Object.keys(hnWeeks).sort()[0],
-    );
-    // YouTube: videos published from the week of the topic's first video found on.
-    const videos = Object.values(yt?.topicVideos || {}).filter((v) =>
-      onTopic(v, key),
-    );
-    since.youtube = earliest(
-      since.youtube,
-      weekOf(videos.map((v) => v.firstSeenAt).sort()[0] || ''),
-    );
-    if (since.youtube)
-      for (const [week, c] of Object.entries(
-        countItems(videos, key, (v) => v.publishedAt || v.firstSeenAt, until),
-      ))
-        if (week >= since.youtube) put('youtube', week, c, true);
-    // GitHub: new repositories under the topic, as GitHub hot topics counts them.
-    const ghWeeks = pick(ght?.weekly, key) || {},
-      counted = Object.entries(ghWeeks).filter(([, c]) => Number.isFinite(c));
-    for (const [week, c] of counted) put('github', week, c, false);
-    since.github = earliest(since.github, counted.map(([w]) => w).sort()[0]);
-    for (const s of TOPIC_SOURCES) if (!since[s]) delete since[s];
+      put('hackernews', week, c, false);
+    fail('hackernews', pick(hn?.topicCountFailed, key));
+    for (const [week, c] of Object.entries(pick(ght?.weekly, key) || {}))
+      put('github', week, c, false);
+    fail('github', pick(ght?.topicFailed, key));
     out[key] = {
       name,
-      since,
       weeks: Object.fromEntries(
         Object.entries(weeks)
           .sort(([a], [b]) => a.localeCompare(b))
           .slice(-KEEP_WEEKS),
       ),
+      ...(Object.keys(failed).length ? { failed } : {}),
     };
   }
   return { updatedAt: new Date(now).toISOString(), until, topics: out };
 }
 
 /**
- * A topic's last `count` whole weeks for the chart, oldest first: each source's count from the week it covers the topic,
- * 0 for a covered week with nothing posted.
+ * A topic's last `count` whole weeks for the chart, oldest first: each source's count for the weeks it read, none for
+ * a week it did not.
  */
 function chartWeeks(entry, until, count = 8) {
   const out = [];
   for (let i = count - 1; i >= 0; i--) {
     const week = addDays(until, -7 * i),
       counts = {};
-    for (const s of TOPIC_SOURCES)
-      if (entry?.since?.[s] && entry.since[s] <= week)
-        counts[s] = entry.weeks?.[week]?.[s] ?? 0;
+    for (const s of TOPIC_SOURCES) {
+      const c = entry?.weeks?.[week]?.[s];
+      if (Number.isFinite(c)) counts[s] = c;
+    }
     out.push({ week, counts });
   }
+  return out;
+}
+
+/**
+ * How much of the last `count` weeks each source has read for a topic: `weeks` read, and whether its latest read
+ * failed. A source with no week read and no failure has not read the topic yet.
+ */
+function coverage(entry, until, count = 8) {
+  const weeks = chartWeeks(entry, until, count),
+    out = {};
+  for (const s of TOPIC_SOURCES)
+    out[s] = {
+      weeks: weeks.filter((w) => w.counts[s] !== undefined).length,
+      failed: Boolean(entry?.failed?.[s]),
+    };
   return out;
 }
 
@@ -168,4 +188,12 @@ class TopicWeeks {
   }
 }
 
-export { TopicWeeks, tally, chartWeeks, weekOf, lastWholeWeek, addDays };
+export {
+  TopicWeeks,
+  tally,
+  chartWeeks,
+  coverage,
+  weekOf,
+  lastWholeWeek,
+  addDays,
+};
