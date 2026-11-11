@@ -23,13 +23,19 @@ export function playbookTitle(p: Named, subject: string, locale?: string) {
   ).slice(0, 200);
 }
 
-/** The title a playbook gives the task: only when its title is automatic, and only when it would change. */
+/**
+ * The title a playbook gives the task: only when its title is automatic, and only when it would change. On a change of
+ * playbook after the start (2026-11-11), `from` is the playbook replaced: a title other than the one it gave is kept.
+ */
 export function retitle(
   task: { title?: string; evidence?: { autoTitle?: AutoTitle } | null },
   p: Named,
+  from?: Named,
 ) {
   const auto = task.evidence?.autoTitle;
   if (!auto?.subject) return null;
+  if (from && task.title !== playbookTitle(from, auto.subject, auto.locale))
+    return null;
   const title = playbookTitle(p, auto.subject, auto.locale);
   return title !== task.title ? title : null;
 }

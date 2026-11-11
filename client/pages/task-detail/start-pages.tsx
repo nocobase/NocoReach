@@ -56,8 +56,12 @@ export function PagePicker({
   busy: boolean;
   /** A page of Website content: linked to the task, so the lookup tells where it is changed. */
   onPage: (url: string) => void;
-  /** A CMS article: linked to the task, changed in that article. */
-  onArticle: (targetId: string, articleId: string) => void;
+  /** A CMS article: linked to the task, changed in that article; its title and address as the search found them. */
+  onArticle: (
+    targetId: string,
+    articleId: string,
+    found: { title: string; url: string },
+  ) => void;
   /** The exceptions (a change that is about no single page): the delivery dialog. */
   onChange: () => void;
 }) {
@@ -177,7 +181,10 @@ export function PagePicker({
                     onClick={() =>
                       h.kind === 'page'
                         ? onPage(h.url)
-                        : onArticle(h.targetId!, h.articleId!)
+                        : onArticle(h.targetId!, h.articleId!, {
+                            title: h.title,
+                            url: h.url,
+                          })
                     }
                   >
                     <span className='flex min-w-0 flex-col'>

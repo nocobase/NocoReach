@@ -179,4 +179,16 @@ describe('how often a step failed', () => {
       ),
     ).toEqual({ failures: 0, same: 0 });
   });
+
+  it('passes over runs a person stopped: a stop is not a failure (2026-11-11)', () => {
+    const runs = [
+      run('4', { failureReason: 'toolAuth' }),
+      run('3', { error: 'cancelled' }),
+      run('2', { failureReason: 'toolAuth' }),
+      run('1', { status: 'succeeded' }),
+    ];
+    expect(failureStreak(runs, 'toolLogin', data(runs[0], 'toolAuth'))).toEqual(
+      { failures: 2, same: 2 },
+    );
+  });
 });

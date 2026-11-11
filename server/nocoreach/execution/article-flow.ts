@@ -149,6 +149,20 @@ export class ArticleFlow {
         return this.providerError(error);
       }
     }
+    // A change of playbook links its article and starts in one command: the article it links, and the same slug in the
+    // other targets it publishes to (the linked article's, or the one it keeps).
+    if (v.command === 'restartWithPlaybook') {
+      let snapshot: ArticleSnapshot | undefined;
+      if (v.link?.targetId && v.link.articleId) {
+        try {
+          snapshot = await this.need().read(project, String(v.link.targetId), String(v.link.articleId));
+        } catch (error) {
+          return this.providerError(error);
+        }
+      }
+      const linking = snapshot ? { slug: snapshot.slug, targetId: String(v.link.targetId) } : v.link === null || (v.link && !v.link.articleId) ? { slug: '' } : undefined;
+      return { ...(snapshot ? { snapshot } : {}), ...(await this.preReadAlso(project, taskId, v.delivery?.also, linking)) };
+    }
     if (v.command === 'rebaseArticle') {
       // Each conflicting leg's article as it is now; a leg whose slug was taken uses the article found then.
       const w = projectWork(await this.s.task(project, taskId)),
@@ -168,17 +182,18 @@ export class ArticleFlow {
     return {};
   }
   /** For a linked article, the article with the same slug in each other chosen target (null: created there). */
-  private async preReadAlso(project: string, taskId: string, also: unknown) {
+  private async preReadAlso(project: string, taskId: string, also: unknown, linking?: { slug: string; targetId?: string }) {
     if (!Array.isArray(also) || !also.length) return {};
     if (also.length > MAX_ALSO) return fail(systemMessageText('articles.tooManyTargets'), 400);
     const w = projectWork(await this.s.task(project, taskId)),
-      slug = w.article?.articleId ? w.article.slug : '';
+      slug = linking ? linking.slug : w.article?.articleId ? w.article.slug : '',
+      own = linking ? linking.targetId : w.article?.targetId;
     if (!slug) return {};
     const targets = this.targets(project),
       out: Record<string, ArticleSnapshot | null> = {};
     for (const id of new Set(also.filter((x) => typeof x === 'string'))) {
       const t = targets.find((x) => x.id === id);
-      if (!t || id === w.article.targetId) continue;
+      if (!t || id === own) continue;
       try {
         out[id] = await this.need().provider(project, id).findBySlug(slug);
       } catch {
@@ -504,27 +519,36 @@ export class ArticleFlow {
     if (typeof tx?.afterCommit === 'function') tx.afterCommit(go);
     else go();
   }
+  /**
+   * The article a task changes, linked before it starts (`linkArticle`), or with a change of playbook after it started
+   * (`restartWithPlaybook`, 2026-11-11): `{ targetId, articleId }` read before the lock (`pre.snapshot`), a target alone
+   * for a new article, or no target to unlink.
+   */
+  async link(project: string, taskId: string, w: Work, v: any, at: string, tx: any, pre: { snapshot?: ArticleSnapshot | null }, event: any) {
+    const s = this.s;
+    if (!v?.targetId) {
+      w.article = undefined;
+      event.note = '';
+      return;
+    }
+    const target = this.need().target(project, String(v.targetId));
+    let sourceKey = null;
+    if (v.articleId) {
+      if (!pre.snapshot || pre.snapshot.id !== String(v.articleId)) return fail(systemMessageText('articles.provider.notFound'), 404);
+      sourceKey = s.key('article', project, taskId, randomUUID());
+      await s.put(sourceKey, pre.snapshot, tx);
+    }
+    const title = pre.snapshot ? pre.snapshot.locales[target.locales[0]]?.title || pre.snapshot.slug : '';
+    // The languages it has text in, for a translation's choice of what to translate (2026-10-25).
+    w.article = { targetId: target.id, articleId: v.articleId ? String(v.articleId) : null, slug: pre.snapshot?.slug || '', title: clip(title, 300), sourceKey, linkedAt: at, ...(pre.snapshot ? { locales: articleLocales(pre.snapshot) } : {}) };
+    event.note = w.article.title || target.name;
+  }
   /** Commands that belong to article delivery. Returns false for any other command. */
   async command(project: string, taskId: string, task: any, w: Work, v: any, actor: string, at: string, tx: any, pre: { snapshot?: ArticleSnapshot | null }, event: any) {
     const s = this.s;
     if (v.command === 'linkArticle') {
       if (w.stage !== 'plan' || w.flow) return fail(systemMessageText('articles.linkBeforeStart'), 409);
-      if (!v.targetId) {
-        w.article = undefined;
-        event.note = '';
-        return true;
-      }
-      const target = this.need().target(project, String(v.targetId));
-      let sourceKey = null;
-      if (v.articleId) {
-        if (!pre.snapshot || pre.snapshot.id !== String(v.articleId)) return fail(systemMessageText('articles.provider.notFound'), 404);
-        sourceKey = s.key('article', project, taskId, randomUUID());
-        await s.put(sourceKey, pre.snapshot, tx);
-      }
-      const title = pre.snapshot ? pre.snapshot.locales[target.locales[0]]?.title || pre.snapshot.slug : '';
-      // The languages it has text in, for a translation's choice of what to translate (2026-10-25).
-      w.article = { targetId: target.id, articleId: v.articleId ? String(v.articleId) : null, slug: pre.snapshot?.slug || '', title: clip(title, 300), sourceKey, linkedAt: at, ...(pre.snapshot ? { locales: articleLocales(pre.snapshot) } : {}) };
-      event.note = w.article.title || target.name;
+      await this.link(project, taskId, w, v, at, tx, pre, event);
       return true;
     }
     if (v.command === 'editArticleDraft') {
@@ -555,7 +579,7 @@ export class ArticleFlow {
       const places = editPlaces(articleText(a.draft, base), articleText(next.draft, base));
       const cover = coverEdit({ ...base?.cover, ...a.draft.cover }, { ...base?.cover, ...next.draft.cover });
       const edits: ArticleEdits = { ai: v.edits?.ai ?? 0, hand: Math.max(0, places - (v.edits?.ai ?? 0)), ...(cover ? { cover } : {}) };
-      const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) }, edits };
+      const artifact = { ...(await s.flowArtifactOf(project, taskId, w, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) }, edits };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 1] = artifact;
       // The changes kept while reviewing (article-edit.ts) are this version now.
@@ -577,7 +601,7 @@ export class ArticleFlow {
       const linked = new Set([...(w.images || []), ...(task.evidence?.attachmentIds || [])]);
       if ([...draftImageIds(chosen.article.draft), ...draftCoverIds(chosen.article.draft)].some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
       const { rebasedFrom: _rebased, ...article } = structuredClone(chosen.article);
-      const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, chosen.content, actor, at, tx)), article, restoredFrom: { artifactId: chosen.id, version: chosen.version, byHand: writtenByHand(chosen) } };
+      const artifact = { ...(await s.flowArtifactOf(project, taskId, w, producer.key, chosen.content, actor, at, tx)), article, restoredFrom: { artifactId: chosen.id, version: chosen.version, byHand: writtenByHand(chosen) } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 1] = artifact;
       await s.articleEditing.clear(project, taskId, tx);
@@ -653,7 +677,7 @@ export class ArticleFlow {
       const others = [];
       for (let i = 1; i < legs.length; i++) others.push({ targetId: legs[i].targetId, ...(await rebased(i)) });
       if (others.length) next.also = await this.alsoProposals(project, w.delivery, next, others, primary.base, 409, tx);
-      const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, approved.content, actor, at, tx)), article: { ...next, ...(primary.conflicts?.length ? { conflicts: primary.conflicts } : {}), rebasedFrom: approved.id } };
+      const artifact = { ...(await s.flowArtifactOf(project, taskId, w, producer.key, approved.content, actor, at, tx)), article: { ...next, ...(primary.conflicts?.length ? { conflicts: primary.conflicts } : {}), rebasedFrom: approved.id } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 2] = artifact;
       if (w.delivery) w.delivery = { ...w.delivery, articleId: primary.articleId, sourceKey: primary.baseKey, ...(others.length ? { also: others.map((o) => ({ targetId: o.targetId, articleId: o.articleId, sourceKey: o.baseKey })) } : {}) };
