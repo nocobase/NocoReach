@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -8,10 +9,15 @@ import {
 } from 'react';
 import { Extension, mergeAttributes, type Editor } from '@tiptap/core';
 import { Image, type ImageOptions } from '@tiptap/extension-image';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Bold,
   Code,
   Heading,
@@ -21,14 +27,30 @@ import {
   List,
   ListOrdered,
   Quote,
+  Table2,
+  Trash2,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { createUuid } from '@nocobase/app-client';
 import { $t } from '#i18n';
 import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '#components/ui/dropdown-menu';
+import { InputGroupButton } from '#components/ui/input-group';
 import { Kbd } from '#components/ui/kbd';
-import { TooltipProvider } from '#components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '#components/ui/tooltip';
 import {
   mergeExtensions,
   richTextExtensions,
@@ -44,6 +66,15 @@ import {
   writeMarkdown,
   type MarkdownSource,
 } from './faithful-markdown.js';
+import {
+  hasText,
+  ImageTransfers,
+  PASTED,
+  settled,
+  waiting,
+  type Transfer,
+} from './article-image-transfers.js';
+import { headerRowFirst } from './article-table.js';
 import { InlineRewrite } from './inline-rewrite.js';
 import {
   boxRoom,
@@ -56,6 +87,7 @@ import {
   ArticleImageNotesContext,
   imageProblem,
   taskImageSrc,
+  useImageImport,
   useImageUpload,
 } from './task-images-model.js';
 import './article-preview.css';
@@ -73,7 +105,12 @@ type ArticleImageOptions = ImageOptions & {
   note: (src: string) => string;
 };
 
-/** Images as the article shows them, with the review note a new image has, as the preview does. */
+/**
+ * Images as the article shows them, with the review note a new image has, as the preview does. Each names the
+ * article's address for it (`data-nr-src`), so one copied within the editor keeps that address rather than the one the
+ * browser loaded, and is not taken for an image from another site; one on its way in carries its transfer
+ * (article-image-transfers.ts).
+ */
 const ArticleImage = Image.extend<ArticleImageOptions>({
   addOptions() {
     return {
@@ -82,12 +119,31 @@ const ArticleImage = Image.extend<ArticleImageOptions>({
       note: () => '',
     };
   },
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      src: {
+        default: null,
+        parseHTML: (element) =>
+          element.getAttribute('data-nr-src') ?? element.getAttribute('src'),
+      },
+      transfer: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-nr-transfer'),
+        renderHTML: (attributes) =>
+          attributes.transfer
+            ? { 'data-nr-transfer': String(attributes.transfer) }
+            : {},
+      },
+    };
+  },
   renderHTML({ node, HTMLAttributes }) {
     const src = String(node.attrs.src ?? '');
     const image = [
       'img',
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         src: this.options.resolve(src),
+        'data-nr-src': src,
       }),
     ] as const;
     const note = this.options.note(src);
@@ -167,6 +223,41 @@ const LinkKey = Extension.create<{ open: () => void }>({
 const stem = (name: string) => name.replace(/\.[^.]+$/, '');
 const blob = (src: string) => src.startsWith('blob:');
 
+/** A pasted `data:` image as a file to upload, or null when it does not read as one. */
+function dataFile(src: string): File | null {
+  const match = /^data:([^;,]*)((?:;[^;,]*)*),(.*)$/s.exec(src);
+  if (!match) return null;
+  try {
+    const raw = match[2].includes(';base64')
+      ? atob(match[3])
+      : decodeURIComponent(match[3]);
+    const type = match[1] || 'text/plain';
+    return new File(
+      [Uint8Array.from(raw, (c) => c.charCodeAt(0))],
+      `image.${type.split('/')[1] || 'bin'}`,
+      { type },
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** An address that names its host (http, https or protocol-relative), as a URL; null for any other. */
+function webAddress(src: string): URL | null {
+  if (!/^(https?:)?\/\//i.test(src)) return null;
+  try {
+    return new URL(src, 'https://x.invalid');
+  } catch {
+    return null;
+  }
+}
+
+/** The editor's state as it is, with nothing to undo: a body put in from outside is where undoing stops. */
+function restart(e: Editor) {
+  const { doc, selection, plugins } = e.state;
+  e.view.updateState(EditorState.create({ doc, selection, plugins }));
+}
+
 type Tool = {
   label: string;
   icon: LucideIcon;
@@ -244,6 +335,61 @@ const TOOLS: Tool[] = [
   },
 ];
 
+type TableCommand =
+  | 'addRowBefore'
+  | 'addRowAfter'
+  | 'addColumnBefore'
+  | 'addColumnAfter'
+  | 'deleteRow'
+  | 'deleteColumn'
+  | 'deleteTable';
+type TableAction = {
+  label: string;
+  icon: LucideIcon;
+  command: TableCommand;
+  destructive?: boolean;
+};
+
+/** What the Table menu does to the table the cursor is in: rows and columns in, then out. */
+const TABLE_ACTIONS: TableAction[][] = [
+  [
+    {
+      label: 'articleEdit.tableRowAbove',
+      icon: ArrowUp,
+      command: 'addRowBefore',
+    },
+    {
+      label: 'articleEdit.tableRowBelow',
+      icon: ArrowDown,
+      command: 'addRowAfter',
+    },
+    {
+      label: 'articleEdit.tableColumnLeft',
+      icon: ArrowLeft,
+      command: 'addColumnBefore',
+    },
+    {
+      label: 'articleEdit.tableColumnRight',
+      icon: ArrowRight,
+      command: 'addColumnAfter',
+    },
+  ],
+  [
+    { label: 'articleEdit.tableDeleteRow', icon: X, command: 'deleteRow' },
+    {
+      label: 'articleEdit.tableDeleteColumn',
+      icon: X,
+      command: 'deleteColumn',
+    },
+    {
+      label: 'articleEdit.tableDelete',
+      icon: Trash2,
+      command: 'deleteTable',
+      destructive: true,
+    },
+  ],
+];
+
 /** The link being edited: the range it covers (the selection, or the whole link the cursor is in) and its address. */
 type LinkEdit = { from: number; to: number; href: string; existing: boolean };
 
@@ -280,6 +426,7 @@ export function ArticleBodyEditor({
   'aria-describedby'?: string;
 }) {
   const upload = useImageUpload();
+  const copy = useImageImport();
   const notes = useContext(ArticleImageNotesContext);
   const [problem, setProblem] = useState('');
   const [pending, setPending] = useState(0);
@@ -292,7 +439,8 @@ export function ArticleBodyEditor({
   const startRewriteRef = useRef<() => void>(() => {});
   const sourceRef = useRef<MarkdownSource | null>(null);
   const emittedRef = useRef(value);
-  const pendingRef = useRef(0);
+  // Every image on its way in, by its transfer's id (article-image-transfers.ts).
+  const [transfers] = useState(() => new Map<string, Transfer>());
   // The latest props for the editor's callbacks, which are fixed when it is made.
   const liveRef = useRef({ onChange, pageUrl, notes, takesImages, readOnly });
 
@@ -313,6 +461,46 @@ export function ArticleBodyEditor({
   };
   const openLinkRef = useRef(openLink);
 
+  /** One more thing that went wrong with images, after any already shown. */
+  const tell = (why: string) =>
+    setProblem((old) =>
+      !why || old.includes(why) ? old : [old, why].filter(Boolean).join(' '),
+    );
+  const propose = (run: () => Promise<string>, why: string, local?: string) => {
+    const id = createUuid();
+    transfers.set(id, { state: 'proposed', run, problem: why, local });
+    return id;
+  };
+
+  /** A transfer whose image went in, run; when it ends its image is put right (`settled`) and the body handed back. */
+  const start = (e: Editor, id: string) => {
+    const t = transfers.get(id);
+    if (!t || t.state !== 'proposed') return;
+    t.state = 'running';
+    setPending((n) => n + 1);
+    void Promise.resolve()
+      .then(t.run)
+      .then(
+        (ref) => {
+          t.state = 'done';
+          t.ref = ref;
+        },
+        () => {
+          t.state = 'failed';
+          tell(t.problem);
+        },
+      )
+      .finally(() => {
+        setPending((n) => n - 1);
+        if (t.local) URL.revokeObjectURL(t.local);
+        if (e.isDestroyed) return;
+        const tr = settled(e.state, transfers);
+        if (tr) e.view.dispatch(tr);
+        emitRef.current(e);
+      });
+  };
+  const startRef = useRef(start);
+
   /** Shown at once from the file, then pointed at the uploaded copy; one that fails is taken out again. */
   const addImages = (e: Editor, files: File[], at?: number) => {
     if (!liveRef.current.takesImages || !e.isEditable) return;
@@ -323,53 +511,100 @@ export function ArticleBodyEditor({
       return !why;
     });
     setProblem(problems.join(' '));
-    for (const file of accepted) {
+    if (!accepted.length) return;
+    const nodes = accepted.map((file) => {
       const local = URL.createObjectURL(file);
-      const node = {
+      return {
         type: 'image',
-        attrs: { src: local, alt: stem(file.name) },
+        attrs: {
+          src: local,
+          alt: stem(file.name),
+          transfer: propose(
+            () => upload(file, createUuid()).then((image) => image.ref),
+            $t('taskImages.uploadFailed', { 0: file.name }),
+            local,
+          ),
+        },
       };
-      // Counted first, so the insert itself does not hand back the body with the file's local address.
-      pendingRef.current++;
-      setPending((n) => n + 1);
-      const chain = e.chain().focus();
-      (at === undefined
-        ? chain.insertContent(node)
-        : chain.insertContentAt(at, node)
-      ).run();
-      const swap = (src: string | null) => {
-        pendingRef.current--;
-        if (e.isDestroyed) return;
-        let tr = e.state.tr;
-        e.state.doc.descendants((n, pos) => {
-          if (n.type.name !== 'image' || n.attrs.src !== local) return true;
-          const mapped = tr.mapping.map(pos);
-          tr = src
-            ? tr.setNodeMarkup(mapped, undefined, { ...n.attrs, src })
-            : tr.delete(mapped, mapped + n.nodeSize);
-          return false;
-        });
-        if (tr.docChanged) e.view.dispatch(tr);
-        URL.revokeObjectURL(local);
-        // Handed back now that no image is waiting, with whatever was typed meanwhile.
-        emitRef.current(e);
-      };
-      upload(file, createUuid())
-        .then(
-          (image) => swap(image.ref),
-          () => {
-            swap(null);
-            setProblem($t('taskImages.uploadFailed', { 0: file.name }));
-          },
-        )
-        .finally(() => setPending((n) => n - 1));
-    }
+    });
+    const chain = e.chain().focus();
+    (at === undefined
+      ? chain.insertContent(nodes)
+      : chain.insertContentAt(at, nodes)
+    ).run();
   };
   const addRef = useRef(addImages);
 
-  /** The body handed back as Markdown, unless an image is still uploading (its address is not the article's yet). */
+  /**
+   * A pasted image's way in: one from this editor (a copy) or the article's own site stays as it is, a task image is
+   * pointed at by its own address, a `data:` image is uploaded and one from another site copied by the server; one
+   * with an address that cannot be read (a local file, another page's `blob:`) is taken out with a message.
+   */
+  const decide = (node: PMNode): Record<string, unknown> | null => {
+    const id = node.attrs.transfer as string | null;
+    if (!id || (id !== PASTED && transfers.has(id))) return null;
+    const src = String(node.attrs.src ?? '').trim();
+    const task = taskImageOf(src);
+    if (task) return { src: taskImageRef(task.id, task.ext), transfer: null };
+    const fail = (why: string) => ({
+      transfer: propose(() => Promise.reject(new Error(why)), why),
+    });
+    if (src.startsWith('data:')) {
+      if (!liveRef.current.takesImages)
+        return fail($t('articles.provider.imagesUnsupported'));
+      const file = dataFile(src);
+      if (!file) return fail($t('taskImages.pasteFailed'));
+      const why = imageProblem(file, 0, Infinity);
+      return why
+        ? fail(why)
+        : {
+            transfer: propose(
+              () => upload(file, createUuid()).then((image) => image.ref),
+              $t('taskImages.uploadFailed', { 0: file.name }),
+            ),
+          };
+    }
+    const web = webAddress(src);
+    if (!web) {
+      // A site-relative address is the article's site's own; any other scheme names something only the source had.
+      return /^[a-z][a-z0-9+.-]*:/i.test(src) && liveRef.current.takesImages
+        ? fail($t('taskImages.pasteFailed'))
+        : { transfer: null };
+    }
+    const site = webAddress(liveRef.current.pageUrl || '')?.host;
+    if (!liveRef.current.takesImages || web.host === site)
+      return { transfer: null };
+    return {
+      transfer: propose(
+        () => copy(web.href, createUuid()).then((image) => image.ref),
+        $t('taskImages.copyFailed', { 0: web.hostname }),
+      ),
+    };
+  };
+  const decideRef = useRef(decide);
+
+  /**
+   * Image files pasted on their own (a screenshot, Copy image in a browser) are uploaded as files, and the HTML that
+   * may come with them is left out, so the image goes in once. With text, what was copied is the HTML, whose images
+   * come in by address.
+   */
+  const paste = (e: Editor, event: ClipboardEvent) => {
+    setProblem('');
+    const data = event.clipboardData;
+    const files = Array.from(data?.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    if (!files.length || !liveRef.current.takesImages) return false;
+    const html = data?.getData('text/html') ?? '';
+    if (html && hasText(html)) return false;
+    addRef.current(e, files);
+    return true;
+  };
+  const pasteRef = useRef(paste);
+
+  /** The body handed back as Markdown, unless an image is still on its way in (its address is not the article's yet). */
   const emit = (e: Editor) => {
-    if (pendingRef.current > 0) return;
+    if (waiting(e.state.doc)) return;
     // A change can come before the editor says it is ready (onCreate waits a tick): the source is what it was made from.
     sourceRef.current ??= readMarkdown(e, emittedRef.current);
     const markdown = writeMarkdown(e, sourceRef.current);
@@ -384,14 +619,16 @@ export function ArticleBodyEditor({
   const [extensions] = useState(() =>
     mergeExtensions(
       richTextExtensions({
+        // Pasted files are the editor's own to take (ImageTransfers), so a copied image does not also come in by
+        // its address from the HTML beside it.
         files: {
           allowedMimeTypes: [...TASK_IMAGE_TYPES],
-          onPaste: (e, files) => addRef.current(e, files),
           onDrop: (e, files, at) => addRef.current(e, files, at),
         },
       }),
       [
         ArticleImage.configure({
+          allowBase64: true,
           resolve: (src) => {
             if (blob(src)) return src;
             const task = taskImageOf(src);
@@ -401,6 +638,12 @@ export function ArticleBodyEditor({
           },
           note: (src) =>
             liveRef.current.notes?.get(taskImageOf(src)?.id || '') ?? '',
+        }),
+        ImageTransfers.configure({
+          transfers,
+          start: (e, id) => startRef.current(e, id),
+          decide: (node) => decideRef.current(node),
+          paste: (e, event) => pasteRef.current(e, event),
         }),
         LinkKey.configure({ open: () => openLinkRef.current() }),
         InlineRewriteMarks.configure({
@@ -443,17 +686,23 @@ export function ArticleBodyEditor({
     liveRef.current = { onChange, pageUrl, notes, takesImages, readOnly };
     openLinkRef.current = openLink;
     addRef.current = addImages;
+    startRef.current = start;
+    decideRef.current = decide;
+    pasteRef.current = paste;
     emitRef.current = emit;
     editorRef.current = editor;
   });
 
-  // A body from outside (another version, the draft discarded): shown, and read again as the source to keep.
+  // A body from outside (the edits saved earlier, another version, the draft discarded): shown, and read again as the
+  // source to keep. It is not a step to undo: undoing past it would bring back the body it replaced, which the next
+  // save would keep (2026-11-12 user report), so the history starts again from it.
   useEffect(() => {
     if (!editor || value === emittedRef.current) return;
     editor.commands.setContent(value, {
       contentType: 'markdown',
       emitUpdate: false,
     });
+    restart(editor);
     sourceRef.current = readMarkdown(editor, value);
     emittedRef.current = value;
   }, [editor, value]);
@@ -477,9 +726,14 @@ export function ArticleBodyEditor({
 
   const state = useEditorState({
     editor,
-    selector: ({ editor: e }) =>
+    selector: ({ editor: e }): Record<string, boolean> =>
       e
-        ? Object.fromEntries(TOOLS.map((tool) => [tool.label, tool.active(e)]))
+        ? {
+            ...Object.fromEntries(
+              TOOLS.map((tool) => [tool.label, tool.active(e)]),
+            ),
+            table: e.isActive('table'),
+          }
         : {},
   });
 
@@ -652,6 +906,64 @@ export function ArticleBodyEditor({
                     <ImagePlus />
                   </ToolButton>
                 </>
+              )}
+              {state?.table && (
+                // Rows and columns of the table the cursor is in (2026-11-12 user report: a table could not grow or
+                // shrink); shown only there, as the menu has nothing to do elsewhere.
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <DropdownMenuTrigger
+                          render={
+                            <InputGroupButton
+                              size='icon-sm'
+                              aria-label={$t('articleEdit.table')}
+                              className='data-popup-open:bg-muted'
+                            />
+                          }
+                        />
+                      }
+                    >
+                      <Table2 />
+                    </TooltipTrigger>
+                    <TooltipContent>{$t('articleEdit.table')}</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent
+                    className='w-auto min-w-48'
+                    // Back to the article, where the cursor was, rather than to the button.
+                    finalFocus={() => editor.view.dom}
+                  >
+                    {TABLE_ACTIONS.map((group, i) => (
+                      <Fragment key={group[0].command}>
+                        {i > 0 && <DropdownMenuSeparator />}
+                        {group.map((action) => {
+                          const Icon = action.icon;
+                          return (
+                            <DropdownMenuItem
+                              key={action.command}
+                              variant={
+                                action.destructive ? 'destructive' : 'default'
+                              }
+                              disabled={!editor.can()[action.command]()}
+                              onClick={() =>
+                                editor
+                                  .chain()
+                                  .focus()
+                                  [action.command]()
+                                  .command(headerRowFirst)
+                                  .run()
+                              }
+                            >
+                              <Icon />
+                              {$t(action.label)}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </TooltipProvider>
           </div>

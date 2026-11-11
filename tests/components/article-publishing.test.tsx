@@ -497,6 +497,7 @@ it('uploads an image added from the toolbar and writes it where the cursor was',
     expect(box.querySelector('img')).toHaveAttribute('src', 'blob:local-1');
     expect(screen.getByRole('status')).toHaveTextContent('Uploading images…');
     expect(onChange).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
     answer(
       new Response(
         JSON.stringify({

@@ -130,13 +130,24 @@ export function useArticleEditSession({
       unwrap: 'data',
     });
 
-  /** What the server holds, shown unless the person has changes of their own it has not saved yet. */
+  /**
+   * What the server holds, shown when the page takes the article over: on opening it, or once someone else has let it
+   * go. While the page holds it, its own form is what the server has or is about to have, so an answer that left
+   * before the last save (a heartbeat) cannot put back older text (2026-11-12 user report).
+   */
   const receive = (at: string, state: ArticleEditState) => {
     if (liveRef.current.key !== at) return;
+    const { remote: was } = liveRef.current;
+    const held = was.key === at && Boolean(was.state?.mine);
     setRemote({ key: at, state, failed: false });
     const draft = state.draft?.artifactId === at ? state.draft : null;
+    // Saved by someone else meanwhile (the page slept past its lease): theirs is the article now.
+    const theirs = Boolean(
+      draft && state.lease && draft.savedBy !== state.lease.userId,
+    );
     setLocal((old) => {
-      if (old.key === at && old.unsaved && state.mine) return old;
+      if (old.key === at && state.mine && (old.unsaved || (held && !theirs)))
+        return old;
       const base = liveRef.current.initial;
       if (!base) return old;
       return {
