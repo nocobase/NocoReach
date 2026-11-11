@@ -6,6 +6,7 @@ import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
 import { hash as candidateKey } from './research-helpers.js';
 import { pageIdentity, pageKey } from '../../shared/page-identity.js';
+import { organicLink, savedResult } from './serp-links.js';
 // 关键词 详情 (2026-10-15 user choice, after Ahrefs' Keywords Explorer): one page for a keyword in one market, opened from
 // every list of 关键词. `site` is free and answers at once: the saved record, the weekly rank checks with that week's
 // top 10 (already paid for), the site's pages Search Console shows for the keyword and its other queries sharing the
@@ -34,6 +35,8 @@ function keywordItem(r){const ki=r?.keyword_info||{},kp=r?.keyword_properties||{
   trend:t?{monthly:num(t.monthly),quarterly:num(t.quarterly),yearly:num(t.yearly)}:null,coreKeyword:str(kp.core_keyword,200)||null,
   serpFeatures:[...new Set(arr(serp?.serp_item_types).map(String).filter(x=>x!=='organic'&&x!=='paid'))].slice(0,12),resultsCount:num(serp?.se_results_count),
   referringDomains:num(bl?.referring_main_domains??bl?.referring_domains),backlinks:num(bl?.backlinks)};}
+// A result's address and site, as the page shows them; a hidden link is marked unresolved with the site's name Google showed.
+const serpLink=i=>{const {url,domain,resolved,site}=organicLink(i);return {url:str(url,2000),domain:str(domain,200),...(resolved?{}:{resolved:false,...(site?{site:str(site,100)}:{})})};};
 const failed=(raw,key)=>({status:'failed',errorCode:systemMessageText(key),result:null,costUsd:Number.isFinite(raw?.cost)?raw.cost:null});
 const ok=(raw,result)=>({status:'completed',errorCode:null,result,costUsd:Number.isFinite(raw?.cost)?raw.cost:null});
 const good=raw=>raw?.status_code===20000&&raw?.tasks?.[0]?.status_code===20000;
@@ -45,10 +48,11 @@ const kinds={
   result:raw=>good(raw)?ok(raw,{items:arr(raw.tasks[0].result?.[0]?.items).map(i=>keywordItem(i.keyword_data)).filter(i=>i.keyword)}):failed(raw,'keywordSuggest.keywordDataLookupFailed')},
  'kw-suggestions':{specification:v=>base('kw-suggestions',v,'dataforseo_labs/google/keyword_suggestions/live',{keyword:market(v).keyword,limit:LIST,order_by:['keyword_info.search_volume,desc']},0.015,0.03),
   result:raw=>good(raw)?ok(raw,{items:arr(raw.tasks[0].result?.[0]?.items).map(keywordItem).filter(i=>i.keyword)}):failed(raw,'keywordSuggest.keywordDataLookupFailed')},
- // The top 10 organic results, the questions people also ask and the related searches Google shows.
+ // The top 10 organic results, the questions people also ask and the related searches Google shows. A result whose link
+ // Google hid (serp-links.ts) keeps the redirect, which still opens the page, with the site its breadcrumb shows.
  'kw-serp':{specification:v=>base('kw-serp',v,'serp/google/organic/live/advanced',{keyword:market(v).keyword,device:'desktop',depth:10},0.002,0.01),
   result:raw=>{if(!good(raw))return failed(raw,'rankTracking.searchResultsLookupFailed');const items=arr(raw.tasks[0].result?.[0]?.items);
-   return ok(raw,{items:items.filter(i=>i.type==='organic').map(i=>({position:num(i.rank_group),title:str(i.title,200),url:str(i.url,2000),domain:str(i.domain,200)})).slice(0,10),
+   return ok(raw,{items:items.filter(i=>i.type==='organic').map(i=>({position:num(i.rank_group),title:str(i.title,200),...serpLink(i)})).slice(0,10),
     questions:items.filter(i=>i.type==='people_also_ask').flatMap(i=>arr(i.items).map(q=>str(q.title,200))).filter(Boolean).slice(0,10),
     related:items.filter(i=>i.type==='related_searches').flatMap(i=>arr(i.items).map(q=>str(typeof q==='string'?q:q?.title,200))).filter(Boolean).slice(0,10),
     features:[...new Set(items.map(i=>String(i.type||'')).filter(t=>t&&t!=='organic'&&t!=='paid'))].slice(0,12)});}},
@@ -69,7 +73,8 @@ class KeywordDetail{
    related:{status:related.status==='error'&&suggestions.status==='error'?'error':'ready',message:error,related:relatedItems,matching,questions}};}
  // The top 10: the latest weekly check of a tracked keyword (free), else a lookup.
  async serp(id,v){const m=market(v),domains=((await this.p.project(id)).domains||[]).map(bare).filter(Boolean);
-  const mark=items=>items.map(i=>({...i,own:ownDomain(i.domain||i.url,domains)}));
+  // Results saved before 2026-11-11 with a hidden link lose the google.com they were credited to.
+  const mark=items=>items.map(savedResult).map(({shown:_shown,...i})=>({...i,own:ownDomain(i.resolved===false?i.domain:i.domain||i.url,domains)}));
   const tracked=await this.tracked(id,m);const last=tracked?.checks.at(-1);
   if(last?.runId){const run=await this.p.db.getRepository('nrKeywordRuns').findOne({filter:{id:String(last.runId),projectId:id}});const items=run?.get('result')?.items;
    if(Array.isArray(items))return {connected:true,source:'tracking',status:'ready',at:last.at,items:mark(items.filter(i=>i.position&&i.position<=10).slice(0,10)),questions:[],related:[],features:[]};}
@@ -93,7 +98,7 @@ class KeywordDetail{
    .slice(0,10).map(p=>({url:p.url,title:str(p.title,200)||null}));
   return {keyword:m.keyword,market:{locationCode:m.locationCode,language:m.language},dataforseo:this.connected(id),
    saved:record?{id:record.id,source:record.source,tagIds:record.tagIds,savedAt:record.savedAt,metrics:record.metrics}:null,
-   tracking:tracked?{id:tracked.id,addedAt:tracked.addedAt,history:tracked.checks.slice(-12).map(c=>({at:c.at,position:c.position,url:c.url}))}:null,
+   tracking:tracked?{id:tracked.id,addedAt:tracked.addedAt,history:tracked.checks.slice(-12).map(c=>({at:c.at,position:c.position,url:c.url,...(c.uncertain?{uncertain:true}:{})}))}:null,
    gsc:{connected:gsc.connected,cutoff:gsc.cutoff,window:gsc.window,pages,queries:[...byQuery.values()].map(avg).sort((a,b)=>b.impressions-a.impressions).slice(0,20)},
    mentions};}
  // 保存 from the page: the keyword in this market, with the overview already read when there is one (no new query).

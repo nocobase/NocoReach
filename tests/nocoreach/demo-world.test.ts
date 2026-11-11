@@ -207,6 +207,56 @@ describe.each(['zh-CN', 'en-US'])(
       ]);
     });
 
+    it('answers Google with a page and title of its own for every result, in the market script', async () => {
+      const market =
+        language === 'zh-CN'
+          ? { location_code: 2158, language_code: 'zh-TW' }
+          : { location_code: 2840, language_code: 'en' };
+      for (const which of ['main', 'second'] as const) {
+        const project = { id: which, ...content.projects[which], language };
+        for (const k of new World(project, now).research.slice(0, 15)) {
+          const response = await worldResponse(
+            project,
+            'https://api.dataforseo.com/v3/serp/google/organic/live/advanced',
+            {
+              method: 'POST',
+              body: JSON.stringify([
+                { keyword: k.keyword, depth: 10, ...market },
+              ]),
+            },
+            now,
+          );
+          const items: {
+            domain: string;
+            url: string;
+            title: string;
+            breadcrumb: string;
+            website_name: string;
+          }[] = (await response.json()).tasks[0].result[0].items.filter(
+            (i: { type: string }) => i.type === 'organic',
+          );
+          const label = `${which}: ${k.keyword}`;
+          expect(new Set(items.map((i) => i.title)).size, label).toBe(
+            items.length,
+          );
+          expect(new Set(items.map((i) => i.url)).size, label).toBe(
+            items.length,
+          );
+          for (const i of items) {
+            expect(i.website_name, label).toBeTruthy();
+            expect(i.breadcrumb.startsWith(`https://${i.domain}`), label).toBe(
+              true,
+            );
+          }
+          // The Chinese demo's market is Taiwan: no Simplified-only characters in its titles.
+          if (language === 'zh-CN')
+            expect(items.map((i) => i.title).join(' '), label).not.toMatch(
+              /[与项务团队时间说导个们发会录评论实际费历区]/,
+            );
+        }
+      }
+    });
+
     it('answers every Search & market › Backlinks lookup the way the service reads it', async () => {
       const project = { id: 'main', ...content.projects.main, language };
       const ask = async (path: string, body: unknown) =>

@@ -114,8 +114,10 @@ function hackernewsSignals({hn,now}){if(!hn?.retainedFrom)return [];const {daily
 // 排名跟踪: a tracked keyword that fell 5 or more places, dropped out of the top 100 from the top 20, or entered the top 10.
 // A page that fell so for one or more keywords is an opportunity (2026-11-10): the clicks it can win back, with every
 // keyword it fell for and the sites above it now (`rt.serps`, the latest results of those keywords).
+// An uncertain check (Google hid more than 30% of the result links, rank-tracking.ts) says nothing about the position and is skipped, so
+// it never reads as a drop or a loss.
 function rankSignals({rt,queries,identity,volumes=new Map()}){if(!rt?.keywords?.length)return [];const out=[],fell=new Map();
- for(const k of rt.keywords){const list=rt.checks?.[k.id]||[],now=list.at(-1),before=list.at(-2);if(!now||!before)continue;const a=before.position,b=now.position;
+ for(const k of rt.keywords){const list=(rt.checks?.[k.id]||[]).filter(c=>!c.uncertain),now=list.at(-1),before=list.at(-2);if(!now||!before)continue;const a=before.position,b=now.position;
   const url=(b&&now.url)||before.url||now.url;if(a&&url&&(b?b>a:a<=20)){const path=pathOf(canonicalUrl(url,identity)),e=fell.get(path)||{url,keywords:[],ruled:false};e.keywords.push({keyword:k.keyword,before:a,now:b||null,ahead:aheadOf(rt.serps?.[k.id],b)});if(b?b-a>=V('rank','dropPlaces'):true)e.ruled=true;fell.set(path,e);}
   if(a&&b&&b-a>=V('rank','dropPlaces'))out.push(signal({key:`rank-drop:${k.id}`,type:'page',source:'rank',url:now.url||before.url,title:systemMessageText('messages.dropped', { 0: k.keyword, 1: a, 2: b }),chip:chip('red',systemMessageText('messages.positions', { 0: b-a })),facts:[systemMessageText('rankTracking.positionComparison', { 0: before.at.slice(0,10), 1: a, 2: now.at.slice(0,10), 3: b }),...(now.url?[systemMessageText('messages.rankingPage', { 0: now.url })]:[])],strength:clamp((b-a)*6),action:'optimize'}));
   else if(a&&a<=20&&!b)out.push(signal({key:`rank-lost:${k.id}`,type:'page',source:'rank',url:before.url,title:systemMessageText('messages.droppedOutTop100Last', { 0: k.keyword, 1: a }),chip:chip('red',systemMessageText('analysisRules.droppedOutTop100')),facts:[systemMessageText('messages.notTop100', { 0: before.at.slice(0,10), 1: a, 2: now.at.slice(0,10) })],strength:clamp(80-a),action:'optimize'}));

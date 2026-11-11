@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
 import { KeywordDetail, kinds } from '../../server/nocoreach/keyword-detail.js';
+import fixture from '../fixtures/dataforseo/goto-serp.json' with { type: 'json' };
 
 const row = (keyword, extra = {}) => ({
   keyword,
@@ -331,6 +332,96 @@ describe('keyword detail', () => {
     expect(m.related.status).toBe('ready');
     expect(m.related.message).toBe('结果不确定');
     expect(m.related.matching).toEqual([]);
+  });
+  it('top 10 with hidden links: the real sites from the breadcrumb, the redirect kept as the link, never google.com', () => {
+    const { result } = kinds['kw-serp'].result(fixture.top10);
+    expect(result.items.map((i) => i.domain)).toEqual([
+      'www.odoo.com',
+      'suitecrm.com',
+      'www.nocobase.com',
+      '',
+      'github.com',
+      'www.espocrm.com',
+      'en.wikipedia.org',
+      'zapier.com',
+      'krayincrm.com',
+      'docs.nocobase.com',
+    ]);
+    expect(result.items[2]).toEqual({
+      position: 3,
+      title: 'Top 10 Open Source CRM Systems in 2026 - NocoBase',
+      url: 'https://www.google.com/goto?url=CAESFAKE0003x',
+      domain: 'www.nocobase.com',
+      resolved: false,
+      site: 'NocoBase',
+    });
+    // Reddit's breadcrumb is a comment count: the site's name is shown instead.
+    expect(result.items[3]).toMatchObject({
+      domain: '',
+      resolved: false,
+      site: 'Reddit · r/selfhosted',
+    });
+    expect(result.items[1]).toEqual({
+      position: 2,
+      title: 'SuiteCRM | Open Source CRM',
+      url: 'https://suitecrm.com/',
+      domain: 'suitecrm.com',
+    });
+  });
+  it('serp: a weekly check saved before the fix shows no google.com, and the site is marked from its breadcrumb', async () => {
+    const { d } = setup({ tracked: true });
+    const legacy = Array.from({ length: 10 }, (_, i) => ({
+      position: i + 1,
+      domain: 'google.com',
+      url: `https://google.com/goto?url=CAES${i}`,
+      title: `T${i}`,
+    }));
+    legacy[6] = {
+      position: 7,
+      domain: 'www.nocobase.com',
+      url: 'https://www.google.com/goto?url=CAES6',
+      title: 'T6',
+      resolved: false,
+      shown: 'https://www.nocobase.com › blog',
+      site: 'NocoBase',
+    };
+    d.p.db.getRepository = () => ({
+      findOne: async () => ({ get: () => ({ items: legacy }) }),
+    });
+    const s = await d.serp(1, { ...asked, keyword: 'open source CRM' });
+    expect(s.items.map((i) => i.domain)).toEqual([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'www.nocobase.com',
+      '',
+      '',
+      '',
+    ]);
+    expect(s.items.every((i) => i.resolved === false)).toBe(true);
+    expect(s.items.filter((i) => i.own).map((i) => i.position)).toEqual([7]);
+    expect(s.items[6]).not.toHaveProperty('shown');
+  });
+  it('site: an uncertain weekly check is kept in the history, marked', async () => {
+    const { d } = setup({ tracked: true });
+    const state = await d.p.rankTracking.state();
+    state.checks.k1.push({
+      at: '2026-11-10T00:00:00Z',
+      position: null,
+      url: null,
+      runId: 'run-8',
+      uncertain: true,
+    });
+    d.p.rankTracking.state = async () => state;
+    expect((await d.site(1, asked)).tracking.history.at(-1)).toEqual({
+      at: '2026-11-10T00:00:00Z',
+      position: null,
+      url: null,
+      uncertain: true,
+    });
   });
   it('serp: a tracked keyword shows its latest weekly check for free, the site marked', async () => {
     const { d, lookups } = setup({ tracked: true });

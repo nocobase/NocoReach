@@ -31,9 +31,11 @@ import { formatDate } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 import { refreshNavSources } from '#components/app-shell/nav-badges';
 
-type Check = { at: string; position: number | null; url: string | null; runId: string };
-type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };
-type Status = { keywords: Tracked[]; lastRun: { at: string; ok: boolean; errors: string[]; checked: number } | null };
+// `uncertain`: Google hid the links of more than 30% of the results in that check and our site was not among the rest
+// (serp-links.ts), so a missing position there is unknown rather than beyond 100; it is never drawn or compared as a drop.
+type Check = { at: string; position: number | null; url: string | null; runId: string; uncertain?: boolean };
+type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null; checking?: string | null };
+type Status = { keywords: Tracked[]; lastRun: { at: string; ok: boolean; errors: string[]; checked: number; queued?: number } | null };
 export const rankRequest = <T,>(action: string, body: object = {}) => api.action<T>("nrRankTracking", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const day = (v?: string | null) => formatDate(v);
 const pathOf = (u?: string | null) => { try { return u ? new URL(u).pathname : ""; } catch { return u || ""; } };
@@ -74,7 +76,7 @@ export function StartTrackingDialog({ keywords, onClose, onDone }: { keywords: {
 }
 
 function Spark({ history }: { history: Check[] }) {
-  const pts = history.map((c) => c.position ?? 101);
+  const pts = history.filter((c) => !c.uncertain).map((c) => c.position ?? 101);
   if (pts.length < 2) return <span className="text-xs text-muted-foreground">—</span>;
   const w = 80, h = 22, max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
   // Lower positions are better, so 1 is drawn at the top.
@@ -82,12 +84,12 @@ function Spark({ history }: { history: Check[] }) {
   return <svg viewBox={`0 0 ${w} ${h}`} className="h-5 w-20" role="img" aria-label={$t('rankTracking.rankTrend')}><polyline points={d} fill="none" stroke="var(--chart-3)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" /></svg>;
 }
 function Move({ now, before }: { now: Check | null; before: Check | null }) {
-  if (!now || !before) return <span className="text-muted-foreground">—</span>;
+  if (!now || !before || now.uncertain) return <span className="text-muted-foreground">—</span>;
   const a = before.position ?? 101, b = now.position ?? 101, d = a - b;
   if (d === 0) return <span className="text-muted-foreground">{$t('common.flat')}</span>;
   return <Delta value={d} kind="count" />;
 }
-const pos = (c: Check | null) => (!c ? "—" : c.position ? String(c.position) : $t('common.beyond100'));
+const pos = (c: Check | null) => (!c ? "—" : c.position ? String(c.position) : c.uncertain ? $t('rankTracking.uncertain') : $t('common.beyond100'));
 
 const helper = createColumnHelper<Tracked & { site?: number }>();
 export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
@@ -100,30 +102,32 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const anchorRef = useSelectionAnchor();
   const load = useCallback(() => rankRequest<Status>("status").then((s) => { setStatus(s); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $legacyText(e.message) : $t('rankTracking.notLoadRankTracking')))), [setError]);
   useEffect(() => { void load(); }, [load]);
-  // The first check runs in the background after keywords are added; look again shortly while any has none.
-  useEffect(() => { if (!status?.keywords.some((k) => !k.latest)) return; const t = setTimeout(() => void load(), 8000); return () => clearTimeout(t); }, [status, load]);
+  // The first check runs in the background after keywords are added, and a check waits in DataForSEO's queue for a few
+  // minutes; look again shortly while any keyword has none yet, and every minute while any is still being checked.
+  useEffect(() => { const keywords = status?.keywords ?? []; const wait = keywords.some((k) => !k.latest && !k.checking) ? 8000 : keywords.some((k) => k.checking) ? 60000 : 0; if (!wait) return; const t = setTimeout(() => void load(), wait); return () => clearTimeout(t); }, [status, load]);
   const rows = useMemo(() => (status?.keywords ?? []).map((k) => ({ ...k, site: rankOf(ranks, k.keyword)?.position })), [status, ranks]);
   const columns = useMemo<ColumnDef<Tracked & { site?: number }>[]>(() => [
     makeSelectionColumn<Tracked & { site?: number }>(anchorRef),
     helper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className="block max-w-60 truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "market", header: () => $t('common.market'), cell: ({ row }) => <span className="text-muted-foreground">{marketLabel(row.original)}</span> }) as ColumnDef<Tracked & { site?: number }>,
-    helper.accessor((r) => r.latest?.position ?? (r.latest ? 101 : undefined), { id: "position", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('rankTracking.latestRank')} align="right" />, cell: ({ row }) => <span className="font-semibold">{pos(row.original.latest)}</span>, meta: right }) as ColumnDef<Tracked & { site?: number }>,
+    helper.accessor((r) => (r.latest?.uncertain ? undefined : r.latest?.position ?? (r.latest ? 101 : undefined)), { id: "position", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('rankTracking.latestRank')} align="right" />, cell: ({ row }) => row.original.latest?.uncertain ? <span className="text-muted-foreground" title={$t('rankTracking.uncertainHelp')}>{pos(row.original.latest)}</span> : <span className="font-semibold">{pos(row.original.latest)}</span>, meta: right }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "move", header: () => <span className="block text-right">{$t('rankTracking.sinceLastCheck')}</span>, cell: ({ row }) => <span className="block text-right tabular-nums"><Move now={row.original.latest} before={row.original.previous} /></span> }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "page", header: () => $t('common.rankingPage'), cell: ({ row }) => { const u = row.original.latest?.url; return u && safeLink(u) ? <a className="block max-w-44 truncate text-primary hover:underline" href={safeLink(u)} target="_blank" rel="noreferrer" title={u}>{pathOf(u)}</a> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "trend", header: () => $t('rankTracking.trend'), cell: ({ row }) => <Spark history={row.original.history} /> }) as ColumnDef<Tracked & { site?: number }>,
     helper.accessor("site", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.searchConsolePosition')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Tracked & { site?: number }>,
-    helper.display({ id: "checked", header: () => <span className="block text-right">{$t('rankTracking.lastChecked')}</span>, cell: ({ row }) => <span className="block text-right text-muted-foreground tabular-nums">{row.original.latest ? day(row.original.latest.at) : $t('rankTracking.waitingFirstCheck')}</span> }) as ColumnDef<Tracked & { site?: number }>,
+    helper.display({ id: "checked", header: () => <span className="block text-right">{$t('rankTracking.lastChecked')}</span>, cell: ({ row }) => <span className="block text-right text-muted-foreground tabular-nums">{row.original.checking ? $t('common.checking') : row.original.latest ? day(row.original.latest.at) : $t('rankTracking.waitingFirstCheck')}</span> }) as ColumnDef<Tracked & { site?: number }>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = rows.filter((r) => rowSelection[r.id]);
   const [handing, setHanding] = useState<TrackedRow[]>();
   useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)), noun: $t('common.keywordsSelected'), actions: <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: () => ($t('rankTracking.stopTrackingKeywords',{0:selected.length})), description: () => ($t('rankTracking.checkHistoryDeletedToo')), action: 'rankTracking.stopTracking' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); refreshNavSources(); }); }}>{$t('rankTracking.stopTracking')}</TableBulkActionButton></>, clear: () => setRowSelection({}) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
-  const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
+  const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); const known = t.latest?.uncertain ? null : t.latest; return { keyword: t.keyword, market: marketLabel(t), latest: known ?? t.previous, previous: known ? t.previous : null, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {
     setBusy(true);
     // Results from the last 6 days are reused (rankTracking.checkNowReusesResultLast); the toast says how many, not "checked".
-    try { const r = await rankRequest<Status & { checked: number; reused?: number; errors: string[] }>("check"); setStatus(r); const reused = r.reused ?? 0; r.errors.length ? toast.error(() => (translateRankCheckError(r.errors[0]))) : toast.success(() => (!reused ? $t('rankTracking.keywordsChecked',{0:r.checked}) : reused === r.checked ? $t('rankTracking.keywordsReused') : $t('rankTracking.keywordsCheckedSomeReused',{0:r.checked - reused,1:reused}))); }
+    // Checks go to DataForSEO's Standard queue; `queued` counts those whose results are read on a later pass.
+    try { const r = await rankRequest<Status & { checked: number; reused?: number; queued?: number; errors: string[] }>("check"); setStatus(r); const reused = r.reused ?? 0, queued = r.queued ?? 0; r.errors.length ? toast.error(() => (translateRankCheckError(r.errors[0]))) : toast.success(() => (queued ? (reused ? $t('rankTracking.keywordsQueuedSomeReused',{0:queued,1:reused}) : $t('rankTracking.keywordsQueued',{0:queued})) : !reused ? $t('rankTracking.keywordsChecked',{0:r.checked}) : reused === r.checked ? $t('rankTracking.keywordsReused') : $t('rankTracking.keywordsCheckedSomeReused',{0:r.checked - reused,1:reused}))); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('rankTracking.notFullyChecked'))); }
     finally { setBusy(false); }
   };
@@ -133,7 +137,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   return (
     <>
       {/* The status line sits above the table, outside the card, as on every data page (UI review 2026-10-22). */}
-      <p className="nr-footnote flex items-center">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1"><p>{$t('rankTracking.weeklyNote')}</p><p>{$t('rankTracking.checkNowReusesResultLast')}</p></InfoTip></p>
+      <p className="nr-footnote flex items-center">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1"><p>{$t('rankTracking.weeklyNote')}</p><p>{$t('rankTracking.checkNowReusesResultLast')}</p><p>{$t('rankTracking.uncertainHelp')}</p></InfoTip></p>
       <HeaderActions><RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} /></HeaderActions>
       {/* A check that did not finish is said above the table, as on Competitors › Activity, not under 50 rows (UI review 2026-10-23). */}
       {status.lastRun && !status.lastRun.ok ? <ConnectionError message={$t('rankTracking.lastCheckNotFinish',{0:translateRankCheckError(status.lastRun.errors[0])})} /> : null}
