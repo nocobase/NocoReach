@@ -225,10 +225,12 @@ describe('dedicated mock deployment external execution guard', () => {
     const notification = { channels: { inbox: { provider: 'in-app' } } };
     const jobs = {
       default: 'redis',
-      redis: { adapter: 'redis' },
-      memory: {
-        adapter: 'memory',
-        persistence: { path: '/dedicated-mock/jobs' },
+      backends: {
+        redis: { adapter: 'redis' },
+        memory: {
+          adapter: 'memory',
+          persistence: { path: '/dedicated-mock/jobs' },
+        },
       },
     };
     expect(() =>
@@ -262,7 +264,7 @@ describe('dedicated mock deployment jobs isolation', () => {
   };
 
   it('does not let memory notification and scheduler overrides conceal a shared default executor', () => {
-    const jobs = { ...configurations, default: 'redis' };
+    const jobs = { default: 'redis', backends: configurations };
     expect(() =>
       assertMockNotificationIsolation(mock, { jobs: 'memory' }, jobs),
     ).not.toThrow();
@@ -277,7 +279,7 @@ describe('dedicated mock deployment jobs isolation', () => {
       expect(() =>
         assertMockJobsIsolation(
           mock,
-          { ...configurations, default: defaultName },
+          { default: defaultName, backends: configurations },
           { jobs: 'redis' },
         ),
       ).toThrow('NR_MOCK_JOBS_WORKER_NOT_ISOLATED: mock scheduler.jobs');
@@ -290,12 +292,25 @@ describe('dedicated mock deployment jobs isolation', () => {
       expect(() =>
         assertMockJobsIsolation(
           mock,
-          { ...configurations, default: defaultName },
+          { default: defaultName, backends: configurations },
           undefined,
         ),
       ).toThrow('NR_MOCK_JOBS_WORKER_NOT_ISOLATED: mock jobs.default');
     },
   );
+
+  it('reads named configurations only from backends, never from legacy top-level entries', () => {
+    const legacy = { default: 'memory', ...configurations };
+    expect(() => assertMockJobsIsolation(mock, legacy, undefined)).toThrow(
+      'NR_MOCK_JOBS_WORKER_NOT_ISOLATED: mock jobs.default',
+    );
+    expect(() =>
+      assertMockNotificationIsolation(mock, { jobs: 'memory' }, legacy),
+    ).toThrow('NR_MOCK_NOTIFICATION_WORKER_NOT_ISOLATED');
+    expect(() =>
+      assertMockMailIsolation(mock, { jobs: 'memory' }, legacy),
+    ).toThrow('NR_MOCK_MAIL_WORKER_NOT_ISOLATED');
+  });
 
   it.each(['missing', 'default', ''])(
     'rejects invalid scheduler.jobs selector %s without falling back',
@@ -303,7 +318,7 @@ describe('dedicated mock deployment jobs isolation', () => {
       expect(() =>
         assertMockJobsIsolation(
           mock,
-          { ...configurations, default: 'memory' },
+          { default: 'memory', backends: configurations },
           { jobs: name },
         ),
       ).toThrow('NR_MOCK_JOBS_WORKER_NOT_ISOLATED: mock scheduler.jobs');
@@ -316,14 +331,14 @@ describe('dedicated mock deployment jobs isolation', () => {
       expect(() =>
         assertMockJobsIsolation(
           mock,
-          { ...configurations, default: 'selected', selected },
+          { default: 'selected', backends: { ...configurations, selected } },
           undefined,
         ),
       ).toThrow('NR_MOCK_JOBS_WORKER_NOT_ISOLATED: mock jobs.default');
       expect(() =>
         assertMockJobsIsolation(
           mock,
-          { ...configurations, default: 'memory', selected },
+          { default: 'memory', backends: { ...configurations, selected } },
           { jobs: 'selected' },
         ),
       ).toThrow('NR_MOCK_JOBS_WORKER_NOT_ISOLATED: mock scheduler.jobs');
@@ -332,10 +347,10 @@ describe('dedicated mock deployment jobs isolation', () => {
 
   it.each([
     [undefined, undefined],
-    [configurations, undefined],
-    [configurations, { jobs: 'memory' }],
-    [{ ...configurations, default: 'memory' }, undefined],
-    [{ ...configurations, default: 'memory' }, { jobs: 'memory' }],
+    [{ backends: configurations }, undefined],
+    [{ backends: configurations }, { jobs: 'memory' }],
+    [{ default: 'memory', backends: configurations }, undefined],
+    [{ default: 'memory', backends: configurations }, { jobs: 'memory' }],
   ])(
     'allows built-in or explicitly selected memory with unused Redis configurations: %j, %j',
     (jobs, scheduler) => {
@@ -351,7 +366,7 @@ describe('dedicated mock deployment jobs isolation', () => {
       expect(() =>
         assertMockJobsIsolation(
           disabled,
-          { ...configurations, default: 'redis' },
+          { default: 'redis', backends: configurations },
           { jobs: 'redis' },
         ),
       ).not.toThrow();
@@ -399,7 +414,7 @@ describe('mock Mail isolation after template upgrade', () => {
         assertMockMailIsolation(
           mock,
           { jobs },
-          { redis: { adapter: 'redis' } },
+          { backends: { redis: { adapter: 'redis' } } },
         ),
       ).toThrow('NR_MOCK_MAIL_WORKER_NOT_ISOLATED');
     },
@@ -409,7 +424,7 @@ describe('mock Mail isolation after template upgrade', () => {
       assertMockMailIsolation(
         mock,
         { jobs: 'local' },
-        { local: { adapter: 'memory' } },
+        { backends: { local: { adapter: 'memory' } } },
       ),
     ).not.toThrow();
   });

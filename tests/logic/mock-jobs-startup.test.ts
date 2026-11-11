@@ -48,11 +48,11 @@ function runtime(
 
 describe('mock jobs startup preflight', () => {
   it.each([
-    [{ ...configurations, default: 'redis' }, { jobs: 'memory' }],
-    [{ ...configurations, default: 'memory' }, { jobs: 'redis' }],
-    [configurations, { jobs: 'redis' }],
-    [{ ...configurations, default: 'missing' }, { jobs: 'memory' }],
-    [{ ...configurations, default: 'memory' }, { jobs: 'default' }],
+    [{ default: 'redis', backends: configurations }, { jobs: 'memory' }],
+    [{ default: 'memory', backends: configurations }, { jobs: 'redis' }],
+    [{ backends: configurations }, { jobs: 'redis' }],
+    [{ default: 'missing', backends: configurations }, { jobs: 'memory' }],
+    [{ default: 'memory', backends: configurations }, { jobs: 'default' }],
   ])(
     'rejects unsafe jobs before business provider registration, startup or Redis connections: %j, %j',
     (jobs, scheduler) => {
@@ -105,7 +105,9 @@ describe('mock Mail startup preflight', () => {
         throw new Error('Mail preflight must not contact a network');
       });
     expect(() =>
-      createApp(runtime({ ...configurations, default: 'memory' }, {}, mail)),
+      createApp(
+        runtime({ default: 'memory', backends: configurations }, {}, mail),
+      ),
     ).toThrow(reason);
     expect(register.mock.calls.map(([provider]) => provider)).not.toContain(
       JobExecutorServiceProvider,

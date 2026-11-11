@@ -1,4 +1,4 @@
-// NocoReach's patch of the authorization plugin's client (patches/@nocobase__app-plugin-authorization@1.0.0-beta.36.patch):
+// NocoReach's patch of the authorization plugin's client (patches/@nocobase__app-plugin-authorization@1.0.0-beta.37.patch):
 // its topics becoming ready, after each connection, read the snapshot again once and invalidate only on a change; the
 // connection opening itself reads nothing; a permission event still invalidates at once.
 import { apiClientToken, realtimeClientToken } from '@nocobase/app-client';
