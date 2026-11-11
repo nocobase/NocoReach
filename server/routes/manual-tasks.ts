@@ -277,6 +277,49 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
       );
     },
   );
+  routes.post(
+    '/nocoreachTasks/media/import',
+    describeRoute({
+      tags: ['NocoReach Tasks'],
+      summary: 'Copy an image from its address into a started task',
+      description:
+        "For an image pasted into an article from another site: reads the public HTTPS (or http, read over HTTPS) address through the project's website egress, every redirect hop checked for a public address, and keeps a PNG, JPEG, WebP or GIF of at most 20 MiB as the caller's upload, linked like one when the edit is saved. 503 when the address cannot be read; 400 when it is not such an image.",
+      operationId: 'importManualTaskImage',
+      responses: {
+        201: dataResponse(TaskMediaView),
+        ...apiErrorResponses,
+        429: apiErrorResponse(429),
+        503: apiErrorResponse(503),
+      },
+      ...cliRoute(false),
+    }),
+    apiValidator(
+      'query',
+      mediaQuery.extend({ taskId: z.string().regex(/^\d+$/) }),
+    ),
+    apiValidator(
+      'json',
+      z.strictObject({
+        url: z.url({ protocol: /^https?$/ }).max(4096),
+      }),
+    ),
+    async (context) => {
+      const input = context.req.valid('query');
+      return context.json(
+        {
+          data: await service().importImage(
+            creator(context),
+            input.projectId,
+            input.requestId,
+            context.req.valid('json').url,
+            input.taskId,
+            context.req.raw.signal,
+          ),
+        },
+        201,
+      );
+    },
+  );
   routes.get(
     '/nocoreachTasks/:taskId/media',
     describeRoute({

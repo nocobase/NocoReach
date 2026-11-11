@@ -1,6 +1,7 @@
 import { formatDateTime } from '../../client/lib/format';
 import { NavigationGuardProvider } from '@nocobase/app-client';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -25,6 +26,10 @@ import {
 import { TaskDetail } from '../../client/pages/task-detail';
 import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
+import {
+  ARTICLE_AUTOSAVE_MS,
+  ARTICLE_LEASE_HEARTBEAT_MS,
+} from '../../shared/article-edit';
 import spanish from '../../shared/i18n/es-ES.json';
 import russian from '../../shared/i18n/ru-RU.json';
 
@@ -1676,6 +1681,75 @@ test('kept edits open again with when they were saved, and Approve makes a versi
       revision: edited.work.revision,
     }),
   ]);
+});
+
+// 2026-11-12 user report: what was typed went away by itself. The lease's heartbeat reads the kept edits; one answered
+// after a newer save must not put the older text back while the page holds the article.
+test('a heartbeat answered after a newer save keeps what was typed since', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const lease = {
+      userId: '1',
+      name: 'Super Admin',
+      until: '2099-01-01T00:00:00Z',
+    };
+    const kept = (title: string) => ({
+      artifactId: 'artifact-1',
+      form: { locales: { en: { title } } },
+      ai: 0,
+      savedAt: '2026-11-04T10:20:00Z',
+      savedBy: '1',
+      savedByName: 'Super Admin',
+    });
+    let opens = 0;
+    let answer: (state: unknown) => void = () => {};
+    articleEdit.mockImplementation(
+      (o: {
+        body: { op: string; form?: { locales: { en: { title: string } } } };
+      }) => {
+        if (o.body.op === 'save')
+          return Promise.resolve({
+            lease,
+            mine: true,
+            draft: kept(o.body.form!.locales.en.title),
+          });
+        if (o.body.op !== 'open')
+          return Promise.resolve({ lease, mine: true, draft: null });
+        if (++opens === 1)
+          return Promise.resolve({
+            lease,
+            mine: true,
+            draft: kept('Kept title'),
+          });
+        // The heartbeat: read before the save below, answered after it.
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      },
+    );
+    mount(reviewArticle());
+    const card = screen.getByRole('region', { name: '等你处理' });
+    const title = within(card).getByRole('textbox', { name: '标题' });
+    await waitFor(() => expect(title).toHaveValue('Kept title'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ARTICLE_LEASE_HEARTBEAT_MS);
+    });
+    expect(opens).toBeGreaterThan(1);
+    await user.type(title, '!');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ARTICLE_AUTOSAVE_MS + 100);
+    });
+    expect(
+      articleEdit.mock.calls.filter(([o]) => o.body.op === 'save'),
+    ).not.toHaveLength(0);
+    await act(async () => {
+      answer({ lease, mine: true, draft: kept('Kept title') });
+    });
+    expect(title).toHaveValue('Kept title!');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('Discard unversioned changes takes the article back to its version', async () => {

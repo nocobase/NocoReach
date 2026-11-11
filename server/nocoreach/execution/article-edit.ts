@@ -3,9 +3,15 @@ import {
   ARTICLE_LEASE_MS,
   articleEditInput,
   type ArticleEditDraft,
+  type ArticleEditForm,
   type ArticleEditLease,
   type ArticleEditState,
 } from '../../../shared/article-edit.js';
+import {
+  taskImageIds,
+  taskImageOf,
+  type MessageImage,
+} from '../../../shared/task-images.js';
 import { roleOf } from '../policy.js';
 import { fail, projectWork, type Artifact, type Work } from './model';
 
@@ -80,6 +86,24 @@ export async function editProblem(
 const refuse = (p: EditProblem): never =>
   fail(systemMessageText(p.key, p.params), p.status);
 
+/** At most this many images are linked by one save, as by one edit made a version (article-flow.ts). */
+const LINKED_PER_SAVE = 40;
+
+/** The task images a form shows in its fields or sets as covers, each once. */
+function formImageIds(form: ArticleEditForm): string[] {
+  return [
+    ...new Set([
+      ...taskImageIds(
+        Object.values(form.locales).flatMap((fields) => Object.values(fields)),
+      ),
+      ...Object.values(form.cover || {}).flatMap((v) => {
+        const image = taskImageOf(v);
+        return image ? [image.id] : [];
+      }),
+    ]),
+  ];
+}
+
 /** What the article-edit records need of the task service. */
 interface Host {
   p: {
@@ -93,6 +117,16 @@ interface Host {
         ): Promise<void>;
       };
     };
+    /** manual-tasks.ts, which keeps the uploads. */
+    taskAttachments?: {
+      linkImages(
+        connection: unknown,
+        actor: string,
+        project: string,
+        taskId: string,
+        ids: readonly string[],
+      ): Promise<MessageImage[]>;
+    };
   };
   key(kind: string, project: string, task: string, id?: string): string;
   snapshot(key: string, tx?: unknown): Promise<unknown>;
@@ -100,6 +134,7 @@ interface Host {
   repo(name: string): {
     findOne(options: Record<string, unknown>): Promise<unknown>;
     destroy(options: Record<string, unknown>): Promise<unknown>;
+    update(options: Record<string, unknown>): Promise<unknown>;
   };
   task(project: string, id: string, tx?: unknown): Promise<unknown>;
   lock<T>(
@@ -115,6 +150,54 @@ export class ArticleEditing {
     const repo = this.s.repo('nrSnapshots');
     if (await repo.findOne({ filter: { key }, transaction: tx }))
       await repo.destroy({ filter: { key }, transaction: tx });
+  }
+  /**
+   * The images the saved form shows that are the person's own uploads (pasted, dropped or added in the editor, or a
+   * cover), linked to the task now (2026-11-12): until then only the uploader's session reads them, for a day, so the
+   * article showed them broken after signing in again, on another computer, to anyone else, or the next day. Each is
+   * linked on its own and one that cannot be (someone else's, expired, another task's) is left for making the version
+   * to refuse, so a save is never refused for an image. The work gains them as readable images without a revision.
+   */
+  private async link(
+    project: string,
+    taskId: string,
+    task: { id?: unknown; evidence?: Record<string, unknown> },
+    w: Work,
+    form: ArticleEditForm,
+    actor: string,
+    tx: unknown,
+  ) {
+    const attachments = this.s.p.taskAttachments;
+    if (!attachments) return;
+    const known = new Set([
+      ...(w.images || []),
+      ...((task.evidence?.attachmentIds as string[] | undefined) || []),
+    ]);
+    const linked: string[] = [];
+    for (const id of formImageIds(form)
+      .filter((x) => !known.has(x))
+      .slice(0, LINKED_PER_SAVE)) {
+      try {
+        await attachments.linkImages(
+          (tx as { connection?: unknown } | undefined)?.connection,
+          actor,
+          project,
+          taskId,
+          [id],
+        );
+        linked.push(id);
+      } catch (error) {
+        if ((error as { reason?: string })?.reason !== 'TASK_IMAGE_UNAVAILABLE')
+          throw error;
+      }
+    }
+    if (!linked.length) return;
+    w.images = [...(w.images || []), ...linked];
+    await this.s.repo('nrTasks').update({
+      filterByTk: task.id,
+      values: { evidence: { ...task.evidence, work: w } },
+      transaction: tx,
+    });
   }
   /** The kept changes became a version, or another version replaced the one they were made to. */
   clear(project: string, taskId: string, tx: unknown) {
@@ -141,7 +224,11 @@ export class ArticleEditing {
     if (v.op === 'save' && !v.form)
       return fail(systemMessageText('taskExecution.articleEditInvalid'), 400);
     return this.s.lock(project, v.taskId, async (tx) => {
-      const w = projectWork(await this.s.task(project, v.taskId, tx));
+      const task = (await this.s.task(project, v.taskId, tx)) as {
+        id?: unknown;
+        evidence?: Record<string, unknown>;
+      };
+      const w = projectWork(task);
       const leaseKey = this.s.key(LEASE_KIND, project, v.taskId),
         draftKey = this.s.key(EDIT_KIND, project, v.taskId);
       const now = Date.now();
@@ -198,6 +285,7 @@ export class ArticleEditing {
             savedByName: name,
           };
           await this.s.put(draftKey, draft, tx);
+          await this.link(project, v.taskId, task, w, v.form!, actor, tx);
           await take();
         }
       }

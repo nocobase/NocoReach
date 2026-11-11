@@ -16,6 +16,8 @@ import { projectWork } from './execution/model.js';
 import type { TaskService } from './execution/service.js';
 import type { MaterialAttachment } from './execution/task-materials.js';
 import { roleOf } from './policy.js';
+import type { OutboundNetwork } from './outbound-network.js';
+import { download } from './public-sources.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { draftTask, relevantPages, type DraftPage } from './task-draft.js';
 import {
@@ -79,6 +81,41 @@ const DRAFT_TIMEOUT = 90_000;
 const DRAFT_OUTPUT_TOKENS = 4000;
 const EXPIRY = 24 * 60 * 60 * 1000;
 const UNLINKED_LIMIT = 20;
+// A pasted image is asked for in the types a task takes (never AVIF or SVG), and read for at most this long.
+const IMAGE_ACCEPT =
+  'image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5';
+const IMPORT_TIMEOUT = 30_000;
+
+/** The task image type bytes start with, whatever the address or the response says; null for anything else. */
+function imageTypeOf(bytes: Buffer): string | null {
+  const is = (offset: number, value: string) =>
+    bytes.subarray(offset, offset + value.length).toString('latin1') === value;
+  if (
+    bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  )
+    return 'image/png';
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255)
+    return 'image/jpeg';
+  if (is(0, 'GIF87a') || is(0, 'GIF89a')) return 'image/gif';
+  if (is(0, 'RIFF') && is(8, 'WEBP')) return 'image/webp';
+  return null;
+}
+
+/** A name for an image read from an address: the last part of its path, with the extension of what it is. */
+function importedName(url: URL, type: string): string {
+  let last = url.pathname.split('/').pop() || '';
+  try {
+    last = decodeURIComponent(last);
+  } catch {
+    // A malformed escape: the name keeps it as it is.
+  }
+  last = last
+    .replace(/\.[^.]*$/, '')
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 80);
+  return `${last || 'image'}.${type === 'image/jpeg' ? 'jpg' : type.slice(6)}`;
+}
 
 function denied(
   reason: string,
@@ -325,6 +362,71 @@ export class ManualTasks {
       if (!row) throw new Error('Uploaded task media record is missing.');
       return this.mediaView(row);
     });
+  }
+
+  /**
+   * An image pasted into an article from elsewhere (a web page, Feishu, WeChat, Notion), read from its address and
+   * kept as the person's upload (2026-11-12), so the article shows its own copy rather than another site's, which may
+   * expire or refuse to be shown elsewhere. It is read through the project's website egress like any public read
+   * (public-sources.ts: HTTPS, a public address checked and pinned on every hop, at most 20 MiB); an http address is
+   * read over HTTPS. What comes back is kept only when its bytes are a PNG, JPEG, WebP or GIF image.
+   */
+  async importImage(
+    actor: TaskCreator,
+    projectId: string,
+    draftId: string,
+    address: string,
+    taskId: string,
+    signal?: AbortSignal,
+  ): Promise<TaskMediaView> {
+    await this.authorizeUpload(actor, projectId, taskId);
+    const url = new URL(address);
+    if (url.protocol === 'http:') url.protocol = 'https:';
+    const network = (
+      this.runtime.plugin as unknown as { network: OutboundNetwork }
+    ).network;
+    const deadline = AbortSignal.timeout(IMPORT_TIMEOUT);
+    let read: { body: Buffer };
+    try {
+      read = await network.runProject(projectId, () =>
+        download(url, 0, {
+          network,
+          connection: 'site',
+          signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+          limit: TASK_MEDIA_LIMIT,
+          accept: IMAGE_ACCEPT,
+          anyHost: true,
+        }),
+      );
+    } catch (error) {
+      // The host and why, never the address, which may carry a signed token.
+      this.runtime.logger.warn('A pasted image could not be copied.', {
+        host: url.hostname,
+        message: (error as Error | undefined)?.message,
+      });
+      throw new ApiError({
+        status: 'UNAVAILABLE',
+        domain: 'nocoreach',
+        reason: 'TASK_MEDIA_IMPORT_FAILED',
+        message: 'The image could not be read from its address.',
+        metadata: { host: url.hostname },
+        cause: error,
+      });
+    }
+    const type = imageTypeOf(read.body);
+    if (!type)
+      denied(
+        'TASK_MEDIA_INVALID',
+        'The address is not a PNG, JPEG, WebP or GIF image.',
+        'INVALID_ARGUMENT',
+      );
+    return this.upload(
+      actor,
+      projectId,
+      draftId,
+      new File([new Uint8Array(read.body)], importedName(url, type), { type }),
+      taskId,
+    );
   }
 
   async create(

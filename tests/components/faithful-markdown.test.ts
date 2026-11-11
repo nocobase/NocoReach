@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { Image } from '@tiptap/extension-image';
 import {
@@ -9,6 +9,7 @@ import {
   readMarkdown,
   writeMarkdown,
 } from '../../client/pages/task-detail/faithful-markdown';
+import { headerRowFirst } from '../../client/pages/task-detail/article-table';
 
 // 2026-11-04 user request: the article body is edited as it reads, and what is saved is still the article's Markdown,
 // with every block nobody touched exactly as it was.
@@ -136,4 +137,100 @@ it('writes an empty article as nothing, and a new one from the editor', () => {
     contentType: 'markdown',
   });
   expect(write()).toBe('## Title\n\nFirst paragraph.');
+});
+
+// 2026-11-12 user report: a table could not grow or shrink. The Table menu runs TableKit's commands, then keeps the
+// first row the header (article-table.ts); the table is written again as Markdown and every other block stays as it was.
+describe('the Table menu', () => {
+  const TABLE =
+    '| Plan | Price |\n| --- | ---: |\n| Community | Free |\n| Pro | $800 |';
+  /** The cursor in the cell holding `text`, the command run as the menu does, the article written back. */
+  function edit(
+    text: string,
+    command:
+      | 'addRowBefore'
+      | 'addRowAfter'
+      | 'addColumnBefore'
+      | 'addColumnAfter'
+      | 'deleteRow'
+      | 'deleteColumn'
+      | 'deleteTable',
+  ) {
+    const { editor: e, write } = open(ARTICLE);
+    e.chain()
+      .setTextSelection(after(e, text))
+      [command]()
+      .command(headerRowFirst)
+      .run();
+    const out = write();
+    const start = ARTICLE.indexOf(TABLE);
+    const rest = out.slice(start);
+    const end = rest.search(/\n\n(?!\|)/);
+    return {
+      table: rest.slice(0, end),
+      // The article around the table, which must not change by a byte.
+      around: [out.slice(0, start), rest.slice(end)],
+    };
+  }
+  const around = [
+    ARTICLE.slice(0, ARTICLE.indexOf(TABLE)),
+    ARTICLE.slice(ARTICLE.indexOf(TABLE) + TABLE.length),
+  ];
+
+  it.each([
+    [
+      'Community',
+      'addRowAfter',
+      '| Plan      | Price |\n| --------- | -----: |\n| Community | Free  |\n|           |       |\n| Pro       | $800  |',
+    ],
+    [
+      'Community',
+      'addRowBefore',
+      '| Plan      | Price |\n| --------- | -----: |\n|           |       |\n| Community | Free  |\n| Pro       | $800  |',
+    ],
+    [
+      'Community',
+      'addColumnAfter',
+      '| Plan      |     | Price |\n| --------- | --- | -----: |\n| Community |     | Free  |\n| Pro       |     | $800  |',
+    ],
+    [
+      'Free',
+      'addColumnBefore',
+      '| Plan      |     | Price |\n| --------- | --- | -----: |\n| Community |     | Free  |\n| Pro       |     | $800  |',
+    ],
+    [
+      'Community',
+      'deleteRow',
+      '| Plan | Price |\n| ---- | -----: |\n| Pro  | $800  |',
+    ],
+    [
+      'Free',
+      'deleteColumn',
+      '| Plan      |\n| --------- |\n| Community |\n| Pro       |',
+    ],
+  ] as const)(
+    '%s, %s: a Markdown table, the rest as it was',
+    (text, command, table) => {
+      const out = edit(text, command);
+      expect(out.table).toBe(table);
+      expect(out.around).toEqual(around);
+    },
+  );
+
+  it('keeps one header row when the header row goes or a row goes above it', () => {
+    // Deleting the header makes the next row the header, not an empty header above body rows.
+    expect(edit('Plan', 'deleteRow').table).toBe(
+      '| Community | Free |\n| --------- | ----: |\n| Pro       | $800 |',
+    );
+    // A row above the header is the new, empty header, and the old header a body row.
+    expect(edit('Plan', 'addRowBefore').table).toBe(
+      '|           |       |\n| --------- | -----: |\n| Plan      | Price |\n| Community | Free  |\n| Pro       | $800  |',
+    );
+  });
+
+  it('deletes the table and nothing else', () => {
+    const { editor: e, write } = open(ARTICLE);
+    e.chain().setTextSelection(after(e, 'Pro')).deleteTable().run();
+    expect(write()).toBe(ARTICLE.replace(`${TABLE}\n\n`, ''));
+  });
 });
