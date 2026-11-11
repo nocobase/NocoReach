@@ -22,6 +22,9 @@ export const MOCK_AI_OPERATIONS = [
   'competitor-suggest',
   'task-draft',
   'article-rewrite',
+  'topic-discovery',
+  'market-suggest',
+  'market-keywords',
 ] as const;
 export type MockAiOperation = (typeof MOCK_AI_OPERATIONS)[number];
 export const MOCK_AI_MODEL = {
@@ -227,6 +230,68 @@ function fixture(
                 examples: [],
               },
             ],
+      };
+    // Growth sources (2026-11-10 step 2b): a phrase from the first discussion title as a new topic, the first three
+    // forum topics as one question group, the first markets offered, and each keyword kept as it is.
+    case 'topic-discovery': {
+      if (empty) return { newTopics: [], questions: [] };
+      const followed = new Set(
+        (Array.isArray(input.followedTopics) ? input.followedTopics : []).map(
+          (t) => str(t, 60).toLowerCase(),
+        ),
+      );
+      const title = str(list(input.discussions)[0]?.title, 200).toLowerCase();
+      const term = (title.match(/[a-z][a-z0-9-]{3,}/g) ?? []).find(
+        (w) => !followed.has(w),
+      );
+      const forum = list(input.forum).slice(0, 3);
+      return {
+        newTopics: term
+          ? [
+              {
+                phrase: term,
+                from: str(
+                  (Array.isArray(input.followedTopics)
+                    ? input.followedTopics
+                    : [])[0],
+                  60,
+                ),
+                terms: [term],
+                reason: `${LABEL}固定测试短语 ${stamp}`,
+              },
+            ]
+          : [],
+        questions:
+          forum.length >= 3
+            ? [
+                {
+                  theme: `${LABEL}${str(forum[0].title, 80)}`,
+                  query: str(forum[0].title, 80),
+                  ids: forum.map((f) => str(f.id, 80)),
+                },
+              ]
+            : [],
+      };
+    }
+    case 'market-suggest':
+      return {
+        markets: empty
+          ? []
+          : list(input.markets)
+              .slice(0, 2)
+              .map((m) => ({
+                id: str(m.id, 10),
+                reason: `${LABEL}固定测试市场`,
+              })),
+      };
+    case 'market-keywords':
+      return {
+        keywords: empty
+          ? []
+          : (Array.isArray(input.keywords) ? input.keywords : []).map((k) => ({
+              source: str(k, 100),
+              local: str(k, 80),
+            })),
       };
     case 'competitor-suggest':
       return {

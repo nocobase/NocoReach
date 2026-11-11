@@ -247,6 +247,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrDataViews', ['overview', 'ranks']),
     ...list('nrDomains', ['list', 'getRun']),
     'nrGitHubTrends.view',
+    'nrGrowthSources.view',
     ...list('nrHealth', ['list', 'connected']),
     'nrInsights.summary',
     ...list('nrKeywordSuggest', ['view', 'notPicked']),
@@ -319,8 +320,15 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrArticles.languages',
   ],
   knowledge: [
-    ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),
+    ...list('nrKnowledge', [
+      'add',
+      'edit',
+      'remove',
+      'saveMemory',
+      'followTopic',
+    ]),
     ...list('nrKnowledgeAdd', ['suggest', 'confirm']),
+    'nrGrowthSources.setMarkets',
     ...list('nrMemory', ['sources', 'draft', 'check', 'accept', 'dismiss']),
     ...list('nrPlaybooks', ['save', 'copy', 'remove', 'restore', 'draft']),
     ...list('nrAnalysisRules', [

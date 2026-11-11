@@ -58,6 +58,7 @@ import { pageMeta, parseSitemap } from '../../server/nocoreach/site-content.js';
 import { plain } from '../../server/nocoreach/public-sources.js';
 import { WebsiteReport } from '../../server/nocoreach/website-report.js';
 import { windowFor } from '../../server/nocoreach/data-views.js';
+import { marketVolume } from '../../server/nocoreach/growth-sources.js';
 
 const ctx: MockRunContext = {
   projectId: '41',
@@ -651,6 +652,34 @@ describe('DataForSEO actual business parsers', () => {
     expect(parsed.status).toBe('completed');
     expect(parsed.result.items[0].volume).toBeGreaterThan(0);
     expect(parsed.result.global).toBe(true);
+  });
+  it('answers Other-language markets on the Standard queue and Site search with no results (step 2b)', async () => {
+    const spec = marketVolume.specification({
+      market: 'jp',
+      keywords: ['ガントチャート', 'タスク管理'],
+    });
+    const posted = await seo(spec.path, spec.request);
+    const parsed = marketVolume.result(
+      await request(
+        `https://api.dataforseo.com/v3/${spec.taskGet}/${posted.tasks[0].id}`,
+      ),
+    );
+    expect(parsed.status).toBe('completed');
+    expect(
+      parsed.result!.items.map((i: { keyword: string }) => i.keyword),
+    ).toEqual(['ガントチャート', 'タスク管理']);
+    expect(parsed.result!.items[0].monthly).toHaveLength(12);
+    const url = `https://analyticsdata.googleapis.com/v1beta/properties/${fixtureCatalog(ctx).ga4PropertyId}:runReport`;
+    const input = {
+      dateRanges: [{ startDate: '28daysAgo', endDate: 'yesterday' }],
+      dimensions: [{ name: 'searchTerm' }],
+      metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+    };
+    const terms = await request(url, input);
+    expect(terms.rows[0].dimensionValues[0].value).toBe('import from airtable');
+    expect(
+      (await request(url, input, { ...ctx, scenario: 'empty' })).rows,
+    ).toEqual([]);
   });
   it('parses AI brand shares, competitor gaps, answers and model catalogs', async () => {
     const input = {

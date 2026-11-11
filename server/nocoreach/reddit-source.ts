@@ -24,6 +24,9 @@ import { organicLink, subredditOf } from './serp-links.js';
 // (serp-links.ts) and costs less than Live: a search is posted, stays `queued` in the plan and is read at a later tick.
 // A result whose link stayed hidden has no thread id; it counts only when its title and subreddit match a thread already
 // known, otherwise it is skipped and counted (`lastRun.unresolved`).
+// Step 2b (2026-11-10): a topic thread also keeps its place among the week's results for each topic it came up under
+// (`ranks[topicKey] = {week, rank}`, Google's organic position; a thread in the "discussions and forums" box has the
+// box's place), for Opportunities' hot discussions. Votes and comment counts are still not known.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const DAY=86400000,MAX_POSTS=3000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -49,10 +52,11 @@ function topicSpecification(v){const topic=cleanTopic(v.term);if(!topic)fail(sys
 const titleOf=i=>String(i.title||'').replace(/\s*:\s*r\/\w+\s*$/i,'').slice(0,300);
 function result(raw,spec){const {valid,empty,page,taskId,cost,status,reason,diagnostic}=liveTask(raw);
  if(!valid)return {status,taskId,errorCode:systemMessageText(`redditDiagnostic.${reason}`),result:{diagnostic},costUsd:cost};
- const items=(empty?[]:page.items||[]).flatMap(i=>i?.type==='discussions_and_forums'?(i.items||[]):[i]).filter(i=>['organic','discussions_and_forums_element'].includes(i?.type));
+ const items=(empty?[]:page.items||[]).flatMap(i=>i?.type==='discussions_and_forums'?(i.items||[]).map(x=>({...x,boxRank:i.rank_group})):[i]).filter(i=>['organic','discussions_and_forums_element'].includes(i?.type));
+ const rankOf=i=>{const r=Number(i.type==='organic'?i.rank_group:i.boxRank);return Number.isSafeInteger(r)&&r>0?r:null;};
  const seen=new Set(),posts=[],hidden=[];for(const i of items){const link=organicLink(i);
-  if(!link.resolved){hidden.push({title:titleOf(i),subreddit:subredditOf(i.website_name,i.breadcrumb,i.title),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp)});continue;}
-  const t=thread(link.url);if(!t||seen.has(t.id))continue;seen.add(t.id);posts.push({...t,title:titleOf(i),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp)});}
+  if(!link.resolved){hidden.push({title:titleOf(i),subreddit:subredditOf(i.website_name,i.breadcrumb,i.title),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp),rank:rankOf(i)});continue;}
+  const t=thread(link.url);if(!t||seen.has(t.id))continue;seen.add(t.id);posts.push({...t,title:titleOf(i),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp),rank:rankOf(i)});}
  return {status:'completed',taskId,errorCode:null,result:{posts:posts.slice(0,100),hidden:hidden.slice(0,100),diagnostic:{...diagnostic,...(hidden.length?{unresolved:hidden.length}:{})}},costUsd:cost};}
 // Hidden results that are threads already known (same subreddit and title, Google's cut-off "…" allowed), as those
 // threads; the others are skipped.
@@ -109,7 +113,7 @@ class RedditSource{
   const successAt=complete?plan.entries.map(e=>e.queriedAt).sort()[0]:null;
   let added=0;
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;const posts={...(cur.posts||{})};
-   for(const p of found){const old=posts[p.id];if(!old)added++;posts[p.id]={...p,firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
+   for(const {rank:_rank,...p} of found){const old=posts[p.id];if(!old)added++;posts[p.id]={...p,firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
    const kept=Object.values(posts).sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,MAX_POSTS);
    return {...cur,plan,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(complete?through:null),lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),found:found.length,added,...(queued?{queued}:{}),...(known.skipped?{unresolved:known.skipped}:{}),lastSuccessAt:successAt||lastSuccess(cur.lastRun)},dataThrough:through||cur.dataThrough||null,datesReadAt:cur.datesReadAt||(complete?plan.cutoff:null)};});
   // searched and reused let Update now say when every term came back from the 6-day reuse instead of a new search;
@@ -133,7 +137,8 @@ class RedditSource{
   const known=matchHidden(hidden,[...found,...Object.values(s.topicPosts||{}),...Object.values(s.posts||{})]),ids=new Set(found.map(p=>p.id));found.push(...known.matched.filter(p=>!ids.has(p.id)&&ids.add(p.id)));
   let added=0;const keep=new Set(topics.map(topicKey));
   await this.mutate(id,cur=>{if(!cur)return cur;const posts={...(cur.topicPosts||{})};
-   for(const {topic,...p} of found){const old=posts[p.id];if(!old)added++;posts[p.id]={...p,topics:[...new Set([...(old?.topics||[]),topic])],firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
+   for(const {topic,rank,...p} of found){const old=posts[p.id];if(!old)added++;const ranks={...(old?.ranks||{}),...(rank?{[topicKey(topic)]:{week,rank}}:{})};
+    posts[p.id]={...p,topics:[...new Set([...(old?.topics||[]),topic])],...(Object.keys(ranks).length?{ranks}:{}),firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
    const kept=Object.values(posts).sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,MAX_POSTS);
    return {...cur,topicChecks:Object.fromEntries(Object.entries(checks).filter(([k])=>keep.has(k))),topicPosts:Object.fromEntries(kept.map(p=>[p.id,p])),topicRun:{at,week,searched,found:found.length,added,budgetUntil,...(known.skipped?{unresolved:known.skipped}:{})}};});
   return {searched,added,budget:Boolean(budgetUntil),...(known.skipped?{unresolved:known.skipped}:{})};}

@@ -130,12 +130,13 @@ class DataForSeo{
   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:systemMessageText('messages.resultUncertainMayChargedNot', { 0: stage==='request'&&e.safeCode==='timeout'?'DataForSEO 太久没有回音，':'' }),completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }
- // A queued run read again (free): its result once the task is done, else the run still queued. A read that does not
+ // A queued run read again (free): its result once the task is done, else the run still queued. A kind whose queue has
+// no advanced results (Google Ads search volume) names its own task_get path (`taskGet`). A read that does not
  // complete changes nothing and is tried again later; the post's cost is kept, as task_get replies cost nothing.
  async collect(id,runId){const row=await this.repo().findOne({filter:{id:String(runId),projectId:id}});if(!row)error(systemMessageText('dataforseo.researchRecordNotFound'),404);return this.read(id,row.toJSON());}
  async read(id,json){const spec=json.spec||{},c=this.config(id),kind=this.kinds[spec.kind];if(json.status!=='queued'||!spec.queue||!kind||!c)return json;
   const stale=Date.now()-Date.parse(json.createdAt)>QUEUE_WAIT_MS,giveUp=async()=>{await this.repo().update({filterByTk:json.id,values:{status:'failed',errorCode:systemMessageText('dataforseo.queuedTaskNotFinished'),result:{diagnostic:{taskId:json.taskId,reason:'providerFailure',retryable:false,billing:'known'}},completedAt:new Date().toISOString()}});return (await this.repo().findOne({filterByTk:json.id})).toJSON();};
-  let raw;try{raw=await this.request(c,`${spec.queue}/task_get/advanced/${encodeURIComponent(json.taskId)}`,null,spec.timeoutMs??kind.timeoutMs);}catch{return stale?giveUp():json;}
+  let raw;try{raw=await this.request(c,`${spec.taskGet||`${spec.queue}/task_get/advanced`}/${encodeURIComponent(json.taskId)}`,null,spec.timeoutMs??kind.timeoutMs);}catch{return stale?giveUp():json;}
   const code=raw?.tasks?.[0]?.status_code;if(raw?.status_code===20000&&WAITING.includes(code))return stale?giveUp():json;
   if(raw?.status_code!==20000)return stale?giveUp():json;
   const parsed=kind.result({...raw,cost:json.costUsd},spec),status=parsed.status==='completed'?'completed':'failed';

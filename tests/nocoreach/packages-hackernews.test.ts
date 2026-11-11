@@ -71,7 +71,7 @@ test('Hacker News followed topics: each sync reads the last week’s stories on 
   return {text:JSON.stringify({nbPages:1,hits:[]})};};
  let topics=['team collaboration','task management'];
  const p={...plugin(),followedTopics:{of:async()=>topics}},s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'acme'});await s.runs.wait('1');
- const asked=calls.filter(u=>new URL(u).pathname==='/api/v1/search');
+ const asked=calls.filter(u=>new URL(u).pathname==='/api/v1/search'&&new URL(u).searchParams.get('hitsPerPage')!=='0');
  assert.equal(asked.length,2);const u=new URL(asked[0]);
  assert.deepEqual([u.searchParams.get('tags'),u.searchParams.get('hitsPerPage')],['story','50']);
  assert.ok(Math.abs(Number(u.searchParams.get('numericFilters').split('>')[1])-Math.floor((now-7*DAY)/1000))<5,'the last seven days');
@@ -87,4 +87,46 @@ test('Hacker News followed topics: each sync reads the last week’s stories on 
  topics=['task management'];const after=await new DataViews({...p,hackernews:s}).hackernews('1',{range:'7'});
  assert.deepEqual(after.topic.stories.map(x=>x.title),['Story 200','Story 105'],'a removed topic’s stories leave the view');
  assert.deepEqual(after.topic.stories[1].topics,['task management']);
+});
+test('Hacker News topic weeks: each topic is counted per whole week, twelve weeks once and the latest two again; the busiest stories’ comments are read for the product and competitors',async()=>{
+ const now=Date.now(),calls=[];
+ const story={objectID:'900',_tags:['story'],title:'Show HN: an AI project assistant',points:240,num_comments:3,created_at_i:Math.floor((now-2*DAY)/1000)};
+ const read=async url=>{calls.push(url);const u=new URL(url);
+  if(u.pathname==='/api/v1/search'){if(u.searchParams.get('hitsPerPage')==='0'){const from=Number(u.searchParams.get('numericFilters').match(/>=(\d+)/)[1]);return {text:JSON.stringify({nbHits:from%3+1,hits:[]})};}
+   return {text:JSON.stringify({nbPages:1,hits:u.searchParams.get('query')==='"ai project assistant"'?[story]:[]})};}
+  if(u.pathname==='/api/v1/items/900')return {text:JSON.stringify({id:900,children:[{type:'comment',text:'We moved from Asana to Acme last year.',children:[{type:'comment',text:'Acme <i>works</i>, Asana too',children:[]}]},{type:'comment',text:'Nothing to add',children:[]}]})};
+  return {text:JSON.stringify({nbPages:1,hits:[]})};};
+ const p={...plugin(),followedTopics:{of:async()=>['ai project assistant']},projects:{get:async()=>({name:'Acme'})},competitors:{state:async()=>({list:[{name:'Asana'},{name:'Monday'}]})}};
+ const s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'acme'});await s.runs.wait('1');
+ const counts=()=>calls.filter(u=>new URL(u).searchParams.get('hitsPerPage')==='0');
+ assert.equal(counts().length,12,'twelve whole weeks the first time');
+ const st=await s.state('1'),weeks=Object.keys(st.topicWeeks['ai project assistant']);
+ assert.equal(weeks.length,12);assert.ok(weeks.every(w=>new Date(w+'T00:00:00Z').getUTCDay()===1),'Mondays');
+ assert.ok(Date.parse(weeks.at(-1)+'T00:00:00Z')+7*DAY<=now,'only whole weeks');
+ const f=new URL(counts()[0]).searchParams.get('numericFilters');assert.match(f,/^created_at_i>=\d+,created_at_i<\d+$/);
+ const story900=st.topicStories['900'];
+ assert.deepEqual(story900.named.map(x=>[x.name,x.own,x.mentions]),[['Acme',true,2],['Asana',false,2],['Monday',false,0]]);
+ assert.equal(story900.commentsRead,3);assert.equal(story900.excerpts.length,2);assert.deepEqual(story900.excerpts[0].names,['Acme','Asana']);
+ calls.length=0;await s.sync('1');
+ assert.equal(counts().length,2,'later, the latest two weeks again');
+ assert.equal(calls.filter(u=>new URL(u).pathname.startsWith('/api/v1/items/')).length,0,'comments are read again only after a day');
+});
+test('Hacker News topic weeks: a count that fails is kept as failed, not as weeks with no stories',async()=>{
+ let failing=true;
+ const read=async url=>{const u=new URL(url);
+  if(u.pathname==='/api/v1/search'&&u.searchParams.get('hitsPerPage')==='0'){if(failing)throw new Error('Algolia unreachable');return {text:JSON.stringify({nbHits:2,hits:[]})};}
+  return {text:JSON.stringify({nbPages:1,hits:[]})};};
+ const p={...plugin(),followedTopics:{of:async()=>['ai project assistant']},projects:{get:async()=>({name:'Acme'})},competitors:{state:async()=>({list:[]})}};
+ const s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'acme'});await s.runs.wait('1');
+ let st=await s.state('1');
+ assert.deepEqual(st.topicWeeks['ai project assistant'],{});
+ assert.ok(st.topicCountFailed['ai project assistant']);
+ failing=false;await s.sync('1');st=await s.state('1');
+ assert.equal(Object.keys(st.topicWeeks['ai project assistant']).length,12);
+ assert.deepEqual(st.topicCountFailed,{});
+});
+test('Hacker News named products: whole words for Latin names, anywhere for CJK names',()=>{
+ assert.equal(hn.occurrences('Acme, acme! Acmeville','Acme'),2);
+ assert.equal(hn.occurrences('我们用了飞书和飞书文档','飞书'),2);
+ assert.equal(hn.occurrences('anything','A'),0);
 });

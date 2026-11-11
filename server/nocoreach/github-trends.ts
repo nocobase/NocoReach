@@ -81,7 +81,7 @@ class GitHubTrends{
  async refresh(id){if(this.running.has(String(id)))return this.state(id);this.running.add(String(id));try{return await this.read(id);}finally{this.running.delete(String(id));}}
  async read(id){const token=this.token(id),today=iso(businessNow(this.p,id,'github')),week7=add(today,-7),errors=[],started=new Date().toISOString();
   const was=await this.state(id)||{},topics=await this.topics(id,was),cur={...was,heat:rekey(was.heat,topics),weekly:rekey(was.weekly,topics),modes:rekey(was.modes,topics)};
-  const heat={...cur.heat},weekly={...cur.weekly},leaders={},topicNew={},repos={...(cur.repos||{})},seen={},modes={};
+  const heat={...cur.heat},weekly={...cur.weekly},leaders={},topicNew={},repos={...(cur.repos||{})},seen={},modes={},failed={},done=new Set();
   const keep=x=>{const r=repoOf(x);repos[r.repo]={...repos[r.repo],...r};if(Number.isFinite(r.stars))seen[r.repo]=r.stars;return r.repo;};
   let limited=false;
   for(const t of topics){if(limited)break;try{
@@ -94,8 +94,8 @@ class GitHubTrends{
    // The last 12 whole weeks once, then the latest two again each day (a week fills as GitHub indexes new repositories).
    const w={...(weekly[t]||{})},last=add(weekStart(today),-7),weeks=[];for(let i=11;i>=0;i--)weeks.push(add(last,-7*i));
    for(const s of weeks.filter(s=>!(s in w)||s>=add(last,-7))){const r=await this.search(id,`${query(t,mode)} created:${s}..${add(s,6)}`,token,{per:1});w[s]=r.total_count??null;}
-   weekly[t]=Object.fromEntries(Object.entries(w).sort(([a],[b])=>a.localeCompare(b)).slice(-26));
-  }catch(e){if(e.limited)limited=true;errors.push(`${t}：${e.message}`);}}
+   weekly[t]=Object.fromEntries(Object.entries(w).sort(([a],[b])=>a.localeCompare(b)).slice(-26));done.add(t);
+  }catch(e){if(e.limited)limited=true;failed[t]=started;errors.push(`${t}：${e.message}`);}}
   let newHot=cur.newHot?.all||[];if(!limited)try{newHot=((await this.search(id,`created:>=${week7}`,token,{sort:'stars',per:20})).items||[]).map(keep);}catch(e){if(e.limited)limited=true;errors.push(e.message);}
   const trending={};for(const since of ['daily','weekly','monthly']){try{trending[since]=await this.trendingPage(id,since);for(const r of trending[since]){repos[r.repo]={...repos[r.repo],repo:r.repo,url:r.url,description:r.description||repos[r.repo]?.description||'',language:r.language||repos[r.repo]?.language||null,topics:repos[r.repo]?.topics||[]};if(Number.isFinite(r.stars))seen[r.repo]=r.stars;}}catch(e){errors.push(`Trending：${e.message}`);}}
   if(['daily','weekly','monthly'].every(s=>trending[s]&&!trending[s].length))errors.push(systemMessageText('githubTrends.trendingUnreadable'));
@@ -111,7 +111,9 @@ class GitHubTrends{
   const trendingDays={...(cur.trending||{})};if(Object.keys(trending).length)trendingDays[today]=trending;
   if(this.stopped)return null;
   return this.mutate(id,old=>({...(old||{}),topics,modes:{...(cur.modes||{}),...modes},heat:Object.fromEntries(Object.entries(heat).filter(([t])=>topics.includes(t)).map(([t,v])=>[t,Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).slice(-120))])),
-   weekly:Object.fromEntries(Object.entries(weekly).filter(([t])=>topics.includes(t))),leaders,topicNew,newHot:{date:today,all:newHot},repos:keptRepos,stars:trimmed,
+   weekly:Object.fromEntries(Object.entries(weekly).filter(([t])=>topics.includes(t))),
+   // When a topic's read last failed (topic-weeks.ts tells a failed read from one not made yet); a topic read now is cleared.
+   topicFailed:Object.fromEntries(topics.filter(t=>failed[t]||(!done.has(t)&&cur.topicFailed?.[t])).map(t=>[t,failed[t]||cur.topicFailed[t]])),leaders,topicNew,newHot:{date:today,all:newHot},repos:keptRepos,stars:trimmed,
    trending:Object.fromEntries(Object.entries(trendingDays).sort(([a],[b])=>a.localeCompare(b)).slice(-31)),// A run cut short by the rate limit is not today's: the next tick, three hours on, reads again.
    lastRun:{at:started,day:limited?(cur.lastRun?.day||null):today,ok:!errors.length,errors:errors.slice(0,10),limited,token:Boolean(token)}}));}
  // The list changed in Memory: read again in the background (a few minutes, spaced under GitHub's limit).

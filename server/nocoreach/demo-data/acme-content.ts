@@ -2236,8 +2236,8 @@ export function acmeOpportunities(
     observations: [
       copy(
         t(
-          '“AI 專案管理”近 3 个月搜索量涨了 126%，现在每月 2,750 次；排在前面的多是新闻，竞品里只有 Nimbus 有对应页面，现在写能赶在多数竞品前面。',
-          'Searches for “ai project management” rose 126% over the last 3 months to 2,750 a month; the top results are mostly news and only Nimbus has a page, so writing one now gets ahead of most competitors.',
+          '“AI 项目助理”的讨论 4 周多了近 5 倍，Reddit、Hacker News、YouTube 和 GitHub 一起变多；Google 前 10 里还没有专门的指南，竞品里只有 Nimbus 写过一篇博客。',
+          'Discussion of “AI project assistant” grew almost fivefold in 4 weeks, on Reddit, Hacker News, YouTube and GitHub together; Google’s top 10 has no dedicated guide yet, and among competitors only Nimbus has written a post.',
         ),
       ),
       copy(
@@ -2248,8 +2248,8 @@ export function acmeOpportunities(
       ),
       copy(
         t(
-          '已有内容里，Excel 导入指南进前 3 预计每月多 210 次点击；看板页近 28 天曝光 3,860 次、点击率只有 0.9%，改好标题和摘要预计每月多 280 次点击。',
-          'Among existing pages, the Excel import guide would bring an estimated 210 more clicks a month in the top 3; the kanban page had 3,860 impressions in 28 days at a 0.9% click-through rate, and a better title and description would bring an estimated 280 more clicks a month.',
+          '“客户只看到自己的项目”近 30 天被问了 17 次，没有页面回答；日本 14 个相关词每月搜索 22,000 次，本站还没有日语页面。已有内容里，Excel 导入指南进前 3 预计每月多 210 次点击。',
+          '“Clients seeing only their own projects” was asked 17 times in 30 days with no page answering it; 14 related keywords get 22,000 searches a month in Japan and the site has no Japanese pages. Among existing pages, the Excel import guide would bring an estimated 210 more clicks a month in the top 3.',
         ),
       ),
       copy(
@@ -2259,7 +2259,7 @@ export function acmeOpportunities(
         ),
       ),
     ],
-    lead: 'acme-growth-ai-pm',
+    lead: 'acme-growth-ai-assistant',
     doReason: copy(
       t(
         '增长空间明确，和产品相关，投入可控。',

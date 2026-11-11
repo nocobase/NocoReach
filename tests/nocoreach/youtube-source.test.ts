@@ -100,6 +100,38 @@ describe('YouTube through DataForSEO', () => {
     });
   });
 
+  it('keeps a followed topic whose search failed apart from one not searched yet, until a search reads it', async () => {
+    const f = await youtubeFixture();
+    Object.assign(f.host, {
+      followedTopics: { of: async () => ['workflow automation'] },
+    });
+    let failing = true;
+    f.reader.search.mockImplementation(async (_id, term) =>
+      term === 'workflow automation' && failing
+        ? { ok: false, missed: 'timeout', costUsd: 0 }
+        : {
+            ok: true,
+            videos: term === 'NocoBase' ? [found(1)] : [found(10)],
+            costUsd: 0.002,
+          },
+    );
+    f.reader.details.mockImplementation(async (_id, key) => ({
+      ok: true,
+      video: details(Number(key.slice(5))),
+      costUsd: 0.006,
+    }));
+    await f.connect('1', 'NocoBase');
+    let state = await f.stored();
+    expect(state?.topicReads?.workflowautomation).toBeUndefined();
+    expect(state?.topicMisses?.workflowautomation).toBeTruthy();
+    // Not read: searched again on the next read, which clears the failure.
+    failing = false;
+    await f.sync();
+    state = await f.stored();
+    expect(state?.topicReads?.workflowautomation).toBeTruthy();
+    expect(state?.topicMisses).toEqual({});
+  });
+
   it('searches each term, reads likes and comments once per new video, and keeps daily reading on', async () => {
     const f = await youtubeFixture();
     f.reader.search.mockImplementation(async (_id, term) => ({

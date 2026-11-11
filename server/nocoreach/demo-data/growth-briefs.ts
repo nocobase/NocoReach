@@ -7,6 +7,8 @@ import {
   type GrowthFigure,
   type GrowthKind,
   type GrowthText,
+  type GrowthTopic,
+  type DiscussionWeek,
   type NewPage,
   roundEstimate,
 } from '../../../shared/growth.js';
@@ -20,6 +22,7 @@ import {
   pageIssueGrowth,
   rankDropGrowth,
 } from '../growth-signals.js';
+import { addDays, lastWholeWeek } from '../topic-weeks.js';
 
 // The demo's growth opportunities (2026-11-10): hand-authored growth points of the four categories, every kind among
 // them, for Acme and Acme CRM, in the shapes server/nocoreach/growth-signals.ts computes, with every estimate made by
@@ -52,6 +55,8 @@ export interface GrowthBrief {
    * proportion of the approved mockup, with at most three Content optimization (2026-11-10 review).
    */
   ignored?: number;
+  /** Found this many days ago (2026-11-10 step 2b), for growth points newer than their place in the list says. */
+  found?: number;
 }
 
 const text = (
@@ -586,6 +591,376 @@ function newRepo(topic: string, topicTotal: number, repos: Repo[]): Growth {
   );
 }
 
+// --- Followed topics' discussions and the step 2b sources (2026-11-10) -----------------------------------------------
+
+type WeekCounts = [
+  reddit: number,
+  hackernews: number,
+  youtube: number,
+  github: number,
+];
+/** The last eight whole weeks before `now`, oldest first, with each source's discussions (topic-weeks.ts). */
+const discussionWeeks = (now: Date, counts: WeekCounts[]): DiscussionWeek[] => {
+  const last = lastWholeWeek(now.getTime());
+  return counts.map(([reddit, hackernews, youtube, github], i) => ({
+    week: addDays(last, -7 * (counts.length - 1 - i)),
+    counts: { reddit, hackernews, youtube, github },
+  }));
+};
+const SOURCE_NAMES = ['Reddit', 'Hacker News', 'YouTube', 'GitHub'];
+/** A discussion: [title, source, heat, date, link]. */
+type Discussion = [
+  discussion: string,
+  source: string,
+  heat: GrowthText | null,
+  date: string,
+  url: string,
+];
+const googleRank = (rank: number) =>
+  text('growth.value.googleRank', { 0: rank });
+const hnHeat = (points: number, comments: number) =>
+  text('growth.value.pointsComments', {
+    0: points.toLocaleString('en-US'),
+    1: comments.toLocaleString('en-US'),
+  });
+const viewsHeat = (views: number) =>
+  text('growth.value.views', { 0: views.toLocaleString('en-US') });
+const starsHeat = (stars: number) =>
+  text('growth.value.stars', { 0: stars.toLocaleString('en-US') });
+/**
+ * A topic discussed more (topic-signals.ts): the last four weeks against the four before, the sources rising on their
+ * own, Google's interest and the pages dedicated to it, with the weeks drawn as Discussions a week.
+ */
+function topicRise(
+  kind: 'topic-rise' | 'new-topic',
+  weeks: DiscussionWeek[],
+  google: { change: number; monthly: number } | null,
+  dedicated: { count: number; domains: string[] },
+  rows: Discussion[],
+  total: number,
+  topic: GrowthTopic,
+): Growth {
+  const sum = (list: DiscussionWeek[], s: string) =>
+    list.reduce((n, w) => n + (w.counts[s as keyof typeof w.counts] ?? 0), 0);
+  const sources = ['reddit', 'hackernews', 'youtube', 'github'];
+  const last = weeks.slice(4),
+    before = weeks.slice(0, 4);
+  const lastAll = sources.reduce((n, s) => n + sum(last, s), 0),
+    beforeAll = sources.reduce((n, s) => n + sum(before, s), 0);
+  const rising = sources
+    .map((s, i) => [SOURCE_NAMES[i], sum(last, s), sum(before, s)] as const)
+    .filter(([, l, b]) => l >= 3 && l > b && l >= b * 1.5)
+    .map(([name]) => name);
+  return {
+    ...growth(
+      kind,
+      [
+        figure('discussions4w', lastAll, {
+          detail: text('growth.detail.before4w', { 0: beforeAll }),
+        }),
+        figure('risingSources', rising.length, {
+          detail: text('growth.detail.list', { 0: rising.join(' · ') }),
+        }),
+        ...(google
+          ? [
+              figure('googleSearch3m', google.change, {
+                format: 'change',
+                detail: text('growth.detail.monthlyNow', {
+                  0: google.monthly.toLocaleString('en-US'),
+                }),
+              }),
+            ]
+          : []),
+        figure('dedicatedTop10', dedicated.count, {
+          ...(dedicated.domains.length
+            ? {
+                detail: text('growth.detail.list', {
+                  0: dedicated.domains.join(' · '),
+                }),
+              }
+            : {}),
+        }),
+      ],
+      [
+        col('discussion'),
+        col('source'),
+        col('heat', 'message'),
+        col('date', 'date'),
+      ],
+      rows.map(([discussion, source, heat, date, url]) => ({
+        discussion,
+        source,
+        heat,
+        date,
+        url,
+      })),
+      'discussions',
+      '/data/reddit?group=topics',
+      total,
+    ),
+    weeks,
+    topic,
+  };
+}
+/** A Reddit thread Google ranks first among the week's threads on a topic: no votes or comments, which Reddit through Google does not give. */
+function hotThread(
+  topic: string,
+  thread: { rank: number; posted: string; subreddit: string; named: string },
+  week: [discussion: string, position: number, date: string, url: string][],
+): Growth {
+  return {
+    ...growth(
+      'hot-discussion',
+      [
+        figure('googlePosition', thread.rank, {
+          format: 'position',
+          detail: text('growth.detail.ofWeekThreads', { 0: week.length }),
+        }),
+        figure('posted', thread.posted, { format: 'date' }),
+        figure('subreddit', thread.subreddit),
+        figure('namedOnGoogle', thread.named),
+      ],
+      [col('discussion'), col('position', 'position'), col('date', 'date')],
+      week.map(([discussion, position, date, url]) => ({
+        discussion,
+        position,
+        date,
+        url,
+      })),
+      'discussions',
+      '/data/reddit?group=topics',
+    ),
+    topic: { name: topic, followed: true },
+  };
+}
+/** A Hacker News story with many points, and the products its comments name. */
+function hotStory(
+  topic: string,
+  story: {
+    points: number;
+    comments: number;
+    named: string;
+    own: [string, number] | null;
+    posted: string;
+    url: string;
+  },
+  excerpts: [comment: string, named: string[]][],
+): Growth {
+  return {
+    ...growth(
+      'hot-discussion',
+      [
+        figure('points', story.points),
+        figure('comments', story.comments),
+        figure('namedInComments', story.named, {
+          ...(story.own
+            ? {
+                detail: text('growth.detail.ownMentions', {
+                  0: story.own[0],
+                  1: story.own[1],
+                }),
+              }
+            : {}),
+        }),
+        figure('posted', story.posted, { format: 'date' }),
+      ],
+      [col('comment'), col('named', 'list')],
+      excerpts.map(([comment, named]) => ({ comment, named, url: story.url })),
+      'comments',
+      story.url,
+    ),
+    topic: { name: topic, followed: true },
+  };
+}
+/** Questions asked again and again with no page answering them: [question, forum | reddit | hackernews, date]. */
+function askedOften(
+  forum: number,
+  views: number,
+  rows: [
+    question: string,
+    source: 'forum' | 'reddit' | 'hackernews',
+    date: string,
+  ][],
+  total: number,
+): Growth {
+  return growth(
+    'asked-often',
+    [
+      figure('askedPosts30', total, {
+        detail: text('growth.detail.askedSplit', {
+          0: forum,
+          1: total - forum,
+        }),
+      }),
+      figure('forumViews', views),
+      figure('latestAsked', rows[0][2], { format: 'date' }),
+      figure('matchingPages', 0),
+    ],
+    [col('question'), col('source', 'label'), col('date', 'date')],
+    rows.map(([question, source, date]) => ({
+      question,
+      source: `growth.value.${source}`,
+      date,
+    })),
+    'questions',
+    '/data/community',
+    total,
+  );
+}
+/** A popular video on a followed topic, and the topic's other videos of the month. */
+function hotVideo(
+  topic: string,
+  video: { views: number; posted: string; channel: string; likes: number },
+  others: [title: string, channel: string, views: number, date: string][],
+): Growth {
+  return {
+    ...growth(
+      'hot-video',
+      [
+        figure('views', video.views),
+        figure('posted', video.posted, { format: 'date' }),
+        figure('channel', video.channel),
+        figure('likes', video.likes),
+      ],
+      [
+        col('title'),
+        col('channel'),
+        col('views', 'count'),
+        col('date', 'date'),
+      ],
+      others.map(([title, channel, views, date]) => ({
+        title,
+        channel,
+        views,
+        date,
+      })),
+      'videos',
+      '/data/youtube?group=topics',
+    ),
+    topic: { name: topic, followed: true },
+  };
+}
+/** A market's searches for the main keywords as people there search: [keyword, original keyword, volume, 12-month change]. */
+function otherMarket(
+  market: string,
+  rival: [name: string, keywords: number],
+  change: number,
+  rows: [keyword: string, source: string, volume: number, change: number][],
+): Growth {
+  return growth(
+    'other-market',
+    [
+      figure(
+        'monthlySearchesTotal',
+        rows.reduce((n, r) => n + r[2], 0),
+        { detail: text('growth.detail.keywordCount', { 0: rows.length }) },
+      ),
+      figure('yearChange', change, { format: 'change' }),
+      figure('pagesInLanguage', 0, { labelParams: { 0: market } }),
+      figure('rivalKeywordsThere', rival[1], { labelParams: { 0: rival[0] } }),
+    ],
+    [
+      col('keyword'),
+      col('sourceKeyword'),
+      col('volume', 'count'),
+      col('yearChange', 'change'),
+    ],
+    rows.map(([keyword, sourceKeyword, volume, yearChange]) => ({
+      keyword,
+      sourceKeyword,
+      volume,
+      yearChange,
+    })),
+    'keywords',
+    '/keywords?tab=suggest',
+  );
+}
+/** A site search term with no page, and the related terms people searched: [term, searches, people]. */
+function siteSearch(
+  rows: [term: string, searches: number, people: number][],
+): Growth {
+  return growth(
+    'site-search',
+    [
+      figure('siteSearches28', rows[0][1]),
+      figure('searchers28', rows[0][2]),
+      figure('matchingPages', 0),
+    ],
+    [col('term'), col('searches', 'count'), col('searchers', 'count')],
+    rows.map(([term, searches, searchers]) => ({ term, searches, searchers })),
+    'terms',
+    '/rules',
+  );
+}
+/** People also ask questions no page answers in one keyword group: [question, keyword, volume]. */
+function peopleAlsoAsk(
+  group: string,
+  asked: number,
+  rows: [question: string, keyword: string, volume: number][],
+): Growth {
+  const keywords = new Map(rows.map((r) => [r[1], r[2]]));
+  return growth(
+    'people-also-ask',
+    [
+      figure('unansweredQuestions', rows.length, {
+        detail: text('growth.detail.ofQuestions', { 0: asked }),
+      }),
+      figure(
+        'monthlySearchesTotal',
+        [...keywords.values()].reduce((n, v) => n + v, 0),
+        { detail: text('growth.detail.keywordCount', { 0: keywords.size }) },
+      ),
+      figure('keywordGroup', group),
+    ],
+    [col('question'), col('keyword'), col('volume', 'count')],
+    rows.map(([question, keyword, volume]) => ({ question, keyword, volume })),
+    'questions',
+    '/keywords?tab=suggest',
+  );
+}
+/** Sites linking to two or more competitors and not to us: [domain, authority, competitors, first seen]. */
+function linkGap(
+  rivals: string[],
+  total: number,
+  average: number,
+  rows: [
+    domain: string,
+    authority: number,
+    linksTo: string[],
+    firstSeen: string,
+  ][],
+): Growth {
+  return growth(
+    'link-gap',
+    [
+      figure('linkingSites', total, {
+        detail: text('growth.detail.linkAtLeast', { 0: 2 }),
+      }),
+      figure('topAuthority', rows[0][1], {
+        detail: text('growth.detail.list', { 0: rows[0][0] }),
+      }),
+      figure('averageAuthority', average),
+      figure('comparedWith', rivals.join(' · ')),
+    ],
+    [
+      col('domain'),
+      col('authority', 'count'),
+      col('linksTo', 'list'),
+      col('firstSeen', 'date'),
+    ],
+    rows.map(([domain, authority, linksTo, firstSeen]) => ({
+      domain,
+      authority,
+      linksTo,
+      firstSeen,
+      url: `https://${domain}`,
+    })),
+    'sites',
+    '/backlinks?view=gap',
+    total,
+  );
+}
+
 /** Days before the demo's import, as a date: the demo's dates move with it. */
 const dayBefore = (now: Date, days: number) =>
   new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
@@ -871,6 +1246,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       ),
       source: 'ai-search',
       priority: 'high',
+      ignored: 3,
       effort: 'low',
       growth: (lang) =>
         citedSources(
@@ -951,6 +1327,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       newPage: { section: '/features/', linkFrom: ['/', '/features/workload'] },
       source: 'keywords',
       priority: 'high',
+      ignored: 1,
       effort: 'medium',
       growth: () =>
         rising(
@@ -1037,6 +1414,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       path: '/features/kanban',
       source: 'gsc',
       priority: 'medium',
+      ignored: 2,
       effort: 'low',
       growth: (lang) =>
         lowCtr(
@@ -1084,6 +1462,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       path: '/docs/recurring-tasks',
       source: 'gsc',
       priority: 'medium',
+      ignored: 2,
       effort: 'low',
       growth: (lang) =>
         newQueries(
@@ -1200,6 +1579,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       path: '/compare/nimbus',
       source: 'competitors',
       priority: 'medium',
+      ignored: 2,
       effort: 'low',
       growth: (lang) =>
         competitorLaunch(
@@ -1289,6 +1669,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       path: '/docs/getting-started',
       source: 'github',
       priority: 'low',
+      ignored: 3,
       effort: 'medium',
       growth: () =>
         topicHeat(64, 23, 18400, [
@@ -1358,6 +1739,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       newPage: { section: '/blog/', linkFrom: ['/features/portfolio'] },
       source: 'keywords',
       priority: 'medium',
+      ignored: 2,
       effort: 'medium',
       growth: (lang) =>
         demandGap(
@@ -1412,6 +1794,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       newPage: { section: '/blog/', linkFrom: ['/templates'] },
       source: 'keywords',
       priority: 'medium',
+      ignored: 1,
       effort: 'medium',
       growth: (lang) =>
         demandGap(
@@ -1684,6 +2067,710 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
           })),
           total: 7,
         }).growth,
+    },
+    // Step 2b (2026-11-10): what the followed topics' discussions, site search, People also ask, other-language markets
+    // and the link gap find.
+    {
+      key: 'acme-growth-ai-assistant',
+      title: t(
+        '“AI 项目助理”讨论 4 周多了近 5 倍，抢先写一篇入门指南',
+        'Discussion of “AI project assistant” is up almost 5× in 4 weeks: write the first guide',
+      ),
+      reason: t(
+        '近 4 周 58 条讨论，之前 4 周只有 12 条；Google 前 10 里专门讲它的只有 1 篇。',
+        '58 discussions in the last 4 weeks against 12 the 4 weeks before; only 1 page in Google’s top 10 is dedicated to it.',
+      ),
+      meaning: t(
+        '“project management”的讨论里，越来越多人在问能不能让 AI 自动整理进度、写周报，Reddit、Hacker News、YouTube 和 GitHub 一起变多。Acme 的 AI 周报和自动排期正好做这件事。Google 上这个说法的搜索 3 个月涨了 180%，前 10 名大多是泛泛的 AI 工具榜单，专门的指南只有 Nimbus 的一篇博客；早写更容易排上，也更容易被 AI 回答引用。',
+        'In the “project management” discussions more and more people ask whether AI can keep track of progress and write the weekly update, on Reddit, Hacker News, YouTube and GitHub at once. Acme’s AI weekly report and automatic scheduling do exactly that. Google searches for the phrase rose 180% in 3 months; the top 10 are mostly general AI tool lists, and the only dedicated guide is a Nimbus blog post. An early guide ranks more easily and is more likely to be cited by AI answers.',
+      ),
+      suggestion: t(
+        '写一篇“用 AI 助理管项目进度”的入门指南，用 Acme 的 AI 周报做例子；再为讨论最多的 3 个 Reddit 帖子起草回复，你确认后自己发。',
+        'Write a getting-started guide to running project progress with an AI assistant, using Acme’s AI weekly report as the example, and draft replies to the 3 most discussed Reddit threads for you to post yourself.',
+      ),
+      objective: t(
+        '在“AI 项目助理”讨论升温时排进前 10',
+        'Reach the top 10 for “AI project assistant” while the discussion grows',
+      ),
+      newPage: { section: '/blog/', linkFrom: ['/docs/weekly-reports'] },
+      source: 'topics',
+      priority: 'high',
+      effort: 'medium',
+      found: 1,
+      growth: (lang) =>
+        topicRise(
+          'new-topic',
+          discussionWeeks(now, [
+            [2, 0, 1, 0],
+            [1, 0, 1, 0],
+            [2, 1, 0, 1],
+            [2, 0, 1, 0],
+            [3, 0, 1, 1],
+            [5, 1, 1, 2],
+            [9, 1, 3, 4],
+            [14, 2, 4, 7],
+          ]),
+          { change: 1.8, monthly: 2400 },
+          { count: 1, domains: ['nimbus.example'] },
+          pick<Discussion[]>(
+            lang,
+            [
+              [
+                '有人让 AI 助理来写每周进度更新吗？',
+                'Reddit · r/projectmanagement',
+                googleRank(2),
+                dayBefore(now, 3),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Show HN：把看板更新整理成每周简报的 AI 助理',
+                'Hacker News',
+                hnHeat(312, 141),
+                dayBefore(now, 6),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                '我用了一个月的 4 款 AI 项目助理',
+                'YouTube · Workflow Lab',
+                viewsHeat(86_000),
+                dayBefore(now, 9),
+                'https://www.youtube.com/',
+              ],
+              [
+                'pm-copilot：给项目看板用的 AI 助理',
+                'GitHub',
+                starsHeat(860),
+                dayBefore(now, 5),
+                'https://github.com/pm-copilot/pm-copilot',
+              ],
+              [
+                '用 AI 助理排迭代计划，值得吗？',
+                'Reddit · r/agile',
+                googleRank(4),
+                dayBefore(now, 4),
+                'https://www.reddit.com/r/agile/',
+              ],
+              [
+                '我们让 AI 项目经理跑了两个迭代，记录一下',
+                'Reddit · r/projectmanagement',
+                googleRank(5),
+                dayBefore(now, 8),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Ask HN：AI 项目助理真的省时间吗？',
+                'Hacker News',
+                hnHeat(188, 97),
+                dayBefore(now, 12),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                '用 AI 助理保持看板整洁',
+                'YouTube · Team Ops',
+                viewsHeat(24_000),
+                dayBefore(now, 15),
+                'https://www.youtube.com/',
+              ],
+            ],
+            [
+              [
+                'Has anyone let an AI assistant run their weekly status updates?',
+                'Reddit · r/projectmanagement',
+                googleRank(2),
+                dayBefore(now, 3),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Show HN: An AI assistant that turns board updates into a weekly brief',
+                'Hacker News',
+                hnHeat(312, 141),
+                dayBefore(now, 6),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                'I tried 4 AI project assistants for a month',
+                'YouTube · Workflow Lab',
+                viewsHeat(86_000),
+                dayBefore(now, 9),
+                'https://www.youtube.com/',
+              ],
+              [
+                'pm-copilot: An AI assistant for project boards',
+                'GitHub',
+                starsHeat(860),
+                dayBefore(now, 5),
+                'https://github.com/pm-copilot/pm-copilot',
+              ],
+              [
+                'AI assistant for sprint planning: worth it?',
+                'Reddit · r/agile',
+                googleRank(4),
+                dayBefore(now, 4),
+                'https://www.reddit.com/r/agile/',
+              ],
+              [
+                'Our team let an AI PM run two sprints. Notes',
+                'Reddit · r/projectmanagement',
+                googleRank(5),
+                dayBefore(now, 8),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Ask HN: Do AI project assistants actually save time?',
+                'Hacker News',
+                hnHeat(188, 97),
+                dayBefore(now, 12),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                'Keeping boards tidy with an AI assistant',
+                'YouTube · Team Ops',
+                viewsHeat(24_000),
+                dayBefore(now, 15),
+                'https://www.youtube.com/',
+              ],
+            ],
+          ),
+          58,
+          {
+            name: 'AI project assistant',
+            from: 'project management',
+            followed: false,
+          },
+        ),
+    },
+    {
+      key: 'acme-growth-five-tools',
+      title: t(
+        '参与 r/projectmanagement 上“试了五个工具”的讨论',
+        'Join the r/projectmanagement thread on trying five tools',
+      ),
+      reason: t(
+        '本周话题的 9 个 Reddit 帖子里 Google 把它排第 1；Google 收录的内容里提到了 Nimbus。',
+        'Google ranks it first among this week’s 9 Reddit threads on the topic; the text Google shows names Nimbus.',
+      ),
+      meaning: t(
+        '发帖的是 10–30 人的团队，两年换了四个工具，正是 Acme 的目标用户。帖子排在 Google 前面，搜同类问题的人和 AI 回答都会长期看到它；现在回复，还能排在前面的回复里。Reddit 经 Google 找到，拿不到赞数和评论数。',
+        'The poster’s team of 10–30 went through four tools in two years, exactly Acme’s audience. The thread ranks high on Google, so people searching the same question and AI answers will keep seeing it; a reply now can still be among the first. Reddit is found through Google, so votes and comment counts are not available.',
+      ),
+      suggestion: t(
+        'Agent 起草一条回复：先回答他们怎么选定工具，再讲 Acme 从 Excel 迁移和跨团队依赖的做法，附导入指南链接；你确认后用自己的账号发。',
+        'The agent drafts a reply that first answers how teams settled on a tool, then explains how Acme handles moving from Excel and cross-team dependencies, with a link to the import guide; you post it from your own account after checking it.',
+      ),
+      objective: t(
+        '让正在换工具的团队看到 Acme',
+        'Let teams switching tools see Acme',
+      ),
+      offsite: t(
+        'Reddit · r/projectmanagement 的这个帖子（回复）',
+        'This thread in r/projectmanagement (a reply)',
+      ),
+      source: 'reddit',
+      priority: 'high',
+      effort: 'low',
+      found: 1,
+      growth: (lang) =>
+        hotThread(
+          'project management',
+          {
+            rank: 1,
+            posted: dayBefore(now, 1),
+            subreddit: 'r/projectmanagement',
+            named: 'Nimbus 1',
+          },
+          pick<[string, number, string, string][]>(
+            lang,
+            [
+              [
+                '试了五个项目管理工具，最后留下来的是哪个？',
+                1,
+                dayBefore(now, 1),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '有人让 AI 助理来写每周进度更新吗？',
+                2,
+                dayBefore(now, 3),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '不用甘特图，三个团队之间的依赖怎么跟？',
+                3,
+                dayBefore(now, 3),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '迭代评审变成了进度汇报会，你们怎么改回来的？',
+                4,
+                dayBefore(now, 5),
+                'https://www.reddit.com/r/agile/',
+              ],
+              [
+                '项目经理每周花多少时间在写报告上？',
+                5,
+                dayBefore(now, 2),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '给客户看的项目进度页，你们用什么做？',
+                6,
+                dayBefore(now, 4),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '从 Excel 迁到项目管理工具，最难的是哪一步？',
+                7,
+                dayBefore(now, 6),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '小团队需要 PMO 吗？',
+                8,
+                dayBefore(now, 5),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                '资源排期表大家怎么维护？',
+                9,
+                dayBefore(now, 6),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+            ],
+            [
+              [
+                'Which project management tool finally stuck after you tried five?',
+                1,
+                dayBefore(now, 1),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Has anyone let an AI assistant run their weekly status updates?',
+                2,
+                dayBefore(now, 3),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Tracking dependencies across three teams without a Gantt chart',
+                3,
+                dayBefore(now, 3),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Our sprint reviews turned into status meetings. How did you fix yours?',
+                4,
+                dayBefore(now, 5),
+                'https://www.reddit.com/r/agile/',
+              ],
+              [
+                'How much of your week goes into writing status reports?',
+                5,
+                dayBefore(now, 2),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'What do you use for a client-facing progress page?',
+                6,
+                dayBefore(now, 4),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Moving from Excel to a PM tool: what was the hardest part?',
+                7,
+                dayBefore(now, 6),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'Does a small team need a PMO?',
+                8,
+                dayBefore(now, 5),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+              [
+                'How do you keep a resource plan up to date?',
+                9,
+                dayBefore(now, 6),
+                'https://www.reddit.com/r/projectmanagement/',
+              ],
+            ],
+          ),
+        ),
+    },
+    {
+      key: 'acme-growth-client-visibility',
+      title: t(
+        '写清楚怎么让客户只看到自己的项目',
+        'Explain how clients can see only their own projects',
+      ),
+      reason: t(
+        '近 30 天 17 个帖子在问这件事（论坛 11 个，Reddit 和 Hacker News 6 个），帮助中心没有对应页面。',
+        '17 posts asked this in the last 30 days (11 in the forum, 6 on Reddit and Hacker News), and the help center has no page for it.',
+      ),
+      meaning: t(
+        '代理商和外包团队想把客户请进来看进度，又怕客户看到别的项目。Acme 的访客权限可以按项目限制，但帮助中心只有一页设置说明，没讲这个用法；同样的问题每周都有人问，回答散在帖子里。',
+        'Agencies and outsourcing teams want clients to follow progress without seeing other projects. Acme’s guest access can be limited per project, but the help center has only a settings page and does not explain this use; the same question comes up every week and the answers are scattered across threads.',
+      ),
+      suggestion: t(
+        '在帮助中心写一篇“让客户只看到自己的项目”，按访客权限、项目分组和共享链接三种做法分别说明，从访客权限文档链接过来；写好后回复论坛里还没解决的帖子。',
+        'Write a help article on letting clients see only their own projects, covering guest access, project groups and shared links, link to it from the guest access docs, and reply to the unsolved forum topics once it is up.',
+      ),
+      objective: t(
+        '让问这个问题的人直接找到答案',
+        'Let people asking this find the answer directly',
+      ),
+      newPage: {
+        section: '/docs/',
+        linkFrom: ['/docs/guests', '/docs/permissions'],
+      },
+      source: 'discourse',
+      priority: 'medium',
+      effort: 'low',
+      found: 2,
+      growth: (lang) =>
+        askedOften(
+          11,
+          2340,
+          pick<[string, 'forum' | 'reddit' | 'hackernews', string][]>(
+            lang,
+            [
+              ['怎么让客户只看到他们自己的项目？', 'forum', dayBefore(now, 1)],
+              [
+                '访客能不能只看一个项目里的部分任务？',
+                'forum',
+                dayBefore(now, 2),
+              ],
+              ['有没有给客户看的只读视图？', 'reddit', dayBefore(now, 3)],
+              [
+                '外部协作者会看到团队里其他项目吗？',
+                'forum',
+                dayBefore(now, 5),
+              ],
+              [
+                '给多个客户共用一个工作区，怎么隔离？',
+                'forum',
+                dayBefore(now, 6),
+              ],
+              [
+                '代理商怎么在一个工具里管好几个客户的项目？',
+                'reddit',
+                dayBefore(now, 8),
+              ],
+              ['共享链接能设置只看进度吗？', 'forum', dayBefore(now, 9)],
+              [
+                'Ask HN：你们怎么给客户看项目进度又不暴露内部讨论？',
+                'hackernews',
+                dayBefore(now, 11),
+              ],
+              [
+                '邀请客户进来以后，他能看到成员列表吗？',
+                'forum',
+                dayBefore(now, 13),
+              ],
+              ['按客户分项目组，权限怎么设？', 'forum', dayBefore(now, 16)],
+            ],
+            [
+              [
+                'How do I let clients see only their own projects?',
+                'forum',
+                dayBefore(now, 1),
+              ],
+              [
+                'Can a guest see only some tasks in a project?',
+                'forum',
+                dayBefore(now, 2),
+              ],
+              [
+                'Is there a read-only view for clients?',
+                'reddit',
+                dayBefore(now, 3),
+              ],
+              [
+                'Do external collaborators see the team’s other projects?',
+                'forum',
+                dayBefore(now, 5),
+              ],
+              [
+                'One workspace for several clients: how do you keep them apart?',
+                'forum',
+                dayBefore(now, 6),
+              ],
+              [
+                'Agencies: how do you run several clients’ projects in one tool?',
+                'reddit',
+                dayBefore(now, 8),
+              ],
+              [
+                'Can a shared link show progress only?',
+                'forum',
+                dayBefore(now, 9),
+              ],
+              [
+                'Ask HN: How do you show clients progress without exposing internal discussion?',
+                'hackernews',
+                dayBefore(now, 11),
+              ],
+              [
+                'After inviting a client, can they see the member list?',
+                'forum',
+                dayBefore(now, 13),
+              ],
+              [
+                'Project groups per client: how should permissions be set?',
+                'forum',
+                dayBefore(now, 16),
+              ],
+            ],
+          ),
+          17,
+        ),
+    },
+    {
+      key: 'acme-growth-japan',
+      title: t(
+        '日语市场“ガントチャート”等 14 个词每月搜索 2.2 万次，先做日语页面',
+        'Japanese searches: 14 keywords like “ガントチャート” get 22,000 a month. Start Japanese pages',
+      ),
+      reason: t(
+        '日本这 14 个词每月合计搜索 22,000 次，一年涨了 34%；本站没有日语页面，Nimbus 在那里排上了 380 个词。',
+        'These 14 keywords get 22,000 searches a month in Japan, up 34% in a year; the site has no Japanese pages, and Nimbus ranks for 380 keywords there.',
+      ),
+      meaning: t(
+        'Acme 的甘特图、看板和模板在日本也有人找，搜索量一年里稳定上升；排在前面的多是本地工具和 Nimbus 的日语页面。先把访问最多的 3 页做成日语，就能试出这个市场有多少需求。',
+        'People in Japan look for what Acme’s Gantt charts, boards and templates do, and the searches grew steadily over the year; the top results are mostly local tools and Nimbus’s Japanese pages. Making the 3 most visited pages Japanese first shows how much demand there is.',
+      ),
+      suggestion: t(
+        '先把时间线（甘特图）功能页、模板页和 Excel 导入指南做成日语版，放在 /ja/ 下，标题用当地说法；各语言版本用 hreflang 互相指向。',
+        'Make Japanese versions of the timeline (Gantt chart) feature page, the templates page and the Excel import guide under /ja/, with titles in local phrasing, and point the language versions to each other with hreflang.',
+      ),
+      objective: t(
+        '在日本市场拿到第一批搜索访问',
+        'Win the first search visits from Japan',
+      ),
+      newPage: { section: '/ja/', linkFrom: ['/', '/features/timeline'] },
+      source: 'keywords',
+      priority: 'medium',
+      effort: 'high',
+      found: 3,
+      growth: (lang) =>
+        otherMarket(
+          lang === 'zh' ? '日本（日语）' : 'Japan (Japanese)',
+          ['Nimbus', 380],
+          0.34,
+          pick<[string, string, number, number][]>(
+            lang,
+            [
+              ['ガントチャート', '甘特圖', 8100, 0.22],
+              ['プロジェクト管理ツール', '專案管理工具', 3600, 0.41],
+              ['ガントチャート エクセル', '甘特圖 Excel', 2900, 0.18],
+              ['タスク管理 アプリ', '任務管理 App', 2400, 0.36],
+              ['カンバン ボード', '看板工具', 1300, 0.52],
+              ['ガントチャート 無料', '免費甘特圖', 1000, 0.29],
+              ['プロジェクト管理 テンプレート', '專案管理範本', 880, 0.15],
+              ['WBS テンプレート', 'WBS 範本', 590, 0.08],
+              ['工数管理 ツール', '工時管理工具', 390, 0.44],
+              ['タスク 依存関係', '任務相依性', 260, 0.61],
+              ['リソース管理 ツール', '資源管理工具', 210, 0.12],
+              ['進捗管理 エクセル', '進度管理 Excel', 170, -0.05],
+              ['週報 テンプレート', '週報範本', 110, 0.2],
+              ['ガントチャート 共有', '甘特圖 共享', 90, 0.33],
+            ],
+            [
+              ['ガントチャート', 'gantt chart', 8100, 0.22],
+              ['プロジェクト管理ツール', 'project management tool', 3600, 0.41],
+              ['ガントチャート エクセル', 'gantt chart excel', 2900, 0.18],
+              ['タスク管理 アプリ', 'task management app', 2400, 0.36],
+              ['カンバン ボード', 'kanban board', 1300, 0.52],
+              ['ガントチャート 無料', 'free gantt chart', 1000, 0.29],
+              [
+                'プロジェクト管理 テンプレート',
+                'project management template',
+                880,
+                0.15,
+              ],
+              ['WBS テンプレート', 'wbs template', 590, 0.08],
+              ['工数管理 ツール', 'time tracking tool', 390, 0.44],
+              ['タスク 依存関係', 'task dependencies', 260, 0.61],
+              ['リソース管理 ツール', 'resource management tool', 210, 0.12],
+              ['進捗管理 エクセル', 'progress tracking excel', 170, -0.05],
+              ['週報 テンプレート', 'weekly report template', 110, 0.2],
+              ['ガントチャート 共有', 'share gantt chart', 90, 0.33],
+            ],
+          ),
+        ),
+    },
+    {
+      key: 'acme-growth-link-gap',
+      title: t(
+        '23 个网站链接了 Nimbus 和 Example Tasks，没有链接我们',
+        '23 sites link to Nimbus and Example Tasks but not to us',
+      ),
+      reason: t(
+        '这 23 个网站各链接了至少 2 个竞品，权威度最高 71、平均 38。',
+        'Each of these 23 sites links to at least 2 competitors; their authority is 71 at most and 38 on average.',
+      ),
+      meaning: t(
+        '链接了几个竞品的网站多是工具榜单、评测和模板合集，已经在推荐同类产品；请它们加上 Acme，比找新网站容易得多，这些页面也常被 AI 回答引用。',
+        'Sites linking to several competitors are mostly tool lists, reviews and template collections that already recommend products like ours; asking them to add Acme is far easier than finding new sites, and AI answers often cite these pages.',
+      ),
+      suggestion: t(
+        'Agent 按权威度为前 10 个网站起草联系邮件，写明 Acme 和已列产品的区别并附上对比页；你确认后自己发送。',
+        'The agent drafts outreach emails to the top 10 sites by authority, saying how Acme differs from the products they list and linking the comparison page; you send them yourself after checking.',
+      ),
+      objective: t(
+        '让推荐同类产品的网站也列上 Acme',
+        'Get listed by the sites that recommend products like ours',
+      ),
+      offsite: t(
+        '权威度最高的 10 个网站（联系邮件）',
+        'The 10 sites with the highest authority (outreach emails)',
+      ),
+      source: 'competitors',
+      priority: 'medium',
+      effort: 'medium',
+      found: 4,
+      growth: () =>
+        linkGap(['Nimbus', 'Example Tasks'], 23, 38, [
+          [
+            'pmtoolsreview.example',
+            71,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 210),
+          ],
+          [
+            'saasgrid.example',
+            64,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 340),
+          ],
+          [
+            'teamstack.example',
+            58,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 95),
+          ],
+          [
+            'remotetools.example',
+            52,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 160),
+          ],
+          [
+            'agencyplaybook.example',
+            47,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 60),
+          ],
+          [
+            'ganttguide.example',
+            44,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 400),
+          ],
+          [
+            'startupkit.example',
+            41,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 120),
+          ],
+          [
+            'opsweekly.example',
+            37,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 45),
+          ],
+          [
+            'templatesheet.example',
+            33,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 280),
+          ],
+          [
+            'devteamtools.example',
+            30,
+            ['Nimbus', 'Example Tasks'],
+            dayBefore(now, 75),
+          ],
+        ]),
+    },
+    {
+      key: 'acme-growth-kanban-video',
+      title: t(
+        '“看板和 Scrum 怎么选”视频一个月 8.6 万次播放，做一期同题内容',
+        'A “Kanban vs Scrum” video got 86,000 views in a month: make one on the same subject',
+      ),
+      reason: t(
+        '话题 task management 下这个视频 23 天播放 86,000 次；同话题近 30 天还有 3 个视频过万。',
+        'This task management video got 86,000 views in 23 days; 3 more on the topic passed 10,000 in the last 30 days.',
+      ),
+      meaning: t(
+        '看的人多是正在给团队选流程的负责人，评论里反复问“看板和迭代能不能一起用”。Acme 的看板和迭代视图正好能演示两种做法，网站上还没有讲这个对比的内容。',
+        'Its viewers are mostly leads choosing a process for their team, and the comments keep asking whether boards and sprints can be combined. Acme’s board and sprint views can show both, and the site has nothing on the comparison yet.',
+      ),
+      suggestion: t(
+        '用 Acme 的看板和迭代视图录一期 8 分钟的对比视频，配一篇同题博客；在视频说明里链接看板功能页。',
+        'Record an 8-minute comparison with Acme’s board and sprint views, publish a blog post on the same subject, and link the kanban feature page from the video description.',
+      ),
+      objective: t(
+        '借这个话题的热度让选流程的团队看到 Acme',
+        'Reach teams choosing a process while the subject is popular',
+      ),
+      newPage: { section: '/blog/', linkFrom: ['/features/kanban'] },
+      source: 'youtube',
+      priority: 'medium',
+      effort: 'medium',
+      found: 2,
+      growth: (lang) =>
+        hotVideo(
+          'task management',
+          {
+            views: 86_000,
+            posted: dayBefore(now, 23),
+            channel: 'Workflow Lab',
+            likes: 3_100,
+          },
+          pick<[string, string, number, string][]>(
+            lang,
+            [
+              [
+                '用一张看板管好个人任务',
+                'Team Ops',
+                31_000,
+                dayBefore(now, 12),
+              ],
+              [
+                '迭代计划会怎么开才不超时',
+                'Agile Coach Lin',
+                18_000,
+                dayBefore(now, 19),
+              ],
+              [
+                '任务拆分的 5 个常见错误',
+                'Workflow Lab',
+                12_000,
+                dayBefore(now, 27),
+              ],
+            ],
+            [
+              [
+                'Run your own tasks from one board',
+                'Team Ops',
+                31_000,
+                dayBefore(now, 12),
+              ],
+              [
+                'Sprint planning that ends on time',
+                'Agile Coach Lin',
+                18_000,
+                dayBefore(now, 19),
+              ],
+              [
+                '5 common mistakes when breaking down tasks',
+                'Workflow Lab',
+                12_000,
+                dayBefore(now, 27),
+              ],
+            ],
+          ),
+        ),
     },
   ];
 }
@@ -2336,5 +3423,440 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
         });
       },
     },
+    // Step 2b (2026-11-10): a followed topic discussed more, a hot Hacker News story, site search and People also ask.
+    {
+      key: 'crm-growth-automation-topic',
+      title: t(
+        '“workflow automation”讨论是之前 4 周的 2.7 倍，写一篇 CRM 自动化指南',
+        'Discussion of “workflow automation” is 2.7× the 4 weeks before: write a CRM automation guide',
+      ),
+      reason: t(
+        '近 4 周 49 条讨论，之前 4 周 18 条；Reddit 和 Hacker News 一起变多。',
+        '49 discussions in the last 4 weeks against 18 the 4 weeks before, rising on Reddit and Hacker News together.',
+      ),
+      meaning: t(
+        '销售团队在讨论怎么把跟进提醒、线索分配和报价审批自动化，问得最多的是“不写代码能不能做”。Acme CRM 的自动化规则正好能做，但网站上只有功能列表，没有讲做法的指南。',
+        'Sales teams are discussing how to automate follow-up reminders, lead routing and quote approvals, most often asking whether it works without code. Acme CRM’s automation rules do this, but the site only lists the feature and has no how-to guide.',
+      ),
+      suggestion: t(
+        '写一篇“不写代码自动化销售流程”的指南，用跟进提醒、线索分配、报价审批三个例子，从线索分配文档链接过来。',
+        'Write a guide to automating the sales process without code, with follow-up reminders, lead routing and quote approvals as examples, and link to it from the lead routing docs.',
+      ),
+      objective: t(
+        '在销售自动化讨论升温时排进前 10',
+        'Reach the top 10 while sales automation is discussed more',
+      ),
+      newPage: { section: '/blog/', linkFrom: ['/docs/lead-routing'] },
+      source: 'topics',
+      priority: 'medium',
+      effort: 'medium',
+      found: 1,
+      growth: (lang) =>
+        topicRise(
+          'topic-rise',
+          discussionWeeks(now, [
+            [3, 1, 1, 0],
+            [2, 1, 0, 0],
+            [3, 0, 1, 0],
+            [4, 1, 1, 0],
+            [6, 2, 1, 0],
+            [8, 3, 1, 0],
+            [9, 3, 0, 0],
+            [11, 4, 1, 0],
+          ]),
+          { change: 0.45, monthly: 1600 },
+          { count: 2, domains: ['sales.example', 'flowdesk.example'] },
+          pick<Discussion[]>(
+            lang,
+            [
+              [
+                '不写代码，销售跟进提醒能自动化到什么程度？',
+                'Reddit · r/sales',
+                googleRank(1),
+                dayBefore(now, 2),
+                'https://www.reddit.com/r/sales/',
+              ],
+              [
+                'Show HN：开源的销售流程自动化规则引擎',
+                'Hacker News',
+                hnHeat(176, 64),
+                dayBefore(now, 4),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                '线索自动分配，你们按什么规则？',
+                'Reddit · r/salesops',
+                googleRank(3),
+                dayBefore(now, 5),
+                'https://www.reddit.com/r/salesops/',
+              ],
+              [
+                '我们把报价审批从邮件搬进了自动化流程',
+                'Hacker News',
+                hnHeat(121, 38),
+                dayBefore(now, 9),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                'CRM 自动化做太多，反而没人看提醒了',
+                'Reddit · r/sales',
+                googleRank(4),
+                dayBefore(now, 11),
+                'https://www.reddit.com/r/sales/',
+              ],
+              [
+                '10 分钟搭好销售自动化',
+                'YouTube · RevOps Daily',
+                viewsHeat(14_000),
+                dayBefore(now, 13),
+                'https://www.youtube.com/',
+              ],
+            ],
+            [
+              [
+                'How far can you automate sales follow-ups without code?',
+                'Reddit · r/sales',
+                googleRank(1),
+                dayBefore(now, 2),
+                'https://www.reddit.com/r/sales/',
+              ],
+              [
+                'Show HN: An open source rule engine for sales workflows',
+                'Hacker News',
+                hnHeat(176, 64),
+                dayBefore(now, 4),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                'Automatic lead routing: which rules do you use?',
+                'Reddit · r/salesops',
+                googleRank(3),
+                dayBefore(now, 5),
+                'https://www.reddit.com/r/salesops/',
+              ],
+              [
+                'We moved quote approvals from email into an automated workflow',
+                'Hacker News',
+                hnHeat(121, 38),
+                dayBefore(now, 9),
+                'https://news.ycombinator.com/',
+              ],
+              [
+                'Too much CRM automation and nobody reads the reminders',
+                'Reddit · r/sales',
+                googleRank(4),
+                dayBefore(now, 11),
+                'https://www.reddit.com/r/sales/',
+              ],
+              [
+                'Set up sales automation in 10 minutes',
+                'YouTube · RevOps Daily',
+                viewsHeat(14_000),
+                dayBefore(now, 13),
+                'https://www.youtube.com/',
+              ],
+            ],
+          ),
+          49,
+          { name: 'workflow automation', followed: true },
+        ),
+    },
+    {
+      key: 'crm-growth-pipeline-math',
+      title: t(
+        '在 Hacker News 热帖“早期 B2B 销售的漏斗算术”下回复',
+        'Reply under the Hacker News story “Pipeline math for early-stage B2B sales”',
+      ),
+      reason: t(
+        '2 天 143 分、41 条评论；读了的评论里提到 Example Sales 2 次，没有提到 Acme CRM。',
+        '143 points and 41 comments in 2 days; the comments read name Example Sales twice and Acme CRM not at all.',
+      ),
+      meaning: t(
+        '评论里的创始人在比较用表格还是用 CRM 算漏斗，已经有人推荐了 Example Sales。Acme CRM 的漏斗报表能直接算出每阶段转化率，正好回答他们在问的事。',
+        'Founders in the comments compare spreadsheets with a CRM for pipeline math, and someone already recommended Example Sales. Acme CRM’s pipeline report computes each stage’s conversion rate directly, which is what they are asking about.',
+      ),
+      suggestion: t(
+        'Agent 起草一条回复：先补充算漏斗时容易漏掉的阶段停留时间，再说明 Acme CRM 的漏斗报表怎么算，附上漏斗阶段的博客；你确认后自己发。',
+        'The agent drafts a reply that first adds the stage durations people tend to miss, then explains how Acme CRM’s pipeline report works, linking the pipeline stages post; you post it yourself after checking.',
+      ),
+      objective: t(
+        '让在算漏斗的创始人看到 Acme CRM',
+        'Let founders doing pipeline math see Acme CRM',
+      ),
+      offsite: t(
+        'Hacker News 上这个帖子的评论（回复）',
+        'The comments of this Hacker News story (a reply)',
+      ),
+      source: 'hackernews',
+      priority: 'medium',
+      effort: 'low',
+      found: 2,
+      growth: (lang) =>
+        hotStory(
+          'sales pipeline',
+          {
+            points: 143,
+            comments: 41,
+            named: 'Example Sales 2',
+            own: null,
+            posted: dayBefore(now, 2),
+            url: 'https://news.ycombinator.com/',
+          },
+          pick<[string, string[]][]>(
+            lang,
+            [
+              [
+                '我们一开始用表格算，换到 Example Sales 以后才看到每个阶段卡了多久。',
+                ['Example Sales'],
+              ],
+              [
+                'Example Sales 的漏斗报表不错，就是自定义阶段要升级套餐。',
+                ['Example Sales'],
+              ],
+              ['转化率算对了，才知道每月该开多少个新机会。', []],
+            ],
+            [
+              [
+                'We started in a spreadsheet; only after moving to Example Sales did we see how long each stage stalled.',
+                ['Example Sales'],
+              ],
+              [
+                'Example Sales has a good pipeline report, but custom stages need a higher plan.',
+                ['Example Sales'],
+              ],
+              [
+                'Get the conversion rates right and you know how many new opportunities a month you need.',
+                [],
+              ],
+            ],
+          ),
+        ),
+    },
+    {
+      key: 'crm-growth-merge-contacts',
+      title: t(
+        '站内搜“合并重复联系人”73 次，补一篇帮助文档',
+        '“merge duplicate contacts” was searched 73 times on the site: add a help article',
+      ),
+      reason: t(
+        '近 28 天站内搜索 73 次、46 人搜过，网站上没有对应页面；相近的“合并联系人”还有 22 次。',
+        'Searched 73 times by 46 people on the site in the last 28 days with no matching page; the similar “merge contacts” adds 22 more.',
+      ),
+      meaning: t(
+        '搜这个的多是刚导入联系人的新用户：导入后出现重复，他们在站内找办法，找不到就会去问客服或放弃。Acme CRM 有按邮箱合并的功能，只是没写进帮助中心。',
+        'Most people searching this are new users who just imported contacts and found duplicates; when the site has no answer they ask support or give up. Acme CRM can merge by email address, but the help center does not say so.',
+      ),
+      suggestion: t(
+        '在帮助中心写一篇“合并重复联系人”，讲按邮箱自动合并和手动合并两种做法，从导入指南的最后一步链接过来。',
+        'Write a help article on merging duplicate contacts, covering automatic merging by email and merging by hand, and link to it from the last step of the import guide.',
+      ),
+      objective: t(
+        '让导入后遇到重复的用户自己解决',
+        'Let users who find duplicates after an import solve it themselves',
+      ),
+      newPage: { section: '/docs/', linkFrom: ['/docs/import'] },
+      source: 'ga4',
+      priority: 'medium',
+      effort: 'low',
+      found: 3,
+      growth: (lang) =>
+        siteSearch(
+          pick<[string, number, number][]>(
+            lang,
+            [
+              ['合并重复联系人', 73, 46],
+              ['合并联系人', 22, 17],
+            ],
+            [
+              ['merge duplicate contacts', 73, 46],
+              ['merge contacts', 22, 17],
+            ],
+          ),
+        ),
+    },
+    {
+      key: 'crm-growth-pipeline-paa',
+      title: t(
+        '销售漏斗：Google 上大家还问了 6 个我们没回答的问题',
+        'Sales pipeline: 6 People also ask questions no page of ours answers',
+      ),
+      reason: t(
+        '4 个关键词每月合计搜索 9,300 次，结果页里 18 个问题有 6 个本站页面没回答。',
+        '4 keywords get 9,300 searches a month; 6 of the 18 questions on their results pages are not answered by any page of ours.',
+      ),
+      meaning: t(
+        '这些问题出现在“销售漏斗”相关词的 Google 结果页里，回答得好的页面会被摘进“大家还问了”，也常被 AI 回答引用。漏斗阶段那篇博客只讲了阶段怎么分，没讲怎么算转化率和多久该清理。',
+        'These questions appear on the results pages of the sales pipeline keywords; a page that answers them well is quoted in People also ask and often cited by AI answers. The pipeline stages post explains how to split stages but not how to compute conversion rates or when to clean up.',
+      ),
+      suggestion: t(
+        '在漏斗阶段那篇博客后面加一节常见问题，逐条回答这 6 个问题，每条 2–3 句，并加上 FAQ 结构化数据。',
+        'Add an FAQ section to the pipeline stages post answering these 6 questions in 2–3 sentences each, with FAQ structured data.',
+      ),
+      objective: t(
+        '让漏斗相关的问题由我们的页面回答',
+        'Have our page answer the pipeline questions',
+      ),
+      path: '/blog/pipeline-stages',
+      source: 'keywords',
+      priority: 'low',
+      effort: 'low',
+      found: 5,
+      growth: (lang) =>
+        peopleAlsoAsk(
+          lang === 'zh' ? '銷售漏斗' : 'Sales pipeline',
+          18,
+          pick<[string, string, number][]>(
+            lang,
+            [
+              ['銷售漏斗轉換率怎麼算？', '銷售漏斗', 4400],
+              ['銷售漏斗多久要清理一次？', '銷售漏斗', 4400],
+              ['B2B 銷售漏斗一般有幾個階段？', '銷售漏斗 階段', 2400],
+              ['銷售漏斗和銷售管道有什麼不同？', '銷售管道', 1600],
+              ['怎麼判斷商機卡在哪個階段？', '銷售漏斗 階段', 2400],
+              ['小團隊需要 CRM 來管銷售漏斗嗎？', '銷售漏斗 CRM', 900],
+            ],
+            [
+              [
+                'How do you calculate sales pipeline conversion rate?',
+                'sales pipeline',
+                4400,
+              ],
+              [
+                'How often should you clean up your sales pipeline?',
+                'sales pipeline',
+                4400,
+              ],
+              [
+                'How many stages does a B2B sales pipeline have?',
+                'sales pipeline stages',
+                2400,
+              ],
+              [
+                'What is the difference between a sales funnel and a pipeline?',
+                'sales funnel vs pipeline',
+                1600,
+              ],
+              [
+                'How do you tell which stage a deal is stuck in?',
+                'sales pipeline stages',
+                2400,
+              ],
+              [
+                'Does a small team need a CRM for its pipeline?',
+                'sales pipeline crm',
+                900,
+              ],
+            ],
+          ),
+        ),
+    },
   ];
+}
+
+/**
+ * A followed topic discussed more on Reddit alone (Acme, 2026-11-10 step 2b): the rule waits in Watching until a
+ * second source rises as well, with the weeks drawn in the change's detail.
+ */
+export function acmeTopicWatch(now: Date, lang: Lang) {
+  const weeks = discussionWeeks(now, [
+    [3, 1, 1, 0],
+    [4, 0, 1, 0],
+    [2, 1, 0, 0],
+    [3, 1, 1, 0],
+    [5, 1, 1, 0],
+    [7, 0, 0, 0],
+    [9, 1, 1, 0],
+    [12, 0, 1, 0],
+  ]);
+  const rows = pick<Discussion[]>(
+    lang,
+    [
+      [
+        '远程团队怎么避免每天开站会？',
+        'Reddit · r/remotework',
+        googleRank(1),
+        dayBefore(now, 3),
+        'https://www.reddit.com/r/remotework/',
+      ],
+      [
+        '跨部门协作，大家用什么工具对齐进度？',
+        'Reddit · r/projectmanagement',
+        googleRank(2),
+        dayBefore(now, 6),
+        'https://www.reddit.com/r/projectmanagement/',
+      ],
+      [
+        '团队消息太多，任务反而被淹没了',
+        'Reddit · r/productivity',
+        googleRank(4),
+        dayBefore(now, 10),
+        'https://www.reddit.com/r/productivity/',
+      ],
+      [
+        '异步协作的团队是怎么交接工作的？',
+        'Reddit · r/remotework',
+        googleRank(3),
+        dayBefore(now, 15),
+        'https://www.reddit.com/r/remotework/',
+      ],
+    ],
+    [
+      [
+        'How do remote teams avoid a daily standup?',
+        'Reddit · r/remotework',
+        googleRank(1),
+        dayBefore(now, 3),
+        'https://www.reddit.com/r/remotework/',
+      ],
+      [
+        'Cross-team work: which tool keeps everyone on the same page?',
+        'Reddit · r/projectmanagement',
+        googleRank(2),
+        dayBefore(now, 6),
+        'https://www.reddit.com/r/projectmanagement/',
+      ],
+      [
+        'Too many team messages and the tasks get buried',
+        'Reddit · r/productivity',
+        googleRank(4),
+        dayBefore(now, 10),
+        'https://www.reddit.com/r/productivity/',
+      ],
+      [
+        'How do async teams hand work over?',
+        'Reddit · r/remotework',
+        googleRank(3),
+        dayBefore(now, 15),
+        'https://www.reddit.com/r/remotework/',
+      ],
+    ],
+  );
+  return {
+    key: 'topic-rise:team collaboration',
+    title: pick(
+      lang,
+      '话题 team collaboration 近 4 周讨论是之前 4 周的 2.1 倍',
+      'Topic team collaboration: 2.1× the discussions of the 4 weeks before',
+    ),
+    fact: pick(
+      lang,
+      '近 4 周 38 条讨论，之前 4 周 18 条；一起变多的来源：Reddit',
+      '38 discussions in the last 4 weeks, 18 the 4 weeks before; rising on Reddit',
+    ),
+    waitingFor: pick(
+      lang,
+      '再有一个来源一起变多',
+      'One more source rising as well',
+    ),
+    chip: '18 → 38',
+    growth: topicRise(
+      'topic-rise',
+      weeks,
+      { change: 0.06, monthly: 6600 },
+      { count: 6, domains: ['teamhub.example', 'nimbus.example'] },
+      rows,
+      38,
+      { name: 'team collaboration', followed: true },
+    ),
+  };
 }
