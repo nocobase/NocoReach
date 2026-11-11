@@ -772,26 +772,47 @@ describe('app server', () => {
     );
     expect(unscoped.status).toBe(403);
     const created = await requestApp(app, `${baseUrl}/api/nocoreachKeys`, {
-      method: 'POST', headers: { cookie, 'content-type': 'application/json', origin: 'http://localhost' },
-      body: JSON.stringify({ name: 'template-integration', type: 'personal', scope: { groups: { 'nocoreach.business': { level: 'read' } } } }),
+      method: 'POST',
+      headers: {
+        cookie,
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({
+        name: 'template-integration',
+        type: 'personal',
+        scope: { groups: { 'nocoreach.business': { level: 'read' } } },
+      }),
     });
     expect(created.status).toBe(200);
-    const { data } = await created.json() as { data: { key: { id: string }; secret: string } };
+    const { data } = (await created.json()) as {
+      data: { key: { id: string }; secret: string };
+    };
     const key = { id: data.key.id, key: data.secret };
     const authenticated = await requestApp(app, `${baseUrl}/api/users`, {
       headers: { 'x-api-key': key.key },
     });
     expect(authenticated.status).toBe(403);
-    const business = await requestApp(app, `${baseUrl}/api/nocoreach/nrProjects/list`, { headers: { 'x-api-key': key.key } });
+    const business = await requestApp(
+      app,
+      `${baseUrl}/api/nocoreach/nrProjects/list`,
+      { headers: { 'x-api-key': key.key } },
+    );
     expect(business.status).toBe(200);
-    const session = await requestApp(app, `${baseUrl}/api/auth/get-session`, { headers: { cookie } });
-    const { user } = await session.json() as { user: { id: string } };
+    const session = await requestApp(app, `${baseUrl}/api/auth/get-session`, {
+      headers: { cookie },
+    });
+    const { user } = (await session.json()) as { user: { id: string } };
     const revoked = await requestApp(
       app,
       `${baseUrl}/api/nocoreachKeys/revoke`,
       {
         method: 'POST',
-        headers: { cookie, 'content-type': 'application/json', origin: 'http://localhost' },
+        headers: {
+          cookie,
+          'content-type': 'application/json',
+          origin: 'http://localhost',
+        },
         body: JSON.stringify({ keyId: key.id, ownerId: user.id }),
       },
     );
@@ -1231,12 +1252,14 @@ interface CreateTestAppOptions {
 function createTestQueueConfig(): AppQueueConfig {
   return {
     default: 'memory',
-    memory: {
-      adapter: 'inMemory',
-      persistence: {
-        path: mkdtempSync(
-          path.join(tmpdir(), 'nocobase-app-template-default-queue-'),
-        ),
+    backends: {
+      memory: {
+        adapter: 'inMemory',
+        persistence: {
+          path: mkdtempSync(
+            path.join(tmpdir(), 'nocobase-app-template-default-queue-'),
+          ),
+        },
       },
     },
   };
@@ -1612,17 +1635,21 @@ async function writeRuntimeTestConfig(
       // another suite may be using at the same time.
       jobs: {
         default: 'memory',
-        memory: {
-          adapter: 'memory',
-          persistence: { path: path.join(directory, 'jobs') },
+        backends: {
+          memory: {
+            adapter: 'memory',
+            persistence: { path: path.join(directory, 'jobs') },
+          },
         },
       },
       // Queue state files likewise stay beside the test database.
       queue: {
         default: 'memory',
-        memory: {
-          adapter: 'inMemory',
-          persistence: { path: path.join(directory, 'queue') },
+        backends: {
+          memory: {
+            adapter: 'inMemory',
+            persistence: { path: path.join(directory, 'queue') },
+          },
         },
       },
       database: {
