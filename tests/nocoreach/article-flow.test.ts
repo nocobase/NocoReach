@@ -1083,6 +1083,8 @@ test('several targets: a target still a draft when the primary goes live keeps b
     delivery: { targetId: 'cms', also: ['news'] },
   });
   await draftAndApprove(f, freshPost);
+  // Data sources › Blog CMS lists a target's latest article once it went live there, not when its draft was pushed.
+  expect(await f.s.latestPublished('1')).toEqual({});
   f.cms.edit(f.cms.state.rows.find((r) => r.slug === 'fresh').id, {
     status: 'published',
   });
@@ -1095,6 +1097,12 @@ test('several targets: a target still a draft when the primary goes live keeps b
     article: { state: 'published' },
     also: [{ state: 'drafted', cms: { status: 'draft' } }],
   });
+  expect(await f.s.latestPublished('1')).toEqual({
+    cms: expect.objectContaining({
+      slug: 'fresh',
+      at: d.work.release.article.cmsLive.at,
+    }),
+  });
   f.news.edit(f.news.state.rows[0].id, { status: 'published' });
   cmsDue(f, (r) => r.also[0]);
   await f.s.articleFlow.tick();
@@ -1102,6 +1110,10 @@ test('several targets: a target still a draft when the primary goes live keeps b
   expect(d.work.release).toMatchObject({
     state: 'live',
     also: [{ state: 'published', cmsLive: { by: 'system' } }],
+  });
+  expect((await f.s.latestPublished('1')).news).toMatchObject({
+    slug: 'fresh',
+    at: d.work.release.also[0].cmsLive.at,
   });
   expect(d.work.history.at(-1)).toMatchObject({
     action: 'articleCmsPublished',

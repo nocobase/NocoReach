@@ -231,7 +231,8 @@ export class TaskService {
     await this.eachTask(project, t => {
       const r = t.evidence?.work?.release;
       for (const a of [r?.article, ...(Array.isArray(r?.also) ? r.also : [])]) {
-        const at = String(a?.published?.at || '');
+        // A new article pushed as a draft (2026-11-12) counts once it was seen published in the CMS, not when it was pushed.
+        const at = String((a?.draft ? a.cmsLive?.at : a?.published?.at) || '');
         if (a?.targetId && at && !(latest[a.targetId]?.at >= at)) latest[a.targetId] = { slug: String(a.published.slug || a.slug || ''), title: String(t.title || '').slice(0, 200), at, taskId: String(t.id) };
       }
     });
