@@ -1050,7 +1050,9 @@ test('several targets: the task goes live when the primary is published in the C
     also: [{ draft: true, state: 'drafted', cms: { status: 'draft' } }],
   });
   expect(
-    d.work.history.filter((e) => e.action === 'articleDrafted').map((e) => e.note),
+    d.work.history
+      .filter((e) => e.action === 'articleDrafted')
+      .map((e) => e.note),
   ).toEqual(['NocoBase CMS', 'News']);
   f.news.edit(f.news.state.rows[0].id, { status: 'published' });
   cmsDue(f, (r) => r.also[0]);

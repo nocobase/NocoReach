@@ -186,6 +186,19 @@ export function otherLanguages(data: TaskData, a?: ArticleProposal) {
 }
 
 /**
+ * A new article for a target that keeps a status (2026-11-12): pushed to the CMS as a draft, which a person publishes
+ * there. `a` is a proposal, a release leg or the task's delivery; `drafts` lists targets where the task's new article
+ * already waits as a draft (a rebase updates it in place).
+ */
+export function pushesDraft(
+  data: TaskData,
+  a?: { targetId: string; articleId: string | null; drafts?: string[] } | null,
+) {
+  if (!a || (a.articleId && !a.drafts?.includes(a.targetId))) return false;
+  return Boolean(data.articleTargets?.find((t) => t.id === a.targetId)?.status);
+}
+
+/**
  * Which round a version under review is: the primary to approve (`pending`), the other languages to publish (`after`),
  * or a version of those that changed none of them (`nothing`; T-53 read "Translation done" with Chinese and Japanese
  * untouched). The card and the reading page share its title and actions.
@@ -202,7 +215,13 @@ export function reviewRound(
     names = (list: string[]) =>
       joinNames(list.map((l) => localeName(l, getCurrentLocale()))),
     primary = localeName(plan.primary, getCurrentLocale()),
-    updating = plan.update.length > 0;
+    updating = plan.update.length > 0,
+    // The last approval of a new article that goes to the CMS as a draft.
+    toCms =
+      !simulated &&
+      !translationPending(data) &&
+      !nothing &&
+      pushesDraft(data, a);
   const title = translationPending(data)
     ? $t(
         updating
@@ -224,13 +243,22 @@ export function reviewRound(
               1: names(plan.update),
             })
         : after
-          ? $t('articleTask.reviewTranslatedTitle')
-          : $t('articleTask.reviewTitle');
+          ? $t(
+              toCms
+                ? 'articleTask.reviewTranslatedDraftTitle'
+                : 'articleTask.reviewTranslatedTitle',
+            )
+          : $t(
+              toCms
+                ? 'articleTask.reviewDraftTitle'
+                : 'articleTask.reviewTitle',
+            );
   return {
     ...plan,
     after,
     nothing,
     title,
+    toCms,
     /** Approve's label in place of Approve and publish, if any. */
     approve: translationPending(data)
       ? $t(
@@ -245,7 +273,9 @@ export function reviewRound(
               : 'articleTask.publishOnly',
             { 0: primary },
           )
-        : undefined,
+        : toCms
+          ? $t('articleTask.approveAndPush')
+          : undefined,
     /** Update again or Translate again, and the feedback it sends with the change request. */
     again: $t(
       updating ? 'articleTask.updateAgain' : 'articleTask.translateAgain',
@@ -530,3 +560,23 @@ export function restGroups(rest: PageFound[]): {
       : null,
   };
 }
+
+/** A new article pushed as a draft (2026-11-12): whether the CMS still holds it as a draft, lost it or published it. */
+export function cmsState(a: ReleaseArticle, state: string) {
+  if (!a.draft || state !== 'drafted') return 'published';
+  return a.cms?.status === 'missing' || a.cms?.status === 'unseen'
+    ? a.cms.status
+    : 'draft';
+}
+/** Where Open CMS goes for a target: the article itself when the target gave its address, else the CMS. */
+export const cmsLink = (data: TaskData, a?: ReleaseArticle) =>
+  a
+    ? a.editUrl ||
+      data.articleTargets?.find((t) => t.id === a.targetId)?.cmsUrl ||
+      ''
+    : '';
+/** The drafts the CMS no longer has, which Push again creates anew. */
+export const missingDrafts = (r?: Release) =>
+  r?.article
+    ? releaseLegs(r).filter(({ a, state }) => cmsState(a, state) === 'missing')
+    : [];

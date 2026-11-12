@@ -66,6 +66,7 @@ import {
   ARTICLE_TARGET_PRESETS,
   fill,
   pagePattern,
+  supportsStatus,
   type ArticleTargetKind,
   type ArticleTargetView,
   type PublishedArticle,
@@ -725,8 +726,9 @@ function TargetsPanel({
 
 /**
  * A publishing target as Data sources › Blog CMS shows it (2026-10-29): the same status card as a website repository,
- * with whether it answers (the latest check, kept with its time), where it is, its languages and the article a task
- * last published there.
+ * with whether it answers (the latest check, kept with its time), where it is, its languages, what becomes of a new
+ * article there (2026-11-12: a draft to publish in the CMS, or published directly where the target keeps no status) and
+ * the article a task last published there.
  */
 function TargetCard({
   target: t,
@@ -807,6 +809,23 @@ function TargetCard({
               1: joinList(t.locales.slice(1).map((l) => localeName(l, ui))),
             })
           : localeName(t.locales[0], ui)}
+      </StatusRow>
+      <StatusRow label={$t('articlePublishing.newArticles')}>
+        {t.kind === 'git-files' ? (
+          <span>
+            {$t('articlePublishing.newArticlesGit', { 0: t.branch })}
+            <span className='text-muted-foreground'>
+              {' · '}
+              {$t('articlePublishing.gitNoDrafts')}
+            </span>
+          </span>
+        ) : (
+          $t(
+            supportsStatus(t)
+              ? 'articlePublishing.newArticlesDraft'
+              : 'articlePublishing.newArticlesDirect',
+          )
+        )}
       </StatusRow>
       {t.kind !== 'git-files' && t.downstream && (
         <StatusRow label={$t('articlePublishing.exportsRow')}>

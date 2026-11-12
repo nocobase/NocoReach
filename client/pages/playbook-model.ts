@@ -55,10 +55,12 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
 // task went back to is named Translate wherever the current step is named: the step tags, Tasks and Tasks › By Agent.
 // It is Update other languages when the article already has some of them and they get the primary's changes in place
 // (2026-10-28).
-type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:unknown;delivery?:{articleId?:string|null;locales?:string[];translateFrom?:{published?:boolean}|null};article?:{locales?:string[]}};
+type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:{article?:{draft?:boolean}}|null;delivery?:{articleId?:string|null;locales?:string[];translateFrom?:{published?:boolean}|null};article?:{locales?:string[]}};
 export const translatingStage=(s:Stage,w?:StepWork)=>Boolean(w?.delivery?.translateFrom&&!w.release&&w.stage!=='done'&&s.kind==='agent'&&w.flow?.stages[w.stageIndex||0]?.key===s.key);
-export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t(inPlaceLocales(w!.delivery,w!.article?.locales).length?'articleTask.updateStep':'articleTask.translateStep'):s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
-export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s);
+// A new article pushed to the CMS as a draft is published there by a person (2026-11-12): its release step is Publish in
+// CMS, once released (`release.article.draft`) or, before, when the task page knows its target keeps drafts (`draft`).
+export const stageName=(s:Stage,w?:StepWork,draft?:boolean)=>translatingStage(s,w)?$t(inPlaceLocales(w!.delivery,w!.article?.locales).length?'articleTask.updateStep':'articleTask.translateStep'):s.kind==='release'?$t(draft||w?.release?.article?.draft?'articleTask.publishInCms':'playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
+export const stageLabel=(s:Stage,w?:StepWork,draft?:boolean)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s,w,draft);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
 // What a task timeline says for each recorded event. Which events Activity shows is ACTIVITY_EVENTS in
@@ -129,6 +131,12 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'articleExported':return {who:$t('common.system'),text:$t('taskDetail.eventArticleExported')};
   case 'articleExportLate':return {who:$t('common.system'),text:$t('taskDetail.eventArticleExportLate')};
   case 'articleDrift':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDrift')};
+  // A new article pushed to the CMS as a draft and published there by a person (2026-11-12); `note` names the target.
+  case 'articleDrafted':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDrafted',{0:e.note||''})};
+  case 'articleCmsLive':return {who:$t('common.system'),text:$t('taskDetail.eventArticleCmsLive',{0:e.note||''})};
+  case 'articleCmsPublished':return {who:$t('common.system'),text:$t('taskDetail.eventArticleCmsPublished',{0:e.note||''})};
+  case 'articleDraftMissing':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDraftMissing',{0:e.note||''})};
+  case 'repushDraft':return {who:$t('common.you'),text:$t('taskDetail.eventRepushDraft',{0:e.note||''})};
   default:return null;
  }
 }

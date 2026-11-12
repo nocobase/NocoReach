@@ -11,6 +11,7 @@ import { $t, useNocoReachLocale } from '#i18n';
 import { PageContainer } from '#components/reach/page';
 import { RouteChildPage } from '#components/route-child-page';
 import { Button } from '#components/ui/button';
+import { InfoTip } from '#components/reach/info-tip';
 import { cn } from '#lib/utils';
 import { mockSettingsAvailable } from '../../../app-plugins/nocoreach-mock/client/index.js';
 import {
@@ -247,6 +248,13 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                           },
                         ),
                     }
+              }
+              info={
+                round.toCms ? (
+                  <InfoTip label={$t('taskDetail.aboutPublishing')}>
+                    {$t('articleTask.pushDraftHint')}
+                  </InfoTip>
+                ) : undefined
               }
             />
           )}

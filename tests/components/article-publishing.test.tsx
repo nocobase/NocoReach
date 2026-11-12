@@ -225,7 +225,8 @@ it('a new article shows its target, kind and status as tags, in the languages it
   expect(screen.getByRole('heading', { name: 'Internal tools' })).toBeVisible();
 });
 
-it('a changed article tags a changed status and leaves out a language it does not have', () => {
+// The CMS owns an existing article's status (2026-11-12): a status in the proposal is not sent, so it gets no tag.
+it('a changed article has no status tag and leaves out a language it does not have', () => {
   render(
     <ArticleReview
       data={
@@ -244,7 +245,7 @@ it('a changed article tags a changed status and leaves out a language it does no
       notes=''
     />,
   );
-  expect(tagTexts()).toEqual(['NocoBase CMS', 'Update article', 'Make draft']);
+  expect(tagTexts()).toEqual(['NocoBase CMS', 'Update article']);
   // An existing article is named by its title; its unchanged address is left out.
   expect(screen.queryByText('hello')).toBeNull();
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
@@ -689,20 +690,17 @@ it('edits the languages written, one at a time from the one asked for, and opens
   });
 });
 
-it.each([
-  { create: true, status: 'published' as const },
-  { create: true, status: 'draft' as const },
-  { create: false, status: 'published' as const },
-  { create: false, status: 'draft' as const },
-])(
-  'keeps $status in the version made of an edit (create=$create)',
-  ({ create, status }) => {
+// There is no status to choose (2026-11-12): a new article goes to the CMS as a draft and an existing one keeps its
+// status, so a version made of an edit carries none, even when the agent proposed one.
+it.each([true, false])(
+  'leaves the status out of the version made of an edit (create=%s)',
+  (create) => {
     const article = {
       ...proposal,
       ...(create ? { articleId: null, baseKey: null, baseVersion: null } : {}),
       draft: {
         slug: 'hello',
-        status,
+        status: 'published',
         locales: { en: { title: 'Hello', body: 'English body' } },
       },
       changes: [],
@@ -711,7 +709,6 @@ it.each([
     form.locales.en.title = 'Edited title';
     expect(formDraft(data, article, form)).toEqual({
       ...(create ? { slug: 'hello' } : {}),
-      status,
       locales: {
         en: {
           title: 'Edited title',
@@ -722,7 +719,7 @@ it.each([
   },
 );
 
-it('chooses draft or published for a target that stores a status, starting from the draft', async () => {
+it('offers no status choice for a target that stores a status', async () => {
   const onVersion = vi.fn();
   const user = userEvent.setup();
   render(
@@ -740,18 +737,17 @@ it('chooses draft or published for a target that stores a status, starting from 
         baseVersion: null,
         draft: {
           slug: 'new-post',
-          status: 'draft',
+          status: 'published',
           locales: { en: { title: 'New', body: 'Body' } },
         },
       }}
       onVersion={onVersion}
     />,
   );
-  expect(screen.getByRole('radio', { name: 'Draft' })).toBeChecked();
-  await user.click(screen.getByRole('radio', { name: 'Published' }));
+  expect(screen.queryByRole('radio')).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Save' }));
   expect(onVersion).toHaveBeenCalledWith(
-    expect.objectContaining({ slug: 'new-post', status: 'published' }),
+    expect.not.objectContaining({ status: expect.anything() }),
   );
 });
 
@@ -762,10 +758,19 @@ it('keeps an unfinished address out of the automatic save', () => {
   expect(keptForm({ ...form, slug: 'hello' })).toMatchObject({ slug: 'hello' });
 });
 
-it('shows status changes as words in the review', () => {
+// A new article says where it ends up: saved as a draft in a CMS that keeps a status, else published directly.
+it.each([
+  [true, 'Save as draft'],
+  [false, 'Publish directly'],
+])('a new article on a target with status=%s is tagged %s', (status, tag) => {
   render(
     <ArticleReview
-      data={data}
+      data={
+        {
+          ...data,
+          articleTargets: [{ ...target, status }],
+        } as unknown as TaskData
+      }
       article={{
         ...proposal,
         articleId: null,
@@ -782,7 +787,7 @@ it('shows status changes as words in the review', () => {
     />,
   );
   // A tag at the top, as words: no tab or diff for one value.
-  expect(tagTexts()).toContain('Save as draft');
+  expect(tagTexts()).toEqual(['NocoBase CMS', 'New article', tag]);
   expect(screen.queryByRole('tab', { name: 'Status' })).toBeNull();
 });
 

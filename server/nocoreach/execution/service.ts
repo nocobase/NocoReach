@@ -155,7 +155,7 @@ export class TaskService {
       // An Agent step that failed or waits to be started again needs you too, but sends no message yet: the message
       // names a step to do, and a run a restart interrupted is tried again right after it fails.
       const agentWaits = stage?.kind === 'agent' && !w.boardState;
-      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.kind === 'release' && w.release?.state === 'awaiting_cms' ? systemMessageText('common.publishInCms') : stage.name });
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.kind === 'release' && w.release?.state === 'awaiting_cms' ? systemMessageText('articleTask.publishInCms') : stage.name });
       if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
       for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
     }

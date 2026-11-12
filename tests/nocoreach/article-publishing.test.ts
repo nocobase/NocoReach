@@ -668,7 +668,7 @@ describe('Git files target', () => {
 
 // 2026-11-12: covers, layout and the final publish are the CMS's. NocoReach writes no cover, so an existing article keeps
 // the one it has, and a new article goes to a target that keeps a status as a draft, whatever an older version chose.
-describe('covers and status stay the CMS\'s', () => {
+describe("covers and status stay the CMS's", () => {
   const legacy = { cover: { url: 'https://cdn.example.com/new-cover.png' } };
   test('NocoBase API: an update writes no cover field and leaves the cover and status as they are', async () => {
     const cms = fakeNocoBase([

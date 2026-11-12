@@ -581,7 +581,11 @@ export class ArticleDelivery {
       // A version approved before 2026-11-12 may carry a status someone chose: the release follows cmsStatus all the same.
       p = {
         ...p,
-        draft: cmsStatus(this.target(project, p.targetId), p.draft, !p.articleId),
+        draft: cmsStatus(
+          this.target(project, p.targetId),
+          p.draft,
+          !p.articleId,
+        ),
       };
       const wanted = changesOf(base, asChanges(p.draft));
       if (!p.articleId)

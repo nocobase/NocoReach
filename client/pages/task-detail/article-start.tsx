@@ -364,6 +364,7 @@ function DeliveryForm({
             present={
               mode === 'existing' && article ? (present ?? null) : undefined
             }
+            draft={Boolean(targets.find((t) => t.id === target)?.status)}
             disabled={disabled}
             onChange={(locales) => setDraft({ ...draft, locales })}
           />
@@ -516,6 +517,7 @@ function LanguagePicker({
   all,
   chosen,
   present,
+  draft = false,
   disabled,
   onChange,
 }: {
@@ -524,6 +526,8 @@ function LanguagePicker({
   chosen: string[];
   /** An existing article's languages (null: not known yet, every one counts as present); undefined for a new one. */
   present?: string[] | null;
+  /** The target keeps a status: a new article is pushed to the CMS as a draft (2026-11-12). */
+  draft?: boolean;
   disabled: boolean;
   onChange: (locales: string[]) => void;
 }) {
@@ -600,7 +604,9 @@ function LanguagePicker({
         {$t(
           updates
             ? 'articleTask.languagesHelpUpdate'
-            : 'articleTask.languagesHelp',
+            : draft && present === undefined
+              ? 'articleTask.languagesHelpDraft'
+              : 'articleTask.languagesHelp',
         )}
       </small>
     </div>
@@ -1013,12 +1019,15 @@ export function HandoffLanguage({
   id,
   all,
   primary,
+  draft = false,
   busy,
   onChange,
 }: {
   id: string;
   all: string[];
   primary: string;
+  /** The new task's target keeps a status: its new article is pushed to the CMS as a draft (2026-11-12). */
+  draft?: boolean;
   busy: boolean;
   onChange: (primary: string) => void;
 }) {
@@ -1046,9 +1055,14 @@ export function HandoffLanguage({
         </SelectContent>
       </Select>
       <p className={text.muted}>
-        {$t('articleTask.handoffLanguagesHelp', {
-          0: joinList(others.map((l) => localeName(l, ui))),
-        })}
+        {$t(
+          draft
+            ? 'articleTask.handoffLanguagesHelpDraft'
+            : 'articleTask.handoffLanguagesHelp',
+          {
+            0: joinList(others.map((l) => localeName(l, ui))),
+          },
+        )}
       </p>
     </Field>
   );

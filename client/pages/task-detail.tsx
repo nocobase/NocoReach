@@ -26,8 +26,8 @@ import { ArticleReview } from './task-detail/article-review.js';
 import { ArticleEditActions, ArticleEditFields, RequestChangesBox } from './task-detail/article-edit.js';
 import { editedLine, editsLine } from './task-detail/article-edit-model.js';
 import { ArticleEditContext, useArticleEdit, useArticleEditSession, useArticleSubmit, type ArticleEditSession } from './task-detail/article-edit-session.js';
-import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { againstPrevious, canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
+import { CmsRows, ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
+import { againstPrevious, canRebase, cmsLink, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, missingDrafts, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, pushesDraft, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
 import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
@@ -49,7 +49,7 @@ import {Outlet,useNavigate,useSearchParams} from 'react-router';
 import {createUuid,useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {History,BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine} from 'lucide-react';
+import {History,BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine,Upload} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -211,14 +211,14 @@ function TaskHeading({data,title,list,pick,busy,members,update,onPage}:{data:Dat
    <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className="mr-2 text-muted-foreground">T-{no}</span>:null}{title}</h1>
    <div className="flex shrink-0 items-center gap-1 pt-1.5"><TaskStatusTag work={w} status={(data.task as {status?:string}).status||''}/><MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/></div>
   </div>
-  {stages.length>0&&<StepBar stages={stages} w={w}/>}
+  {stages.length>0&&<StepBar stages={stages} w={w} draft={pushesDraft(data,w.delivery)}/>}
  </header>;
 }
 // The playbook's steps as a row of tags, as before #241 (restored 2026-10-24 at the user's request): done ones ticked in
 // green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey.
-function StepBar({stages,w}:{stages:Stage[];w:Work}){
+function StepBar({stages,w,draft}:{stages:Stage[];w:Work;draft:boolean}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w)),snoozed=isSnoozed(w);
- const label=(s:Stage)=>{const text=stageLabel(s,w);if(s.kind!=='review'||self)return text;
+ const label=(s:Stage)=>{const text=stageLabel(s,w,draft);if(s.kind!=='review'||self)return text;
   // A space where a Latin owner name meets Chinese or Japanese text ("Super Admin" before the review step).
   if(!text.startsWith($t('common.you')))return `${text} · ${owner}`;const rest=text.slice($t('common.you').length);
   return `${owner}${/[A-Za-z0-9]$/.test(owner)&&/^[\u3040-\u30ff\u3400-\u9fff]/.test(rest)?' ':''}${rest}`;};
@@ -454,7 +454,8 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,se
  return <StageCard title={round.title} sub={session.changed?editedLine(session,out.version):versionLine(out)} at={session.changed?undefined:out.createdAt}
   actions={allowed?<ArticleEditActions session={session} version={out.version} busy={busy} request={()=>setAsking(true)} fullScreenTo={fullScreen(tab||(w.delivery?.locales||[])[0]||'')} onVersions={showVersions}
    lead={round.nothing?<Button disabled={busy||session.readOnly} onClick={()=>void versioned('requestStageChanges',{comment:round.againComment})}><RotateCcw/>{round.again}</Button>:undefined}
-   approve={targetGone?undefined:{label:round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish'),primary:!round.nothing,disabled:missingChecks||session.readOnly,run:()=>void versioned('approveStage',{checked})}}/>:undefined}>
+   approve={targetGone?undefined:{label:round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish'),primary:!round.nothing,disabled:missingChecks||session.readOnly,run:()=>void versioned('approveStage',{checked})}}
+   info={round.toCms?<InfoTip label={$t('taskDetail.aboutPublishing')}>{$t('articleTask.pushDraftHint')}</InfoTip>:undefined}/>:undefined}>
   {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
   {round.nothing&&<p className={text.muted}>{round.hint}</p>}
   <PrimaryLanguage data={data} busy={busy} allowed={allowed} onChange={l=>void changePrimary(l)}/>
@@ -522,6 +523,16 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    if(r.state==='publish_failed')return <StageCard error title={$t('articleTask.publishFailed')} sub={failedSub(r)} actions={act2?<PendingButton disabled={busy} onClick={()=>act('retryPublish',{})}>{$t('articleTask.retry')}</PendingButton>:undefined}>{rows}{techLinkTo('result')}</StageCard>;
    if(r.state==='publish_conflict')return <StageCard title={conflictHeading(data,r)} actions={act2&&canRebase(r)?<PendingButton disabled={busy} onClick={()=>act('rebaseArticle',{})}>{$t('articleTask.reviewAgain')}</PendingButton>:undefined}>{rows}{sole&&!r.also&&<ConflictBody data={data} r={sole}/>}</StageCard>;
    if(r.state==='exporting')return <StageCard label={progress} title={$t('articleTask.exporting',{0:exportingNames(data,r)})} sub={$t('articleTask.exportingHint')} actions={act2?<Button variant='ghost' disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>:undefined}>{rows}<PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
+   if(r.state==='awaiting_cms'){
+    // A new article waits in the CMS as a draft (2026-11-12) until a person publishes it there: seen by the half-hourly
+    // check (article-flow.ts checkCms) or said with I've published it. A draft the CMS no longer has is pushed again.
+    const gone=missingDrafts(r),primaryGone=gone.some(l=>l.a===r.article),open=cmsLink(data,r.article),c=r.article?.cms;
+    const last=c?.at?$t(c.status==='unseen'?'taskDetail.lastCheckedNotSeenYet':'articleTask.lastCheckedStillDraft',{0:when(c.at)}):'';
+    const openButton=open?<Button nativeButton={false} variant={primaryGone?'outline':'default'} render={<a href={open} target='_blank' rel='noreferrer'/>}>{$t('articleTask.openCms')}<ExternalLink/></Button>:null;
+    const repush=act2&&gone.length?<PendingButton variant={primaryGone?'default':'outline'} disabled={busy} onClick={()=>act('repushDraft',{})}>{$t('articleTask.repushDraft')}</PendingButton>:null;
+    return <StageCard title={$t(primaryGone?'articleTask.draftMissing':'articleTask.awaitingCms')} sub={primaryGone?$t('articleTask.draftMissingHint'):$t('articleTask.awaitingCmsHint',{0:last}).trim()}
+     actions={<>{primaryGone?<>{repush}{openButton}</>:<>{openButton}{repush}{act2&&<Button variant='ghost' disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('articleTask.iPublishedIt')}</Button>}</>}</>}><CmsRows data={data} r={r}/><DriftNotice data={data} r={r}/></StageCard>;
+   }
    if(r.state==='export_late')return <StageCard title={$t('articleTask.exportLate')} sub={$t('articleTask.exportLateHint',{0:exportingNames(data,r)})} actions={act2?<><Button disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button><Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button></>:undefined}>{rows}<PageLinks pages={r.pages}/></StageCard>;
   }
   const manualMark=<Button variant="ghost" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.publishedManually')}</Button>;
@@ -550,7 +561,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
      <SelectTrigger className="w-full" aria-labelledby={`${stage.key}-next`}><SelectValue>{(v:string)=>v===NONE?$t('taskDetail.notContinue'):name(v)}</SelectValue></SelectTrigger>
      <SelectContent className="min-w-(--anchor-width)">{nextOptions.map(id=><SelectItem key={id} value={id}>{name(id)}</SelectItem>)}<SelectItem value={NONE}>{$t('taskDetail.notContinue')}</SelectItem></SelectContent>
     </Select></Field>}
-    {nextOptions.length>0&&handTarget&&<HandoffLanguage id={`${stage.key}-hand`} all={handAll} primary={handLang} busy={busy} onChange={setHandPrimary}/>}
+    {nextOptions.length>0&&handTarget&&<HandoffLanguage id={`${stage.key}-hand`} all={handAll} primary={handLang} draft={Boolean(handTarget.status)} busy={busy} onChange={setHandPrimary}/>}
    </>}
   </StageCard>;
  }
@@ -626,6 +637,12 @@ function ClosedCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   actions={allowed&&canReopen(w)?<Button variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>:undefined}>{prLine&&<p className={text.body}>{prLine}</p>}</StageCard>;
 }
 // After the task: the effect once a change is live, otherwise the accepted result itself.
+// How going live was known: the page check saw the change, the check saw the draft published in the CMS (2026-11-12),
+// or a person said so.
+function liveBy(w:Work){
+ const seen=(w.history||[]).find(e=>(e.action==='live'||e.action==='articleCmsLive')&&e.actor==='system');
+ return seen?.action==='articleCmsLive'?$t('taskDetail.sawPublishedInCms',{0:seen.note||''}):seen?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive');
+}
 function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const w=data.work,r=w.release,canRevert=Boolean(data.agent?.repo),navigate=useNavigate();
  // The task the accepted document was handed over to, linked with where it stands (2026-10-24 user report: after the
@@ -637,7 +654,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const shipped=(r?.article?.artifactId&&w.results.find(x=>x?.id===r.article!.artifactId))||accepted||undefined;
  const done=$t('common.completed');
  if(r?.state==='simulated')return <StageCard label={done} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><Field label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Field></StageCard>;
- if(r?.state==='live')return <StageCard label={done} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
+ if(r?.state==='live')return <StageCard label={done} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:liveBy(w)})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'text-sm text-destructive':text.body} role={w.revert.state==='failed'?'alert':undefined} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
   <LiveChange data={data} artifact={shipped}/>
@@ -713,7 +730,7 @@ function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,editArticleDraft:<Pencil/>,restoreArticleVersion:<History/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
+const eventIcons:Record<string,ReactNode>={articleDrafted:<Upload/>,articleCmsLive:<Check/>,articleCmsPublished:<Check/>,articleDraftMissing:<AlertCircle/>,repushDraft:<RotateCcw/>,merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,editArticleDraft:<Pencil/>,restoreArticleVersion:<History/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
 const RECENT=8;
 // The events that made a version, each opened from its line.
 const VERSION_EVENTS=['runSucceeded','editArticleDraft','restoreArticleVersion'];

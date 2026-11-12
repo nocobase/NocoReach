@@ -6,7 +6,6 @@ import {
   type ArticleContent,
   type ArticleDraft,
   type ArticleField,
-  type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import type {
   ArticleEditForm,
@@ -19,10 +18,12 @@ import { articleLanguages, fieldChange, valueAt } from './article-model';
 // The review card is the article's editor (2026-11-04 user request): the form it edits, which languages it offers,
 // what it checks before a version is made of it, and what that version sends.
 
-/** The whole form being edited, every field of every language the article can have. */
+/**
+ * The whole form being edited, every field of every language the article can have. There is no status (2026-11-12): a
+ * new article goes to the CMS as a draft and an existing one keeps its own (cmsStatus).
+ */
 export type EditForm = {
   slug: string;
-  status: ArticleStatus;
   locales: Record<string, Record<ArticleField, string>>;
 };
 
@@ -58,7 +59,6 @@ export function initialForm(data: TaskData, a: ArticleProposal): EditForm {
   const { base } = articleLanguages(data, a);
   return {
     slug: a.draft.slug || base?.slug || '',
-    status: a.draft.status ?? base?.status ?? 'draft',
     locales: Object.fromEntries(
       formLocales(data, a).map((l) => [
         l,
@@ -81,7 +81,6 @@ export function withForm(
   if (!saved) return initial;
   return {
     slug: saved.slug ?? initial.slug,
-    status: saved.status ?? initial.status,
     locales: Object.fromEntries(
       Object.entries(initial.locales).map(([l, fields]) => [
         l,
@@ -99,7 +98,6 @@ export function keptForm(form: EditForm): ArticleEditForm {
 
 export const sameForm = (a: EditForm, b: EditForm) =>
   a.slug === b.slug &&
-  a.status === b.status &&
   Object.keys(a.locales).every((l) =>
     ARTICLE_FIELDS.every((f) => a.locales[l]?.[f] === b.locales[l]?.[f]),
   );
@@ -156,7 +154,7 @@ export function formDraft(
   a: ArticleProposal,
   form: EditForm,
 ): ArticleDraft {
-  const { target, base } = articleLanguages(data, a);
+  const { base } = articleLanguages(data, a);
   const create = !a.articleId;
   const locales: ArticleDraft['locales'] = {};
   for (const l of Object.keys(form.locales))
@@ -166,13 +164,6 @@ export function formDraft(
         (locales[l] ||= {})[f] = v;
     }
   return {
-    // The chosen status where the target stores one, or the draft's own; an unchanged one is dropped against the base
-    // on the server.
-    ...(target?.status
-      ? { status: form.status }
-      : a.draft.status
-        ? { status: a.draft.status }
-        : {}),
     ...(create ? { slug: form.slug } : {}),
     locales,
   };

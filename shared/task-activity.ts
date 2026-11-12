@@ -64,6 +64,12 @@ export const ACTIVITY_EVENTS: ReadonlySet<string> = new Set([
   'articleExported',
   'articleExportLate',
   'articleDrift',
+  // A new article pushed to the CMS as a draft and published there (2026-11-12).
+  'articleDrafted',
+  'articleCmsLive',
+  'articleCmsPublished',
+  'articleDraftMissing',
+  'repushDraft',
 ]);
 
 export type ActivityEvent = { at?: string; action: string };
