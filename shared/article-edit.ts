@@ -15,7 +15,6 @@ export const articleEditFormSchema = articleDraftSchema.pick({
   slug: true,
   status: true,
   locales: true,
-  cover: true,
 });
 export type ArticleEditForm = z.infer<typeof articleEditFormSchema>;
 
@@ -54,15 +53,8 @@ export const articleEditInput = z
   .strict();
 export type ArticleEditInput = z.input<typeof articleEditInput>;
 
-/**
- * How many places of a version AI rewrote and the person changed by hand, and what happened to its cover (2026-11-05),
- * for its Activity line.
- */
-export type ArticleEdits = {
-  ai: number;
-  hand: number;
-  cover?: 'added' | 'replaced' | 'removed';
-};
+/** How many places of a version AI rewrote and the person changed by hand, for its Activity line. */
+export type ArticleEdits = { ai: number; hand: number };
 
 /** One rewrite of a selection in the article body, with the turns before it on the same selection. */
 export const articleRewriteInput = z

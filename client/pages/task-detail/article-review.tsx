@@ -3,11 +3,8 @@ import { $t, getCurrentLocale } from '#i18n';
 import { Button } from '#components/ui/button';
 import {
   ARTICLE_FIELDS,
-  coverKeyFor,
-  coverPath,
   type ArticleContent,
 } from '../../../shared/article-publishing.js';
-import { CoverChange } from './article-cover.js';
 import { Reveal } from '#components/reach/reveal';
 import { Tag } from '#components/reach/tag';
 import { GitBranch, Globe, Maximize2 } from 'lucide-react';
@@ -169,14 +166,12 @@ function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
     const base = x.baseKey ? data.articleBases?.[x.baseKey] || null : null,
       target = data.articleTargets?.find((t) => t.id === x.targetId);
     const left = x.skipped.map((p) =>
-      p.includes('.') || p === 'status' || p === 'cover'
+      p.includes('.') || p === 'status'
         ? fieldLabel(p)
         : localeName(p, getCurrentLocale()),
     );
     const draft = draftContent(x),
-      fields = x.changes.filter(
-        (p) => p.includes('.') && !p.endsWith('.cover'),
-      );
+      fields = x.changes.filter((p) => p.includes('.'));
     return (
       <div key={x.targetId} className='flex min-w-0 flex-col gap-1'>
         <TargetTags
@@ -373,10 +368,6 @@ export function ArticleLanguage({
 }) {
   const draft = draftContent(a),
     revised = revisedText(a, base, tab);
-  // The cover this language shows (2026-11-05): its own, or the one shared by every language.
-  const target = data.articleTargets?.find((t) => t.id === a.targetId),
-    coverKey = target ? coverKeyFor(target, tab) : null,
-    cover = target && coverKey !== null ? { key: coverKey, target } : null;
   // Images the version adds or swaps in (2026-11-03 user request): a note under each new task image in the preview,
   // and a line for each kind of change above the fields' changes.
   const images = imageChanges(base?.locales[tab]?.body, revised.body);
@@ -406,13 +397,6 @@ export function ArticleLanguage({
         </ArticleImageNotesContext.Provider>
       ) : (
         <>
-          {cover && a.changes.includes(coverPath(cover.key)) && (
-            <CoverChange
-              before={base?.cover?.[cover.key] || ''}
-              after={a.draft.cover?.[cover.key] || ''}
-              target={cover.target}
-            />
-          )}
           <ImageChangeLines data={data} article={a} changes={images} />
           {ARTICLE_FIELDS.map((f) => {
             const path = `${tab}.${f}`;

@@ -64,30 +64,10 @@ export const LOCALE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/;
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,199}$/;
 export const TARGET_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
-/**
- * An article's cover (2026-11-05): one image shared by every language (key `*`), or one per language (keys are locales)
- * when the target keeps a cover field per language (`cover_cn`). A value is the image's address as the target keeps it,
- * a task image path in a draft (`/uploads/task-media/<id>.png`), or '' for no cover. A draft holds only the covers it
- * changes; the Agent never writes them.
- */
-export type ArticleCovers = Record<string, string>;
-export const SHARED_COVER = '*';
-/** A cover's field path in changes, conflicts and drift: `cover` for the shared one, `zh.cover` for a language's. */
-export const coverPath = (key: string) =>
-  key === SHARED_COVER ? 'cover' : `${key}.cover`;
-/** The cover key a field path names, or null when it names no cover. */
-export const coverKeyOf = (path: string) =>
-  path === 'cover'
-    ? SHARED_COVER
-    : path.endsWith('.cover')
-      ? path.slice(0, -'.cover'.length)
-      : null;
-
 export type ArticleContent = {
   slug: string;
   status?: ArticleStatus;
   locales: Record<string, ArticleFields>;
-  cover?: ArticleCovers;
 };
 export type ArticleSnapshot = ArticleContent & {
   id: string;
@@ -109,30 +89,12 @@ const fieldsSchema = z
     body: z.string().max(ARTICLE_LIMITS.body).optional(),
   })
   .strict();
-// A cover address: no spaces or control characters, and no script or data address.
-const coverValue = z
-  .string()
-  .max(2048)
-  .refine(
-    (v) =>
-      !/\s/u.test(v) &&
-      ![...v].some((c) => c.charCodeAt(0) < 0x20) &&
-      !/^(?:javascript|data|vbscript):/i.test(v),
-    'cover',
-  );
 /** What an Agent returns (and a person saves) for an article step. Absent fields stay as they are. */
 export const articleDraftSchema = z
   .object({
     slug: z.string().regex(SLUG).optional(),
     status: z.enum(['draft', 'published']).optional(),
     locales: z.record(z.string().regex(LOCALE), fieldsSchema),
-    // Set by a person on the review card only; an Agent's is dropped (execution/article-flow.ts).
-    cover: z
-      .record(
-        z.union([z.literal(SHARED_COVER), z.string().regex(LOCALE)]),
-        coverValue,
-      )
-      .optional(),
     verifyText: z.string().max(200).optional(),
     // For the reviewer: what this version did, answering their feedback.
     summary: z.string().max(2000).optional(),
@@ -210,56 +172,6 @@ const downstream = z
       .optional(),
   })
   .strict();
-/** The cover ratios offered in the settings; any other is Custom. */
-export const COVER_RATIOS = ['16:9', '3:2', '2:1', '3:1', '1:1'] as const;
-export const COVER_RATIO = /^\d{1,4}(?:\.\d{1,2})?:\d{1,4}(?:\.\d{1,2})?$/;
-// A cover field or front matter key.
-const coverKey = z.string().regex(/^[A-Za-z_][A-Za-z0-9_-]{0,62}$/);
-/**
- * How a target keeps covers (2026-11-05): detected from its recent articles when it is connected or checked, editable
- * by an administrator (`edited`). `field` is the one cover shared by every language (a NocoBase attachment field, a
- * front matter key); `locales` maps each language to its own cover field instead. `ratio` absent means any; `required`
- * holds for new articles published at once. A Git target writes a new cover into `folder` and its front matter key
- * as `prefix` and the file name. Absent: the target takes no covers.
- */
-export const coverSettingsSchema = z
-  .object({
-    field: coverKey.optional(),
-    locales: localeMap(coverKey).optional(),
-    ratio: z.string().regex(COVER_RATIO).optional(),
-    minWidth: z.number().int().min(1).max(20000).optional(),
-    required: z.boolean().optional(),
-    folder: z
-      .string()
-      .trim()
-      .min(1)
-      .max(300)
-      .refine(
-        (v) =>
-          !v.startsWith('/') &&
-          !v.split('/').some((x) => !x || x === '.' || x === '..'),
-        'path',
-      )
-      .optional(),
-    prefix: z
-      .string()
-      .max(300)
-      .refine((v) => !/[\s"]/u.test(v), 'prefix')
-      .optional(),
-    /** The last detection: when, how many recent articles it read and how many had a cover, and the fields it found. */
-    detected: z
-      .object({
-        at: z.string().max(40),
-        articles: z.number().int().min(0).max(1000),
-        covers: z.number().int().min(0).max(1000),
-        fields: z.array(coverKey).max(20),
-      })
-      .strict()
-      .optional(),
-    edited: z.boolean().optional(),
-  })
-  .strict();
-export type CoverSettings = z.infer<typeof coverSettingsSchema>;
 const common = {
   id: z.string().regex(TARGET_ID),
   name: z.string().trim().min(1).max(60),
@@ -269,7 +181,6 @@ const common = {
   pages: localeMap(
     z.union([pageTemplate, z.array(pageTemplate).min(1).max(5)]),
   ).optional(),
-  cover: coverSettingsSchema.optional(),
 };
 export const nocobaseTargetSchema = z
   .object({
@@ -379,52 +290,6 @@ export type PublishedArticle = {
 /** Whether a target stores a draft/published status (Git files have none: committing publishes). */
 export const supportsStatus = (t: ArticleTarget) =>
   t.kind === 'http' || (t.kind === 'nocobase-api' && Boolean(t.fields.status));
-
-/**
- * The covers a target keeps: `['*']` for one shared by every language, its languages for one each, none when it takes
- * no covers. Only languages the target has count.
- */
-export function coverKeys(t: Pick<ArticleTarget, 'locales' | 'cover'>) {
-  const c = t.cover;
-  if (!c) return [];
-  if (c.locales) return t.locales.filter((l) => Boolean(c.locales?.[l]));
-  return c.field ? [SHARED_COVER] : [];
-}
-/** The cover key a language shows: its own, or the shared one; null when the target takes no covers. */
-export function coverKeyFor(
-  t: Pick<ArticleTarget, 'locales' | 'cover'>,
-  locale: string,
-) {
-  const keys = coverKeys(t);
-  return keys.includes(SHARED_COVER)
-    ? SHARED_COVER
-    : keys.includes(locale)
-      ? locale
-      : null;
-}
-/** A cover ratio as width over height (`3:1` is 3), or null for any. */
-/** How far off a ratio an image may be and still count as it (3302 × 1068 is nocobase.com's "3:1"). */
-export const COVER_RATIO_TOLERANCE = 0.04;
-export function ratioValue(ratio?: string | null) {
-  if (!ratio || !COVER_RATIO.test(ratio)) return null;
-  const [w, h] = ratio.split(':').map(Number);
-  return w > 0 && h > 0 ? w / h : null;
-}
-/**
- * Whether approval needs a cover first (2026-11-05): the target requires one, the article is new, it is published at
- * once (a target without a status publishes on approval), and the cover of the task's primary language is empty.
- */
-export function coverMissing(
-  t: ArticleTarget,
-  draft: { status?: ArticleStatus; cover?: ArticleCovers },
-  create: boolean,
-  primary: string,
-) {
-  if (!t.cover?.required || !create) return false;
-  if (supportsStatus(t) && draft.status !== 'published') return false;
-  const key = coverKeyFor(t, primary);
-  return key !== null && !draft.cover?.[key]?.trim();
-}
 
 export const fill = (value: string, slug: string) =>
   value.split('{slug}').join(slug);
