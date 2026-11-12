@@ -34,7 +34,7 @@ export function stepOf(w?:Work):Step|null{
   return {text:$t('taskList.executorActivity',{0:who,1:stageName(st,w)})};}
  if(st.kind==='review')return {text:st.name,tone:'amber'};
  if(st.kind==='publish')return {text:$t('common.confirmPublish'),tone:'amber'};
- if(st.kind==='release'){const s=w.release?.state;return s==='merge_failed'?{text:$t('taskList.mergeFailed'),tone:'red'}:s==='not_seen'?{text:$t('taskList.confirmLive'),tone:'amber'}:{text:s==='verifying'?$t('taskList.confirmingLive'):$t('taskList.merging')};}
+ if(st.kind==='release'){const s=w.release?.state;return s==='merge_failed'?{text:$t('taskList.mergeFailed'),tone:'red'}:s==='not_seen'?{text:$t('taskList.confirmLive'),tone:'amber'}:s==='awaiting_cms'?{text:$t('taskList.publishInCms'),tone:'amber'}:{text:s==='verifying'?$t('taskList.confirmingLive'):$t('taskList.merging')};}
  return null;
 }
 // Tasks run on Runner agents.

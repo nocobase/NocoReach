@@ -1,11 +1,12 @@
 import { useState, type ComponentProps, type ReactNode } from 'react';
-import { $t } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import { Spinner } from '#components/ui/spinner';
 import { Reveal } from '#components/reach/reveal';
 import { Tag, type Tone } from '#components/reach/tag';
 import { formatDateTime } from '#lib/format';
+import { localeName } from '../article-targets-api';
 import { ChangeView } from '../change-view';
 import { FieldDiff } from './article-field-diff.js';
 import { Notice } from './layout';
@@ -20,6 +21,9 @@ import {
   failureText,
   fieldChange,
   fieldLabel,
+  cmsLink,
+  cmsState,
+  joinNames,
   legRelease,
   nameOf,
   releaseLegs,
@@ -37,6 +41,7 @@ const LEG_TONE: Record<string, Tone> = {
   exported: 'green',
   publish_failed: 'red',
   publish_conflict: 'red',
+  drafted: 'grey',
 };
 const LEG_KEY: Record<string, string> = {
   publishing: 'publishing',
@@ -45,6 +50,7 @@ const LEG_KEY: Record<string, string> = {
   exported: 'exported',
   publish_failed: 'publishFailed',
   publish_conflict: 'publishConflict',
+  drafted: 'drafted',
 };
 /** Each target with its state, and a conflict's details; only when the release has several targets. */
 export function TargetRows({ data, r }: { data: TaskData; r?: Release }) {
@@ -78,6 +84,72 @@ export function TargetRows({ data, r }: { data: TaskData; r?: Release }) {
           )}
         </li>
       ))}
+    </ul>
+  );
+}
+
+// A new article pushed to the CMS as a draft (2026-11-12): whether each target still holds it as a draft.
+const CMS_TONE: Record<string, Tone> = {
+  draft: 'grey',
+  unseen: 'grey',
+  missing: 'red',
+  published: 'green',
+};
+/** The languages a target holds of the article, in the target's order. */
+function languagesOf(data: TaskData, a: ReleaseArticle) {
+  const written = new Set(
+    (a.published?.written || [])
+      .filter((f) => f.includes('.'))
+      .map((f) => f.split('.')[0]),
+  );
+  const order =
+    data.articleTargets?.find((t) => t.id === a.targetId)?.locales || [];
+  const ui = getCurrentLocale();
+  return joinNames(
+    [
+      ...order.filter((l) => written.has(l)),
+      ...[...written].filter((l) => !order.includes(l)),
+    ].map((l) => localeName(l, ui)),
+  );
+}
+/**
+ * Each target of a release that waits for a draft to be published in the CMS: its name, whether the CMS still holds
+ * it as a draft, and the languages and address it holds. Another target than the primary links to its own CMS.
+ */
+export function CmsRows({ data, r }: { data: TaskData; r: Release }) {
+  return (
+    <ul className='flex flex-col gap-2'>
+      {releaseLegs(r).map(({ a, state }, i) => {
+        const st = cmsState(a, state),
+          url = i > 0 && st !== 'published' ? cmsLink(data, a) : '',
+          name = nameOf(data, a.targetId);
+        return (
+          <li
+            key={a.targetId}
+            className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1'
+            data-cms-state={st}
+          >
+            {url ? (
+              <a
+                className='nr-link text-sm'
+                href={url}
+                target='_blank'
+                rel='noreferrer'
+              >
+                {name}
+              </a>
+            ) : (
+              <span className={text.body}>{name}</span>
+            )}
+            <Tag tone={CMS_TONE[st]}>{$t(`articleTask.cmsState.${st}`)}</Tag>
+            <span className='min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]'>
+              {[languagesOf(data, a), a.published?.slug || a.slug]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

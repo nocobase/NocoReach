@@ -155,7 +155,7 @@ export class TaskService {
       // An Agent step that failed or waits to be started again needs you too, but sends no message yet: the message
       // names a step to do, and a run a restart interrupted is tried again right after it fails.
       const agentWaits = stage?.kind === 'agent' && !w.boardState;
-      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage && !agentWaits) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.kind === 'release' && w.release?.state === 'awaiting_cms' ? systemMessageText('articleTask.publishInCms') : stage.name });
       if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
       for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
     }
@@ -231,7 +231,8 @@ export class TaskService {
     await this.eachTask(project, t => {
       const r = t.evidence?.work?.release;
       for (const a of [r?.article, ...(Array.isArray(r?.also) ? r.also : [])]) {
-        const at = String(a?.published?.at || '');
+        // A new article pushed as a draft (2026-11-12) counts once it was seen published in the CMS, not when it was pushed.
+        const at = String((a?.draft ? a.cmsLive?.at : a?.published?.at) || '');
         if (a?.targetId && at && !(latest[a.targetId]?.at >= at)) latest[a.targetId] = { slug: String(a.published.slug || a.slug || ''), title: String(t.title || '').slice(0, 200), at, taskId: String(t.id) };
       }
     });
@@ -413,13 +414,25 @@ export class TaskService {
     }
     return [...out].slice(0, 10);
   }
-  private async goLive(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+  // `seen` is the Activity line when something other than the page check saw it live (a draft published in the CMS).
+  async goLive(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string, seen?: { action: string; note: string }) {
     if (this.simulated) return this.simulateRelease(w, actor, at);
     const index = w.stageIndex ?? 0;
     w.release = { ...w.release!, state: 'live', liveAt: at };
     w.receipt = { note: w.release.note, url: w.release.pages[0] || '', recordedAt: at, recordedBy: actor };
-    w.history.push({ at, actor, action: 'live', note: w.release.pages[0] || '' });
+    w.history.push({ at, actor, ...(seen || { action: 'live', note: w.release.pages[0] || '' }) });
     await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+  }
+  // Whether one of the pages shows the phrase. Background workers scan several projects outside an HTTP request.
+  async seenOnPages(project: string, pages: string[], phrase: string, read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
+    for (const url of pages) {
+      try {
+        const load = () => read(url);
+        const page = await (this.p.network ? this.p.network.run(project, load) : load());
+        if (seenOn(page.text || '', phrase)) return true;
+      } catch { /* try again later */ }
+    }
+    return false;
   }
   // Every few minutes: open the live pages of merged tasks and look for the sentence the Agent said would appear.
   async verifyReleases(read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
@@ -428,15 +441,7 @@ export class TaskService {
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, rel = projectWork(t).release;
         if (!rel || rel.state !== 'verifying' || Date.parse(rel.nextCheckAt || '') > Date.now()) continue;
-        let seen = false;
-        for (const url of rel.pages) {
-          try {
-            // This worker scans several projects outside an HTTP request.
-            const load = () => read(url);
-            const page = await (this.p.network ? this.p.network.run(String(t.projectId), load) : load());
-            if (seenOn(page.text || '', rel.verifyText || '')) { seen = true; break; }
-          } catch { /* try again later */ }
-        }
+        const seen = await this.seenOnPages(String(t.projectId), rel.pages, rel.verifyText || '', read);
         await this.lock(String(t.projectId), String(t.id), async tx => {
           const task = await this.task(String(t.projectId), String(t.id), tx), w = projectWork(task), r = w.release;
           if (!r || r.state !== 'verifying') return;
@@ -837,8 +842,6 @@ export class TaskService {
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
           // Files a publishing target exports would be rewritten by its exporter: they are published as articles instead.
           if (output.pr?.protected?.length) return fail(systemMessageText('articles.protectedPaths', { 0: output.pr.protected.join('、') }), 409);
-          // A site that requires covers does not publish a new article without one (2026-11-05); a draft may go without.
-          if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.coverMissing(project, w, output)) return fail(systemMessageText('articles.coverRequired'), 409);
           // The primary language approved while others are to follow: the Agent translates it before anything is published
           // (2026-10-24). The step goes back to the Agent; the translated version comes back here for one Publish of all.
           if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
@@ -949,7 +952,12 @@ export class TaskService {
             await this.put(this.key('run', project, taskId, x.id), { ...x, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
           }
           w.release = { ...r, state: r.verifyText && r.pages.length ? 'verifying' : 'not_seen', ...(r.verifyText && r.pages.length ? {} : { reason: 'cannot_verify' }), error: undefined, mergedAt: at, checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
-        } else if (v.command === 'confirmLive') { if (!['verifying', 'not_seen', 'exporting', 'export_late'].includes(r.state)) return fail(systemMessageText('taskExecution.prNotMergedYet'), 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
+        } else if (v.command === 'confirmLive') {
+          if (!['verifying', 'not_seen', 'exporting', 'export_late', 'awaiting_cms'].includes(r.state)) return fail(systemMessageText('taskExecution.prNotMergedYet'), 409);
+          // I've published it: a draft waiting in the CMS was published there.
+          if (r.state === 'awaiting_cms') this.articleFlow.confirmCms(w, actor, at);
+          await this.goLive(project, taskId, task, w, tx, actor, at);
+        }
         else if (r.state === 'export_late') w.release = { ...r, state: 'exporting', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
         else { if (r.state !== 'not_seen' || r.reason) return fail(systemMessageText('taskExecution.noNeedWaitAnymore'), 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }
         void index;

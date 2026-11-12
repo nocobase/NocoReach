@@ -3,12 +3,9 @@ import {
   ARTICLE_FIELDS,
   ARTICLE_LIMITS,
   SLUG,
-  coverKeyFor,
-  coverKeys,
   type ArticleContent,
   type ArticleDraft,
   type ArticleField,
-  type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import type {
   ArticleEditForm,
@@ -21,13 +18,13 @@ import { articleLanguages, fieldChange, valueAt } from './article-model';
 // The review card is the article's editor (2026-11-04 user request): the form it edits, which languages it offers,
 // what it checks before a version is made of it, and what that version sends.
 
-/** The whole form being edited, every field of every language the article can have. */
+/**
+ * The whole form being edited, every field of every language the article can have. There is no status (2026-11-12): a
+ * new article goes to the CMS as a draft and an existing one keeps its own (cmsStatus).
+ */
 export type EditForm = {
   slug: string;
-  status: ArticleStatus;
   locales: Record<string, Record<ArticleField, string>>;
-  /** Each cover the target keeps (`*` shared, or by language): a task image, the site's own, or '' for none. */
-  cover: Record<string, string>;
 };
 
 /** The article version under review on the task page, when the step waits for one. */
@@ -59,10 +56,9 @@ export function formLocales(data: TaskData, a: ArticleProposal) {
 
 /** The version as a form: the base's values with the draft's changes over them. */
 export function initialForm(data: TaskData, a: ArticleProposal): EditForm {
-  const { base, target } = articleLanguages(data, a);
+  const { base } = articleLanguages(data, a);
   return {
     slug: a.draft.slug || base?.slug || '',
-    status: a.draft.status ?? base?.status ?? 'draft',
     locales: Object.fromEntries(
       formLocales(data, a).map((l) => [
         l,
@@ -72,13 +68,6 @@ export function initialForm(data: TaskData, a: ArticleProposal): EditForm {
             a.draft.locales[l]?.[f] ?? base?.locales[l]?.[f] ?? '',
           ]),
         ) as Record<ArticleField, string>,
-      ]),
-    ),
-    // An existing article starts from the site's cover (read with it when it was linked).
-    cover: Object.fromEntries(
-      (target ? coverKeys(target) : []).map((k) => [
-        k,
-        a.draft.cover?.[k] ?? base?.cover?.[k] ?? '',
       ]),
     ),
   };
@@ -92,15 +81,11 @@ export function withForm(
   if (!saved) return initial;
   return {
     slug: saved.slug ?? initial.slug,
-    status: saved.status ?? initial.status,
     locales: Object.fromEntries(
       Object.entries(initial.locales).map(([l, fields]) => [
         l,
         { ...fields, ...(saved.locales?.[l] ?? {}) },
       ]),
-    ),
-    cover: Object.fromEntries(
-      Object.entries(initial.cover).map(([k, v]) => [k, saved.cover?.[k] ?? v]),
     ),
   };
 }
@@ -113,10 +98,6 @@ export function keptForm(form: EditForm): ArticleEditForm {
 
 export const sameForm = (a: EditForm, b: EditForm) =>
   a.slug === b.slug &&
-  a.status === b.status &&
-  Object.keys({ ...a.cover, ...b.cover }).every(
-    (k) => (a.cover?.[k] || '') === (b.cover?.[k] || ''),
-  ) &&
   Object.keys(a.locales).every((l) =>
     ARTICLE_FIELDS.every((f) => a.locales[l]?.[f] === b.locales[l]?.[f]),
   );
@@ -146,31 +127,9 @@ export function primaryOf(data: TaskData, a: ArticleProposal) {
   return chosen && target?.locales.includes(chosen) ? chosen : locales[0];
 }
 
-/**
- * Whether a target that requires covers would refuse to publish the form (2026-11-05): a new article published at once
- * without a cover for its primary language. A draft may go without.
- */
-export function coverMissing(data: TaskData, a: ArticleProposal, f: EditForm) {
-  const { target } = articleLanguages(data, a);
-  if (!target?.cover?.required || a.articleId) return false;
-  if (target.status && f.status !== 'published') return false;
-  const key = coverKeyFor(target, primaryOf(data, a));
-  return key !== null && !f.cover?.[key];
-}
-
-/**
- * What keeps the form from becoming a version, by field (`slug`, `zh.title`); approving it also needs a cover where the
- * target requires one.
- */
-export function formProblems(
-  data: TaskData,
-  a: ArticleProposal,
-  f: EditForm,
-  approving = false,
-) {
+/** What keeps the form from becoming a version, by field (`slug`, `zh.title`). */
+export function formProblems(data: TaskData, a: ArticleProposal, f: EditForm) {
   const e: Record<string, string> = {};
-  if (approving && coverMissing(data, a, f))
-    e.cover = $t('articles.coverRequired');
   const create = !a.articleId,
     primary = primaryOf(data, a);
   if (create && !SLUG.test(f.slug)) e.slug = $t('articleTask.slugInvalid');
@@ -195,7 +154,7 @@ export function formDraft(
   a: ArticleProposal,
   form: EditForm,
 ): ArticleDraft {
-  const { target, base } = articleLanguages(data, a);
+  const { base } = articleLanguages(data, a);
   const create = !a.articleId;
   const locales: ArticleDraft['locales'] = {};
   for (const l of Object.keys(form.locales))
@@ -204,21 +163,7 @@ export function formDraft(
       if (v !== (base?.locales[l]?.[f] ?? '') || (create && v))
         (locales[l] ||= {})[f] = v;
     }
-  // A cover goes with the version when it differs from the site's; a new article takes the ones set.
-  const cover = Object.fromEntries(
-    Object.entries(form.cover || {}).filter(
-      ([k, v]) => v !== (base?.cover?.[k] ?? '') || (create && v),
-    ),
-  );
   return {
-    ...(Object.keys(cover).length ? { cover } : {}),
-    // The chosen status where the target stores one, or the draft's own; an unchanged one is dropped against the base
-    // on the server.
-    ...(target?.status
-      ? { status: form.status }
-      : a.draft.status
-        ? { status: a.draft.status }
-        : {}),
     ...(create ? { slug: form.slug } : {}),
     locales,
   };
@@ -245,12 +190,6 @@ export function editsLine(line: string, edits?: ArticleEdits) {
   const parts = [
     edits?.ai ? $t('articleEdit.editsAi', { 0: edits.ai }) : '',
     edits?.hand ? $t('articleEdit.editsHand', { 0: edits.hand }) : '',
-    // What it did to the cover (2026-11-05): added, replaced or removed.
-    edits?.cover
-      ? $t(
-          `articleEdit.cover${edits.cover[0].toUpperCase()}${edits.cover.slice(1)}`,
-        )
-      : '',
   ].filter(Boolean);
   return parts.length
     ? $t('articleEdit.withEdits', {

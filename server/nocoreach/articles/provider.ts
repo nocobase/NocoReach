@@ -1,14 +1,10 @@
 import {
   ARTICLE_FIELDS,
-  coverKeyOf,
-  coverPath,
   type ArticleCapabilities,
   type ArticleContent,
-  type ArticleCovers,
   type ArticleFields,
   type ArticleSnapshot,
   type ArticleSummary,
-  type CoverSettings,
 } from '../../../shared/article-publishing.js';
 
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
@@ -18,8 +14,6 @@ export type ArticleChanges = Partial<
   Pick<ArticleContent, 'slug' | 'status'>
 > & {
   locales: Record<string, ArticleFields>;
-  /** The covers to change; absent keys keep theirs, '' removes one. */
-  cover?: ArticleCovers;
 };
 
 export type ArticleErrorCode =
@@ -128,16 +122,6 @@ export interface ArticleProvider {
    * Only targets with `capabilities.images` have it.
    */
   uploadImage?(image: ArticleImageFile): Promise<string>;
-  /**
-   * Upload a cover into the target (2026-11-05) and return the value its cover field takes: a NocoBase attachment, a
-   * file committed to the repository's cover folder, the address the site gives back. Every kind has it.
-   */
-  uploadCover?(
-    image: ArticleImageFile,
-    opts: { slug: string; key: string },
-  ): Promise<string>;
-  /** How the target keeps covers, read from its recent articles; null when it keeps none (targets.ts detectCover). */
-  detectCover?(): Promise<CoverSettings | null>;
 }
 /** An image to upload with an article: a task image's name, type and bytes. */
 export type ArticleImageFile = { name: string; type: string; bytes: Buffer };
@@ -147,10 +131,7 @@ const norm = (v: unknown) =>
   typeof v === 'string' ? v.replace(/\r\n/g, '\n').replace(/\s+$/, '') : '';
 export const sameText = (a: unknown, b: unknown) => norm(a) === norm(b);
 
-/**
- * Field-level differences between two versions of an article, as `locale.field` (plus `slug`, `status` and the covers,
- * `cover` or `zh.cover`). A cover compares as its address; no cover is ''.
- */
+/** Field-level differences between two versions of an article, as `locale.field` (plus `slug` and `status`). */
 export function changedFields(
   from: ArticleContent | null,
   to: ArticleChanges | ArticleContent,
@@ -165,8 +146,6 @@ export function changedFields(
         !sameText(fields[field], from?.locales[locale]?.[field])
       )
         out.push(`${locale}.${field}`);
-  for (const [key, value] of Object.entries(to.cover || {}))
-    if (!sameText(value, from?.cover?.[key])) out.push(coverPath(key));
   return out.sort();
 }
 
@@ -177,8 +156,6 @@ export function valueAt(
   if (!content) return undefined;
   if (path === 'slug') return content.slug;
   if (path === 'status') return content.status;
-  const cover = coverKeyOf(path);
-  if (cover !== null) return content.cover?.[cover];
   const [locale, field] = path.split('.') as [string, keyof ArticleFields];
   return content.locales[locale]?.[field];
 }
@@ -190,11 +167,8 @@ export function changesOf(
 ): ArticleChanges {
   const out: ArticleChanges = { locales: {} };
   for (const path of changedFields(base, draft)) {
-    const cover = coverKeyOf(path);
     if (path === 'slug') out.slug = draft.slug;
     else if (path === 'status') out.status = draft.status;
-    else if (cover !== null)
-      (out.cover ||= {})[cover] = draft.cover?.[cover] ?? '';
     else {
       const [locale, field] = path.split('.') as [string, keyof ArticleFields];
       (out.locales[locale] ||= {})[field] = draft.locales[locale][field];
@@ -206,8 +180,7 @@ export function changesOf(
 export const isEmpty = (c: ArticleChanges) =>
   c.slug === undefined &&
   c.status === undefined &&
-  !Object.keys(c.locales).length &&
-  !Object.keys(c.cover || {}).length;
+  !Object.keys(c.locales).length;
 
 /** Every change already holds in `current` (a retried write that reached the target). */
 export const applied = (current: ArticleContent, changes: ArticleChanges) =>

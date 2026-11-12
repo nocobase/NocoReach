@@ -68,6 +68,8 @@ export function startedDelivery(data: TaskData) {
       pages: a ? [{ url: url || a.slug, title: a.title || a.slug }] : [],
       targets: [d.targetId, ...(d.also || []).map((x) => x.targetId)],
       locales: d.locales || [],
+      // Started without an article: a new one, saved as a draft where its target keeps a status (2026-11-12).
+      isNew: !a,
     };
   }
   return {

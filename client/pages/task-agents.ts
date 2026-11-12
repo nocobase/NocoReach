@@ -99,6 +99,12 @@ export function placeOf(w: Work | undefined, hasAgent: boolean): Placed | null {
         lane: 'waiting',
         ask: { text: $t('taskList.confirmLive'), tone: 'amber' },
       };
+    // A new article waiting as a draft for a person to publish it in the CMS (2026-11-12).
+    if (s === 'awaiting_cms')
+      return {
+        lane: 'waiting',
+        ask: { text: $t('taskList.publishInCms'), tone: 'amber' },
+      };
     if (s === 'merge_failed')
       return {
         lane: 'waiting',

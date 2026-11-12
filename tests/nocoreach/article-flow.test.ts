@@ -33,7 +33,6 @@ async function fixture({
   downstream = false,
   news = null,
   language = '',
-  cover = null,
 } = {}) {
   const state = {
     nrTasks: [
@@ -128,7 +127,6 @@ async function fixture({
         en: 'https://www.example.com/en/blog/{slug}',
         zh: 'https://www.example.com/cn/blog/{slug}',
       },
-      ...(cover ? { cover } : {}),
       ...(downstream
         ? {
             downstream: {
@@ -275,16 +273,16 @@ test('an article task reads the CMS source, drafts without a repository and publ
       id: 'cms',
       name: 'NocoBase CMS',
       kind: 'nocobase-api',
-      // The public page patterns, so the task page can link the article; never the key or the API address.
+      // The public page patterns, so the task page can link the article, and the CMS a draft is published in (Open
+      // CMS); never the key.
       pages: {
         en: 'https://www.example.com/en/blog/{slug}',
         zh: 'https://www.example.com/cn/blog/{slug}',
       },
+      cmsUrl: 'https://cms.example.com',
     }),
   ]);
-  expect(JSON.stringify(d.articleTargets)).not.toMatch(
-    /cms-key|cms\.example\.com/,
-  );
+  expect(JSON.stringify(d.articleTargets)).not.toMatch(/cms-key/);
   d = await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
   expect(d.work.article).toMatchObject({
     targetId: 'cms',
@@ -664,30 +662,79 @@ test('a blog post becomes a new article on the target; a code change to exported
     summary: 'New post',
   });
   d = await f.view();
+  // A new article waits in the CMS as a draft, whatever status the Agent wrote, for a person to publish it there.
   expect(d.work.release).toMatchObject({
-    state: 'exporting',
-    article: { published: { slug: 'new-post' } },
+    state: 'awaiting_cms',
+    article: {
+      draft: true,
+      state: 'drafted',
+      cms: { status: 'draft' },
+      published: { slug: 'new-post' },
+    },
   });
+  expect(d.work.release.deadline).toBeUndefined();
+  expect(boardState(d.work)).toBe('review');
   expect(f.cms.state.rows.find((r) => r.slug === 'new-post')).toMatchObject({
     status: 'drafted',
     title: 'A new post',
   });
+  expect(d.work.history.at(-1)).toMatchObject({
+    actor: 'system',
+    action: 'articleDrafted',
+    note: 'NocoBase CMS',
+  });
+  // Editing the draft in the CMS (its cover, layout, wording) is not an overwrite.
+  const created = f.cms.state.rows.find((r) => r.slug === 'new-post');
+  f.cms.edit(created.id, { title: 'A new post, edited in the CMS' });
+  const due = () =>
+    (f.state.nrTasks[0].evidence.work.release.article.cms.nextAt = new Date(
+      0,
+    ).toISOString());
+  due();
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { state: 'drafted', cms: { status: 'draft' } },
+  });
+  expect(d.work.release.article.drift).toBeUndefined();
+  // Not read again before the next check is due.
+  f.cms.edit(created.id, { status: 'published' });
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.state).toBe('awaiting_cms');
+  due();
+  await f.s.articleFlow.tick();
+  d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'live',
+    article: {
+      state: 'published',
+      cmsLive: { by: 'system', baselineKey: expect.any(String) },
+    },
+  });
+  expect(d.work.history).toContainEqual(
+    expect.objectContaining({
+      actor: 'system',
+      action: 'articleCmsLive',
+      note: 'NocoBase CMS',
+    }),
+  );
+  expect(d.work.history.some((e) => e.action === 'live')).toBe(false);
+  // The overwrite watch compares with the article as it was published in the CMS, not with what was pushed.
   f.s.articleFlow.checked.clear();
   await f.s.articleFlow.tick();
   expect((await f.view()).work.release.article.drift).toBeUndefined();
-  const created = f.cms.state.rows.find((r) => r.slug === 'new-post');
-  f.cms.edit(created.id, { status: 'published' });
+  f.cms.edit(created.id, { title: 'Overwritten later' });
   f.s.articleFlow.checked.clear();
   await f.s.articleFlow.tick();
   expect((await f.view()).work.release.article.drift.fields).toEqual([
-    { field: 'status', published: 'draft', current: 'published' },
+    {
+      field: 'en.title',
+      published: 'A new post, edited in the CMS',
+      current: 'Overwritten later',
+    },
   ]);
-  f.cms.edit(created.id, { status: 'drafted' });
-  f.s.articleFlow.checked.clear();
-  await f.s.articleFlow.tick();
-  expect((await f.view()).work.release.article.drift.resolvedAt).toEqual(
-    expect.any(String),
-  );
 
   // A code task in the same project: its PR edits a file the CMS exports.
   f.state.nrTasks.push({
@@ -909,6 +956,203 @@ test('several targets: a conflict on one does not stop the other; rebasing does 
   expect(updates(f.news)).toHaveLength(1);
 });
 
+// 2026-11-12: a new article is pushed to the CMS as a draft and waits there for a person to publish it.
+const cmsDue = (f, leg = (r) => r.article) =>
+  (leg(f.state.nrTasks[0].evidence.work.release).cms.nextAt = new Date(
+    0,
+  ).toISOString());
+const freshPost = {
+  slug: 'fresh',
+  locales: {
+    en: { title: 'Fresh post', body: 'A sentence only this new post has.' },
+  },
+  verifyText: 'A sentence only this new post has',
+  summary: 'New post',
+};
+
+test('a draft deleted in the CMS can be pushed again, and I have published it goes live with the article then as the baseline', async () => {
+  const f = await fixture();
+  await f.command('startTask', { playbookId: 'blog-post' });
+  await draftAndApprove(f, freshPost);
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  expect(d.work.release.state).toBe('awaiting_cms');
+  const first = f.cms.state.rows.find((r) => r.slug === 'fresh');
+  f.cms.state.rows.splice(f.cms.state.rows.indexOf(first), 1);
+  for (let i = 0; i < 2; i++) {
+    cmsDue(f);
+    await f.s.articleFlow.tick();
+  }
+  d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { state: 'drafted', cms: { status: 'missing' } },
+  });
+  // Said once, not at every check.
+  expect(
+    d.work.history.filter((e) => e.action === 'articleDraftMissing'),
+  ).toEqual([expect.objectContaining({ note: 'NocoBase CMS' })]);
+  await f.command('repushDraft', { stageKey });
+  await f.settle();
+  d = await f.view();
+  const again = f.cms.state.rows.find((r) => r.slug === 'fresh');
+  expect(again).toMatchObject({ status: 'drafted', title: 'Fresh post' });
+  expect(again.id).not.toBe(first.id);
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: {
+      state: 'drafted',
+      articleId: String(again.id),
+      cms: { status: 'draft' },
+    },
+  });
+  expect(d.work.delivery.articleId).toBe(String(again.id));
+  await expect(f.command('repushDraft', { stageKey })).rejects.toMatchObject({
+    status: 409,
+  });
+  // I've published it: live at once; the overwrite watch reads the article once and compares with that.
+  d = await f.command('confirmLive', { stageKey });
+  expect(d.work.release).toMatchObject({
+    state: 'live',
+    article: { state: 'published', cmsLive: { by: '1' } },
+  });
+  f.cms.edit(again.id, { status: 'published', title: 'Fresh, as published' });
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  d = await f.view();
+  expect(d.work.release.article.cmsLive.baselineKey).toEqual(
+    expect.any(String),
+  );
+  expect(d.work.release.article.drift).toBeUndefined();
+  f.cms.edit(again.id, { title: 'Changed later' });
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.article.drift.fields).toEqual([
+    {
+      field: 'en.title',
+      published: 'Fresh, as published',
+      current: 'Changed later',
+    },
+  ]);
+});
+
+test('several targets: the task goes live when the primary is published in the CMS; the others keep being checked', async () => {
+  const f = await fixture({ news: [] });
+  await f.command('startTask', {
+    playbookId: 'blog-post',
+    delivery: { targetId: 'cms', also: ['news'] },
+  });
+  await draftAndApprove(f, freshPost);
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { draft: true, state: 'drafted' },
+    also: [{ draft: true, state: 'drafted', cms: { status: 'draft' } }],
+  });
+  expect(
+    d.work.history
+      .filter((e) => e.action === 'articleDrafted')
+      .map((e) => e.note),
+  ).toEqual(['NocoBase CMS', 'News']);
+  f.news.edit(f.news.state.rows[0].id, { status: 'published' });
+  cmsDue(f, (r) => r.also[0]);
+  await f.s.articleFlow.tick();
+  d = await f.view();
+  // Another target published first: shown on its row, while the task still waits for the primary.
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { state: 'drafted' },
+    also: [{ state: 'published', cms: { status: 'published' } }],
+  });
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'articleCmsPublished',
+    note: 'News',
+  });
+  f.cms.edit(f.cms.state.rows.find((r) => r.slug === 'fresh').id, {
+    status: 'published',
+  });
+  cmsDue(f);
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.state).toBe('live');
+});
+
+test('several targets: a target still a draft when the primary goes live keeps being checked', async () => {
+  const f = await fixture({ news: [] });
+  await f.command('startTask', {
+    playbookId: 'blog-post',
+    delivery: { targetId: 'cms', also: ['news'] },
+  });
+  await draftAndApprove(f, freshPost);
+  // Data sources › Blog CMS lists a target's latest article once it went live there, not when its draft was pushed.
+  expect(await f.s.latestPublished('1')).toEqual({});
+  f.cms.edit(f.cms.state.rows.find((r) => r.slug === 'fresh').id, {
+    status: 'published',
+  });
+  cmsDue(f);
+  cmsDue(f, (r) => r.also[0]);
+  await f.s.articleFlow.tick();
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'live',
+    article: { state: 'published' },
+    also: [{ state: 'drafted', cms: { status: 'draft' } }],
+  });
+  expect(await f.s.latestPublished('1')).toEqual({
+    cms: expect.objectContaining({
+      slug: 'fresh',
+      at: d.work.release.article.cmsLive.at,
+    }),
+  });
+  f.news.edit(f.news.state.rows[0].id, { status: 'published' });
+  cmsDue(f, (r) => r.also[0]);
+  await f.s.articleFlow.tick();
+  d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'live',
+    also: [{ state: 'published', cmsLive: { by: 'system' } }],
+  });
+  expect((await f.s.latestPublished('1')).news).toMatchObject({
+    slug: 'fresh',
+    at: d.work.release.also[0].cmsLive.at,
+  });
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'articleCmsPublished',
+    note: 'News',
+  });
+});
+
+test('a target that does not say whether the draft is published has its pages opened instead', async () => {
+  const f = await fixture();
+  await f.command('startTask', { playbookId: 'blog-post' });
+  await draftAndApprove(f, freshPost);
+  const read = f.s.p.articles.read.bind(f.s.p.articles);
+  f.s.p.articles.read = async (...args) => {
+    const { status: _, ...snap } = await read(...args);
+    return snap;
+  };
+  const opened = [];
+  let page = 'Nothing new yet';
+  f.s.p.siteContent = {
+    read: async (url) => (opened.push(url), { text: page }),
+  };
+  cmsDue(f);
+  await f.s.articleFlow.tick();
+  let d = await f.view();
+  expect(opened).toEqual(['https://www.example.com/en/blog/fresh']);
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { cms: { status: 'unseen' } },
+  });
+  page = 'Fresh post. A sentence only this new post has.';
+  cmsDue(f);
+  await f.s.articleFlow.tick();
+  d = await f.view();
+  expect(d.work.release.state).toBe('live');
+  expect(d.work.history).toContainEqual(
+    expect.objectContaining({ action: 'articleCmsLive', actor: 'system' }),
+  );
+});
+
 test('several targets: a failure on one is retried alone', async () => {
   const f = await fixture({ news: [newsRow()] });
   await startBoth(f);
@@ -960,7 +1204,7 @@ test('several targets: a new article whose slug is taken elsewhere becomes an up
   );
   expect(d.work.release).toMatchObject({
     state: 'publish_conflict',
-    article: { state: 'published' },
+    article: { state: 'drafted' },
     also: [{ state: 'publish_conflict', conflict: { reason: 'slug_taken' } }],
   });
   d = await f.command('rebaseArticle', {
@@ -975,7 +1219,12 @@ test('several targets: a new article whose slug is taken elsewhere becomes an up
     { targetId: 'news', articleId: '70', sourceKey: expect.any(String) },
   ]);
   d = await approveCurrent(f);
-  expect(d.work.release.state).not.toMatch(/^publish/);
+  // The primary's draft is still a draft: the task still waits for it in the CMS.
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { draft: true, state: 'drafted' },
+    also: [{ state: 'published' }],
+  });
   expect(
     f.cms.state.requests.filter((r) => r.action === 'create'),
   ).toHaveLength(1);
@@ -2371,192 +2620,6 @@ test('Edit directly: an image pasted into the body is linked when the edit is sa
   await f.settle();
   expect((await f.view()).work.release.state).toBe('verifying');
   expect(f.cms.state.uploads.map((u) => u.name)).toEqual(['pasted.png']);
-});
-
-// Covers (2026-11-05): a person sets one on the review card; the Agent never does.
-test('covers: the Agent cover is dropped; one set on the card is linked, noted, kept for the next run and published once', async () => {
-  const f = await fixture({ cover: { field: 'cover', ratio: '3:1' } });
-  const images = fakeTaskImages();
-  f.s.p.taskAttachments = images;
-  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
-  await f.command('startTask', { playbookId: 'optimize-page' });
-  // The review card learns where covers go and their ratio.
-  expect((await f.view()).articleTargets[0].cover).toEqual({
-    field: 'cover',
-    ratio: '3:1',
-  });
-  let { run } = await claim(f);
-  await finish(f, {
-    taskId: '1',
-    runId: run.id,
-    ok: true,
-    content: '改了中文正文。',
-    article: {
-      locales: { zh: { body: '# 你好\n\n第一版正文。' } },
-      cover: { '*': 'https://agent.example.com/made-up.png' },
-      verifyText: '第一版正文',
-    },
-  });
-  let d = await f.view();
-  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
-  expect(review(d).article.draft.cover).toBeUndefined();
-  const shot = images.add('cover.png');
-  const ref = `/uploads/task-media/${shot}.png`;
-  d = await f.command('editArticleDraft', {
-    stageKey,
-    artifactId: review(d).id,
-    article: {
-      locales: { zh: { body: '# 你好\n\n第一版正文。' } },
-      cover: { '*': ref },
-    },
-  });
-  expect(images.files.get(shot)!.taskId).toBe('1');
-  expect(review(d).article).toMatchObject({
-    draft: { cover: { '*': ref } },
-    changes: expect.arrayContaining(['cover']),
-  });
-  expect(review(d).edits).toMatchObject({ cover: 'added' });
-  // A change request: the next run sees the cover and cannot change it.
-  await f.command('requestStageChanges', {
-    stageKey,
-    artifactId: review(d).id,
-    comment: '正文再短一点。',
-  });
-  ({ run } = await claim(f));
-  expect(run.input.article.previous.cover).toEqual({ '*': ref });
-  await finish(f, {
-    taskId: '1',
-    runId: run.id,
-    ok: true,
-    content: '缩短了。',
-    article: {
-      locales: { zh: { body: '# 你好\n\n这是缩短以后的中文正文。' } },
-      cover: { '*': '' },
-      verifyText: '这是缩短以后的中文正文',
-    },
-  });
-  d = await f.view();
-  expect(review(d).article.draft.cover).toEqual({ '*': ref });
-  await f.command('approveStage', {
-    stageKey: d.work.flow.stages[d.work.stageIndex].key,
-    artifactId: review(d).id,
-    checked: [],
-  });
-  await f.settle();
-  d = await f.view();
-  expect(d.work.release.state).toBe('verifying');
-  // Into the cover field's storage, once; the article relates to the record it made.
-  expect(
-    f.cms.state.uploads.map((u) => [u.name, u.params.get('attachmentField')]),
-  ).toEqual([['cover.png', 'articles.cover']]);
-  const write = f.cms.state.requests.filter((r) => r.action === 'update');
-  expect(write).toHaveLength(1);
-  expect(write[0].body).toEqual({
-    content_cn: '# 你好\n\n这是缩短以后的中文正文。',
-    cover: 1,
-  });
-  expect(d.work.coverUrls).toEqual({
-    cms: {
-      [shot]:
-        'https://cms.example.com/storage/uploads/1-cover.png#attachment=1',
-    },
-  });
-  // The published cover read back is not an overwrite.
-  f.s.articleFlow.checked.clear();
-  await f.s.articleFlow.tick();
-  expect((await f.view()).work.release.article.drift).toBeUndefined();
-  // Someone replaces it in the CMS afterwards: the task shows it.
-  f.cms.edit(7, { cover: 999 });
-  f.s.articleFlow.checked.clear();
-  await f.s.articleFlow.tick();
-  expect(
-    (await f.view()).work.release.article.drift?.fields?.map((x) => x.field),
-  ).toEqual(['cover']);
-});
-
-test('covers: a site that requires one refuses to approve a new published article without it; with one it is created', async () => {
-  const f = await fixture({
-    cover: { field: 'cover', ratio: '3:1', required: true },
-  });
-  const images = fakeTaskImages();
-  f.s.p.taskAttachments = images;
-  await f.command('startTask', { playbookId: 'blog-post' });
-  const { run } = await claim(f);
-  await finish(f, {
-    taskId: '1',
-    runId: run.id,
-    ok: true,
-    content: 'New post',
-    article: {
-      slug: 'new-post',
-      status: 'published',
-      locales: { en: { title: 'A new post', body: 'Body of the new post' } },
-      summary: 'New post',
-    },
-  });
-  let d = await f.view();
-  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
-  await expect(
-    f.command('approveStage', {
-      stageKey,
-      artifactId: review(d).id,
-      checked: [],
-    }),
-  ).rejects.toMatchObject({
-    status: 409,
-    message: systemMessageText('articles.coverRequired'),
-  });
-  const shot = images.add('cover.png');
-  d = await f.command('editArticleDraft', {
-    stageKey,
-    artifactId: review(d).id,
-    article: {
-      slug: 'new-post',
-      status: 'published',
-      locales: { en: { title: 'A new post', body: 'Body of the new post' } },
-      cover: { '*': `/uploads/task-media/${shot}.png` },
-    },
-  });
-  await f.command('approveStage', {
-    stageKey,
-    artifactId: review(d).id,
-    checked: [],
-  });
-  await f.settle();
-  expect(f.cms.state.rows.find((r) => r.slug === 'new-post')).toMatchObject({
-    status: 'published',
-    cover: 1,
-  });
-});
-
-test('covers: a draft may go without one, and an existing article keeps the site cover unless it is replaced', async () => {
-  const f = await fixture({
-    cover: { field: 'cover', ratio: '3:1', required: true },
-  });
-  const site = f.cms.attach('old.png', Buffer.from('old cover'));
-  f.cms.state.rows[0].cover = site;
-  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
-  await f.command('startTask', { playbookId: 'optimize-page' });
-  // The existing article: its cover is read with it and nothing about it is written.
-  await draftAndApprove(f);
-  expect(
-    f.cms.state.requests.find((r) => r.action === 'update').body,
-  ).not.toHaveProperty('cover');
-  expect(f.cms.state.rows[0].cover).toBe(site);
-
-  const g = await fixture({
-    cover: { field: 'cover', ratio: '3:1', required: true },
-  });
-  await g.command('startTask', { playbookId: 'blog-post' });
-  await draftAndApprove(g, {
-    slug: 'draft-post',
-    status: 'draft',
-    locales: { en: { title: 'A draft', body: 'Body of the draft' } },
-    summary: 'Draft',
-  });
-  expect(g.cms.state.rows.find((r) => r.slug === 'draft-post')).toMatchObject({
-    status: 'drafted',
-  });
 });
 
 // 2026-11-04 (T-62): Edit directly no longer has a page check phrase. A hand edit that drops the Agent's phrase from

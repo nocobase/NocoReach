@@ -7,7 +7,6 @@ import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
-import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import {
@@ -26,18 +25,11 @@ import { confirmAction } from '#components/reach/confirm';
 import {
   ARTICLE_FIELDS,
   type ArticleField,
-  type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import { TASK_IMAGES_PER_MESSAGE } from '../../../shared/task-images.js';
 import { localeName } from '../article-targets-api';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
-import {
-  articleLanguages,
-  coverChanges,
-  joinNames,
-  valueAt,
-} from './article-model';
-import { ArticleCoverRow } from './article-cover.js';
+import { articleLanguages, joinNames, valueAt } from './article-model';
 import {
   editableLocales,
   primaryOf,
@@ -80,6 +72,7 @@ export function ArticleEditActions({
   version,
   busy,
   approve,
+  info,
   request,
   lead,
   fullScreenTo,
@@ -95,6 +88,8 @@ export function ArticleEditActions({
     disabled: boolean;
     run: () => void;
   };
+  /** Beside Approve: what approving does, when it needs saying (ⓘ). */
+  info?: ReactNode;
   request: () => void;
   /** Before Approve: Update again, for a version that changed none of the other languages. */
   lead?: ReactNode;
@@ -126,6 +121,7 @@ export function ArticleEditActions({
           {approve.label}
         </Button>
       )}
+      {approve && info}
       <Button variant='ghost' disabled={busy || held} onClick={request}>
         {$t('taskDetail.requestChanges')}
       </Button>
@@ -173,36 +169,22 @@ function comparedArticle(
   base: ReturnType<typeof articleLanguages>['base'],
   form: EditForm,
 ): ArticleProposal {
-  const changes = [
-    ...Object.keys(form.locales).flatMap((l) =>
-      ARTICLE_FIELDS.flatMap((f) => {
-        const path = `${l}.${f}`;
-        return valueAt(base, path) !== form.locales[l][f] ? [path] : [];
-      }),
-    ),
-    // A cover against the site's (2026-11-05), shown as the two thumbnails.
-    ...coverChanges(
-      Object.fromEntries(
-        Object.keys(form.cover || {}).map((k) => [k, base?.cover?.[k] ?? '']),
-      ),
-      form.cover,
-    ),
-  ];
+  const changes = Object.keys(form.locales).flatMap((l) =>
+    ARTICLE_FIELDS.flatMap((f) => {
+      const path = `${l}.${f}`;
+      return valueAt(base, path) !== form.locales[l][f] ? [path] : [];
+    }),
+  );
   return {
     ...a,
-    draft: {
-      ...a.draft,
-      status: form.status,
-      locales: form.locales,
-      cover: form.cover,
-    },
+    draft: { ...a.draft, locales: form.locales },
     changes,
   };
 }
 
 /**
  * The article being reviewed as a form: the languages it is edited in (the others named as following on approval),
- * Compare with original, the automatic save and full screen in one row; then status, title, summary and body.
+ * Compare with original, the automatic save and full screen in one row; then title, summary and body.
  */
 export function ArticleEditFields({
   data,
@@ -226,7 +208,7 @@ export function ArticleEditFields({
   fullScreenTo?: (tab: string) => string;
 }) {
   const languages = articleLanguages(data, a);
-  const { base, target } = languages;
+  const { base } = languages;
   const editable = editableLocales(data, a);
   // The language asked for, else the one the review opens on (a version that updated others, the first of them).
   const tab =
@@ -242,8 +224,7 @@ export function ArticleEditFields({
   const scope = useContext(TaskImageContext);
   const { form, readOnly } = session;
   const create = !a.articleId,
-    primary = primaryOf(data, a),
-    withStatus = Boolean(target?.status);
+    primary = primaryOf(data, a);
   const targets = [
       a.targetId,
       ...(a.also || []).map((x) => x.targetId),
@@ -377,49 +358,6 @@ export function ArticleEditFields({
               {err('slug')}
             </Field>
           )}
-          {withStatus && (
-            <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm'>
-              <span id={`${id}-status`} className={LABEL}>
-                {$t('articleTask.field.status')}
-              </span>
-              <RadioGroup
-                aria-labelledby={`${id}-status`}
-                className='flex w-auto flex-wrap gap-4'
-                value={form.status}
-                disabled={readOnly}
-                onValueChange={(v) =>
-                  session.set({ ...form, status: v as ArticleStatus })
-                }
-              >
-                {(['draft', 'published'] as const).map((v) => (
-                  <div key={v} className='flex items-center gap-2'>
-                    <RadioGroupItem id={`${id}-status-${v}`} value={v} />
-                    <Label
-                      htmlFor={`${id}-status-${v}`}
-                      className='font-normal'
-                    >
-                      {$t(
-                        v === 'draft'
-                          ? 'articleTask.statusDraft'
-                          : 'articleTask.statusPublished',
-                      )}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-              <span className='text-muted-foreground'>
-                {$t('articleEdit.statusHelp')}
-              </span>
-            </div>
-          )}
-          <ArticleCoverRow
-            data={data}
-            article={a}
-            session={session}
-            tab={tab}
-            id={id}
-            error={errors.cover}
-          />
           {ARTICLE_FIELDS.map((f) => {
             const key = `${tab}.${f}`,
               required = create && tab === primary && f !== 'description';

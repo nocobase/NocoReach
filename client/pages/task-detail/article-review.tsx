@@ -3,11 +3,8 @@ import { $t, getCurrentLocale } from '#i18n';
 import { Button } from '#components/ui/button';
 import {
   ARTICLE_FIELDS,
-  coverKeyFor,
-  coverPath,
   type ArticleContent,
 } from '../../../shared/article-publishing.js';
-import { CoverChange } from './article-cover.js';
 import { Reveal } from '#components/reach/reveal';
 import { Tag } from '#components/reach/tag';
 import { GitBranch, Globe, Maximize2 } from 'lucide-react';
@@ -52,8 +49,9 @@ import {
 // both versions.
 
 // Where the article goes and what it becomes, as tags rather than a sentence (2026-10-24 user request, as the task
-// header's steps): the target by its own name with a mark for its kind, new or update, and the status it is published
-// with. A changed article names its address and status only when they change.
+// header's steps): the target by its own name with a mark for its kind, and new or update. A new article also says
+// whether it is saved as a draft in the CMS or published directly (a target without drafts, 2026-11-12); an existing
+// article keeps its status and names its address only when it changes.
 const KIND_ICON: Record<string, ReactNode> = {
   'git-files': <GitBranch aria-hidden='true' />,
 };
@@ -68,9 +66,8 @@ type TargetTagsProps = {
   title?: string;
   slug?: string;
   slugBefore?: string;
-  status?: string;
-  /** The status changes on an existing article (Make draft) rather than being set on a new one (Save as draft). */
-  statusChange?: boolean;
+  /** A new article's target keeps a status: it is saved there as a draft (cmsStatus), else published directly. */
+  draft?: boolean;
   children?: ReactNode;
 };
 
@@ -82,11 +79,9 @@ function TargetTags({
   title,
   slug,
   slugBefore,
-  status,
-  statusChange = false,
+  draft = false,
   children,
 }: TargetTagsProps) {
-  const published = status === 'published';
   return (
     <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-sm'>
       {lead && <span className='text-muted-foreground'>{lead}</span>}
@@ -99,17 +94,9 @@ function TargetTags({
       <Tag tone='grey'>
         {isNew ? $t('articleTask.newArticle') : $t('articleTask.updateArticle')}
       </Tag>
-      {status && (
-        <Tag tone={published ? 'green' : 'grey'}>
-          {$t(
-            statusChange
-              ? published
-                ? 'articleTask.toPublished'
-                : 'articleTask.toDraft'
-              : published
-                ? 'articleTask.asPublished'
-                : 'articleTask.asDraft',
-          )}
+      {isNew && (
+        <Tag tone='grey'>
+          {$t(draft ? 'articleTask.asDraft' : 'articleTask.publishDirectly')}
         </Tag>
       )}
       {title && <span className='min-w-0 break-words'>{title}</span>}
@@ -147,15 +134,7 @@ function PrimaryTags({
       // An existing article is named by its title; its address only when it changes.
       slug={isNew || a.changes.includes('slug') ? a.draft.slug : undefined}
       slugBefore={!isNew && a.changes.includes('slug') ? base?.slug : undefined}
-      // A new article without a status is created as a draft where the target keeps one.
-      status={
-        isNew
-          ? (a.draft.status ?? (target?.status ? 'draft' : undefined))
-          : a.changes.includes('status')
-            ? a.draft.status
-            : undefined
-      }
-      statusChange={!isNew}
+      draft={Boolean(target?.status)}
     />
   );
 }
@@ -169,14 +148,12 @@ function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
     const base = x.baseKey ? data.articleBases?.[x.baseKey] || null : null,
       target = data.articleTargets?.find((t) => t.id === x.targetId);
     const left = x.skipped.map((p) =>
-      p.includes('.') || p === 'status' || p === 'cover'
+      p.includes('.') || p === 'status'
         ? fieldLabel(p)
         : localeName(p, getCurrentLocale()),
     );
     const draft = draftContent(x),
-      fields = x.changes.filter(
-        (p) => p.includes('.') && !p.endsWith('.cover'),
-      );
+      fields = x.changes.filter((p) => p.includes('.'));
     return (
       <div key={x.targetId} className='flex min-w-0 flex-col gap-1'>
         <TargetTags
@@ -189,8 +166,7 @@ function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
           slugBefore={
             x.articleId && x.changes.includes('slug') ? base?.slug : undefined
           }
-          status={x.changes.includes('status') ? x.draft.status : undefined}
-          statusChange={Boolean(x.articleId)}
+          draft={Boolean(target?.status)}
         >
           {left.length > 0 && (
             <span className='text-muted-foreground'>
@@ -373,10 +349,6 @@ export function ArticleLanguage({
 }) {
   const draft = draftContent(a),
     revised = revisedText(a, base, tab);
-  // The cover this language shows (2026-11-05): its own, or the one shared by every language.
-  const target = data.articleTargets?.find((t) => t.id === a.targetId),
-    coverKey = target ? coverKeyFor(target, tab) : null,
-    cover = target && coverKey !== null ? { key: coverKey, target } : null;
   // Images the version adds or swaps in (2026-11-03 user request): a note under each new task image in the preview,
   // and a line for each kind of change above the fields' changes.
   const images = imageChanges(base?.locales[tab]?.body, revised.body);
@@ -406,13 +378,6 @@ export function ArticleLanguage({
         </ArticleImageNotesContext.Provider>
       ) : (
         <>
-          {cover && a.changes.includes(coverPath(cover.key)) && (
-            <CoverChange
-              before={base?.cover?.[cover.key] || ''}
-              after={a.draft.cover?.[cover.key] || ''}
-              target={cover.target}
-            />
-          )}
           <ImageChangeLines data={data} article={a} changes={images} />
           {ARTICLE_FIELDS.map((f) => {
             const path = `${tab}.${f}`;

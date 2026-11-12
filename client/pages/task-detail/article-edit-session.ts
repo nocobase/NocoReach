@@ -332,25 +332,19 @@ export function useArticleSubmit({
   onTab: (tab: string) => void;
 }) {
   const id = useId();
-  // What was asked last: Approve also checks the cover a target requires (2026-11-05), Request changes does not.
-  const [submitted, setSubmitted] = useState<'' | 'approve' | 'request'>('');
+  const [submitted, setSubmitted] = useState(false);
   const errors =
-    submitted && a && session
-      ? formProblems(data, a, session.form, submitted === 'approve')
-      : {};
+    submitted && a && session ? formProblems(data, a, session.form) : {};
   return {
     id,
     errors,
-    prepare: async (approving = false) => {
+    prepare: async () => {
       if (!a || !session) return null;
-      setSubmitted(approving ? 'approve' : 'request');
-      const first = Object.keys(
-        formProblems(data, a, session.form, approving),
-      )[0];
+      setSubmitted(true);
+      const first = Object.keys(formProblems(data, a, session.form))[0];
       if (first) {
         const l = first.split('.')[0];
-        if (first.includes('.') && editableLocales(data, a).includes(l))
-          onTab(l);
+        if (editableLocales(data, a).includes(l)) onTab(l);
         focusSoon(`${id}-${first}`);
         return null;
       }
