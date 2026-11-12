@@ -7964,6 +7964,8 @@
   "articles.cannotRestore": "Эту версию уже нельзя восстановить. Обновите страницу, чтобы увидеть текущую версию.",
   "taskDetail.eventRestoreArticleVersion": "Восстановлена предыдущая версия черновика статьи",
   "taskDetail.editedArticleVersion": "Черновик статьи изменен, версия {0}",
+  "taskDetail.unversionedEdits": "Черновик статьи изменен, но еще не сохранен как версия",
+  "taskDetail.unversionedEditsYours": "Черновик статьи изменен, но еще не сохранен как версия",
   "taskDetail.restoredArticleVersion": "Версия {0} восстановлена как версия {1}",
   "taskDetail.restoredFromVersion": "восстановлено из версии {0}",
   "taskDetail.editedByHandBy": "Отредактировано вручную: {0}",

@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "Diese Version kann nicht mehr wiederhergestellt werden. Laden Sie die Seite neu, um die aktuelle Version zu sehen.",
   "taskDetail.eventRestoreArticleVersion": "Frühere Version des Artikelentwurfs wiederhergestellt",
   "taskDetail.editedArticleVersion": "Artikelentwurf bearbeitet, Version {0}",
+  "taskDetail.unversionedEdits": "Artikelentwurf bearbeitet, noch nicht als Version gespeichert",
+  "taskDetail.unversionedEditsYours": "haben den Artikelentwurf bearbeitet, noch nicht als Version gespeichert",
   "taskDetail.restoredArticleVersion": "Version {0} als Version {1} wiederhergestellt",
   "taskDetail.restoredFromVersion": "aus Version {0} wiederhergestellt",
   "taskDetail.editedByHandBy": "Manuell bearbeitet von {0}",

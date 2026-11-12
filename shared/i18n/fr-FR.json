@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "Cette version ne peut plus être restaurée. Actualisez la page pour voir la version actuelle.",
   "taskDetail.eventRestoreArticleVersion": "Version précédente du brouillon de l’article restaurée",
   "taskDetail.editedArticleVersion": "Brouillon de l’article modifié, version {0}",
+  "taskDetail.unversionedEdits": "Brouillon de l’article modifié, pas encore enregistré comme version",
+  "taskDetail.unversionedEditsYours": "avez modifié le brouillon de l’article, pas encore enregistré comme version",
   "taskDetail.restoredArticleVersion": "Version {0} restaurée comme version {1}",
   "taskDetail.restoredFromVersion": "restaurée depuis la version {0}",
   "taskDetail.editedByHandBy": "Modifiée à la main par {0}",

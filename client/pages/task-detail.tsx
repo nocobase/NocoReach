@@ -24,7 +24,7 @@ import { StartedCard } from './task-detail/started-card.js';
 import { startBrief } from './task-detail/started-model.js';
 import { ArticleReview } from './task-detail/article-review.js';
 import { ArticleEditActions, ArticleEditFields, RequestChangesBox } from './task-detail/article-edit.js';
-import { editedLine, editsLine } from './task-detail/article-edit-model.js';
+import { editedLine, editsLine, unversionedEdits, unversionedLine } from './task-detail/article-edit-model.js';
 import { ArticleEditContext, useArticleEdit, useArticleEditSession, useArticleSubmit, type ArticleEditSession } from './task-detail/article-edit-session.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
 import { againstPrevious, canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
@@ -279,9 +279,9 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
 // what it is (Needs you, Current progress, Done, Status) for assistive technology; the header already shows the status.
 // `error` marks something that did not work (2026-10-23 user request: a failure read like any other text): a red mark
 // before the title and a red edge on the card.
-function StageCard({title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false}:{title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean}){
+function StageCard({id,title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false}:{id?:string;title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean}){
  const access=useContext(TaskAccess),time=at?when(at):'';
- return <Card sticky className={cn('nr-td-now',error&&'border-destructive/40')} aria-label={label} data-error={error||undefined}
+ return <Card id={id} sticky className={cn('nr-td-now scroll-mt-4',error&&'border-destructive/40')} aria-label={label} data-error={error||undefined}
   title={<>{spinning&&<Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"/>}{error&&<CircleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive"/>}{title}</>}
   sub={sub||time?<>{sub}{sub&&time?' · ':''}{time&&<time dateTime={at}>{time}</time>}</>:undefined}
   actions={actions&&(access.allowed?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=""><Lock aria-hidden="true" className="size-3.5 shrink-0"/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
@@ -436,7 +436,7 @@ function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string
 // languages translated or updated in place, or a version that changed none of them, which offers Update again first
 // (T-53).
 function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,setChecked}:{data:Data;stage:Stage;out:Artifact;article:NonNullable<Artifact['article']>;session:ArticleEditSession;act:(command:string,body:object)=>Promise<Data|undefined>;busy:boolean;checked:string[];setChecked:(c:string[])=>void}){
- const w=data.work,{allowed}=useContext(TaskAccess),{showVersions}=useContext(TaskActions);
+ const w=data.work,{allowed}=useContext(TaskAccess),{showVersions}=useContext(TaskActions),{me}=useMe();
  const [tab,setTab]=useState(''),[asking,setAsking]=useState(false);
  const submit=useArticleSubmit({data,article:a,session,onTab:setTab});
  const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
@@ -451,7 +451,7 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,se
  // The edits made a version first; the command then acts on that version.
  const versioned=async(command:string,body:object)=>{const v=await submit.prepare(command==='approveStage');return v?act(command,{...body,artifactId:v.artifactId,revision:v.revision}):undefined;};
  const fullScreen=(lang:string)=>`article?lang=${encodeURIComponent(lang)}`;
- return <StageCard title={round.title} sub={session.changed?editedLine(session,out.version):versionLine(out)} at={session.changed?undefined:out.createdAt}
+ return <StageCard id={ARTICLE_REVIEW_ID} title={round.title} sub={session.changed?editedLine(session,out.version,me?.id):versionLine(out)} at={session.changed?undefined:out.createdAt}
   actions={allowed?<ArticleEditActions session={session} version={out.version} busy={busy} request={()=>setAsking(true)} fullScreenTo={fullScreen(tab||(w.delivery?.locales||[])[0]||'')} onVersions={showVersions}
    lead={round.nothing?<Button disabled={busy||session.readOnly} onClick={()=>void versioned('requestStageChanges',{comment:round.againComment})}><RotateCcw/>{round.again}</Button>:undefined}
    approve={targetGone?undefined:{label:round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish'),primary:!round.nothing,disabled:missingChecks||session.readOnly,run:()=>void versioned('approveStage',{checked})}}/>:undefined}>
@@ -713,19 +713,23 @@ function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,editArticleDraft:<Pencil/>,restoreArticleVersion:<History/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
+// Activity's line for an article's changes not made a version yet (unversionedEdits), placed among the events by when
+// they were last saved; its View brings the review card, where they are, into view.
+const UNVERSIONED='unversionedEdits',ARTICLE_REVIEW_ID='nr-article-review';
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,editArticleDraft:<Pencil/>,restoreArticleVersion:<History/>,[UNVERSIONED]:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
 const RECENT=8;
 // The events that made a version, each opened from its line.
 const VERSION_EVENTS=['runSucceeded','editArticleDraft','restoreArticleVersion'];
 // Release events in the owner's words rather than in pull-request terms.
 const getPlainEvents=():Record<string,string>=>({merged:$t('taskDetail.eventPublished'),markMerged:$t('taskDetail.publishedManually'),retryMerge:$t('taskDetail.eventPublishAgain'),prClosed:$t('taskDetail.unpublishedClosed'),revertOpened:$t('taskDetail.undoPrepared')});
 // What has happened: people's actions, each version delivered, edited by hand or restored (open it here; 2026-11-04:
-// Activity is the article's version history, with no list of its own) and comments, then one line to write to the
-// Agent (2026-10-22 user decision: the activity and the message form one card), where changes to a version under review
-// are asked for too.
+// Activity is the article's version history, with no list of its own), changes to the article under review not made a
+// version yet (2026-11-12: everyone who reads the task sees who made them and when) and comments, then one line to
+// write to the Agent (2026-10-22 user decision: the activity and the message form one card), where changes to a version
+// under review are asked for too.
 function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{data:Data;update:Update;busy:boolean;members:Member[];membersLoaded:boolean;error:string;onFailed:()=>void}){
  const [message,setMessage,clearMessage]=useTaskDraft('comment',''),w=data.work,stages=w.flow?.stages||[],done=w.stage==='done',closed=Boolean(w.cancelledAt||w.archivedAt);
- const [all,setAll]=useState(false),[view,setView]=useState<Artifact>(),{versionsAsk}=useContext(TaskActions),articleEdit=useArticleEdit(),cardRef=useRef<HTMLElement>(null);
+ const [all,setAll]=useState(false),[view,setView]=useState<Artifact>(),{versionsAsk}=useContext(TaskActions),articleEdit=useArticleEdit(),{me}=useMe(),cardRef=useRef<HTMLElement>(null);
  // View all versions, from the article card's menu: every line shown, and the card brought into view.
  useEffect(()=>{if(!versionsAsk)return;setAll(true);cardRef.current?.scrollIntoView?.({block:'start',behavior:'smooth'});},[versionsAsk]);
  const executor=getStageExecutor().agent;
@@ -740,7 +744,9 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  const review:{stageKey:string;artifactId:string;revision?:number}|undefined=!done&&!closed&&allowed&&stage?.kind==='review'&&out&&!out.rejectedAt?{stageKey:stage.key,artifactId:out.id}:undefined;
  // Who reads a note: the run that starts the task, the step's next run, or, with only publishing left, no run (it is recorded).
  const hint=review?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor}):!w.flow?$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')}):stage?.kind==='release'||stage?.kind==='publish'?$t('taskDetail.leaveNoteRecorded'):$t('taskDetail.leaveNoteNextRunReads',{0:executor});
- const rows=(w.history||[]).map((e,i)=>({e,i,t:shownInActivity(e)?eventText(e,nameOf,executor,w.snooze,w.observation?.results):null})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
+ const edits=unversionedEdits(data,articleEdit),pendingEdits:Work['history'][number][]=edits?[{at:edits.savedAt,actor:edits.savedBy,action:UNVERSIONED}]:[];
+ const rows=[...(w.history||[]).map((e,i)=>({e,i,t:shownInActivity(e)?eventText(e,nameOf,executor,w.snooze,w.observation?.results):null})).filter(x=>x.t),...pendingEdits.map(e=>({e,i:Infinity,t:{who:'',text:''}}))].sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
+ const showArticle=()=>document.getElementById(ARTICLE_REVIEW_ID)?.scrollIntoView?.({block:'start',behavior:'smooth'});
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
  // Images go with the message (2026-11-03 user request, task-detail/task-images.tsx): pasted, dropped or added, numbered
  // in the order they were added so the text can say "Image 1"; they stay with the draft until it is sent.
@@ -757,8 +763,10 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
    const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p>{e.images&&<MessageImages images={e.images}/>}</div></li>;
    const artifact=VERSION_EVENTS.includes(e.action)&&e.artifactId?artifacts.get(e.artifactId):undefined;
-   const line=!artifact?plain[e.action]||t!.text:e.action==='editArticleDraft'?editsLine($t('taskDetail.editedArticleVersion',{0:artifact.version}),artifact.edits):e.action==='restoreArticleVersion'?(artifact.restoredFrom?$t('taskDetail.restoredArticleVersion',{0:artifact.restoredFrom.version,1:artifact.version}):t!.text):$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)});
-   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span>{getCurrentLocale()==='ru-RU'?' — ':' '}{line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
+   const unversioned=e.action===UNVERSIONED?edits:null,mine=Boolean(unversioned&&me?.id&&unversioned.savedBy===me.id);
+   const line=unversioned?unversionedLine(unversioned,mine):!artifact?plain[e.action]||t!.text:e.action==='editArticleDraft'?editsLine($t('taskDetail.editedArticleVersion',{0:artifact.version}),artifact.edits):e.action==='restoreArticleVersion'?(artifact.restoredFrom?$t('taskDetail.restoredArticleVersion',{0:artifact.restoredFrom.version,1:artifact.version}):t!.text):$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)});
+   const actor=unversioned?(mine?$t('common.you'):people.get(unversioned.savedBy)||unversioned.savedByName):e.action==='runSucceeded'?executor:name,open=unversioned?showArticle:artifact?()=>setView(artifact):undefined;
+   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{actor}</span>{getCurrentLocale()==='ru-RU'?' — ':' '}{line}{open&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={open}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<VersionReader data={data} artifact={view} versions={[...artifacts.values()]} who={people.get(view.createdBy)||$t('common.member')} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} update={update} busy={busy} onClose={()=>setView(undefined)}/>}
   {/* The send button is disabled while the box is empty; the box itself stays as it is. */}

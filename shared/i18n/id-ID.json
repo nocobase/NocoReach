@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "Versi ini tidak dapat dipulihkan lagi. Muat ulang halaman untuk melihat versi saat ini.",
   "taskDetail.eventRestoreArticleVersion": "Versi sebelumnya dari draf artikel dipulihkan",
   "taskDetail.editedArticleVersion": "Draf artikel diedit, versi {0}",
+  "taskDetail.unversionedEdits": "Draf artikel diedit, belum disimpan sebagai versi",
+  "taskDetail.unversionedEditsYours": "mengedit draf artikel, belum disimpan sebagai versi",
   "taskDetail.restoredArticleVersion": "Versi {0} dipulihkan sebagai versi {1}",
   "taskDetail.restoredFromVersion": "dipulihkan dari versi {0}",
   "taskDetail.editedByHandBy": "Diedit manual oleh {0}",

@@ -13,6 +13,7 @@ import {
 import type {
   ArticleEditForm,
   ArticleEdits,
+  UnversionedEdits,
 } from '../../../shared/article-edit.js';
 import type { ArticleEditSession } from './article-edit-session.js';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
@@ -261,13 +262,50 @@ export function editsLine(line: string, edits?: ArticleEdits) {
 }
 
 /** The card's grey line once the version has been edited: Version 2 + your changes (1 AI rewrite). */
-export function editedLine(session: ArticleEditSession, version: number) {
-  if (session.holder && session.othersEdits)
-    return $t('articleEdit.versionWithOthersEdits', {
-      0: version,
-      1: session.holder,
-    });
+export function editedLine(
+  session: ArticleEditSession,
+  version: number,
+  me?: string,
+) {
+  // Someone else's, named as Activity names them: whoever saved them last, while this page has none of its own to save
+  // (another person holds the article, or this page took over their changes and has not changed them yet).
+  const theirs =
+    me && !session.saving && session.kept && session.kept.savedBy !== me
+      ? session.kept.savedByName
+      : session.holder && session.othersEdits
+        ? session.holder
+        : '';
+  if (theirs)
+    return $t('articleEdit.versionWithOthersEdits', { 0: version, 1: theirs });
   return session.ai
     ? $t('articleEdit.versionWithAiEdits', { 0: version, 1: session.ai })
     : $t('articleEdit.versionWithEdits', { 0: version });
+}
+
+/**
+ * The changes to the article under review not made a version yet, which Activity shows as its latest line (2026-11-12
+ * user report: a colleague's changes after version 4 showed nowhere in Activity and were taken for lost). The editing
+ * session's record once it has one, as it follows every save and heartbeat; otherwise what the task read returned,
+ * the only source for people who may not edit.
+ */
+export function unversionedEdits(
+  data: TaskData,
+  session: ArticleEditSession | null,
+): UnversionedEdits | null {
+  const reviewed = reviewedArticle(data);
+  if (!reviewed) return null;
+  const kept =
+    session?.artifactId === reviewed.out.id ? session.kept : undefined;
+  const edits = kept === undefined ? data.unversionedEdits : kept;
+  return edits?.artifactId === reviewed.out.id ? edits : null;
+}
+
+/** Their Activity line after who made them, with the AI rewrites as a version's line counts them. */
+export function unversionedLine(edits: UnversionedEdits, mine: boolean) {
+  return editsLine(
+    $t(
+      mine ? 'taskDetail.unversionedEditsYours' : 'taskDetail.unversionedEdits',
+    ),
+    { ai: edits.ai, hand: 0 },
+  );
 }

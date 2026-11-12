@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "这一版已经不能恢复了，请刷新页面查看现在的版本。",
   "taskDetail.eventRestoreArticleVersion": "恢复到文章稿以前的一版",
   "taskDetail.editedArticleVersion": "修改了文章稿，第 {0} 版",
+  "taskDetail.unversionedEdits": "修改了文章稿，还没存成版本",
+  "taskDetail.unversionedEditsYours": "修改了文章稿，还没存成版本",
   "taskDetail.restoredArticleVersion": "恢复到第 {0} 版，生成第 {1} 版",
   "taskDetail.restoredFromVersion": "恢复自第 {0} 版",
   "taskDetail.editedByHandBy": "{0} 人工修改",
