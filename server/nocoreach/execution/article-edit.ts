@@ -120,6 +120,21 @@ export class ArticleEditing {
   clear(project: string, taskId: string, tx: unknown) {
     return this.drop(this.s.key(EDIT_KIND, project, taskId), tx);
   }
+  /**
+   * The kept changes to the version under review, without the form, for the task's view: whoever may read the task
+   * learns who changed the article and when, never what they wrote. Nothing once another version is under review or the
+   * task is closed.
+   */
+  async unversioned(project: string, taskId: string, w: Work, tx: unknown) {
+    if (w.cancelledAt || w.archivedAt) return null;
+    const draft = (await this.s.snapshot(
+      this.s.key(EDIT_KIND, project, taskId),
+      tx,
+    )) as ArticleEditDraft | null;
+    if (!draft || !underReview(w, draft.artifactId)) return null;
+    const { artifactId, ai, savedAt, savedBy, savedByName } = draft;
+    return { artifactId, ai, savedAt, savedBy, savedByName };
+  }
   /** `nrTaskWork:articleEdit`: open (take or renew the lease), save, discard or release. */
   async handle(
     project: string,

@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "This version can no longer be restored. Refresh the page to see the current version.",
   "taskDetail.eventRestoreArticleVersion": "Restored an earlier version of the article draft",
   "taskDetail.editedArticleVersion": "Edited the article draft, version {0}",
+  "taskDetail.unversionedEdits": "edited the article draft, not saved as a version yet",
+  "taskDetail.unversionedEditsYours": "edited the article draft, not saved as a version yet",
   "taskDetail.restoredArticleVersion": "Restored version {0} as version {1}",
   "taskDetail.restoredFromVersion": "restored from version {0}",
   "taskDetail.editedByHandBy": "Edited by hand by {0}",

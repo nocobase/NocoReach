@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "Esta versão não pode mais ser restaurada. Atualize a página para ver a versão atual.",
   "taskDetail.eventRestoreArticleVersion": "Versão anterior do rascunho do artigo restaurada",
   "taskDetail.editedArticleVersion": "Rascunho do artigo editado, versão {0}",
+  "taskDetail.unversionedEdits": "Rascunho do artigo editado, ainda não salvo como versão",
+  "taskDetail.unversionedEditsYours": "editou o rascunho do artigo, ainda não salvo como versão",
   "taskDetail.restoredArticleVersion": "Versão {0} restaurada como versão {1}",
   "taskDetail.restoredFromVersion": "restaurada da versão {0}",
   "taskDetail.editedByHandBy": "Editada manualmente por {0}",

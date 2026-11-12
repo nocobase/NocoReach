@@ -7946,6 +7946,8 @@
   "articles.cannotRestore": "このバージョンはもう復元できません。ページを再読み込みして現在のバージョンを確認してください。",
   "taskDetail.eventRestoreArticleVersion": "記事の下書きを以前のバージョンに戻しました",
   "taskDetail.editedArticleVersion": "記事の下書きを編集しました（バージョン {0}）",
+  "taskDetail.unversionedEdits": "記事の下書きを編集しました。まだバージョンとして保存されていません",
+  "taskDetail.unversionedEditsYours": "記事の下書きを編集しました。まだバージョンとして保存されていません",
   "taskDetail.restoredArticleVersion": "バージョン {0} を復元し、バージョン {1} にしました",
   "taskDetail.restoredFromVersion": "バージョン {0} から復元",
   "taskDetail.editedByHandBy": "{0} が手動で編集",
