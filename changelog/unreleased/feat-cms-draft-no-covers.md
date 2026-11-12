@@ -1,0 +1,7 @@
+## Articles: new articles wait in the CMS as drafts; covers are set there
+
+- Covers are no longer set in NocoReach. The Cover row on the review card, the cover settings on publishing targets and the cover upload are removed: a cover depends on the site's layout and is best chosen where the article is laid out, in the CMS. Updating an existing article never changes its cover.
+- There is no Status choice in the review any more. On a target that keeps a status, a new article is pushed to the CMS as a draft (Approve and push to CMS) and the step is named Publish in CMS; updating an existing article publishes the change on approval and keeps the article's status. Git-file targets have no drafts and still commit new articles directly.
+- While a draft waits, the task counts in Needs you with an amber Publish in the CMS status and no deadline. NocoReach checks the article every 30 minutes, and its page as well; once it is published the task goes live. The card has Open CMS and I've published it, lists each target's state when the article goes to several, and offers Push again when the draft is no longer in the CMS.
+- The overwrite watch of such an article starts when it is published in the CMS and compares with the article as it was then, so a cover or layout set in the CMS is not reported as a change.
+- A publishing target's connect drawer has a New articles row saying how new articles are published there. The article API's create request carries `status: "draft"`, an update carries no status, and an article may give an `editUrl` for Open CMS.
