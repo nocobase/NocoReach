@@ -13,6 +13,7 @@ import {
 import type { Artifact, Release, Run, RunEvent } from '../execution/model.js';
 import { projectWork } from '../execution/model.js';
 import { snoozeInstant } from '../execution/snooze.js';
+import { CMS_DRAFT, DEMO_CMS } from './cms-article.js';
 import { demoContent, type DemoPerson } from './content.js';
 import { ACME_STORIES, ACME_DISCUSSIONS } from './acme-content.js';
 import { CRM_STORIES } from './crm-content.js';
@@ -679,6 +680,322 @@ export async function writeChangeTasks(
   });
 }
 
+/**
+ * A blog-post task whose new article waits in Acme CMS as a draft (2026-11-12): approved this morning, pushed there,
+ * and checked every 30 minutes since; the editor sets its cover and publishes it in the CMS (cms-article.ts).
+ */
+async function writeArticleTask(
+  host: DemoHost,
+  context: DemoImportContext,
+  projectId: string,
+  domain: string,
+  people: Partial<Record<DemoPerson, string>>,
+) {
+  const lang = context.language === 'en-US' ? 'en' : 'zh';
+  const content = demoContent(context.language);
+  const now = context.clock.now.getTime();
+  const at = (days: number, hours = 0) =>
+    new Date(now - days * DAY + hours * HOUR).toISOString();
+  const admin = await host.db
+    .access!.database.repository('user')
+    .findOne({ filter: { id: context.actorId } });
+  const owner = String(context.actorId),
+    ownerName =
+      typeof admin?.name === 'string' && admin.name
+        ? admin.name
+        : typeof admin?.username === 'string'
+          ? admin.username
+          : 'Administrator';
+  const playbook = SYSTEM_PLAYBOOKS.find((p) => p.id === 'blog-post')!;
+  const flowStages = stagesFor(playbook);
+  const brief = t(
+    '为产品发布季写一篇博客：讲清楚跨团队发布怎么从发布日倒推排期，用时间线视图的依赖关系举例，附一份可复制的发布计划模板。',
+    'Write a blog post for the launch season: how to plan a cross-team launch back from launch day, using dependencies in the timeline view as the example, with a launch plan template readers can copy.',
+  );
+  const locale = lang,
+    slug = CMS_DRAFT.slug,
+    page = `https://${domain}/blog/${slug}`,
+    articleId = String(CMS_DRAFT.id);
+  const runId = randomUUID(),
+    started = 2.1,
+    approved = 0.26,
+    usage = {
+      inputTokens: Math.round(
+        14000 + context.clock.sample('input:article') * 9000,
+      ),
+      outputTokens: Math.round(
+        3200 + context.clock.sample('output:article') * 1500,
+      ),
+    };
+  const draft = {
+    slug,
+    status: 'draft' as const,
+    locales: {
+      [locale]: {
+        title: CMS_DRAFT.title[lang],
+        description: CMS_DRAFT.description[lang],
+        body: CMS_DRAFT.body[lang],
+      },
+    },
+    verifyText: CMS_DRAFT.verifyText[lang],
+    summary: CMS_DRAFT.summary[lang],
+  };
+  const notes = t(
+    '写了一篇新文章，结构是倒推排期、每周检查点、模板和发布之后四部分。例子里的团队和日期都是虚构的；模板表格可以直接复制。没有配图，封面请在 CMS 里设置。',
+    'Wrote a new article in four parts: planning back from launch day, weekly checkpoints, the template and after the launch. The teams and dates in the example are fictional; the template table can be copied as is. There are no images; set the cover in the CMS.',
+  );
+  const transcript: RunEvent[] = [
+    { seq: 1, at: at(started), type: 'status', content: 'running' },
+    {
+      seq: 2,
+      at: at(started, 0.01),
+      type: 'thinking',
+      content: text(
+        lang,
+        t(
+          '先看博客里已有文章的写法和长度，再确认时间线视图的依赖关系怎么描述。',
+          'Check how the existing blog posts are written and how long they are, then how the docs describe dependencies in the timeline view.',
+        ),
+      ),
+    },
+    {
+      seq: 3,
+      at: at(started, 0.02),
+      type: 'toolUse',
+      tool: 'WebFetch',
+      input: { url: `https://${domain}/blog/estimation` },
+    },
+    {
+      seq: 4,
+      at: at(started, 0.03),
+      type: 'toolResult',
+      tool: 'WebFetch',
+      output: { status: 200 },
+    },
+    {
+      seq: 5,
+      at: at(started, 0.04),
+      type: 'toolUse',
+      tool: 'WebFetch',
+      input: { url: `https://${domain}/features/timeline` },
+    },
+    {
+      seq: 6,
+      at: at(started, 0.05),
+      type: 'toolResult',
+      tool: 'WebFetch',
+      output: { status: 200 },
+    },
+    {
+      seq: 7,
+      at: at(started, 0.08),
+      type: 'text',
+      content: text(lang, notes),
+    },
+    { seq: 8, at: at(started, 0.09), type: 'usage', meta: usage },
+  ];
+  const run: Run = {
+    id: runId,
+    projectId,
+    taskId: '',
+    planVersion: 0,
+    stepId: flowStages[0].key,
+    baseArtifactId: null,
+    ownerId: owner,
+    actor: owner,
+    inputVersion: 1,
+    capabilitySnapshot: ['article.draft'],
+    status: 'succeeded',
+    createdAt: at(started, -0.05),
+    startedAt: at(started),
+    endedAt: at(started, 0.1),
+    input: JSON.stringify({
+      mode: 'article',
+      title: draft.locales[locale].title,
+    }),
+    model: { llmService: 'demo', model: 'demo-agent' },
+    flowStage: 0,
+    mode: 'article',
+    simulated: true,
+    demoAgentId: 'nocoreach.runner',
+    agentName: 'NocoReach Demo Agent',
+    transcript,
+    usage,
+  };
+  const changes = [
+    `${locale}.body`,
+    `${locale}.description`,
+    `${locale}.title`,
+    'slug',
+    'status',
+  ];
+  const artifact: Artifact = {
+    id: 'article-launch-plan',
+    planVersion: 0,
+    stepId: flowStages[0].key,
+    version: 1,
+    createdAt: at(started, 0.1),
+    createdBy: 'agent',
+    runId,
+    content: text(lang, notes),
+    article: {
+      targetId: DEMO_CMS.id,
+      articleId: null,
+      baseKey: null,
+      baseVersion: null,
+      draft,
+      changes,
+    },
+    approvedAt: at(approved),
+    approvedBy: owner,
+  } as Artifact;
+  run.artifactId = artifact.id;
+  const pushed = at(approved, 0.02),
+    checked = at(0, -0.3),
+    checks = Math.floor((approved * 24 - 0.3) * 2);
+  const work = projectWork({});
+  Object.assign(work, {
+    stage: 'flow',
+    note: content.taskNote,
+    humanOwnerId: owner,
+    humanOwnerName: ownerName,
+    playbookId: 'blog-post',
+    flow: {
+      id: 'blog-post',
+      name: playbook.name,
+      version: 3,
+      stages: flowStages.map((s) =>
+        s.kind === 'agent' ? { ...s, instruction: text(lang, brief) } : s,
+      ),
+    },
+    stageIndex: 2,
+    delivery: {
+      kind: 'article',
+      targetId: DEMO_CMS.id,
+      articleId,
+      sourceKey: null,
+    },
+    latestRun: { id: runId, status: run.status },
+    results: [artifact],
+    release: {
+      state: 'awaiting_cms',
+      note: draft.summary,
+      pages: [page],
+      verifyText: draft.verifyText,
+      article: {
+        artifactId: artifact.id,
+        targetId: DEMO_CMS.id,
+        articleId,
+        key: randomUUID(),
+        slug,
+        draft: true,
+        published: {
+          articleId,
+          slug,
+          version: pushed,
+          written: changes.filter((c) => c !== 'status'),
+          at: pushed,
+        },
+        state: 'drafted',
+        cms: { at: checked, status: 'draft', nextAt: at(0, 0.2) },
+      },
+      mergedAt: pushed,
+      checks,
+    } as Release,
+  });
+  const editor = people.editor ?? 'demo-editor';
+  work.history = [
+    {
+      at: at(2.2),
+      actor: owner,
+      actorName: ownerName,
+      action: 'startTask',
+      note: playbook.name,
+    },
+    {
+      at: at(started, -0.05),
+      actor: owner,
+      action: 'runQueued',
+      runId,
+      note: flowStages[0].name,
+    },
+    { at: run.startedAt!, actor: 'system', action: 'runStarted', runId },
+    {
+      at: artifact.createdAt,
+      actor: 'system',
+      action: 'runSucceeded',
+      runId,
+      artifactId: artifact.id,
+      stageKey: flowStages[0].key,
+    },
+    {
+      at: at(1.1, 3),
+      actor: editor,
+      actorName: content.people.editor.name,
+      action: 'comment',
+      comment: text(
+        lang,
+        t(
+          '正文没问题。封面和配图我在 CMS 里加，发布前再看一遍排版。',
+          "The text is fine. I'll add the cover and images in the CMS and check the layout before publishing.",
+        ),
+      ),
+    },
+    {
+      at: artifact.approvedAt!,
+      actor: owner,
+      action: 'approveStage',
+      stageKey: flowStages[1].key,
+      artifactId: artifact.id,
+    },
+    {
+      at: pushed,
+      actor: 'system',
+      action: 'articleDrafted',
+      note: DEMO_CMS.name,
+    },
+  ];
+  await host.db.sequelize.transaction(async (transaction: unknown) => {
+    const row = await host.db.getRepository('nrTasks').create({
+      values: {
+        projectId,
+        taskKey: `nocoreach-demo:${projectId}:acme-launch-plan-article`,
+        title: text(
+          lang,
+          t(
+            '写一篇跨团队产品发布排期指南',
+            'Write a guide to planning a product launch across teams',
+          ),
+        ),
+        brief: `${content.notice}${text(lang, brief)}`,
+        status: '待确认',
+        evidence: { simulated: true, demoEdition: 'nocoreach-demo', work },
+        createdAt: at(2.2),
+        updatedAt: checked,
+      },
+      transaction,
+    });
+    const taskId = String(row.id),
+      repo = host.db.getRepository('nrSnapshots');
+    await repo.create({
+      values: {
+        key: `nr-task-artifact:${projectId}:${taskId}:${artifact.id}`,
+        payload: artifact,
+      },
+      transaction,
+    });
+    await repo.create({
+      values: {
+        key: `nr-task-run:${projectId}:${taskId}:${run.id}`,
+        payload: { ...run, taskId },
+      },
+      transaction,
+    });
+  });
+}
+
+const text = (lang: 'zh' | 'en', value: L) => value[lang];
+
 interface Exchange {
   ask: L;
   answer: L;
@@ -1058,6 +1375,8 @@ export async function writeActivity(
   which: 'main' | 'second' = 'main',
 ): Promise<void> {
   await writeChangeTasks(host, context, projectId, domain, people);
+  if (which === 'main')
+    await writeArticleTask(host, context, projectId, domain, people);
   // Earlier conversations ran on the demo's own simulated model, never the global default.
   const service = host.demoModels?.serviceName;
   const model = service ? { modelService: service, model: 'demo-chat' } : null;
