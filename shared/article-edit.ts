@@ -31,6 +31,13 @@ export type ArticleEditDraft = {
   savedByName: string;
 };
 
+/**
+ * The unversioned changes without the form: who saved them last, when, and how many AI rewrites they hold. Activity
+ * names them for everyone who may read the task (2026-11-12 user report: a colleague's changes after version 4 showed
+ * nowhere in Activity and were taken for lost), including people who may not edit and so never open the article.
+ */
+export type UnversionedEdits = Omit<ArticleEditDraft, 'form'>;
+
 /** Who holds the article for editing, until when (ISO time). */
 export type ArticleEditLease = { userId: string; name: string; until: string };
 

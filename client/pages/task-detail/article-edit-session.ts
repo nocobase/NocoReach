@@ -12,6 +12,7 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import {
   ARTICLE_AUTOSAVE_MS,
   ARTICLE_LEASE_HEARTBEAT_MS,
+  type ArticleEditDraft,
   type ArticleEditState,
 } from '../../../shared/article-edit.js';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
@@ -50,6 +51,8 @@ export type ArticleEditSession = {
   othersEdits: boolean;
   /** The last automatic save of the form (ISO time). */
   savedAt?: string;
+  /** The changes the server keeps for this version and who saved them; undefined until it has answered. */
+  kept?: ArticleEditDraft | null;
   saving: boolean;
   saveFailed: boolean;
   set: (form: EditForm) => void;
@@ -249,6 +252,7 @@ export function useArticleEditSession({
     holder,
     othersEdits: Boolean(holder && ownForm && !sameForm(ownForm, initial)),
     savedAt: draft && !unsaved ? draft.savedAt : undefined,
+    kept: remote.key === key && remote.state ? draft : undefined,
     saving: saving || unsaved > 0,
     saveFailed: remote.key === key && remote.failed && unsaved > 0,
     set: (next) => {
