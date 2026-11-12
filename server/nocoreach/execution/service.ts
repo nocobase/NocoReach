@@ -63,6 +63,10 @@ const PLAYBOOK_CHANGE_BLOCKED: Record<PlaybookChangeBlock, string> = { notStarte
 const HOUR = 3600000;
 // What says where a task came from (who found it, from which page or change), carried into a task it hands off to.
 const foundBy = (e: any) => Object.fromEntries(['createdBy', 'origin', 'signalKey', 'resultSource', 'entry'].filter(k => e?.[k] != null).map(k => [k, e[k]]));
+// Which playbook an event or a hand-over names by its stored name (2026-11-12): a built-in playbook's name is stored as
+// Chinese system text, which the task page shows in the reader's language, and a person's own is shown as typed, even
+// under the same name (namedPlaybook on the client). A snapshot from before playbooks kept their origin leaves it out.
+const playbookOrigin = (p: { id: string; system?: boolean; edited?: boolean }) => ({ id: p.id, ...(p.system !== undefined ? { system: p.system === true } : {}), ...(p.edited !== undefined ? { edited: p.edited === true } : {}) });
 const httpsUrl = (v: unknown) => { try { const u = new URL(String(v)); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
 const optional = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '';
 // Before/after text of changed text files, for the change comparison; long files are cut and marked.
@@ -781,7 +785,7 @@ export class TaskService {
         event.note = w.snooze.day; w.snooze = null;
       } else if (v.command === 'selectPlaybook') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStartedPlaybookCannotChange'), 409);
-        const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
+        const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name; event.playbook = playbookOrigin(p);
         await followPlaybook(p);
       } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStarted'), 409);
@@ -884,8 +888,8 @@ export class TaskService {
               const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };
               // The languages chosen with the hand-over, primary first (2026-10-30); the new task's start takes the ones its target has.
               const handLocales = Array.isArray(v.nextLocales) ? [...new Set<string>(v.nextLocales.filter((l: unknown) => typeof l === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l)))].slice(0, 20) : [];
-              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: taskContext(task.evidence?.context, task.evidence) || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content, ...(handLocales.length ? { locales: handLocales } : {}) }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
-              w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: taskContext(task.evidence?.context, task.evidence) || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, playbookOrigin: playbookOrigin(w.playbook), artifactId: accepted.id, content: accepted.content, ...(handLocales.length ? { locales: handLocales } : {}) }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name, playbook: playbookOrigin(w.playbook) }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.playbook = playbookOrigin(p); event.nextTaskId = w.nextTaskId;
             }
           }
         } else {
@@ -1044,7 +1048,7 @@ export class TaskService {
     }
     w.startedPages = startedPageUrls({ task, work: w, pageIdentity: identity });
     if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
-    w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
+    w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name; event.playbook = playbookOrigin(w.playbook);
     await followPlaybook(p);
     await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
     // The repository is chosen at the start and kept (2026-10-29): the one the start card names, else the one
