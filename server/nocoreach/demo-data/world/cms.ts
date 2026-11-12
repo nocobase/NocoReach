@@ -1,11 +1,12 @@
-import { CMS_DRAFT, DEMO_CMS } from '../cms-article.js';
+import { CMS_ARTICLES, DEMO_CMS } from '../cms-article.js';
 import { HOUR, iso, json, notFound, object } from './kit.js';
 import type { World } from './world.js';
 
 /**
- * The main demo site's blog CMS, read as NocoBase's API answers it (articles/nocobase-api.ts): one post, the draft the
- * demo's article task pushed, still waiting for someone to publish it. Reads only: the task got there in the import,
- * and the demo never writes to it.
+ * The main demo site's blog CMS, read as NocoBase's API answers it (articles/nocobase-api.ts): the posts the demo's
+ * article tasks pushed (cms-article.ts), one still a draft waiting for someone to publish it and one published there;
+ * the third task's draft was deleted, so it is not found. Reads only: the tasks got there in the import, and the demo
+ * never writes to it.
  */
 export function cms(world: World, u: URL): Response | undefined {
   if (!world.main || u.hostname !== DEMO_CMS.host(world.project.domain))
@@ -15,20 +16,24 @@ export function cms(world: World, u: URL): Response | undefined {
   )?.[1];
   if (!action) return notFound();
   const lang = world.lang;
-  const row = {
-    id: CMS_DRAFT.id,
-    slug: CMS_DRAFT.slug,
-    // Saved a few hours ago, as the task's push reads.
-    updatedAt: iso(Math.floor(world.now / HOUR) * HOUR - 5 * HOUR),
-    status: 'draft',
-    title: CMS_DRAFT.title[lang],
-    description: CMS_DRAFT.description[lang],
-    content: CMS_DRAFT.body[lang],
-  };
+  const rows = CMS_ARTICLES.filter((a) => a.state !== 'deleted').map((a) => ({
+    id: a.id,
+    slug: a.slug,
+    // A draft was saved a few hours ago, as its task's push reads; the published post when it went out (activity.ts).
+    updatedAt: iso(
+      Math.floor(world.now / HOUR) * HOUR -
+        (a.state === 'published' ? 4 * 24 : 5) * HOUR,
+    ),
+    status: a.state,
+    title: a.title[lang],
+    description: a.description[lang],
+    content: a.body[lang],
+  }));
   if (action === 'get')
     return json({
       data:
-        u.searchParams.get('filterByTk') === String(CMS_DRAFT.id) ? row : null,
+        rows.find((r) => String(r.id) === u.searchParams.get('filterByTk')) ??
+        null,
     });
   let filter: Record<string, unknown> = {};
   try {
@@ -42,7 +47,7 @@ export function cms(world: World, u: URL): Response | undefined {
     .flatMap((c) => Object.values(object(c)))
     .map((c) => object(c).$includes)
     .filter((q): q is string => typeof q === 'string');
-  const hit =
+  const hit = (row: (typeof rows)[number]) =>
     slug !== undefined
       ? slug === row.slug
       : !words.length ||
@@ -51,5 +56,5 @@ export function cms(world: World, u: URL): Response | undefined {
             v.toLowerCase().includes(q.toLowerCase()),
           ),
         );
-  return json({ data: hit ? [row] : [] });
+  return json({ data: rows.filter(hit) });
 }
