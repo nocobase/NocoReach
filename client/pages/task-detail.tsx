@@ -5,7 +5,7 @@ import {shownInActivity} from '../../shared/task-activity.js';
 import {nextVersion,previousVersion,restorable,writtenByHand,type RestoredFrom} from '../../shared/article-versions.js';
 import {RESTART_ACTION,attemptOf,playbookChangeBlock,sameAttempt,sinceRestart} from '../../shared/playbook-change.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
-import { localizeWorkSnapshots, recordedStages } from './playbook-snapshot';
+import { localizeWorkSnapshots, namedPlaybook, recordedStages, type PlaybookOrigin } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TechnicalDetails } from './task-detail/technical-details.js';
 import { useTechnicalDetails, type TechnicalTab } from './task-detail/technical-state.js';
@@ -327,7 +327,7 @@ function StartCard({data:task,list,pick,setPick,update,reload,busy,projectId,tas
  const data=restart?{...task,work:unstarted(task.work)}:task;
  // The steps the earlier playbook had approved, which the new one does not take over.
  const approved=restart?task.work.results.flatMap((r,i)=>r?.approvedAt&&!r.rejectedAt&&task.work.flow?.stages[i]?[task.work.flow.stages[i].name]:[]):[];
- const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=startBrief(data,false);
+ const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;playbookOrigin?:PlaybookOrigin;content?:string}|undefined),brief=startBrief(data,false);
  const options=data.agent?.options||[],agent=startAgent(data),ready=agent.ready;
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
  // Where the change goes (article-start.tsx, start-pages.tsx): shown for playbooks that change something; the choice
@@ -378,7 +378,7 @@ function StartCard({data:task,list,pick,setPick,update,reload,busy,projectId,tas
  // with its description, the article where the change goes, and the note.
  // The playbook started with cannot be chosen again: the change starts another.
  const confirm=<Button disabled={busy||!p||!ready||!plan.ready||finding||repoMissing||pick===restart?.original} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>;
- return <StageCard title={restart?$t('taskDetail.restartTitle'):$t('taskDetail.startAfterReview')} sub={restart?undefined:handoff?$t(blockers.length?'taskDetail.handoffNotStarted':'taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
+ return <StageCard title={restart?$t('taskDetail.restartTitle'):$t('taskDetail.startAfterReview')} sub={restart?undefined:handoff?$t(blockers.length?'taskDetail.handoffNotStarted':'taskDetail.taskHandedOverDocumentDelivered',{0:namedPlaybook(handoff.playbook,handoff.playbookOrigin)}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={restart?<>{confirm}<Button variant='ghost' disabled={busy} onClick={restart.onCancel}>{$t('common.cancel')}</Button></>:confirm}>
   {restart&&<div className='flex flex-col gap-1'><p className={text.body}>{$t('taskDetail.restartIntro')}</p>{approved.length>0&&<p className={text.body}>{$t('taskDetail.restartApproved',{0:joinNames(approved.map(n=>$t('taskDetail.quotedName',{0:n})))})}</p>}</div>}
   {brief.text&&<Field label={brief.title}><Clamped long={brief.long} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{brief.text}</Clamped></Field>}

@@ -189,6 +189,25 @@ export function recordedPlaybookName(p?: Replaced | null): string {
   return builtInRecord(p) && names.has(p.name) ? $legacyText(p.name) : p.name;
 }
 
+export type PlaybookOrigin = {
+  id?: string;
+  system?: boolean;
+  edited?: boolean;
+};
+/**
+ * A playbook an event or a hand-over names by its stored name (Start, the playbook chosen before it, a hand-over), in
+ * the reader's language when it is built-in and as typed when a person made it, even under a built-in's name. Records
+ * from before they kept the playbook's origin (2026-11-12) are matched by the name alone.
+ */
+export function namedPlaybook(
+  name?: string,
+  origin?: PlaybookOrigin | null,
+): string {
+  if (!name) return '';
+  if (origin) return recordedPlaybookName({ ...origin, name });
+  return names.has(name) ? $legacyText(name) : name;
+}
+
 /** The steps of the playbook a change replaced, so Activity names its steps as they were then. */
 export function recordedStages(p: Replaced) {
   const builtIn = builtInRecord(p);
