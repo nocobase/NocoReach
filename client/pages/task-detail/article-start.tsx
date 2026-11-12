@@ -1133,7 +1133,7 @@ const shortPage = (url: string) =>
 
 /**
  * Changes go to (2026-10-29, ui-references/repos-2026-10-29/multi-repo.png ④): the website repositories (a pull request)
- * and the publishing targets (published directly) in one select. The repository serving the task's pages is preselected
+ * and the publishing targets (published directly, or a new article saved there as a draft) in one select. The repository serving the task's pages is preselected
  * and the line below says from which page; when several or none serve them, the person chooses.
  */
 export function WhereField({
@@ -1157,6 +1157,13 @@ export function WhereField({
     repos = data.agent?.repos || [],
     targets = data.articleTargets || [],
     route = choice.target === REPO ? choiceRepo(data, choice) : null;
+  // A new article waits as a draft in a target that keeps a status (2026-11-12); anything else is published there.
+  const how = (t: { status?: boolean }) =>
+    $t(
+      choice.mode === 'new' && t.status
+        ? 'articleTask.asDraft'
+        : 'articleTask.publishDirect',
+    );
   const value =
     choice.target === REPO
       ? route?.repo
@@ -1169,7 +1176,7 @@ export function WhereField({
       return r ? `${r.repo} · ${$t('articleTask.viaPr')}` : '';
     }
     const t = targets.find((x) => x.id === v.slice(TARGET_VALUE.length));
-    return t ? `${t.name} · ${$t('articleTask.publishDirect')}` : '';
+    return t ? `${t.name} · ${how(t)}` : '';
   };
   return (
     <Field label={$t('articleTask.changesGoTo')} id={`${id}-where`}>
@@ -1230,9 +1237,7 @@ export function WhereField({
               {targets.map((t) => (
                 <SelectItem key={t.id} value={TARGET_VALUE + t.id}>
                   <span className='min-w-0 flex-1 truncate'>{t.name}</span>
-                  <span className='text-muted-foreground'>
-                    {$t('articleTask.publishDirect')}
-                  </span>
+                  <span className='text-muted-foreground'>{how(t)}</span>
                 </SelectItem>
               ))}
             </SelectGroup>

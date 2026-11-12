@@ -31,6 +31,7 @@ Every request carries `Authorization: Bearer <key>`, the key the administrator s
 - `status` is `draft` or `published` (optional). NocoReach sets it only when it creates an article (see Create) and otherwise only reads it.
 - `editUrl` (optional, HTTPS) is where a person edits the article in your CMS. While a new article waits there as a draft, the task's Open CMS opens it; without it, Open CMS opens the base URL's origin.
 - Locale keys are the target's configured languages. Bodies are Markdown.
+- Fields NocoReach does not know are ignored. A `cover` field, which an earlier version of this document described, is no longer sent or read (2026-11-12): covers are set in your CMS.
 
 Responses wrap results in `{ "data": … }`; errors are `{ "error": { "code": "…" } }`.
 

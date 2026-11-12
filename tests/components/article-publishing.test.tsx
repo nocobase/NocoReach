@@ -2457,3 +2457,32 @@ it('offers the repositories and targets where a change goes, picking the reposit
     repoId: 'site',
   });
 });
+
+// A new article waits as a draft in a target that keeps a status (2026-11-12): the select says so, not published.
+it.each([
+  ['new', 'NocoBase CMS · Save as draft'],
+  ['existing', 'NocoBase CMS · Publish directly'],
+] as const)(
+  'names a %s article on a target with a status as %s',
+  (mode, text) => {
+    render(
+      <WhereField
+        data={
+          {
+            ...data,
+            articleTargets: [{ ...target, status: true }],
+            task: { evidence: {} },
+            work: {},
+            agent: { repo: null, repos: [] },
+          } as unknown as TaskData
+        }
+        choice={{ target: 'cms', mode, also: [] }}
+        playbookId='blog-post'
+        allowed
+        busy={false}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('combobox')).toHaveTextContent(text);
+  },
+);

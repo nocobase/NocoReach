@@ -985,6 +985,22 @@ test('a started article keeps its brief, playbook, article with its languages an
   ).toBeTruthy();
 });
 
+// A new article waits in a CMS that keeps a status as a draft (2026-11-12), so the start no longer says it is published.
+test('a started new article says it is saved as a draft where its target keeps a status', () => {
+  const data = articleStarted();
+  delete data.work.article;
+  data.work.delivery = { ...data.work.delivery!, articleId: null, also: [] };
+  data.articleTargets = data.articleTargets!.map((t) => ({
+    ...t,
+    status: true,
+  }));
+  mount(data);
+  const started = screen.getByRole('region', { name: STARTED });
+  expect(started.querySelector('[data-started-where]')).toHaveTextContent(
+    'NocoBase CMS · 存为草稿',
+  );
+});
+
 test('a started change of the site names its pages and the repository kept at the start; View steps shows the steps it started with', async () => {
   const user = userEvent.setup();
   const data = pageChange();

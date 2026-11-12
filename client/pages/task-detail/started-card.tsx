@@ -103,7 +103,13 @@ export function StartedCard({
     delivery?.kind === 'article' ? (
       <span data-started-where='article'>
         {joinNames(delivery.targets.map(targetName))} ·{' '}
-        {$t('articleTask.publishDirect')}
+        {$t(
+          delivery.isNew &&
+            data.articleTargets?.find((t) => t.id === delivery.targets[0])
+              ?.status
+            ? 'articleTask.asDraft'
+            : 'articleTask.publishDirect',
+        )}
       </span>
     ) : delivery?.repo ? (
       <span data-started-where='repo'>
