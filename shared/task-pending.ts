@@ -35,14 +35,16 @@ export type PendingTask = {
   };
 };
 
-// Release states that wait for a person: the merge failed, the change was not seen online, or an article could not be
-// published or exported (server/nocoreach/execution/article-flow.ts).
+// Release states that wait for a person: the merge failed, the change was not seen online, an article could not be
+// published or exported, or a new article waits as a draft for someone to publish it in the CMS (2026-11-12)
+// (server/nocoreach/execution/article-flow.ts).
 const RELEASE_WAITS = [
   'merge_failed',
   'not_seen',
   'publish_failed',
   'publish_conflict',
   'export_late',
+  'awaiting_cms',
 ];
 
 /**

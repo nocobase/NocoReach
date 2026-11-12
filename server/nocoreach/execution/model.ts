@@ -22,8 +22,9 @@ export type VisibleChange = { page: string; label: string; before: string; after
 export type PullRequestInfo = { url: string; number: number; branch: string; headSha?: string; files: { path: string; additions: number; deletions: number }[]; checks?: { ok: boolean; summary: string }; outOfScope?: string[]; release?: string; verifyText?: string; pages?: string[]; changes?: FileChange[]; visibleChanges?: VisibleChange[]; previewUrl?: string };
 // Release (SPEC §6.0): after you publish, the local Agent merges the reviewed commit and the system checks the live pages.
 // Article releases (article-flow.ts) publish to a target instead of merging: publishing, then exporting when the target
-// exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person.
-export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
+// exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person. A new
+// article saved as a CMS draft waits in awaiting_cms for a person to publish it there (2026-11-12), with no deadline.
+export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late' | 'awaiting_cms'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
 // sortOrder is a board position from before 2026-11-02, when each column came to run newest activity first; it is no
 // longer written or read and stays only on tasks moved before then.
 export type Work = {
@@ -52,7 +53,8 @@ export type Work = {
   // `locales`: the languages chosen at start, primary first (2026-10-24); the Agent writes the primary, and once a person
   // approves it, `translateFrom` holds that approved version while the Agent translates it into the others. A
   // translation playbook (2026-10-25) sets `translateFrom` at start from the article as published (`published`).
-  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[]; locales?: string[]; translateFrom?: { artifactId: string | null; at: string; by: string; draft: any; text: { title: string; description: string; body: string }; fields: string[]; published?: boolean } };
+  // `drafts`: targets where the task's new article already waits as a draft, which a rebase updates in place (2026-11-12).
+  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[]; locales?: string[]; drafts?: string[]; translateFrom?: { artifactId: string | null; at: string; by: string; draft: any; text: { title: string; description: string; body: string }; fields: string[]; published?: boolean } };
 };
 /** A transcript event of a demo run, as the demo Agent plays it back (`demo-data/demo-agent.ts`). */
 export type RunEvent = { seq: number; at: string; type: string; content?: string; tool?: string; input?: unknown; output?: unknown; meta?: Record<string, unknown> };
@@ -108,7 +110,8 @@ export function canApplyRun(w: Work, run: Run): boolean {
 export type BoardState = 'todo' | 'doing' | 'review' | 'done';
 // The pages' rule (shared/task-pending.ts `taskState`), so the status text, notifications and the online agent agree
 // with the task list and the Tasks badge. Flow tasks: an Agent at work is in progress; a step waiting on a person (a
-// review, publishing, a failed run or merge, a step to start again, a change not seen online) needs confirmation; once
+// review, publishing, a failed run or merge, a step to start again, a change not seen online, a draft to publish in the
+// CMS) needs confirmation; once
 // live, watching the effect is the system's job and the task counts as done for you.
 export function boardState(w: Work): BoardState {
   if (w.cancelledAt) return 'done';

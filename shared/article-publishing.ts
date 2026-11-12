@@ -73,6 +73,8 @@ export type ArticleSnapshot = ArticleContent & {
   id: string;
   version: string;
   readAt: string;
+  /** Where a person edits this article in the CMS, when the target says (the article API's `editUrl`). */
+  editUrl?: string;
 };
 export type ArticleSummary = {
   id: string;
@@ -290,6 +292,21 @@ export type PublishedArticle = {
 /** Whether a target stores a draft/published status (Git files have none: committing publishes). */
 export const supportsStatus = (t: ArticleTarget) =>
   t.kind === 'http' || (t.kind === 'nocobase-api' && Boolean(t.fields.status));
+/**
+ * The status a release writes (2026-11-12): a new article goes to a target that keeps a status as a draft, which a person
+ * publishes in the CMS after setting its cover and checking its layout; an existing article keeps the status it has.
+ * Nobody chooses it any more, so a status an older version, client or the Agent sent is not followed.
+ */
+export function cmsStatus<T extends { status?: ArticleStatus }>(
+  t: ArticleTarget,
+  draft: T,
+  create: boolean,
+): T {
+  const { status: _, ...rest } = draft;
+  return (
+    create && supportsStatus(t) ? { ...rest, status: 'draft' } : rest
+  ) as T;
+}
 
 export const fill = (value: string, slug: string) =>
   value.split('{slug}').join(slug);

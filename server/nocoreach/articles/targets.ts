@@ -85,6 +85,21 @@ const patternHosts = (pages: ArticleTarget['pages']) =>
     }),
   );
 
+/** Cover settings a target kept before 2026-11-12 are dropped as they are read, and so are gone at its next save. */
+function withoutCovers(raw: unknown) {
+  const s = raw as { targets?: unknown } | null;
+  if (!s || typeof s !== 'object' || !Array.isArray(s.targets)) return raw;
+  return {
+    ...s,
+    targets: s.targets.map((e: { target?: Record<string, unknown> }) => {
+      if (!e?.target || typeof e.target !== 'object' || !('cover' in e.target))
+        return e;
+      const { cover: _, ...target } = e.target;
+      return { ...e, target };
+    }),
+  };
+}
+
 function fail(key: string, status = 400): never {
   throw Object.assign(new Error(`articles.${key}`), { status });
 }
@@ -109,7 +124,7 @@ export class ArticleTargets {
     const raw = this.variables.get(key);
     if (!raw) return { revision: 0, targets: [] };
     try {
-      return stored.parse(JSON.parse(raw));
+      return stored.parse(withoutCovers(JSON.parse(raw)));
     } catch {
       return fail('unreadable', 503);
     }

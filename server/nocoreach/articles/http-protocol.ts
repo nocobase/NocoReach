@@ -32,7 +32,22 @@ const article = z.object({
   status: z.enum(['draft', 'published']).optional(),
   version: z.union([z.string(), z.number()]).transform(String),
   locales: z.record(z.string().regex(LOCALE), fields),
+  // Where a person edits the article in the site's CMS (2026-11-12): Open CMS opens it while a new article waits there
+  // as a draft. Optional; an address that is not https is ignored rather than failing the read.
+  editUrl: z.unknown().optional(),
 });
+/** An https address without credentials, else undefined. */
+function httpsAddress(value: unknown) {
+  if (typeof value !== 'string' || value.length > 2048) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 const summary = z.object({
   id: z.union([z.string(), z.number()]).transform(String),
   slug: z.string(),
@@ -65,7 +80,9 @@ export class HttpArticles implements ArticleProvider {
     const parsed = article.safeParse(data);
     if (!parsed.success)
       throw new ArticleError('unavailable', 'invalid_article');
-    return { ...parsed.data, readAt: now() };
+    const { editUrl, ...rest } = parsed.data,
+      edit = httpsAddress(editUrl);
+    return { ...rest, ...(edit ? { editUrl: edit } : {}), readAt: now() };
   }
   private async read(path: string, params?: Record<string, string>) {
     let response: Response;

@@ -26,7 +26,9 @@ const clip = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, ma
 // Published articles are watched this long for an overwrite in the target (accepted risk (b), shown on the task).
 const DRIFT_DAYS = 14;
 const EXPORT_HOURS = 6;
-export const ARTICLE_COMMANDS = ['linkArticle', 'editArticleDraft', 'restoreArticleVersion', 'retryPublish', 'rebaseArticle'];
+// How often a new article waiting as a draft is read again to see whether someone published it in the CMS.
+const CMS_CHECK = 30 * 60000;
+export const ARTICLE_COMMANDS = ['linkArticle', 'editArticleDraft', 'restoreArticleVersion', 'retryPublish', 'rebaseArticle', 'repushDraft'];
 // A task publishes to its primary target and at most this many others.
 const MAX_ALSO = 4;
 // Images one save of Edit directly may add; the person's unlinked uploads are capped lower still (manual-tasks.ts).
@@ -52,6 +54,31 @@ function stateOf(r: any, rec: any) {
   if (['exporting', 'export_late'].includes(r.state)) return rec.exported ? 'exported' : 'exporting';
   return rec.exported ? 'exported' : 'published';
 }
+/**
+ * A leg that created a new article as a draft (2026-11-12): pushed to the CMS and waiting there for a person to set its
+ * cover, check its layout and publish it. `rec.cms` holds the latest check (`draft`, `missing`, or `unseen` when the
+ * target does not say and the page check found nothing), `rec.cmsLive` when and by whom it was seen published.
+ */
+const awaitsCms = (rec: any) => Boolean(rec?.draft && rec.state === 'drafted');
+/**
+ * When a leg's overwrite watch starts: once it was published. A new article pushed as a draft is edited in the CMS
+ * before it goes out (its cover, layout, wording), so its watch starts when it is seen published there.
+ */
+function driftFrom(rec: any) {
+  if (rec?.draft) return rec.cmsLive ? Date.parse(rec.cmsLive.at) : NaN;
+  return rec?.published ? Date.parse(rec.published.at) : NaN;
+}
+const watched = (rec: any) => Date.now() - driftFrom(rec) < DRIFT_DAYS * 24 * HOUR;
+/** Where a person opens the target's CMS: a NocoBase app at its address, an article API's site at its origin. */
+function cmsUrl(t: any) {
+  try {
+    if (t.kind === 'nocobase-api') return new URL(t.baseUrl).href.replace(/\/+$/, '');
+    if (t.kind === 'http') return new URL(t.baseUrl).origin;
+  } catch {
+    /* an address that does not parse opens nothing */
+  }
+  return '';
+}
 /** The article as a leg published it: its base with the draft applied, at the version the write returned. */
 function publishedSnapshot(base: ArticleSnapshot | null, p: ArticleProposal, published: any): ArticleSnapshot {
   const locales: any = {};
@@ -71,11 +98,15 @@ export class ArticleFlow {
     if (!this.delivery) return fail(systemMessageText('articles.notConfigured'), 409);
     return this.delivery;
   }
-  /** The project's targets for the task page, without credentials; `pages` are the public address patterns. */
+  /**
+   * The project's targets for the task page, without credentials; `pages` are the public address patterns. `cmsUrl` is
+   * where Open CMS goes when the target gives no address for the article itself (2026-11-12): the NocoBase app, or the
+   * site that serves the article API.
+   */
   targets(project: string) {
     try {
       const list = (this.s.p.articleTargets as ArticleTargets | undefined)?.list(project);
-      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId, ...(t.pages ? { pages: t.pages } : {}) }));
+      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId, ...(t.pages ? { pages: t.pages } : {}), ...(cmsUrl(t) ? { cmsUrl: cmsUrl(t) } : {}) }));
     } catch {
       return [];
     }
@@ -386,11 +417,15 @@ export class ArticleFlow {
       if (!ARTICLE_CAPABILITIES[target.kind]?.images) return fail(systemMessageText('articles.imagesUnsupported', { 0: target.name }), 409);
       if (ids.some((id) => !linked.has(id))) return fail(systemMessageText('articles.imageMissing'), 409);
     }
-    const pages = [];
+    const pages = [],
+      drafts: string[] = w.delivery?.drafts || [];
     const records = legs.map((l, i) => {
       const slug = l.draft.slug || (i ? l.slug : '') || '';
-      if (slug) pages.push(...articlePages(this.need().target(project, l.targetId), slug, l.changes.length ? l.changes : l.carried || []));
-      return { targetId: l.targetId, articleId: l.articleId, key: randomUUID(), slug, ...(a.also?.length ? { state: 'publishing' } : {}) };
+      const target = this.need().target(project, l.targetId);
+      if (slug) pages.push(...articlePages(target, slug, l.changes.length ? l.changes : l.carried || []));
+      // A new article goes to a target that keeps a status as a draft, for a person to publish there (cmsStatus).
+      const draft = (!l.articleId || drafts.includes(l.targetId)) && supportsStatus(target);
+      return { targetId: l.targetId, articleId: l.articleId, key: randomUUID(), slug, ...(a.also?.length ? { state: 'publishing' } : {}), ...(draft ? { draft: true } : {}) };
     });
     // The phrase is looked for in the primary language first. It must be new against what the draft was written on
     // and against the article as the task linked it (`w.article`), which a rebase leaves as it was.
@@ -618,13 +653,46 @@ export class ArticleFlow {
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, approved.content, actor, at, tx)), article: { ...next, ...(primary.conflicts?.length ? { conflicts: primary.conflicts } : {}), rebasedFrom: approved.id } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 2] = artifact;
-      if (w.delivery) w.delivery = { ...w.delivery, articleId: primary.articleId, sourceKey: primary.baseKey, ...(others.length ? { also: others.map((o) => ({ targetId: o.targetId, articleId: o.articleId, sourceKey: o.baseKey })) } : {}) };
+      // A new article already waiting as a draft is updated in place by the next approval, and still waits there.
+      const drafts = legs.filter(awaitsCms).map((rec) => rec.targetId);
+      if (w.delivery) w.delivery = { ...w.delivery, articleId: primary.articleId, sourceKey: primary.baseKey, ...(others.length ? { also: others.map((o) => ({ targetId: o.targetId, articleId: o.articleId, sourceKey: o.baseKey })) } : {}), ...(drafts.length ? { drafts } : {}) };
       w.release = undefined;
       event.artifactId = artifact.id;
       await s.enterStage(project, taskId, task, w, index - 1, tx, actor, at);
       return true;
     }
+    if (v.command === 'repushDraft') {
+      // A draft someone deleted in the CMS before publishing it is created again, as approved, with a fresh key.
+      s.flowStageOf(w, v.stageKey, ['release']);
+      const r = w.release;
+      const gone = r?.state === 'awaiting_cms' ? legsOf(r).filter((rec) => awaitsCms(rec) && rec.cms?.status === 'missing') : [];
+      if (!gone.length) return fail(systemMessageText('articles.nothingToRepush'), 409);
+      for (const rec of gone) {
+        const i = legsOf(r).indexOf(rec);
+        Object.assign(rec, { key: randomUUID(), articleId: null, published: undefined, cms: undefined, editUrl: undefined });
+        if (r.also) rec.state = 'publishing';
+        else delete rec.state;
+        if (i === 0 && w.delivery) w.delivery = { ...w.delivery, articleId: null };
+        if (i && w.delivery?.also?.[i - 1]) w.delivery.also[i - 1] = { ...w.delivery.also[i - 1], articleId: null };
+      }
+      r.state = 'publishing';
+      event.note = gone.map((rec) => this.nameOf(project, rec.targetId)).join(', ');
+      this.kick(project, taskId, tx);
+      return true;
+    }
     return false;
+  }
+  /**
+   * Someone says they published the article in the CMS (I've published it): its primary leg counts as published from
+   * now, with the article as it then is as the overwrite watch's baseline (read on the next check). Other targets
+   * keep being checked.
+   */
+  confirmCms(w: Work, actor: string, at: string) {
+    const rec = w.release?.article;
+    if (!awaitsCms(rec)) return;
+    rec.state = 'published';
+    rec.cms = { ...rec.cms, at, status: 'published', nextAt: undefined };
+    rec.cmsLive = { at, by: actor };
   }
   /** Publish the approved article of one task to each target still publishing. Safe to call repeatedly: a write is adopted, never repeated. */
   async publish(project: string, taskId: string) {
@@ -710,18 +778,28 @@ export class ArticleFlow {
       await this.s.save(task, w, tx);
     });
   }
-  private async record(project: string, taskId: string, w: Work, r: any, i: number, a: any, p: ArticleProposal, outcome: PublishOutcome, tx: any) {
-    const at = now();
-    let name = a.targetId;
+  /** Keep an article as read from a target, for a later comparison; returns its key. */
+  private async keep(project: string, taskId: string, snap: ArticleSnapshot, tx: any) {
+    const key = this.s.key('article', project, taskId, randomUUID());
+    await this.s.put(key, snap, tx);
+    return key;
+  }
+  private nameOf(project: string, targetId: string) {
     try {
-      name = this.delivery.target(project, a.targetId).name;
+      return this.delivery.target(project, targetId).name;
     } catch {
-      /* the target was removed after publishing */
+      return targetId;
     }
+  }
+  private async record(project: string, taskId: string, w: Work, r: any, i: number, a: any, p: ArticleProposal, outcome: PublishOutcome, tx: any) {
+    const at = now(),
+      name = this.nameOf(project, a.targetId);
     const note = (text: string) => (r.also ? `${name}: ${text}` : text);
     if (outcome.kind === 'published') {
       const snap = outcome.snapshot;
-      a.published = { articleId: snap.id, slug: snap.slug, version: snap.version, written: [...new Set([...(p.carried || []), ...outcome.written])], at, ...(outcome.adopted ? { adopted: true } : {}) };
+      // A draft's status is the person's to change in the CMS: it is not a field the overwrite watch compares.
+      const written = [...new Set([...(p.carried || []), ...outcome.written])].filter((f) => !a.draft || f !== 'status');
+      a.published = { articleId: snap.id, slug: snap.slug, version: snap.version, written, at, ...(outcome.adopted ? { adopted: true } : {}) };
       if (!a.slug) {
         try {
           // The primary's pages come first.
@@ -737,6 +815,16 @@ export class ArticleFlow {
       if (i && w.delivery?.also?.[i - 1] && !w.delivery.also[i - 1].articleId) w.delivery.also[i - 1] = { ...w.delivery.also[i - 1], articleId: snap.id };
       a.conflict = undefined;
       clearFailure(a);
+      if (snap.editUrl) a.editUrl = snap.editUrl;
+      // A new article now waits in the CMS as a draft; its export, if the target has one, follows its publication
+      // there. A target that published it at once keeps no drafts after all, and goes on as any other.
+      if (a.draft && snap.status !== 'published') {
+        a.state = 'drafted';
+        a.cms = { at, status: snap.status === 'draft' ? 'draft' : 'unseen', nextAt: new Date(Date.now() + CMS_CHECK).toISOString() };
+        w.history.push({ at, actor: 'system', action: 'articleDrafted', note: name });
+        return;
+      }
+      a.draft = undefined;
       a.state = this.s.p.articleTargets?.downstream(project, a.targetId) ? 'exporting' : 'published';
       w.history.push({ at, actor: 'system', action: 'articlePublished', note: note(snap.slug) });
       return;
@@ -774,13 +862,25 @@ export class ArticleFlow {
   private settle(r: any, at: string) {
     const states = legsOf(r).map((rec) => stateOf(r, rec)),
       was = r.state;
-    if (!r.also) delete r.article.state;
+    if (!r.also && r.article.state !== 'drafted') delete r.article.state;
     if (states.includes('publishing')) r.state = 'publishing';
     else if (states.includes('publish_conflict')) r.state = 'publish_conflict';
     else if (states.includes('publish_failed')) r.state = 'publish_failed';
     else if (states.includes('exporting')) {
       if (was !== 'exporting' && was !== 'export_late') Object.assign(r, { state: 'exporting', nextCheckAt: new Date(Date.now() + 60000).toISOString(), deadline: new Date(Date.now() + EXPORT_HOURS * HOUR).toISOString() });
-    } else this.toVerify(r, at);
+    } else this.published(r, at);
+  }
+  /** Once every leg is written: a primary pushed as a draft waits for a person in the CMS, anything else is checked online. */
+  private published(r: any, at: string) {
+    if (stateOf(r, r.article) === 'drafted') this.toCms(r, at);
+    else this.toVerify(r, at);
+  }
+  /**
+   * Waiting for a person to publish the draft in the CMS (2026-11-12). No deadline: the article is read every half
+   * hour (checkCms) until it is published there, or someone says they published it.
+   */
+  private toCms(r: any, at: string) {
+    Object.assign(r, { state: 'awaiting_cms', reason: undefined, mergedAt: at, checks: 0, nextCheckAt: undefined, deadline: undefined });
   }
   private toVerify(r: any, at: string) {
     const can = Boolean(r.verifyText && r.pages.length);
@@ -790,7 +890,7 @@ export class ArticleFlow {
   private publishedContent(p: ArticleProposal, slug: string) {
     return { slug, status: p.draft.status, locales: p.draft.locales };
   }
-  /** Background work: interrupted publishes, export tracking and the post-publish overwrite watch. */
+  /** Background work: interrupted publishes, export tracking, drafts waiting in the CMS and the post-publish overwrite watch. */
   async tick() {
     if (!this.delivery) return;
     for await (const rows of pagesById(this.s.repo('nrTasks'))) {
@@ -804,7 +904,8 @@ export class ArticleFlow {
         try {
           if (r.state === 'publishing') await this.publish(project, taskId);
           else if (r.state === 'exporting' && Date.parse(r.nextCheckAt || '') <= Date.now()) await this.checkExport(project, taskId);
-          if (legsOf(r).some((rec) => rec?.published && Date.now() - Date.parse(rec.published.at) < DRIFT_DAYS * 24 * HOUR)) await this.checkDrift(project, taskId);
+          if (!w.archivedAt && legsOf(r).some((rec) => awaitsCms(rec) && !(Date.parse(rec.cms?.nextAt || '') > Date.now()))) await this.checkCms(project, taskId);
+          if (legsOf(r).some((rec) => rec?.published && watched(rec))) await this.checkDrift(project, taskId);
         } catch {
           /* checked again on the next pass */
         }
@@ -840,11 +941,79 @@ export class ArticleFlow {
         if (rel.also) rec.state = 'exported';
         w.history.push({ at, actor: 'system', action: 'articleExported', note: result?.commit?.slice(0, 12) || '' });
       }
-      if (!legs.some((rec) => stateOf(rel, rec) === 'exporting')) this.toVerify(rel, at);
+      if (!legs.some((rec) => stateOf(rel, rec) === 'exporting')) this.published(rel, at);
       else if (Date.now() > Date.parse(rel.deadline || '')) {
         rel.state = 'export_late';
         w.history.push({ at, actor: 'system', action: 'articleExportLate' });
       } else rel.nextCheckAt = new Date(Date.now() + 5 * 60000).toISOString();
+      await this.s.save(task, w, tx);
+    });
+  }
+  /**
+   * Whether the drafts waiting in the CMS were published there (2026-11-12): each is read through the target. A target
+   * that does not say has its pages opened for the release's phrase, as the page check does. A draft the target no
+   * longer has is shown as missing, for a person to push again. Once the primary is published the task goes live.
+   */
+  private async checkCms(project: string, taskId: string) {
+    const t = await this.s.task(project, taskId),
+      r = projectWork(t).release;
+    const seen = new Map<number, { status: string; snapshot?: ArticleSnapshot } | null>();
+    for (const [i, rec] of legsOf(r).entries()) {
+      if (!awaitsCms(rec) || Date.parse(rec.cms?.nextAt || '') > Date.now()) continue;
+      let snap: ArticleSnapshot;
+      try {
+        snap = await this.delivery.read(project, rec.targetId, rec.articleId);
+      } catch (error) {
+        seen.set(i, error instanceof ArticleError && error.code === 'not_found' ? { status: 'missing' } : null);
+        continue;
+      }
+      if (snap.status) {
+        seen.set(i, { status: snap.status, snapshot: snap });
+        continue;
+      }
+      let pages: string[] = [];
+      try {
+        pages = articlePages(this.delivery.target(project, rec.targetId), snap.slug, rec.published?.written || []);
+      } catch {
+        /* the target was removed: nothing to open */
+      }
+      const live = Boolean(r.verifyText && pages.length) && (await this.s.seenOnPages(project, pages, r.verifyText));
+      seen.set(i, { status: live ? 'published' : 'unseen', snapshot: snap });
+    }
+    if (!seen.size) return;
+    await this.s.lock(project, taskId, async (tx) => {
+      const task = await this.s.task(project, taskId, tx),
+        w = projectWork(task),
+        rel = w.release;
+      if (!rel?.article || rel.article.artifactId !== r.article.artifactId || w.cancelledAt || w.archivedAt) return;
+      const at = now(),
+        nextAt = new Date(Date.now() + CMS_CHECK).toISOString(),
+        legs = legsOf(rel);
+      let live = '';
+      for (const [i, result] of seen) {
+        const rec = legs[i];
+        if (!awaitsCms(rec)) continue;
+        if (!result) {
+          // The target could not be read: tried again at the next check.
+          rec.cms = { ...rec.cms, nextAt };
+          continue;
+        }
+        const name = this.nameOf(project, rec.targetId);
+        if (result.snapshot?.editUrl) rec.editUrl = result.snapshot.editUrl;
+        if (result.status === 'published') {
+          rec.state = 'published';
+          rec.cms = { at, status: 'published' };
+          // What the CMS holds as it goes out (the person's cover, layout and wording) is what later reads compare with.
+          rec.cmsLive = { at, by: 'system', ...(result.snapshot ? { baselineKey: await this.keep(project, taskId, result.snapshot, tx) } : {}) };
+          if (i === 0 && rel.state === 'awaiting_cms') live = name;
+          else w.history.push({ at, actor: 'system', action: 'articleCmsPublished', note: name });
+          continue;
+        }
+        if (result.status === 'missing' && rec.cms?.status !== 'missing') w.history.push({ at, actor: 'system', action: 'articleDraftMissing', note: name });
+        rec.cms = { at, status: result.status === 'missing' ? 'missing' : result.status === 'draft' ? 'draft' : 'unseen', nextAt };
+      }
+      if (rel.state === 'awaiting_cms') rel.checks = (rel.checks || 0) + 1;
+      if (live) await this.s.goLive(project, taskId, task, w, tx, 'system', at, { action: 'articleCmsLive', note: live });
       await this.s.save(task, w, tx);
     });
   }
@@ -857,13 +1026,24 @@ export class ArticleFlow {
       r = work.release;
     const artifact = await this.s.snapshot(this.s.key('artifact', project, taskId, r.article.artifactId));
     if (!artifact?.article) return;
-    const found = new Map<number, any[]>();
+    const found = new Map<number, any[]>(),
+      baselines = new Map<number, ArticleSnapshot>();
     for (const [i, rec] of legsOf(r).entries()) {
       const p = proposalOf(artifact, i);
-      if (!rec.published || !p || Date.now() - Date.parse(rec.published.at) >= DRIFT_DAYS * 24 * HOUR) continue;
+      if (!rec.published || !p || !watched(rec)) continue;
       let fields: any[];
       try {
-        ({ fields } = await this.delivery.drift(project, rec.targetId, rec.published.articleId, this.publishedContent(withImageUrls(p, work.imageUrls?.[rec.targetId]), rec.published.slug), rec.published.written));
+        // A draft is compared with what the CMS held when it was published, not with what was pushed. Seen published
+        // by a person's word only, it is read once first and that becomes the baseline.
+        let published: any = this.publishedContent(withImageUrls(p, work.imageUrls?.[rec.targetId]), rec.published.slug);
+        if (rec.draft) {
+          published = rec.cmsLive?.baselineKey ? await this.s.snapshot(rec.cmsLive.baselineKey) : null;
+          if (!published) {
+            baselines.set(i, await this.delivery.read(project, rec.targetId, rec.published.articleId));
+            continue;
+          }
+        }
+        ({ fields } = await this.delivery.drift(project, rec.targetId, rec.published.articleId, published, rec.published.written));
       } catch {
         continue;
       }
@@ -871,7 +1051,7 @@ export class ArticleFlow {
       if (!fields.length ? !rec.drift || rec.drift.resolvedAt : same(rec.drift?.fields) && !rec.drift?.resolvedAt) continue;
       found.set(i, fields);
     }
-    if (!found.size) return;
+    if (!found.size && !baselines.size) return;
     await this.s.lock(project, taskId, async (tx) => {
       const task = await this.s.task(project, taskId, tx),
         w = projectWork(task),
@@ -879,6 +1059,10 @@ export class ArticleFlow {
       if (!rel?.article) return;
       const at = now(),
         legs = legsOf(rel);
+      for (const [i, snap] of baselines) {
+        const rec = legs[i];
+        if (rec?.cmsLive && !rec.cmsLive.baselineKey) rec.cmsLive = { ...rec.cmsLive, baselineKey: await this.keep(project, taskId, snap, tx) };
+      }
       for (const [i, fields] of found) {
         const rec = legs[i];
         if (!rec?.published) continue;

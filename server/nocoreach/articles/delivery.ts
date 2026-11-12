@@ -7,7 +7,7 @@ import {
   pagePattern,
   LOCALE,
   SLUG,
-  supportsStatus,
+  cmsStatus,
   type ArticleContent,
   type ArticleDraft,
   type ArticleSnapshot,
@@ -201,8 +201,15 @@ export function writesNone(write: string[], primary: string, value: unknown) {
     : undefined;
 }
 
+/** Covers were removed on 2026-11-12: a version saved with one still holds it, and it is neither read nor sent. */
+function withoutCover(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const { cover: _, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
+
 /**
- * Keep only the locales and fields the target maps, and drop a status the target has no field for. A new article needs
+ * Keep only the locales and fields the target maps, with the status its rule gives (cmsStatus). A new article needs
  * a title and body in `primary`: the task's primary language, by default the target's first; null asks for none (another
  * target while the task's other languages are still to be translated).
  */
@@ -212,9 +219,9 @@ export function cleanDraft(
   create: boolean,
   primary: string | null = target.locales[0],
 ): ArticleDraft {
-  const parsed = articleDraftSchema.safeParse(value);
+  const parsed = articleDraftSchema.safeParse(withoutCover(value));
   if (!parsed.success) throw schemaProblem(parsed.error.issues[0], target);
-  const draft = parsed.data;
+  let draft = parsed.data;
   for (const [locale, fields] of Object.entries(draft.locales)) {
     if (!target.locales.includes(locale))
       throw rejected(
@@ -252,9 +259,7 @@ export function cleanDraft(
         : rejected(code, 'needsPrimaryNone', language(primary));
     }
   }
-  if (draft.status && !supportsStatus(target)) delete draft.status;
-  // A new article is a draft unless someone chose to publish it, whatever the target's own default is.
-  if (create && !draft.status && supportsStatus(target)) draft.status = 'draft';
+  draft = cmsStatus(target, draft, create);
   if (target.kind === 'git-files' && draft.slug && !create) delete draft.slug;
   return draft;
 }
@@ -308,14 +313,13 @@ export function projectDraft(
       else skipped.push(`${locale}.${f}`);
     if (Object.keys(kept).length) locales[locale] = kept;
   }
-  const status = draft.status ?? (whole ? source.status : undefined);
-  if (status && !supportsStatus(target)) skipped.push('status');
+  // The status is the target's own rule (cmsStatus in cleanDraft), never the source's.
+  const { status: _, ...rest } = draft;
   const slug = draft.slug || (whole ? source.slug : undefined);
   return {
     draft: {
-      ...draft,
+      ...rest,
       ...(slug ? { slug } : {}),
-      ...(status ? { status } : {}),
       locales,
     },
     skipped,
@@ -574,6 +578,11 @@ export class ArticleDelivery {
     }
     const at = { step: 'read' as PublishStep };
     try {
+      // A version approved before 2026-11-12 may carry a status someone chose: the release follows cmsStatus all the same.
+      p = {
+        ...p,
+        draft: cmsStatus(this.target(project, p.targetId), p.draft, !p.articleId),
+      };
       const wanted = changesOf(base, asChanges(p.draft));
       if (!p.articleId)
         return await this.create(project, provider, p, wanted, key, at);
