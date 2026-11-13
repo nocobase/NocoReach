@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import {
   Link,
   useLocation,
@@ -7,7 +7,7 @@ import {
   useSearchParams,
 } from 'react-router';
 import { createUuid } from '@nocobase/app-client';
-import { Check, Search } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { $t, useNocoReachLocale } from '#i18n';
 import { RouteDialog } from '#components/route-dialog';
 import { useRouteOverlay } from '#components/use-route-overlay';
@@ -18,18 +18,9 @@ import { Button } from '#components/ui/button';
 import { Checkbox } from '#components/ui/checkbox';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
-import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '#components/ui/tabs';
 import { Textarea } from '#components/ui/textarea';
 import { useBusinessAccess } from '#hooks/use-business-access';
-import { formatCount, formatDate, joinClauses, withDetail } from '#lib/format';
+import { formatDate, withDetail } from '#lib/format';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
@@ -38,6 +29,7 @@ import {
   destinationKey,
   destinationName,
   LINKS_MAX,
+  REPURPOSE_FORMS,
   POINTS_MAX,
   subredditName,
   TOPIC_MAX,
@@ -55,9 +47,7 @@ import {
   errorText,
   getFormNames,
   hotHeadlineText,
-  madeList,
   opportunityNo,
-  resultName,
   standingText,
   taskNo,
   workshopRequest,
@@ -71,12 +61,12 @@ type Item = { form: RepurposeForm; destination?: Destination };
 const itemKey = (i: Item) => `${i.form}|${destinationKey(i.destination)}`;
 
 /**
- * Pick content (mockup v3 frames 2 and 3): step 1 chooses what to adapt, any blog article or a new topic; step 2 the
- * forms, a task each, a community post once per destination. Nothing is ticked for you, except (v4) the subreddit
- * holding most of a trending item's discussions. A recommendation's Adapt and a published article task's Adapt this
- * article open step 2 directly (`?url=&title=`), as Adapt now and Opportunities' Adapt into short posts do for a
- * Trending now item (`?opportunity=`). Under the workshop page it reads the page's data; under a task or an
- * opportunity it loads its own, and under an opportunity it tells the page when tasks were made.
+ * What to make (mockup v3 frame 3, homepage v5): the forms, a task each, a community post once per destination. Nothing
+ * is ticked for you, except (v4) the subreddit holding most of a trending item's discussions. Library's Adapt and a
+ * published article task's Adapt this article open it for an article (`?url=&title=`), Adapt now and Opportunities'
+ * Adapt into short posts for a Trending now item (`?opportunity=`). Adapt a new topic opens it without either: step 1
+ * is the topic's form. Under the workshop page it reads the page's data; under a task or an opportunity it loads its
+ * own, and under an opportunity it tells the page when tasks were made.
  */
 export default function WorkshopPick() {
   useNocoReachLocale();
@@ -144,13 +134,13 @@ function Pick({
   const location = useLocation();
   const [params] = useSearchParams();
   const hotId = params.get('opportunity');
-  const given = (params.get('url') && params.get('title')) || hotId;
+  const url = params.get('url'),
+    title = params.get('title');
+  const chosen = url && title ? { url, title } : null;
+  // An article or a trending item comes with the address; otherwise it is a new topic, written in step 1.
+  const given = Boolean(chosen || hotId);
   const hot = hotId ? view?.hot.find((h) => h.id === hotId) : undefined;
-  const [step, setStep] = useState<1 | 2>(given ? 2 : 1);
-  const [tab, setTab] = useState<'article' | 'topic'>('article');
-  const [chosen, setChosen] = useState<{ url: string; title: string } | null>(
-    given ? { url: params.get('url')!, title: params.get('title')! } : null,
-  );
+  const [step, setStep] = useState<1 | 2>(1);
   const [topic, setTopic] = useState({ topic: '', points: '', links: '' });
   const source: RepurposeSource | null = hot
     ? {
@@ -159,17 +149,15 @@ function Pick({
         ...(hot.no ? { no: hot.no } : {}),
         headline: hotHeadlineText(hot),
       }
-    : tab === 'topic' && !given
-      ? topic.topic.trim()
+    : chosen && !hotId
+      ? { kind: 'article', ...chosen }
+      : !given && topic.topic.trim()
         ? {
             kind: 'topic',
             topic: topic.topic.trim(),
             ...(topic.points.trim() ? { points: topic.points.trim() } : {}),
             ...(links(topic.links).length ? { links: links(topic.links) } : {}),
           }
-        : null
-      : chosen
-        ? { kind: 'article', ...chosen }
         : null;
   const article =
     source?.kind === 'article'
@@ -197,7 +185,7 @@ function Pick({
       void navigate(closeTo, { replace: true });
     } else void navigate('/workshop', { replace: true });
   };
-  if (step === 2 && source && view)
+  if (source && view && (given || step === 2))
     return (
       <Step2
         projectId={projectId}
@@ -205,33 +193,45 @@ function Pick({
         source={source}
         article={article}
         hot={hot}
-        onChange={() => {
-          // From a recommendation, a task or an opportunity the source came with the address: Change opens step 1 to
-          // pick another.
-          if (given)
-            void navigate(
-              { search: kept.size ? `?${kept}` : '' },
-              { replace: true },
-            );
-          setStep(1);
-        }}
+        // A new topic goes back to step 1 to be edited; an article or a trending item is changed by closing the dialog
+        // and picking another.
+        onEdit={given ? undefined : () => setStep(1)}
         closeTo={closeTo}
         onCreated={created}
       />
     );
+  if (given)
+    return (
+      <RouteDialog
+        title={$t('workshop.repurposeOpportunity')}
+        closeTo={closeTo}
+        className={DIALOG}
+        footer={<Cancel />}
+      >
+        {error && !view ? (
+          <LoadError
+            title={$t('workshop.loadFailed')}
+            message={error}
+            onRetry={onRetry}
+          />
+        ) : !view ? (
+          <ListSkeleton rows={5} />
+        ) : (
+          // The trending item is no longer live (ignored, replaced or expired since the page loaded).
+          <p className='py-6 text-center text-sm text-muted-foreground'>
+            {$t('workshop.hotGone')}
+          </p>
+        )}
+      </RouteDialog>
+    );
   return (
     <RouteDialog
-      title={$t('workshop.pick')}
+      title={$t('workshop.newTopic')}
       description={<Steps step={1} />}
       closeTo={closeTo}
       className={DIALOG}
       footer={
         <>
-          {tab === 'article' && chosen ? (
-            <span className='mr-auto self-center text-sm text-muted-foreground'>
-              {$t('workshop.pickedOne')}
-            </span>
-          ) : null}
           <Cancel />
           <Button
             disabled={!view || !source || Boolean(topicProblem)}
@@ -248,25 +248,14 @@ function Pick({
           message={error}
           onRetry={onRetry}
         />
-      ) : !view ? (
-        <ListSkeleton rows={5} />
       ) : (
-        <Step1
-          view={view}
-          tab={tab}
-          onTab={setTab}
-          chosen={chosen}
-          onChoose={setChosen}
-          topic={topic}
-          onTopic={setTopic}
-          problem={topicProblem}
-        />
+        <TopicStep topic={topic} onTopic={setTopic} problem={topicProblem} />
       )}
     </RouteDialog>
   );
 }
 
-// Both steps and both tabs of step 1 share one size, so the dialog stays put as they change; longer content scrolls.
+// Both steps share one size, so the dialog stays put as they change; longer content scrolls.
 const DIALOG = 'h-[min(48rem,calc(100dvh-2rem))] sm:max-w-4xl';
 
 const links = (text: string) => [
@@ -288,7 +277,7 @@ function Steps({ step }: { step: 1 | 2 }) {
         )}
       >
         {step === 1 ? <span>1</span> : <Check className='size-3.5' />}
-        {$t('workshop.stepWhat')}
+        {$t('workshop.stepTopic')}
       </span>
       <span aria-hidden='true'>›</span>
       <span
@@ -305,191 +294,60 @@ function Steps({ step }: { step: 1 | 2 }) {
   );
 }
 
-function Step1({
-  view,
-  tab,
-  onTab,
-  chosen,
-  onChoose,
+/** Adapt a new topic's step 1: the topic, with optional key points and reference links. */
+export function TopicStep({
   topic,
   onTopic,
   problem,
 }: {
-  view: WorkshopView;
-  tab: 'article' | 'topic';
-  onTab: (tab: 'article' | 'topic') => void;
-  chosen: { url: string; title: string } | null;
-  onChoose: (a: { url: string; title: string }) => void;
   topic: { topic: string; points: string; links: string };
   onTopic: (t: { topic: string; points: string; links: string }) => void;
   problem: string;
 }) {
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<'clicks' | 'date'>('clicks');
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const found = view.articles.filter(
-      (a) => !q || a.title.toLowerCase().includes(q),
-    );
-    return sort === 'date'
-      ? [...found].sort((a, b) =>
-          String(b.published || '').localeCompare(String(a.published || '')),
-        )
-      : found;
-  }, [view.articles, query, sort]);
-  const sorts = [
-    { value: 'clicks', label: $t('workshop.sortClicks') },
-    { value: 'date', label: $t('workshop.sortDate') },
-  ];
   return (
-    <div className='space-y-3'>
-      <Tabs value={tab} onValueChange={(v) => onTab(v as 'article' | 'topic')}>
-        <TabsList variant='line' className='h-auto! justify-start'>
-          <TabsTrigger value='article'>
-            {$t('workshop.tabArticles', { 0: view.articles.length })}
-          </TabsTrigger>
-          <TabsTrigger value='topic'>{$t('workshop.tabTopic')}</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      {tab === 'article' ? (
-        <>
-          <div className='flex gap-2'>
-            <label className='relative flex flex-1 items-center'>
-              <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
-              <Input
-                aria-label={$t('workshop.searchTitle')}
-                placeholder={$t('workshop.searchTitle')}
-                className='h-8 pl-8'
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
-            <Select
-              items={sorts}
-              value={sort}
-              onValueChange={(v) => setSort(v === 'date' ? 'date' : 'clicks')}
-            >
-              <SelectTrigger
-                size='sm'
-                className='w-44'
-                aria-label={$t('workshop.sort')}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sorts.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {!view.articles.length ? (
-            <p className='py-6 text-center text-sm text-muted-foreground'>
-              {$t('workshop.noArticlesPick')}
-            </p>
-          ) : !rows.length ? (
-            <p className='py-6 text-center text-sm text-muted-foreground'>
-              {$t('workshop.noMatch', { 0: query.trim() })}
-            </p>
-          ) : (
-            <RadioGroup
-              value={chosen?.url ?? ''}
-              onValueChange={(url) => {
-                const a = view.articles.find((x) => x.url === url);
-                if (a) onChoose({ url: a.url, title: a.title });
-              }}
-              aria-label={$t('workshop.articleColumn')}
-              className='gap-0'
-            >
-              <div className='grid grid-cols-[1.25rem_1fr_7rem_6rem] gap-3 border-b px-2 pb-1.5 text-xs text-muted-foreground'>
-                <span />
-                <span>{$t('workshop.articleColumn')}</span>
-                <span className='text-right'>
-                  {$t('workshop.clicks30Column')}
-                </span>
-                <span>{$t('workshop.madeColumn')}</span>
-              </div>
-              <div className='max-h-80 overflow-y-auto'>
-                {rows.map((a) => {
-                  const n = madeList(a.made).length;
-                  return (
-                    <label
-                      key={a.url}
-                      className={cn(
-                        'grid cursor-pointer grid-cols-[1.25rem_1fr_7rem_6rem] items-center gap-3 border-b px-2 py-2 text-sm last:border-b-0',
-                        chosen?.url === a.url && 'bg-muted/60',
-                      )}
-                      data-article=''
-                    >
-                      <RadioGroupItem value={a.url} />
-                      <span className='truncate' title={a.title}>
-                        {a.title}
-                      </span>
-                      <span className='text-right tabular-nums'>
-                        {formatCount(a.clicks30)}
-                      </span>
-                      <span className='text-xs text-muted-foreground'>
-                        {n
-                          ? $t('workshop.madeCount', { 0: n })
-                          : $t('workshop.notMade')}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </RadioGroup>
-          )}
-        </>
-      ) : (
-        <div className='space-y-3'>
-          <div className='space-y-1.5'>
-            <Label htmlFor='workshop-topic'>{$t('workshop.topic')}</Label>
-            <Input
-              id='workshop-topic'
-              value={topic.topic}
-              maxLength={TOPIC_MAX + 20}
-              onChange={(e) => onTopic({ ...topic, topic: e.target.value })}
-            />
-          </div>
-          <div className='space-y-1.5'>
-            <Label htmlFor='workshop-points'>
-              {$t('workshop.points')}
-              <span className='font-normal text-muted-foreground'>
-                · {$t('workshop.optional')}
-              </span>
-            </Label>
-            <Textarea
-              id='workshop-points'
-              rows={4}
-              value={topic.points}
-              onChange={(e) => onTopic({ ...topic, points: e.target.value })}
-            />
-          </div>
-          <div className='space-y-1.5'>
-            <Label htmlFor='workshop-links'>
-              {$t('workshop.links')}
-              <span className='font-normal text-muted-foreground'>
-                · {$t('workshop.optional')}
-              </span>
-            </Label>
-            <Textarea
-              id='workshop-links'
-              rows={2}
-              placeholder={$t('workshop.linksHint')}
-              value={topic.links}
-              onChange={(e) => onTopic({ ...topic, links: e.target.value })}
-            />
-          </div>
-          {problem ? (
-            <p className='text-sm text-destructive'>{problem}</p>
-          ) : null}
-          <p className='text-sm text-muted-foreground'>
-            {$t('workshop.topicHint')}
-          </p>
-        </div>
-      )}
+    <div className='space-y-3' data-topic-step=''>
+      <div className='space-y-1.5'>
+        <Label htmlFor='workshop-topic'>{$t('workshop.topic')}</Label>
+        <Input
+          id='workshop-topic'
+          value={topic.topic}
+          maxLength={TOPIC_MAX + 20}
+          onChange={(e) => onTopic({ ...topic, topic: e.target.value })}
+        />
+      </div>
+      <div className='space-y-1.5'>
+        <Label htmlFor='workshop-points'>
+          {$t('workshop.points')}
+          <span className='font-normal text-muted-foreground'>
+            · {$t('workshop.optional')}
+          </span>
+        </Label>
+        <Textarea
+          id='workshop-points'
+          rows={4}
+          value={topic.points}
+          onChange={(e) => onTopic({ ...topic, points: e.target.value })}
+        />
+      </div>
+      <div className='space-y-1.5'>
+        <Label htmlFor='workshop-links'>
+          {$t('workshop.links')}
+          <span className='font-normal text-muted-foreground'>
+            · {$t('workshop.optional')}
+          </span>
+        </Label>
+        <Textarea
+          id='workshop-links'
+          rows={2}
+          placeholder={$t('workshop.linksHint')}
+          value={topic.links}
+          onChange={(e) => onTopic({ ...topic, links: e.target.value })}
+        />
+      </div>
+      {problem ? <p className='text-sm text-destructive'>{problem}</p> : null}
+      <p className='text-sm text-muted-foreground'>
+        {$t('workshop.topicHint')}
+      </p>
     </div>
   );
 }
@@ -517,7 +375,7 @@ function Step2({
   source,
   article,
   hot,
-  onChange,
+  onEdit,
   closeTo,
   onCreated,
 }: {
@@ -526,7 +384,8 @@ function Step2({
   source: RepurposeSource;
   article?: Article;
   hot?: HotItem;
-  onChange: () => void;
+  /** A new topic's way back to step 1. */
+  onEdit?: () => void;
   closeTo?: string;
   onCreated: () => void;
 }) {
@@ -568,13 +427,12 @@ function Step2({
   ]);
   const [request, setRequest] = useState<{ choice: string; id: string }>();
   const made = hot ? hot.made : article?.made || [];
-  // An article adapted before: the approved drafts the Agent reads to take another angle (the server's `earlier`).
-  const earlier = hot
-    ? []
-    : [...made]
-        .filter((m) => m.standing === 'done')
-        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-        .slice(0, 3);
+  // An article or a trending item adapted before: the drafts the Agent reads to take another angle, approved or waiting
+  // for review (the server's `earlier`, the latest five).
+  const earlier = [...made]
+    .filter((m) => m.drafted)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+    .slice(0, 5);
   const withAngle = Boolean(hot) || earlier.length > 0;
   const angleProblem =
     angle.trim().length > ANGLE_MAX
@@ -688,8 +546,12 @@ function Step2({
   const names = getFormNames();
   return (
     <RouteDialog
-      title={$t('workshop.pick')}
-      description={<Steps step={2} />}
+      title={$t(
+        source.kind === 'topic'
+          ? 'workshop.newTopic'
+          : 'workshop.repurposeOpportunity',
+      )}
+      description={source.kind === 'topic' ? <Steps step={2} /> : undefined}
       closeTo={closeTo}
       className={DIALOG}
       footer={
@@ -728,7 +590,7 @@ function Step2({
     >
       <div className='space-y-4'>
         {hot ? (
-          <HotHeader hot={hot} onChange={onChange} />
+          <HotHeader hot={hot} />
         ) : (
           <div
             className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm'
@@ -744,32 +606,23 @@ function Step2({
                   ? $t('workshop.topicSource', { 0: source.topic })
                   : source.headline}
             </b>
-            {article ? (
+            {article?.published ? (
               <span className='text-xs text-muted-foreground'>
-                {[
-                  article.published
-                    ? $t('workshop.publishedOn', {
-                        0: formatDate(article.published),
-                      })
-                    : '',
-                  view.searchConnected
-                    ? $t('workshop.clicks7', {
-                        0: formatCount(article.clicks7),
-                      })
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {$t('workshop.publishedOn', {
+                  0: formatDate(article.published),
+                })}
               </span>
             ) : null}
-            <Button
-              variant='link'
-              size='sm'
-              className='ml-auto h-auto p-0'
-              onClick={onChange}
-            >
-              {$t('workshop.change')}
-            </Button>
+            {onEdit ? (
+              <Button
+                variant='link'
+                size='sm'
+                className='ml-auto h-auto p-0'
+                onClick={onEdit}
+              >
+                {$t('common.edit')}
+              </Button>
+            ) : null}
           </div>
         )}
         {earlier.length ? (
@@ -777,20 +630,7 @@ function Step2({
             className='rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm'
             data-again=''
           >
-            {$t('workshop.again', {
-              0: earlier
-                .map((m) =>
-                  withDetail(
-                    resultName(m.form, m.destination),
-                    joinClauses(
-                      [taskNo(m.no), m.at ? formatDate(m.at) : ''].filter(
-                        Boolean,
-                      ),
-                    ),
-                  ),
-                )
-                .join($t('common.listSeparator')),
-            })}
+            {$t('workshop.again', { 0: againList(earlier) })}
           </p>
         ) : null}
         {withAngle ? (
@@ -798,7 +638,11 @@ function Step2({
             <Label htmlFor='workshop-angle' className='gap-1.5'>
               {$t('workshop.angle')}
               <span className='text-xs font-normal text-muted-foreground'>
-                {$t(hot ? 'workshop.angleHotHint' : 'workshop.angleAgainHint')}
+                {$t(
+                  earlier.length
+                    ? 'workshop.angleAgainHint'
+                    : 'workshop.angleHotHint',
+                )}
               </span>
             </Label>
             <Input
@@ -806,9 +650,9 @@ function Step2({
               value={angle}
               maxLength={ANGLE_MAX + 50}
               placeholder={
-                hot
-                  ? $t('workshop.angleHotPlaceholder')
-                  : $t('workshop.angleAgainPlaceholder')
+                earlier.length
+                  ? $t('workshop.angleAgainPlaceholder')
+                  : $t('workshop.angleHotPlaceholder')
               }
               onChange={(e) => setAngle(e.target.value)}
               aria-invalid={Boolean(angleProblem)}
@@ -1001,7 +845,7 @@ function Step2({
 
 // Trending now's step 2 head (v4): what is hot, then what the Agent is given with it: the opportunity's analysis, its
 // discussions and the site's material.
-function HotHeader({ hot, onChange }: { hot: HotItem; onChange: () => void }) {
+function HotHeader({ hot }: { hot: HotItem }) {
   const first = hot.discussions[0];
   const rows: [string, ReactNode][] = [
     [
@@ -1044,14 +888,6 @@ function HotHeader({ hot, onChange }: { hot: HotItem; onChange: () => void }) {
         <span className='text-muted-foreground'>{$t('workshop.adapt')}</span>
         <CategoryTag category='trending' />
         <b className='min-w-0 font-semibold'>{hotHeadlineText(hot)}</b>
-        <Button
-          variant='link'
-          size='sm'
-          className='ml-auto h-auto p-0'
-          onClick={onChange}
-        >
-          {$t('workshop.change')}
-        </Button>
       </div>
       <dl className='mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs'>
         {rows.map(([k, v]) => (
@@ -1063,6 +899,24 @@ function HotHeader({ hot, onChange }: { hot: HotItem; onChange: () => void }) {
       </dl>
     </div>
   );
+}
+
+/**
+ * The drafts adapted before, by form in the forms' order: "X posts (T-47), LinkedIn post (T-50), Community post ×2".
+ */
+function againList(earlier: Made[]) {
+  const names = getFormNames();
+  return REPURPOSE_FORMS.flatMap((form) => {
+    const mine = earlier
+      .filter((m) => m.form === form)
+      .sort((a, b) => (a.no ?? 0) - (b.no ?? 0));
+    if (!mine.length) return [];
+    return [
+      mine.length > 1
+        ? $t('workshop.againMany', { 0: names[form], 1: mine.length })
+        : withDetail(names[form], taskNo(mine[0].no)),
+    ];
+  }).join($t('common.listSeparator'));
 }
 
 // Where a form or destination already stands for this article: done (open it), or the task still under way.

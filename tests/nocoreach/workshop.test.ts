@@ -1,22 +1,21 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const sums = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const sums = vi.hoisted(() => ({ rows: [] as unknown[], periods: [] as unknown[] }));
 vi.mock('../../server/nocoreach/page-days.js', () => ({
-  sumPageDays: vi.fn(async () => ({ rows: sums.rows })),
-}));
-const cited = vi.hoisted(() => ({ questions: [] as unknown[] }));
-vi.mock('../../server/nocoreach/ai-questions.js', () => ({
-  markQuestions: vi.fn(() => cited.questions),
+  sumPageDays: vi.fn(async (_db, _project, _source, _site, periods) => {
+    sums.periods = periods;
+    return { rows: sums.rows };
+  }),
 }));
 
 import { WorkshopService } from '../../server/nocoreach/workshop.js';
 import { projectWork } from '../../server/nocoreach/execution/model.js';
-import { clickPeriods } from '../../shared/workshop-recommend.js';
 import { taskSource } from '../../shared/task-source.js';
 
-// Content workshop (2026-11-13): the page's recommendations come from the site's own figures, its records from the
-// project's workshop tasks, and creating hands one task per form and place to the chosen Agent.
+// Content workshop (2026-11-13; homepage v5): Trending now comes from Opportunities and leaves once handled in the
+// workshop, Library lists every blog article with what was made from it, the records are the project's workshop tasks,
+// and creating hands one task per form and place to the chosen Agent.
 
 const ORIGIN = 'https://acme.example';
 const NOW = '2026-11-13T12:00:00Z';
@@ -77,7 +76,6 @@ function fixture() {
       }),
     },
     followedTopics: { of: async () => ['Kanban'] },
-    aiQuestions: { state: async () => ({}), parties: async () => ({}) },
     taskExecution: {
       playbooks: {
         list: async () => ({
@@ -117,15 +115,9 @@ const page = (path, lastmod, extra = {}) => ({
   firstSeenAt: '2026-09-01T08:00:00Z',
   ...extra,
 });
-// Search Console clicks per day back from the last synced day (day 0), summed into the periods the view asks for.
+// A page's Search Console clicks over the last 30 days, as sumPageDays returns them for the one period asked for.
 const END = '2026-11-12';
-const daily = (path, perDay) =>
-  clickPeriods(END).map((p, period) => {
-    let clicks = 0;
-    for (let d = Math.round((Date.parse(END) - Date.parse(p.end)) / 86400000); d <= Math.round((Date.parse(END) - Date.parse(p.start)) / 86400000); d++)
-      clicks += perDay(d);
-    return { host: 'acme.example', path, period, clicks };
-  });
+const clicks = (path, n) => ({ host: 'acme.example', path, period: 0, clicks: n });
 const ago = (days) => new Date(Date.parse(NOW) - days * 86400000).toISOString();
 const task = (f, id, work, extra = {}) =>
   f.state.nrTasks.push({
@@ -146,11 +138,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   sums.rows = [];
-  cited.questions = [];
 });
 
 describe('Content workshop view', () => {
-  it('recommends site articles by their reasons, after a while again, and lists the workshop tasks', async () => {
+  it('lists every blog article in Library, newest first, with what was made from it, and the workshop tasks', async () => {
     const f = fixture();
     f.site.pages = [
       ...Array.from({ length: 10 }, (_, i) => page(`/docs/p${i}`, STAMP)),
@@ -158,31 +149,20 @@ describe('Content workshop view', () => {
       page('/blog/compare', STAMP),
       page('/blog/old-hit', '2025-06-10'),
       page('/blog/done-all', '2025-01-01'),
-      page('/blog/again', '2025-02-01'),
-      page('/blog/steady-old', '2024-03-01'),
-      page('/blog/steady-recent', '2024-04-01'),
       page('/blog/partly', '2025-03-01'),
       page('/blog/hidden', '2026-11-05', { noindex: true }),
+      // A build stamp and no later sighting: no known date.
       page('/blog/quiet', STAMP),
+      page('/blog/undated-hit', STAMP),
     ];
     sums.rows = [
-      // Published inside the week before: no full week to compare with, so new only.
-      ...daily('/blog/new-board', (d) => (d <= 8 ? 120 : 0)),
-      ...daily('/blog/compare', (d) => (d < 7 ? 15 : d < 14 ? 7 : 3)),
-      ...daily('/blog/old-hit', () => 50),
-      ...daily('/blog/done-all', (d) => (d < 7 ? 10 : d < 14 ? 5 : 1)),
-      ...daily('/blog/again', (d) => (d < 7 ? 20 : d < 14 ? 10 : 2)),
-      ...daily('/blog/steady-old', () => 2),
-      ...daily('/blog/steady-recent', () => 2),
-      ...daily('/blog/partly', (d) => (d % 40 ? 0 : 3)),
-      ...daily('/blog/quiet', (d) => (d % 30 ? 0 : 1)),
-      ...daily('/docs/p0', () => 900),
+      clicks('/blog/new-board', 840),
+      clicks('/blog/new-board/', 6),
+      clicks('/blog/compare', 105),
+      clicks('/blog/undated-hit', 300),
+      clicks('/blog/quiet', 1),
+      clicks('/docs/p0', 900),
     ];
-    cited.questions = [
-      { sources: [{ own: true, url: `${ORIGIN}/blog/new-board` }] },
-      { sources: [{ own: true, url: `${ORIGIN}/blog/new-board/` }, { own: false, url: 'https://other.example/' }] },
-    ];
-    // Adapted 5 days ago: not recommended for 14 days.
     for (const [id, form, destination] of [[1, 'x'], [2, 'linkedin'], [3, 'community', { kind: 'hn' }]])
       task(f, id, { stage: 'done', repurpose: { form, source: article('/blog/done-all'), ...(destination ? { destination } : {}) } }, { createdAt: ago(5), taskKey: 'workshop:r1:0' });
     task(f, 4, {
@@ -200,47 +180,36 @@ describe('Content workshop view', () => {
         destination: { kind: 'own', name: 'Acme Community', url: 'https://community.acme.example/', section: 'Announcements' },
       },
     });
+    // Closed: the article does not count as made into X posts.
     task(f, 6, { stage: 'done', cancelledAt: '2026-11-06', repurpose: { form: 'x', source: article('/blog/new-board') } });
     // A published article task: NocoReach knows when the page went out.
     task(f, 7, { stage: 'done', release: { state: 'live', pages: [`${ORIGIN}/blog/compare`], article: { published: { at: '2026-10-20T09:00:00Z' } } } });
-    // Adapted 20 days ago at 30 clicks a week; 140 now.
-    task(f, 8, { stage: 'done', repurpose: { form: 'x', source: article('/blog/again'), baseline: { clicks7: 30, cited: 0 } } }, { createdAt: ago(20), taskKey: 'workshop:r8:0' });
-    // Steady: back 90 days after its adaptation, not 30.
-    task(f, 9, { stage: 'done', repurpose: { form: 'linkedin', source: article('/blog/steady-old') } }, { createdAt: ago(100), taskKey: 'workshop:r9:0' });
-    task(f, 10, { stage: 'done', repurpose: { form: 'linkedin', source: article('/blog/steady-recent') } }, { createdAt: ago(30), taskKey: 'workshop:r10:0' });
 
     const v = await f.s.view('1');
-    expect(v.searchConnected).toBe(true);
-    expect(v.dataThrough).toBe(END);
-    expect(v.suggested.map((a) => [a.url.slice(ORIGIN.length), a.reasons, a.clicks7, a.spark?.unit])).toEqual([
-      // Rising leads; its clicks all year make it steady too.
-      ['/blog/again', ['rising', 'steady'], 140, 'week'],
-      ['/blog/compare', ['rising', 'new'], 105, 'week'],
-      ['/blog/new-board', ['new'], 840, 'week'],
-      ['/blog/old-hit', ['steady'], 350, 'month'],
-      ['/blog/steady-old', ['steady'], 14, 'month'],
+    // The 30 days back from the last synced day.
+    expect(sums.periods).toEqual([{ start: '2026-10-14', end: END }]);
+    // Dated ones newest first, then those without a date, most clicked first.
+    expect(v.articles.map((a) => [a.url.slice(ORIGIN.length), a.published ?? null, a.clicks30])).toEqual([
+      ['/blog/new-board', '2026-11-04', 846],
+      ['/blog/compare', '2026-10-20', 105],
+      ['/blog/old-hit', '2025-06-10', 0],
+      ['/blog/partly', '2025-03-01', 0],
+      ['/blog/done-all', '2025-01-01', 0],
+      ['/blog/undated-hit', null, 300],
+      ['/blog/quiet', null, 1],
     ]);
-    const again = v.suggested[0];
-    expect(again.spark.points).toEqual([14, 14, 14, 14, 14, 14, 70, 140]);
-    expect(again.last).toMatchObject({
-      at: ago(20),
-      made: [{ form: 'x', taskId: '8', no: 8, standing: 'done', at: ago(20) }],
-    });
-    expect(again.last.since).toBeCloseTo(140 / 30 - 1);
-    expect(v.suggested[2]).toMatchObject({ title: 'new-board', cited: 2, published: '2026-11-04' });
-    expect(v.suggested[2].last).toBeUndefined();
-    expect(v.suggested[4].last).toMatchObject({ at: ago(100) });
-    expect(v.suggested[4].last.since).toBeUndefined();
-    expect(v.suggested.every((a) => !('series' in a) && !('partial' in a))).toBe(true);
-    const partly = v.articles.find((a) => a.url.endsWith('/blog/partly'));
-    expect(partly.made).toEqual([{ form: 'x', taskId: '4', no: 4, standing: 'review', at: '2026-11-04T09:00:00Z' }]);
-    expect(v.articles.some((a) => a.url.endsWith('/hidden'))).toBe(false);
-    expect(v.articles.some((a) => a.url.includes('/docs/'))).toBe(false);
+    const of = (path) => v.articles.find((a) => a.url.endsWith(path));
+    // Latest first, as the records.
+    expect(of('/blog/done-all').made.map((m) => [m.form, m.destination?.kind ?? null, m.standing])).toEqual([
+      ['community', 'hn', 'done'],
+      ['linkedin', null, 'done'],
+      ['x', null, 'done'],
+    ]);
+    expect(of('/blog/partly').made).toEqual([{ form: 'x', taskId: '4', no: 4, standing: 'review', at: '2026-11-04T09:00:00Z' }]);
+    expect(of('/blog/new-board').made).toEqual([]);
+    expect(Object.keys(of('/blog/compare')).sort()).toEqual(['clicks30', 'made', 'published', 'title', 'url']);
     // Records: workshop tasks only, newest first, a failed run marked, nothing kept for the server.
     expect(v.records.map((r) => [r.taskId, r.form, r.standing, r.failed ?? false])).toEqual([
-      ['10', 'linkedin', 'done', false],
-      ['9', 'linkedin', 'done', false],
-      ['8', 'x', 'done', false],
       ['6', 'x', 'closed', false],
       ['5', 'community', 'done', false],
       ['4', 'x', 'review', true],
@@ -249,8 +218,9 @@ describe('Content workshop view', () => {
       ['1', 'x', 'done', false],
     ]);
     expect(v.records.some((r) => 'internal' in r)).toBe(false);
-    expect(v.recordCount).toBe(9);
+    expect(v.recordCount).toBe(6);
     expect(v.hot).toEqual([]);
+    expect(Object.keys(v).sort()).toEqual(['articles', 'brand', 'destinations', 'hot', 'recordCount', 'records', 'voice']);
     expect(v.voice).toBe('Plain and direct.');
     expect(v.brand).toEqual({ revision: 0, community: null });
     expect(v.destinations.reddit).toEqual({
@@ -263,14 +233,15 @@ describe('Content workshop view', () => {
     });
   });
 
-  it('without Search Console recommends new articles by date only', async () => {
+  it('shows no clicks without Search Console', async () => {
     const f = fixture();
     f.p.sync.link = async () => ({ get: () => null });
     f.site.pages = [page('/blog/a', '2026-11-10'), page('/blog/b', '2024-01-01')];
     const v = await f.s.view('1');
-    expect(v.searchConnected).toBe(false);
-    expect(v.suggested.map((a) => [a.url, a.reasons, a.spark])).toEqual([[`${ORIGIN}/blog/a`, ['new'], null]]);
-    expect(v.articles).toHaveLength(2);
+    expect(v.articles.map((a) => [a.url, a.clicks30])).toEqual([
+      [`${ORIGIN}/blog/a`, null],
+      [`${ORIGIN}/blog/b`, null],
+    ]);
   });
 
   it('lists live Trending now opportunities with what is hot, their discussions, material and tasks', async () => {
@@ -285,6 +256,8 @@ describe('Content workshop view', () => {
       id: 'o35',
       no: 35,
       kind: 'rising',
+      // T-32 was made from it in the workshop: it has left the workshop's Trending now.
+      away: 'adapted',
       headline: { key: 'workshop.hot.searchRise', params: { 0: 'ai project assistant', 1: '126%' } },
       figures: [{ value: 2750 }, { value: 1.26 }],
       chart: { unit: 'month', label: { key: 'workshop.hot.chartSearches' }, points: [900, 1200, 2750] },
@@ -296,6 +269,44 @@ describe('Content workshop view', () => {
     });
     expect(v.hot[0].discussions.map((d) => d.title)).toEqual(['Who writes weekly updates?', 'AI status reports']);
     expect(v.hot[0].foundAt).toBe('2026-11-13T06:00:00Z');
+  });
+
+  it('takes a Trending now item off once adapted, skipped or not found for 7 days; Opportunities still adapts it', async () => {
+    const f = fixture();
+    const S = hot(f);
+    const away = async () => (await f.s.view('1')).hot.map((h) => [h.id, h.away ?? null]);
+    expect(await away()).toEqual([['o35', null]]);
+    // A closed workshop task does not count.
+    task(f, 40, { stage: 'done', cancelledAt: '2026-11-12', repurpose: { form: 'x', source: { kind: 'opportunity', id: 'o35', no: 35, headline: 'h' } } });
+    expect(await away()).toEqual([['o35', null]]);
+    // Last found six days before the latest analysis: still listed; seven: left.
+    const latest = { generatedAt: '2026-11-13T06:00:00Z', items: [], evidence: { signals: { items: [] } } };
+    S.insightHistory = [{ ...S.insights, generatedAt: '2026-11-07T06:00:00Z' }];
+    S.insights = latest;
+    expect(await away()).toEqual([['o35', null]]);
+    S.insightHistory[0].generatedAt = '2026-11-06T06:00:00Z';
+    expect(await away()).toEqual([['o35', 'stale']]);
+    // Opportunities keeps it pending for 14 days, so Adapt into short posts still makes tasks from it.
+    const r = await f.s.create('1', { requestId: 'ad2b6a6e-5f0d-4c1e-9b7a-1f2e3d4c5b6a', source: { kind: 'opportunity', id: 'o35' }, items: [{ form: 'x' }] }, '1', 'Tester');
+    expect(r.taskIds).toHaveLength(1);
+    expect(await away()).toEqual([['o35', 'adapted']]);
+  });
+
+  it('keeps a skip per project for the workshop only', async () => {
+    const f = fixture();
+    const S = hot(f);
+    expect(await f.s.skip('1', { opportunityId: 'o35' }, '7')).toEqual({ skipped: 'o35' });
+    await f.s.skip('1', { opportunityId: 'o35' }, '8');
+    await f.s.skip('1', { opportunityId: 'o36' }, '7');
+    const kept = f.state.nrSnapshots.filter((x) => x.key.startsWith('workshop-skips:'));
+    expect(kept.map((x) => x.key)).toEqual(['workshop-skips:1']);
+    expect(Object.keys(kept[0].payload.skipped)).toEqual(['o35', 'o36']);
+    expect(kept[0].payload.skipped.o35).toEqual({ at: NOW.replace('Z', '.000Z'), by: '8' });
+    expect((await f.s.view('1')).hot.map((h) => [h.id, h.away])).toEqual([['o35', 'skipped']]);
+    // Opportunities is unchanged, and another project sees nothing skipped.
+    expect(S.opportunityMeta).toEqual({});
+    expect(await f.s.skips('2')).toEqual({});
+    await expect(f.s.skip('1', { opportunityId: ' ' }, '7')).rejects.toMatchObject({ status: 409 });
   });
 });
 
@@ -385,12 +396,10 @@ describe('Content workshop create', () => {
       '社区帖：New board → Acme Community · Tutorials',
       '社区帖：New board → Hacker News',
     ]);
-    // The article's clicks and AI citations now, for when it is recommended again.
     expect(rows[1].evidence.work.repurpose).toEqual({
       form: 'community',
       source: { kind: 'article', url: `${ORIGIN}/blog/new-board`, title: 'New board' },
       destination: { kind: 'reddit', subreddit: 'ProjectManagement', discussions: 2, weeks: 4 },
-      baseline: { clicks7: 0, cited: 0 },
     });
     expect(rows[2].evidence.work.repurpose.destination).toEqual({
       kind: 'own',
@@ -456,21 +465,40 @@ describe('Content workshop create', () => {
     ).rejects.toThrow();
   });
 
-  it('gives the Agent the approved drafts of earlier adaptations to take another angle', async () => {
+  // Homepage v5: a draft waiting for review counts too, so What to make names every earlier adaptation with a draft.
+  it('gives the Agent the drafts of earlier adaptations, approved or waiting for review, to take another angle', async () => {
     const f = fixture();
     f.site.pages = [page('/blog/again', '2025-02-01')];
-    sums.rows = daily('/blog/again', (d) => (d < 7 ? 20 : 2));
     task(f, 8, { stage: 'done', results: [{ approvedAt: '2026-10-28T10:00:00Z', content: 'Earlier X thread' }], repurpose: { form: 'x', source: article('/blog/again') } }, { createdAt: '2026-10-28T09:00:00Z' });
+    // Still being written: no draft yet.
     task(f, 9, { stage: 'flow', repurpose: { form: 'linkedin', source: article('/blog/again') } });
+    // Waiting for review: its latest draft, not the one rejected before it.
+    task(f, 10, { stage: 'flow', results: [{ content: 'Rejected LinkedIn post', rejectedAt: '2026-11-10T08:00:00Z' }, { content: 'LinkedIn post for review' }], repurpose: { form: 'linkedin', source: article('/blog/again') } });
+    // Only a rejected draft: nothing to read.
+    task(f, 11, { stage: 'flow', results: [{ content: 'Rejected thread', rejectedAt: '2026-11-11T08:00:00Z' }], repurpose: { form: 'community', destination: { kind: 'hn' }, source: article('/blog/again') } });
+    const view = await f.s.view('1');
+    expect(view.articles[0].made.map((m) => [m.taskId, Boolean(m.drafted)])).toEqual([
+      ['11', false],
+      ['10', true],
+      ['9', false],
+      ['8', true],
+    ]);
     await f.s.create('1', { requestId, source: article('/blog/again'), items: [{ form: 'x' }] }, '1', 'Tester', 'en-US');
     const t = f.state.nrTasks.at(-1);
-    expect(t.evidence.work.repurpose).toMatchObject({
-      earlier: [{ taskId: '8', no: 8, form: 'x', at: '2026-10-28T09:00:00Z' }],
-      baseline: { clicks7: 140, cited: 0 },
+    expect(t.evidence.work.repurpose).toEqual({
+      form: 'x',
+      source: article('/blog/again'),
+      earlier: [
+        { taskId: '10', no: 10, form: 'linkedin', at: '2026-11-10T09:00:00Z' },
+        { taskId: '8', no: 8, form: 'x', at: '2026-10-28T09:00:00Z' },
+      ],
     });
-    expect(t.brief).toContain('Adapted before: X posts T-8, 2026-10-28. Their approved drafts are in the context.');
+    expect(t.brief).toContain('Adapted before: LinkedIn post T-10, 2026-11-10; X posts T-8, 2026-10-28. Their drafts are in the context.');
     const kept = f.state.nrSnapshots.find((x) => x.key === `nr-task-source:1:${t.id}:`);
-    expect(kept.payload.earlier).toEqual([{ no: 8, form: 'x', at: '2026-10-28T09:00:00Z', text: 'Earlier X thread' }]);
+    expect(kept.payload.earlier).toEqual([
+      { no: 10, form: 'linkedin', at: '2026-11-10T09:00:00Z', text: 'LinkedIn post for review' },
+      { no: 8, form: 'x', at: '2026-10-28T09:00:00Z', text: 'Earlier X thread' },
+    ]);
   });
 
   it('keeps a topic with its points and links, and a task that cannot start waits at Start', async () => {

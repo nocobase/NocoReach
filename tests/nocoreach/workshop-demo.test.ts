@@ -16,6 +16,8 @@ import {
   ACME_AI,
   ACME_QUERIES,
 } from '../../server/nocoreach/demo-data/world/script/acme.js';
+import { crmGrowthBriefs } from '../../server/nocoreach/demo-data/growth-briefs.js';
+import { categoryOf } from '../../shared/growth.js';
 
 // The Content workshop demo (2026-11-13): every draft reads as the workshop reads an Agent's result, and passes the
 // checks NocoReach shows on review, in both demo languages.
@@ -71,5 +73,16 @@ describe('Content workshop demo', () => {
     ).toEqual(['release-linkedin', 'requests-reddit']);
     for (const d of WORKSHOP_DRAFTS)
       if (d.state === 'done') expect(d.approved).toBeLessThan(d.created);
+  });
+
+  // Homepage v5: the CRM project's Content workshop opens with no Trending now, its one trending opportunity having
+  // been skipped there (workshop-history.ts writes `workshop-skips:<project>` for it).
+  it('skips every trending opportunity of the CRM project in the workshop', () => {
+    for (const lang of ['zh', 'en'] as const)
+      expect(
+        crmGrowthBriefs(new Date('2026-11-13T00:00:00Z'))
+          .filter((b) => categoryOf({ growth: b.growth(lang) }) === 'trending')
+          .map((b) => b.key),
+      ).toEqual(['crm-growth-ai-crm']);
   });
 });

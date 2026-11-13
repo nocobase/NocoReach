@@ -11,7 +11,11 @@ import { systemMessageText } from './i18n/messages.js';
 export const REPURPOSE_FORMS = ['xhs', 'x', 'linkedin', 'community'] as const;
 export type RepurposeForm = (typeof REPURPOSE_FORMS)[number];
 /** The forms that can be chosen now. */
-export const READY_FORMS: readonly RepurposeForm[] = ['x', 'linkedin', 'community'];
+export const READY_FORMS: readonly RepurposeForm[] = [
+  'x',
+  'linkedin',
+  'community',
+];
 export const isRepurposeForm = (value: unknown): value is RepurposeForm =>
   typeof value === 'string' &&
   (REPURPOSE_FORMS as readonly string[]).includes(value);
@@ -69,7 +73,7 @@ export type Destination =
   | { kind: 'reddit'; subreddit: string; discussions?: number; weeks?: number }
   | { kind: 'hn' };
 
-/** An earlier task of the same article or opportunity, whose approved drafts the Agent reads to take another angle. */
+/** An earlier task of the same article or opportunity, whose draft (approved, or waiting for review) the Agent reads to take another angle. */
 export type EarlierAdaptation = {
   taskId: string;
   no?: number;
@@ -86,8 +90,6 @@ export type Repurpose = {
   /** The angle asked for this time; the Agent picks one when there is none. */
   angle?: string;
   earlier?: EarlierAdaptation[];
-  /** An article's clicks in its last 7 days and the AI answers citing it when the task was made (its next recommendation). */
-  baseline?: { clicks7: number; cited: number };
 };
 
 export const ANGLE_MAX = 300;
@@ -178,7 +180,8 @@ const HEADINGS: [RegExp, Piece['kind'] | 'rules'][] = [
   [/^(?:body|正文)$/i, 'body'],
   [/^(?:rules|版规|规矩)$/i, 'rules'],
 ];
-const SECTIONS = /^\s*(?:sections?|出自)\s*[:：]\s*(?:第\s*)?([0-9][0-9\s,，、–—-]*)\s*(?:节)?\s*$/i;
+const SECTIONS =
+  /^\s*(?:sections?|出自)\s*[:：]\s*(?:第\s*)?([0-9][0-9\s,，、–—-]*)\s*(?:节)?\s*$/i;
 
 /** The pieces of a result written in the workshop's format, or null when it does not follow it. */
 export function parseRepurpose(
@@ -346,7 +349,11 @@ export function repurposeChecks(
 
 /** The task title's subject: the article's title, the topic, or what is hot. */
 export const sourceSubject = (s: RepurposeSource) =>
-  s.kind === 'article' ? s.title : s.kind === 'opportunity' ? s.headline : s.topic;
+  s.kind === 'article'
+    ? s.title
+    : s.kind === 'opportunity'
+      ? s.headline
+      : s.topic;
 
 /** An article's title as its page gives it, without the site's name after a separator ("Title | Acme"). */
 export function articleTitle(page: { url: string; title?: string }): string {
@@ -404,7 +411,9 @@ export function repurposeBrief(r: Repurpose, locale?: string): string {
     .map((e) =>
       [
         e.form === 'community' && e.destination
-          ? text('workshop.communityPostAt', { 0: destinationName(e.destination) })
+          ? text('workshop.communityPostAt', {
+              0: destinationName(e.destination),
+            })
           : text(`workshop.form${FORM_KEY[e.form]}`),
         [e.no ? `T-${e.no}` : '', e.at.slice(0, 10)].filter(Boolean).join(', '),
       ].join(' '),

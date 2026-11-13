@@ -1,131 +1,102 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { FileText, Flame } from 'lucide-react';
-import { $legacyText, $t, $tj } from '#i18n';
+import { $legacyText, $t } from '#i18n';
 import { InfoTip } from '#components/reach/info-tip';
-import { Segmented } from '#components/reach/segmented';
-import { EmptyState } from '#components/reach/states';
 import { SourceLogo } from '#components/reach/source-logo';
-import { Tag, type Tone } from '#components/reach/tag';
+import type { Tone } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import {
-  formatChange,
-  formatChangeSize,
-  formatCount,
   formatDate,
   formatRelative,
   joinClauses,
   withDetail,
 } from '#lib/format';
+import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
-import type { ArticleReason } from '../../../shared/workshop-recommend.js';
-import { TOPICS_EDIT_PATH } from '../followed-topics-scope';
 import { playbookNameOf } from '../playbook-model';
 import { GrowthTags } from '../strategy/growth';
 import { figureValue, say } from '../strategy/growth-text';
 import {
+  errorText,
   hotHeadlineText,
-  madeList,
   opportunityNo,
   standingText,
   taskNo,
+  workshopRequest,
   type Handed,
   type HotItem,
-  type Made,
-  type Suggested,
   type WorkshopView,
 } from './model.js';
 
-// Recommendations (v4, 2026-11-13 user decision, ui-references/content-workshop-2026-11-12/recommend-v4.png): two tabs.
-// Trending now lists Opportunities' live Trending now opportunities as cards, each saying what is hot with the growth's
-// own numbers, its discussions, the site's material and where it suits; Adapt now opens step 2 filled with it. Site
-// articles lists the blog articles worth adapting now with their reasons and clicks; an adapted one comes back after a
-// while to be told from a new angle. Every reason and number is the server's, from data already collected.
+// Trending now (homepage v5, 2026-11-13 user decision, ui-references/content-workshop-2026-11-12/homepage-v5.png): the
+// only recommendation. It lists Opportunities' live Trending now opportunities the workshop has not handled yet, as
+// cards saying what is hot with the growth's own numbers, its discussions, the site's material and where it suits. Adapt
+// now opens step 2 filled with it; Skip takes it off this list only. The section is left out when nothing is listed.
 
-type Tab = 'hot' | 'articles';
-
-export function Recommendations({ view }: { view: WorkshopView }) {
-  const [tab, setTab] = useState<Tab>('hot');
-  const count = (label: string, n: number) => (
-    <>
-      {label}
-      <span className='text-xs text-muted-foreground tabular-nums'>{n}</span>
-    </>
-  );
+export function HotTopics({
+  view,
+  projectId,
+  onChange,
+}: {
+  view: WorkshopView;
+  projectId: string;
+  onChange: () => void;
+}) {
+  const { can } = useBusinessAccess('nrWorkshop.skip', projectId);
+  // Skipped here, before the page loads its view again.
+  const [gone, setGone] = useState<string[]>([]);
+  const [busy, setBusy] = useState('');
+  const items = view.hot.filter((h) => !h.away && !gone.includes(h.id));
+  if (!items.length) return null;
+  const skip = async (h: HotItem) => {
+    setBusy(h.id);
+    try {
+      await workshopRequest('skip', projectId, { opportunityId: h.id });
+      setGone((ids) => [...ids, h.id]);
+      toast.success(() =>
+        $t('workshop.hot.skipped', {
+          0: opportunityNo(h.no) || hotHeadlineText(h),
+        }),
+      );
+      onChange();
+    } catch (e) {
+      toast.error(() => errorText(e, $t('workshop.hot.skipFailed')));
+    } finally {
+      setBusy('');
+    }
+  };
   return (
-    <section className='space-y-3' aria-labelledby='workshop-recommended'>
+    <section className='space-y-3' aria-labelledby='workshop-hot'>
       <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2'>
         <div className='flex items-center gap-2'>
-          <h2
-            id='workshop-recommended'
-            className='font-heading text-sm font-semibold'
-          >
-            {$t('workshop.recommended')}
+          <h2 id='workshop-hot' className='font-heading text-sm font-semibold'>
+            {$t('growth.category.trending')}
           </h2>
-          <InfoTip label={$t('common.what', { 0: $t('workshop.recommended') })}>
-            <span className='flex max-w-sm flex-col gap-1.5'>
-              <span>{$t('workshop.recommendedInfoHot')}</span>
-              <span>{$t('workshop.recommendedInfoArticles')}</span>
-              <span>{$t('workshop.recommendedInfoAgain')}</span>
-            </span>
+          <span className='text-xs text-muted-foreground tabular-nums'>
+            {items.length}
+          </span>
+          <InfoTip
+            label={$t('common.what', { 0: $t('growth.category.trending') })}
+          >
+            <span className='block max-w-sm'>{$t('workshop.hot.info')}</span>
           </InfoTip>
-          <Segmented
-            className='ml-1'
-            label={$t('workshop.recommended')}
-            value={tab}
-            onChange={(id) => setTab(id as Tab)}
-            options={[
-              {
-                id: 'hot',
-                label: count($t('growth.category.trending'), view.hot.length),
-              },
-              {
-                id: 'articles',
-                label: count(
-                  $t('workshop.siteArticles'),
-                  view.suggested.length,
-                ),
-              },
-            ]}
-          />
         </div>
-        <span className='text-xs text-muted-foreground' data-note={tab}>
-          {tab === 'hot'
-            ? $t('workshop.hotUpdated')
-            : view.dataThrough
-              ? $t('workshop.dataThrough', { 0: formatDate(view.dataThrough) })
-              : $t('workshop.noSearchData')}
+        <span className='text-xs text-muted-foreground'>
+          {$t('workshop.hotUpdated')}
         </span>
       </div>
-      {tab === 'hot' ? <HotList view={view} /> : <ArticleList view={view} />}
+      <div className='grid gap-3 lg:grid-cols-2' data-hot-list=''>
+        {items.map((h) => (
+          <HotCard
+            key={h.id}
+            h={h}
+            skipping={busy === h.id}
+            onSkip={can ? () => void skip(h) : undefined}
+          />
+        ))}
+      </div>
     </section>
-  );
-}
-
-function HotList({ view }: { view: WorkshopView }) {
-  if (!view.hot.length)
-    return (
-      <EmptyState
-        icon={<Flame />}
-        title={$t('workshop.hot.empty')}
-        description={$t('workshop.hot.emptyHint')}
-        action={
-          <Button
-            variant='outline'
-            nativeButton={false}
-            render={<Link to={TOPICS_EDIT_PATH} data-edit-topics='' />}
-          >
-            {$t('projectKnowledge.followedTopics')}
-          </Button>
-        }
-      />
-    );
-  return (
-    <div className='grid gap-3 lg:grid-cols-2' data-hot-list=''>
-      {view.hot.map((h) => (
-        <HotCard key={h.id} h={h} />
-      ))}
-    </div>
   );
 }
 
@@ -151,38 +122,6 @@ const suitsOf = (h: HotItem) => [
   ...(h.communities.hn ? [{ logo: 'hackernews', name: 'Hacker News' }] : []),
 ];
 
-/**
- * What Content workshop already made from a hot item, by status: "Already adapted into X posts, LinkedIn post (T-59,
- * T-60, In progress)". Closed tasks are left out; nothing when none is left.
- */
-function madeLine(h: HotItem): string {
-  const groups = new Map<string, { names: string[]; nos: string[] }>();
-  for (const m of [...h.made].sort((a, b) => (a.no ?? 0) - (b.no ?? 0))) {
-    if (m.standing === 'closed') continue;
-    const g = groups.get(m.standing) || { names: [], nos: [] };
-    const name = madeList([m])[0];
-    if (name && !g.names.includes(name)) g.names.push(name);
-    if (m.no) g.nos.push(taskNo(m.no));
-    groups.set(m.standing, g);
-  }
-  if (!groups.size) return '';
-  return $t('workshop.hot.made', {
-    0: [...groups]
-      .map(([standing, g]) =>
-        withDetail(
-          g.names.join($t('common.listSeparator')),
-          joinClauses(
-            [
-              g.nos.join($t('common.listSeparator')),
-              standingText(standing as Made['standing']),
-            ].filter(Boolean),
-          ),
-        ),
-      )
-      .join($t('common.entrySeparator')),
-  });
-}
-
 /** A handed-off task's playbook in the interface language: built-in names come from the server untranslated. */
 const handedName = (t: Handed) =>
   t.playbook
@@ -191,7 +130,15 @@ const handedName = (t: Handed) =>
       ? playbookNameOf(t.playbookId)
       : '';
 
-function HotCard({ h }: { h: HotItem }) {
+function HotCard({
+  h,
+  skipping,
+  onSkip,
+}: {
+  h: HotItem;
+  skipping: boolean;
+  onSkip?: () => void;
+}) {
   const navigate = useNavigate();
   const no = opportunityNo(h.no);
   const found = h.firstSeenAt || h.foundAt;
@@ -326,12 +273,7 @@ function HotCard({ h }: { h: HotItem }) {
           })}
         </p>
       ) : null}
-      {madeLine(h) ? (
-        <p className='text-xs text-muted-foreground' data-made=''>
-          {madeLine(h)}
-        </p>
-      ) : null}
-      {/* The button stays on the right; a long list of places wraps beside it. */}
+      {/* The buttons stay on the right; a long list of places wraps beside them. */}
       <div className='mt-auto flex items-center gap-2 border-t pt-3'>
         <span className='flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground'>
           {$t('common.labelValue', { 0: $t('workshop.hot.suits'), 1: '' })}
@@ -345,6 +287,16 @@ function HotCard({ h }: { h: HotItem }) {
             </span>
           ))}
         </span>
+        <Button
+          size='sm'
+          variant='ghost'
+          className='shrink-0'
+          disabled={!onSkip || skipping}
+          onClick={onSkip}
+          data-skip=''
+        >
+          {$t('workshop.hot.skip')}
+        </Button>
         <Button
           size='sm'
           className='shrink-0'
@@ -362,150 +314,8 @@ function HotCard({ h }: { h: HotItem }) {
   );
 }
 
-const REASON: Record<ArticleReason, [Tone, string]> = {
-  rising: ['green', 'workshop.reason.rising'],
-  new: ['blue', 'workshop.reason.new'],
-  steady: ['amber', 'workshop.reason.steady'],
-};
-
-function ArticleList({ view }: { view: WorkshopView }) {
-  const navigate = useNavigate();
-  if (!view.articles.length)
-    return (
-      <EmptyState
-        icon={<FileText />}
-        title={$t('workshop.noArticles')}
-        description={$t('workshop.noArticlesHint')}
-        action={
-          <Button
-            variant='outline'
-            onClick={() => void navigate('/connections?source=site')}
-          >
-            {$t('common.connectWebsiteContent')}
-          </Button>
-        }
-      />
-    );
-  if (!view.suggested.length)
-    return (
-      <EmptyState
-        icon={<FileText />}
-        title={$t('workshop.noSuggested')}
-        description={$t('workshop.noSuggestedHint')}
-      />
-    );
-  return (
-    <div
-      className='grid gap-3 md:grid-cols-2 xl:grid-cols-3'
-      data-article-list=''
-    >
-      {view.suggested.map((a) => (
-        <ArticleCard key={a.url} a={a} />
-      ))}
-    </div>
-  );
-}
-
-function ArticleCard({ a }: { a: Suggested }) {
-  const navigate = useNavigate();
-  const reason = a.reasons[0];
-  const steady = reason === 'steady';
-  const change =
-    a.previous7 > 0 ? (a.clicks7 - a.previous7) / a.previous7 : null;
-  const adapt = () =>
-    void navigate({
-      pathname: 'new',
-      search: `?${new URLSearchParams({ url: a.url, title: a.title })}`,
-    });
-  const since = a.last?.since ?? 0;
-  const footer = a.last
-    ? $t('workshop.lastAdapted', {
-        0: formatDate(a.last.at),
-        1: madeList(a.last.made).join($t('common.listSeparator')),
-      })
-    : $t('workshop.notMade');
-  return (
-    <article
-      className='flex min-w-0 flex-col gap-2.5 rounded-lg border bg-card p-4 text-card-foreground'
-      data-recommended={reason}
-    >
-      <div className='flex flex-wrap items-center gap-1.5'>
-        {reason ? (
-          <Tag tone={REASON[reason][0]}>{$t(REASON[reason][1])}</Tag>
-        ) : null}
-        {a.cited ? (
-          <Tag tone='violet'>{$t('workshop.reason.cited')}</Tag>
-        ) : null}
-      </div>
-      <a
-        href={a.url}
-        target='_blank'
-        rel='noreferrer'
-        className='line-clamp-2 text-sm leading-snug font-semibold hover:underline'
-        title={a.title}
-      >
-        {a.title}
-      </a>
-      <div className='flex items-end gap-3'>
-        <p className='min-w-0 flex-1 text-xs text-muted-foreground'>
-          {steady ? (
-            $tj('workshop.clicks12m', { 0: strong(formatCount(a.clicks12m)) })
-          ) : (
-            <>
-              {reason === 'new' && a.published
-                ? `${$t('workshop.publishedOn', { 0: formatDate(a.published) })} · `
-                : null}
-              {$tj('workshop.clicks7', { 0: strong(formatCount(a.clicks7)) })}
-              {reason === 'rising' && change !== null ? (
-                <b className='ml-1.5 font-semibold text-nr-ink-green tabular-nums'>
-                  {formatChange(change).replace(' ', '')}
-                </b>
-              ) : null}
-            </>
-          )}
-          {since > 0 ? (
-            <span className='mt-1 block' data-since=''>
-              {$tj('workshop.sinceClicks', {
-                0: (
-                  <b className='font-semibold text-nr-ink-green tabular-nums'>
-                    +{formatChangeSize(since)}
-                  </b>
-                ),
-              })}
-            </span>
-          ) : null}
-        </p>
-        {a.spark ? (
-          <MiniChart
-            points={a.spark.points}
-            label={$t(
-              a.spark.unit === 'week'
-                ? 'workshop.sparkWeeks'
-                : 'workshop.sparkMonths',
-            )}
-            tone='green'
-          />
-        ) : null}
-      </div>
-      <div className='mt-auto flex items-center gap-2 border-t pt-3'>
-        {/* One line, so the footers of a row line up; the whole text stays in its title. */}
-        <span
-          className='min-w-0 flex-1 truncate text-xs text-muted-foreground'
-          title={footer}
-        >
-          {footer}
-        </span>
-        <Button size='sm' variant='outline' onClick={adapt}>
-          {a.last ? $t('workshop.adaptAgain') : $t('workshop.adapt')}
-        </Button>
-      </div>
-    </article>
-  );
-}
-
 const INK: Partial<Record<Tone, string>> = {
   orange: 'var(--nr-ink-orange)',
-  green: 'var(--nr-ink-green)',
 };
 
 /**

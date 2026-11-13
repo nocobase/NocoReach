@@ -9,7 +9,7 @@ import type {
   GrowthText,
 } from '../../../shared/growth.js';
 import type {
-  ArticleReason,
+  HotAway,
   HotDiscussion,
 } from '../../../shared/workshop-recommend.js';
 import {
@@ -21,8 +21,9 @@ import {
   type RepurposeSource,
 } from '../../../shared/repurpose.js';
 
-// Content workshop (2026-11-13 user decision): what `nrWorkshop.view` returns and the words the page, its dialogs and the
-// task page share. Recommendations are the site's own figures, never an AI's judgement; nothing is pre-ticked.
+// Content workshop (2026-11-13 user decision; homepage v5): what `nrWorkshop.view` returns and the words the page, its
+// dialogs and the task page share. Only Trending now is recommended, from Opportunities, never an AI's judgement;
+// nothing is pre-ticked.
 
 export type Standing = TaskStanding;
 export type Made = {
@@ -32,25 +33,17 @@ export type Made = {
   no: number | null;
   standing: Standing;
   at?: string;
+  /** It has a draft (approved, or waiting for review) the Agent reads when the same source is adapted again. */
+  drafted?: boolean;
 };
+/** A blog article in Library, with the tasks made from it that are not closed. */
 export type Article = {
   url: string;
   title: string;
   published?: string;
-  clicks7: number;
-  previous7: number;
-  clicks30: number;
-  clicks12m: number;
-  cited: number;
+  /** Search Console clicks of the last 30 days; null without Search Console. */
+  clicks30: number | null;
   made: Made[];
-};
-/** A recommended article's clicks: 8 weeks, or 12 months for a steady one, oldest first. */
-export type Spark = { unit: 'week' | 'month'; points: number[] };
-export type Suggested = Article & {
-  reasons: ArticleReason[];
-  spark: Spark | null;
-  /** Its last adaptation: when, what it made, and the change in weekly clicks since, for a rising or new article. */
-  last?: { at: string; made: Made[]; since?: number };
 };
 /** A task handed off from the opportunity on Opportunities. */
 export type Handed = {
@@ -61,11 +54,15 @@ export type Handed = {
   playbook: string | null;
   playbookId: string | null;
 };
-/** One of Opportunities' live Trending now opportunities (server/nocoreach/workshop.ts hotItems). */
+/**
+ * One of Opportunities' live Trending now opportunities (server/nocoreach/workshop.ts hotItems). One the workshop's
+ * Trending now has left says why: it is not listed, but Adapt into short posts on Opportunities still opens it.
+ */
 export type HotItem = {
   id: string;
   no: number | null;
   kind: GrowthKind;
+  away?: HotAway;
   title: string;
   firstSeenAt?: string;
   foundAt?: string;
@@ -103,9 +100,7 @@ export type Community = { name: string; url: string; sections: string[] };
 export type Brand = { revision: number; community: Community | null };
 export type WorkshopView = {
   hot: HotItem[];
-  suggested: Suggested[];
-  searchConnected: boolean;
-  dataThrough: string | null;
+  /** Every blog article, newest first (shared/workshop-recommend.ts libraryOrder). */
   articles: Article[];
   records: WorkshopRecord[];
   recordCount: number;
@@ -118,6 +113,18 @@ export type WorkshopView = {
       recent: string[];
     };
   };
+};
+
+export type LibraryFilter = 'all' | 'todo' | 'made';
+/** Library's filters: everything, articles nothing was made from yet, and those adapted. */
+export const libraryFilter = (f: LibraryFilter) => (a: Article) =>
+  f === 'all' || (f === 'made') === a.made.length > 0;
+/** Whether a Library article matches a search: its title or its address. */
+export const librarySearch = (a: Article, query: string) => {
+  const q = query.trim().toLowerCase();
+  return (
+    !q || a.title.toLowerCase().includes(q) || a.url.toLowerCase().includes(q)
+  );
 };
 
 export const workshopRequest = <T>(
@@ -180,21 +187,6 @@ export function runNote(
     return { text: $t('taskList.runFailed', { 0: 'Agent' }), tone: 'red' };
   return null;
 }
-
-/** The forms an article was made into, each once: "X posts, Reddit r/selfhosted". */
-export const madeList = (made: Made[]) => [
-  ...new Set(
-    made.map((m) =>
-      m.form === 'community' && m.destination
-        ? destinationName(m.destination)
-        : getFormNames()[m.form],
-    ),
-  ),
-];
-
-/** The source's line in lists: the article's title, the topic, or what is hot. */
-export const sourceLabel = (s: RepurposeSource) =>
-  s.kind === 'article' ? s.title : s.kind === 'topic' ? s.topic : s.headline;
 
 /** An opportunity's short number, as Opportunities shows it. */
 export const opportunityNo = (no: number | null | undefined) =>

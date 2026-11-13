@@ -14,214 +14,21 @@ import {
 import type { Opportunity, Signal, StrategyState } from './strategy-model.js';
 import type { TaskStanding } from './task-pending.js';
 
-// Content workshop's recommendations (2026-11-13, ui-references/content-workshop-2026-11-12/brief-v4.md), worked out by
-// the server from data already collected: no AI judgement and no paid lookups. Trending now lists the opportunities of
-// Opportunities' Trending now category that are still live; Site articles lists the site's blog articles by why they are
-// worth adapting now, an adapted one again after a while. Shared so the tests and the pages read the same rules.
+// Content workshop's Trending now (2026-11-13, ui-references/content-workshop-2026-11-12/brief-v5.md), worked out by the
+// server from data already collected: no AI judgement and no paid lookups. It lists the opportunities of Opportunities'
+// Trending now category that are still live and were not handled in the workshop yet. The site's articles are not
+// recommended: the workshop lists them all in Library, newest first (libraryOrder). Shared so the tests and the pages
+// read the same rules.
 
 const DAY = 86400000;
-const shift = (d: string, n: number) =>
-  new Date(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) + n * DAY)
-    .toISOString()
-    .slice(0, 10);
-
-// --- Site articles ------------------------------------------------------------------------------------------------
-
-/** At most this many articles are recommended. */
-export const ARTICLES_MAX = 6;
-/** Clicks rising: the last 7 days up this much on the 7 days before, with at least RISE_MIN clicks. */
-export const RISE = 0.3;
-export const RISE_MIN = 20;
-/** New: published within this many days. */
-export const NEW_DAYS = 30;
-/** Steady traffic: at least this many clicks over the 12 months, with clicks in at least STEADY_MONTHS of them. */
-export const STEADY_MIN = 100;
-export const STEADY_MONTHS = 9;
-/** An adapted article is not recommended for this many days; a steady one comes back after STEADY_COOL_DAYS. */
-export const COOL_DAYS = 14;
-export const STEADY_COOL_DAYS = 90;
-export const WEEKS = 8;
-export const MONTHS = 12;
-const MONTH_STARTS = Array.from({ length: MONTHS + 1 }, (_, m) =>
-  Math.round((365 * m) / MONTHS),
-);
+const day = (iso?: string) => Date.parse(String(iso || '').slice(0, 10));
 
 /**
- * The periods Search Console clicks are summed in, back from the last synced day: cut wherever a week (of the last
- * eight) or a month (365 days in twelve) starts, so each period lies in one week, when within the eight, and one month.
- */
-export type ClickPeriod = {
-  start: string;
-  end: string;
-  week: number | null;
-  month: number;
-};
-export function clickPeriods(end: string): ClickPeriod[] {
-  const cuts = [
-    ...new Set([
-      ...Array.from({ length: WEEKS + 1 }, (_, w) => w * 7),
-      ...MONTH_STARTS,
-    ]),
-  ].sort((a, b) => a - b);
-  return cuts.slice(0, -1).map((from, i) => ({
-    start: shift(end, -(cuts[i + 1] - 1)),
-    end: shift(end, -from),
-    week: from < WEEKS * 7 ? Math.floor(from / 7) : null,
-    month: MONTH_STARTS.findIndex(
-      (m, j) => j < MONTHS && from >= m && from < MONTH_STARTS[j + 1],
-    ),
-  }));
-}
-
-/** An article's clicks by week and by month, the newest first. */
-export type ClickSeries = { weeks: number[]; months: number[] };
-export function seriesOf(
-  byPeriod: number[],
-  periods: ClickPeriod[],
-): ClickSeries {
-  const weeks = Array<number>(WEEKS).fill(0),
-    months = Array<number>(MONTHS).fill(0);
-  periods.forEach((p, i) => {
-    const c = byPeriod[i] || 0;
-    if (p.week !== null) weeks[p.week] += c;
-    if (p.month >= 0) months[p.month] += c;
-  });
-  return { weeks, months };
-}
-
-export type ArticleReason = 'rising' | 'new' | 'steady';
-export type ArticleFigures = ClickSeries & {
-  /** When it went out, as a day. */
-  published?: string;
-  /** AI answers citing it now. */
-  cited: number;
-  /** Published after the 7 days before began: there is no full week to compare with. */
-  partial?: boolean;
-};
-
-/**
- * Why an article is worth adapting now, in the order its card leads with them: clicks rising, new, steady traffic.
- * Being cited by AI answers is an extra tag, never a reason of its own. Without Search Console only New is known.
- */
-export function articleReasons(
-  a: ArticleFigures,
-  { today, searched }: { today: string; searched: boolean },
-): ArticleReason[] {
-  const out: ArticleReason[] = [];
-  const [now, before] = a.weeks;
-  if (
-    searched &&
-    !a.partial &&
-    before > 0 &&
-    now >= RISE_MIN &&
-    (now - before) / before >= RISE
-  )
-    out.push('rising');
-  if (a.published && a.published >= shift(today, -(NEW_DAYS - 1)))
-    out.push('new');
-  // A new article has no year of traffic to be steady over.
-  const year = a.months.reduce((s, c) => s + c, 0);
-  if (
-    !out.includes('new') &&
-    searched &&
-    year >= STEADY_MIN &&
-    a.months.filter((c) => c > 0).length >= STEADY_MONTHS
-  )
-    out.push('steady');
-  return out;
-}
-
-/** When an article was last adapted, with its 7-day clicks and AI citations then when they were kept. */
-export type Adaptation = { at: string; clicks7?: number; cited?: number };
-
-/**
- * An article's 7-day clicks when it was adapted: as kept then, else those of the week (of the last eight) the day fell
- * in, else a month's clicks over seven of its days.
- */
-export function clicksAt(
-  a: ClickSeries,
-  last: Adaptation,
-  end: string | null,
-): number | null {
-  if (last.clicks7 !== undefined) return last.clicks7;
-  if (!end) return null;
-  const days = Math.max(
-    0,
-    Math.round(
-      (Date.parse(`${end.slice(0, 10)}T00:00:00Z`) -
-        Date.parse(`${last.at.slice(0, 10)}T00:00:00Z`)) /
-        DAY,
-    ),
-  );
-  if (days < WEEKS * 7) return a.weeks[Math.floor(days / 7)];
-  const m = MONTH_STARTS.findIndex(
-    (s, j) => j < MONTHS && days >= s && days < MONTH_STARTS[j + 1],
-  );
-  return m < 0
-    ? null
-    : Math.round((a.months[m] * 7) / (MONTH_STARTS[m + 1] - MONTH_STARTS[m]));
-}
-
-/**
- * Whether an article is recommended, and how its clicks moved since it was last adapted (a ratio, null when unknown).
- * One never adapted is recommended for any reason. One adapted in the last COOL_DAYS days is not. After that, a rising
- * or new one comes back when its clicks rose since, or an AI answer started citing it; a steady one STEADY_COOL_DAYS
- * after it was adapted.
- */
-export function recommendation(
-  a: ArticleFigures,
-  reasons: ArticleReason[],
-  last: Adaptation | undefined,
-  { now, end }: { now: number; end: string | null },
-): { show: boolean; since: number | null } {
-  if (!reasons.length) return { show: false, since: null };
-  if (!last) return { show: true, since: null };
-  const days = (now - Date.parse(last.at)) / DAY;
-  if (!(days >= COOL_DAYS)) return { show: false, since: null };
-  const timely = reasons.includes('rising') || reasons.includes('new'),
-    base = clicksAt(a, last, end),
-    clicks = a.weeks[0],
-    rose = base !== null && clicks > base,
-    cited = last.cited !== undefined && a.cited > last.cited;
-  return {
-    show:
-      (timely && (rose || cited)) ||
-      (reasons.includes('steady') && days >= STEADY_COOL_DAYS),
-    since: timely && base ? (clicks - base) / base : null,
-  };
-}
-
-const REASON_RANK: Record<ArticleReason, number> = {
-  rising: 0,
-  new: 1,
-  steady: 2,
-};
-/** The order of the recommended: clicks rising (most clicks first), new (newest first), steady (most clicks first). */
-export function articleOrder(
-  a: ArticleFigures & { reasons: ArticleReason[]; title: string },
-  b: ArticleFigures & { reasons: ArticleReason[]; title: string },
-): number {
-  const ra = a.reasons[0],
-    rb = b.reasons[0],
-    year = (x: ClickSeries) => x.months.reduce((s, c) => s + c, 0);
-  return (
-    REASON_RANK[ra] - REASON_RANK[rb] ||
-    (ra === 'rising'
-      ? b.weeks[0] - a.weeks[0]
-      : ra === 'new'
-        ? String(b.published || '').localeCompare(String(a.published || ''))
-        : year(b) - year(a)) ||
-    a.title.localeCompare(b.title)
-  );
-}
-
-// --- Trending now -------------------------------------------------------------------------------------------------
-
-/**
- * An opportunity of the Trending now category that is still live: refreshed by an analysis in the last 14 days (the
- * batch rowsFor keeps it from, as Opportunities expires its pending ones), and neither ignored, replaced by a later
- * one, nor closed (every task handed off from it closed). One already handed off stays: short posts sit beside the
- * page or article its task writes.
+ * An opportunity of the Trending now category that is still live, so it can be adapted (Adapt into short posts on its
+ * Opportunities detail): refreshed by an analysis in the last 14 days (the batch rowsFor keeps it from, as Opportunities
+ * expires its pending ones), and neither ignored, replaced by a later one, nor closed (every task handed off from it
+ * closed). One already handed off stays: short posts sit beside the page or article its task writes. The workshop
+ * lists those hotAway leaves in.
  */
 export function isHot(
   row: Row,
@@ -238,7 +45,7 @@ export function isHot(
     row.tasks.length && row.tasks.every((t) => standing(t.taskId) === 'closed')
   );
 }
-/** The live Trending now opportunities, in Opportunities' order. */
+/** The live Trending now opportunities, in Opportunities' order: those the workshop lists, and those it has left. */
 export function hotRows(
   state: StrategyState,
   standing: (taskId: number) => TaskStanding | undefined,
@@ -246,6 +53,46 @@ export function hotRows(
   return rowsFor(state)
     .filter((r) => isHot(r, state, standing))
     .sort(pendingOrder);
+}
+
+/** Trending now in the workshop keeps an opportunity this many days after the last analysis that found it. */
+export const HOT_FRESH_DAYS = 7;
+export type HotAway = 'adapted' | 'skipped' | 'stale';
+/**
+ * Why a live Trending now opportunity has left the workshop's Trending now (v5), or null while it is listed: a task was
+ * made from it in Content workshop (Adapt now, or Adapt into short posts on Opportunities), it was skipped there, or no
+ * analysis has found it for HOT_FRESH_DAYS days, counted from the latest analysis as Opportunities counts its 14. It can
+ * still be adapted from its detail on Opportunities, where it is unchanged.
+ */
+export function hotAway(
+  row: Row,
+  state: StrategyState,
+  { adapted, skipped }: { adapted: boolean; skipped: boolean },
+): HotAway | null {
+  if (adapted) return 'adapted';
+  if (skipped) return 'skipped';
+  const quiet =
+    (day(state.insights?.generatedAt) - day(row.batch.generatedAt)) / DAY;
+  return quiet >= HOT_FRESH_DAYS ? 'stale' : null;
+}
+
+/** An article as Library orders it. */
+export type LibraryArticle = {
+  title: string;
+  /** When it went out, as a day. */
+  published?: string;
+  /** Search Console clicks of the last 30 days; null without Search Console. */
+  clicks30: number | null;
+};
+/** Library's order (v5): the newest published first; articles without a known date last, the most clicked first. */
+export function libraryOrder(a: LibraryArticle, b: LibraryArticle): number {
+  if (Boolean(a.published) !== Boolean(b.published))
+    return a.published ? -1 : 1;
+  return (
+    String(b.published || '').localeCompare(String(a.published || '')) ||
+    (b.clicks30 ?? 0) - (a.clicks30 ?? 0) ||
+    a.title.localeCompare(b.title)
+  );
 }
 
 const SUBJECT_KEYS = [

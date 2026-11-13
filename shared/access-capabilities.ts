@@ -321,6 +321,8 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrArticles.languages',
     // Content workshop › Hand off to agent: one task per form, each started.
     'nrWorkshop.create',
+    // Content workshop › Trending now › Skip, which only the workshop reads.
+    'nrWorkshop.skip',
   ],
   knowledge: [
     ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),

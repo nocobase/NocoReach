@@ -1,6 +1,5 @@
 import type {
   AiQuestion,
-  Change,
   L,
   Page,
   PerLanguage,
@@ -282,11 +281,7 @@ export const WORKSHOP_PAGES: readonly Page[] = [
     ],
     1.6,
     430,
-    [
-      { kind: 'launch', at: 430, ramp: 14 },
-      // Shared in a client-services newsletter: more searches since last week, so it rises again (2026-11-13 v4).
-      { kind: 'step', at: 8, to: 1.6, over: 2 },
-    ],
+    [{ kind: 'launch', at: 430, ramp: 14 }],
   ),
   page(
     '/blog/project-kickoff',
@@ -399,9 +394,8 @@ const head = (
   en: string,
   impressions: number,
   position: number,
-  own?: Change[],
 ): PerLanguage<Query> => {
-  const changes = own || changesOf(path);
+  const changes = changesOf(path);
   const query = {
     path,
     impressions,
@@ -455,16 +449,6 @@ const HEAD_QUERIES = [
     'project kickoff agenda template',
     110,
     4.4,
-  ),
-  // Acme's own estimation article is a planning-season topic: 2.5 times the searches since ten days ago, so Content
-  // workshop recommends it again after its X posts of 16 days ago (2026-11-13 v4).
-  head(
-    '/blog/estimation',
-    '任務估時 怎麼校準',
-    'how to calibrate task estimates',
-    80,
-    3.4,
-    [{ kind: 'step', at: 10, to: 2.5, over: 1 }],
   ),
 ];
 export const WORKSHOP_QUERIES: PerLanguage<Query[]> = {
@@ -544,7 +528,7 @@ const english = (text: string): L => ({ zh: text, en: text });
 
 /** Oldest first, so their task numbers follow the order they were made in. */
 export const WORKSHOP_DRAFTS: readonly WorkshopDraft[] = [
-  // Adapted four months ago: a steady article that Site articles recommends again after 90 days (2026-11-13 v4).
+  // Adapted to LinkedIn four months ago, so Library shows an older article already made into a post.
   {
     key: 'kickoff-linkedin',
     form: 'linkedin',

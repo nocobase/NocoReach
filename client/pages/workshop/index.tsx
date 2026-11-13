@@ -2,17 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { History } from 'lucide-react';
 import { $t } from '#i18n';
-import {
-  PageContainer,
-  PageHeader,
-  SectionHeading,
-} from '#components/reach/page';
+import { PageContainer, PageHeader } from '#components/reach/page';
 import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
 import { SourceLogo } from '#components/reach/source-logo';
 import { Tag } from '#components/reach/tag';
 import { DataTableTabs } from '#components/seo/data-table-toolbar';
 import { Button } from '#components/ui/button';
-import { TabsTrigger } from '#components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '#components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -36,16 +32,18 @@ import {
   type WorkshopRecord,
   type WorkshopView,
 } from './model.js';
-import { Recommendations } from './recommend.js';
+import { Library } from './library.js';
+import { HotTopics } from './recommend.js';
 
 /** What the dialogs under this page read from it: the view it loaded, and a way to load it again after a change. */
 export type WorkshopOutlet = { view?: WorkshopView; reload: () => void };
 
 type Filter = 'all' | 'review' | 'doing' | 'done';
 
-// Content workshop (mockup v3, 2026-11-12; recommendations v4, 2026-11-13): recommendations in two tabs, Trending now
-// and Site articles (recommend.tsx), then the adaptation records. Each recommendation says its figures, not an AI's
-// opinion; its button opens step 2 of Pick content with it chosen.
+// Content workshop (homepage v5, 2026-11-13 user decision, ui-references/content-workshop-2026-11-12/homepage-v5.png):
+// Trending now when there is anything to show (recommend.tsx), then two tabs, Library (every blog article, library.tsx)
+// and the adaptation records. Adapt on either opens step 2 with it chosen; Adapt a new topic writes about a topic of
+// one's own.
 export default function WorkshopPage() {
   const { project } = useProject();
   const navigate = useNavigate();
@@ -57,6 +55,7 @@ export default function WorkshopPage() {
     error?: string;
   }>();
   const [count, setCount] = useState(0);
+  const [tab, setTab] = useState<'library' | 'records'>('library');
   const reload = useCallback(() => setCount((n) => n + 1), []);
   // Loaded again whenever the page comes back from one of its dialogs, so a new task shows in the records at once.
   const atPage = /\/workshop\/?$/.test(location.pathname);
@@ -91,7 +90,7 @@ export default function WorkshopPage() {
               {$t('workshop.brandKit')}
             </Button>
             <Button onClick={() => void navigate('new')}>
-              {$t('workshop.pick')}
+              {$t('workshop.newTopic')}
             </Button>
           </>
         }
@@ -106,8 +105,35 @@ export default function WorkshopPage() {
         <ListSkeleton rows={6} />
       ) : (
         <>
-          <Recommendations view={view} />
-          <Records view={view} />
+          <HotTopics view={view} projectId={projectId} onChange={reload} />
+          <div className='space-y-3'>
+            <Tabs
+              value={tab}
+              onValueChange={(v) =>
+                setTab(v === 'records' ? 'records' : 'library')
+              }
+            >
+              <TabsList variant='line' className='h-auto! justify-start'>
+                <TabsTrigger value='library'>
+                  {$t('workshop.library')}
+                  <span className='text-xs text-muted-foreground tabular-nums'>
+                    {view.articles.length}
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger value='records'>
+                  {$t('workshop.records')}
+                  <span className='text-xs text-muted-foreground tabular-nums'>
+                    {view.recordCount}
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {tab === 'library' ? (
+              <Library view={view} />
+            ) : (
+              <Records view={view} />
+            )}
+          </div>
         </>
       )}
       <Outlet context={{ view, reload } satisfies WorkshopOutlet} />
@@ -129,8 +155,7 @@ function Records({ view }: { view: WorkshopView }) {
   };
   const rows = view.records.filter(of(filter));
   return (
-    <section className='space-y-3' aria-labelledby='workshop-records'>
-      <SectionHeading id='workshop-records' title={$t('workshop.records')} />
+    <section aria-label={$t('workshop.records')}>
       {!view.records.length ? (
         <EmptyState
           icon={<History />}
@@ -159,7 +184,9 @@ function Records({ view }: { view: WorkshopView }) {
                   <TableHead className='w-10' />
                   <TableHead>{$t('workshop.outputColumn')}</TableHead>
                   <TableHead className='w-36'>{$t('common.status')}</TableHead>
-                  <TableHead className='w-32'>{$t('workshop.updated')}</TableHead>
+                  <TableHead className='w-32'>
+                    {$t('workshop.updated')}
+                  </TableHead>
                   <TableHead className='w-20' />
                 </TableRow>
               </TableHeader>
@@ -188,7 +215,9 @@ function Records({ view }: { view: WorkshopView }) {
                       <TableCell>
                         <div className='flex flex-wrap items-center gap-1'>
                           <TaskStandingTag state={r.standing} />
-                          {note ? <Tag tone={note.tone}>{note.text}</Tag> : null}
+                          {note ? (
+                            <Tag tone={note.tone}>{note.text}</Tag>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell className='text-xs text-muted-foreground tabular-nums'>

@@ -84,6 +84,21 @@ export async function writeWorkshop(
       payload: { revision: 1, community, updatedAt: at(9) },
     },
   });
+  // The CRM project's one Trending now opportunity ("ai crm", growth-briefs.ts crmGrowthBriefs) was skipped in the
+  // workshop two days ago, so its Content workshop opens on Library alone; Opportunities still lists it.
+  await snapshots.create({
+    values: {
+      key: `workshop-skips:${data.projects!.second}`,
+      payload: {
+        skipped: {
+          'editorial-opportunity-crm-growth-ai-crm': {
+            at: at(2),
+            by: String(context.actorId),
+          },
+        },
+      },
+    },
+  });
   await host.projects.update(
     id,
     (project: Record<string, unknown>) => {

@@ -101,6 +101,8 @@ export const PROJECT_SNAPSHOTS = new Set([
   'strategy',
   'task-numbers',
   'trends',
+  // Trending now opportunities skipped in Content workshop (`workshop-skips:<project>`, workshop.ts).
+  'workshop-skips',
   'x',
   'xiaohongshu',
   'youtube',
