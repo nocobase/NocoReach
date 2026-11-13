@@ -8,6 +8,8 @@ import {
   type MockAiOperation,
 } from '../../../app-plugins/nocoreach-mock/server/ai';
 import { mockDelay, type MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
+import type { OnlineModel } from '../../../shared/online-agent.js';
+import { cloudModelWork } from '../cloud-models.js';
 
 /** Raised only before a gateway request has started. */
 export class ModelPreparationError extends Error {
@@ -76,17 +78,26 @@ function answerText(answer: string, plain: boolean): string {
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
   constructor(
-    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; demoConfiguration?: { readonly enabled: boolean }; network?: { inDemoProject(): Promise<boolean> } },
+    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; demoConfiguration?: { readonly enabled: boolean }; network?: { inDemoProject(): Promise<boolean> }; editingModel?: { get(): Promise<OnlineModel | null> } },
   ) {}
-  async prepare(connection?: DatabaseConnection) {
+  /**
+   * The model the operation runs on: Editing and suggestions' own model for what a person asks for on a page, when one
+   * is chosen, else the default chat model (`cloud-models.ts`). An own model that can no longer answer fails in
+   * `connect` rather than quietly falling back, as the chat panel's does.
+   */
+  async prepare(operation?: string, connection?: DatabaseConnection) {
     if (this.p.mock?.enabled) {
       this.p.mock.context();
       return MOCK_AI_MODEL;
     }
     let model;
     try {
-      model = (await this.p.agents.models.services.defaults(connection))
-        .effectiveChat;
+      model =
+        (cloudModelWork(operation) === 'editing'
+          ? await this.p.editingModel?.get()
+          : null) ??
+        (await this.p.agents.models.services.defaults(connection))
+          .effectiveChat;
     } catch (cause) {
       throw new ModelPreparationError('precondition', cause);
     }
@@ -107,7 +118,7 @@ export class OnlineProvider {
       if (!this.p.demoModels) throw new ModelPreparationError('precondition', 'Demo model adapter unavailable');
       return this.p.demoModels.complete({ system, prompt, tag: operation });
     }
-    const chosen = await this.prepare();
+    const chosen = await this.prepare(operation);
     await this.p.demoData?.load();
     // The demo's simulated model answers in process, where it can tell which operation asks.
     if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService }))
@@ -143,7 +154,7 @@ export class OnlineProvider {
   }
   /**
    * The answer as the model writes it, a piece of text at a time, routed as `complete` routes: the simulation, then a
-   * demo project's model, then the default chat model. Throws `ModelPreparationError` before the first piece when no
+   * demo project's model, then the operation's model (`prepare`). Throws `ModelPreparationError` before the first piece when no
    * model can answer, and `ModelStreamError` when the answer was cut off or filtered.
    */
   async *stream(
@@ -161,7 +172,7 @@ export class OnlineProvider {
       yield* pieces(answerText(await this.p.demoModels.complete({ system, prompt, tag: operation }), true), signal);
       return;
     }
-    const chosen = await this.prepare();
+    const chosen = await this.prepare(operation);
     await this.p.demoData?.load();
     if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService })) {
       yield* pieces(answerText(await this.p.demoModels.complete({ system, prompt, tag: operation }), true), signal);

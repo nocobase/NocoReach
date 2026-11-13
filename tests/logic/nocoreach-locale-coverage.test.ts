@@ -424,10 +424,10 @@ describe('NocoReach semantic-key translations', () => {
       // Reddit searches moved to DataForSEO's Standard queue (2026-11-11): about $0.03 a term, not $0.002.
       '多个词用逗号分开，最多 5 个；按整个词组搜。每周每个词在 Google 搜一次 site:reddit.com，约 $0.002，算进 DataForSEO 的月度预算。只看得到 Google 收录了的帖子，看不到点赞和评论数；不保存作者。':
         '多个词用逗号分开，最多 5 个；按整个词组搜。每周每个词在 Google 搜一次 site:reddit.com，约 $0.03，算进 DataForSEO 的月度预算。只看得到 Google 收录了的帖子，看不到点赞和评论数；不保存作者。',
-      // The online model's glossary entry names Model services' default chat model and Editing and suggestions
-      // (2026-11-10).
+      // The online model's glossary entry names Model services' chat models and Editing and suggestions (2026-11-10;
+      // each cloud row picks its own model since 2026-11-13).
       '服务器上的模型（NocoBase AI 插件），每天分析数据、提出机会，也帮你起草做法。':
-        '服务器上的模型（「模型服务」里的默认对话模型），每天分析数据、提出机会，也负责编辑与建议：改写选中的文字、整理新任务、起草做法等。',
+        '服务器上的模型（「模型服务」里的对话模型），每天分析数据、提出机会，也负责编辑与建议：改写选中的文字、整理新任务、起草做法等。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

@@ -162,7 +162,7 @@ class DailyAnalysis{
  key(id){return `daily-analysis:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||{runs:[]};}
  async save(id,fn){const row=await this.repo().findOne({filter:{key:this.key(id)}});const next=await fn(row?.get('payload')||{runs:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
- async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user,operation,operation==='daily-report'?AbortSignal.timeout(REPORT_TIMEOUT_MS):undefined),model:`${model.llmService}/${model.model}`};}
+ async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare(operation);return {text:await provider.complete(system,user,operation,operation==='daily-report'?AbortSignal.timeout(REPORT_TIMEOUT_MS):undefined),model:`${model.llmService}/${model.model}`};}
  async run(id,trigger){const started=Date.now(),at=new Date().toISOString();let outcome,phase='prepare';
   try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error(systemMessageText('analysis.signalsUnavailable'));
    const language=await this.language(id);

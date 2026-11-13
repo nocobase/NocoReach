@@ -44,6 +44,7 @@ const state = vi.hoisted(() => ({
   analysis: {
     model: 'deepseek-v4.1-flash' as string | null,
     analysis: { last: { at: '2026-10-21T00:00:00Z', ok: true } } as unknown,
+    editing: undefined as unknown,
   },
   action: vi.fn(),
   request: vi.fn(),
@@ -131,6 +132,7 @@ beforeEach(() => {
   state.analysis = {
     model: 'deepseek-v4.1-flash',
     analysis: { last: { at: '2026-10-21T00:00:00Z', ok: true } },
+    editing: { choice: null, model: 'deepseek-v4.1-flash', available: true },
   };
   state.action.mockReset();
   state.action.mockImplementation((resource: string, action: string) =>
@@ -175,7 +177,7 @@ test('says which work cloud models and local agents do, with what each uses and 
   expect(
     within(row('每日分析')).getByText('deepseek-v4.1-flash'),
   ).toBeVisible();
-  // Editing and suggestions sits between them and runs on the daily analysis's model.
+  // Editing and suggestions sits between them and, without a model of its own, runs on the daily analysis's.
   const rows = screen.getAllByRole('rowheader').map((cell) => cell.textContent);
   expect(rows.slice(1, 4)).toEqual([
     '每日分析每天找机会，每周整理项目知识',
@@ -185,9 +187,9 @@ test('says which work cloud models and local agents do, with what each uses and 
   expect(
     within(row('编辑与建议')).getByText('deepseek-v4.1-flash'),
   ).toBeVisible();
-  expect(
-    within(row('编辑与建议')).getByText('和每日分析用同一个模型'),
-  ).toHaveClass('text-xs');
+  expect(within(row('编辑与建议')).getByText('和每日分析相同')).toHaveClass(
+    'text-xs',
+  );
   expect(within(row('对话栏')).getByText('deepseek-v4.1-flash')).toBeVisible();
   expect(
     within(row('执行任务')).getByText('Codex · GPT-6 Astra'),
@@ -439,21 +441,8 @@ test('with no runtime yet, tasks and the setup point to adding one', async () =>
   expect(screen.getByText('最快配置')).toBeVisible();
 });
 
-test('Daily analysis › Settings changes the model the analysis and editing run on', async () => {
+test('Daily analysis › Settings changes the model the analysis runs on', async () => {
   const user = userEvent.setup();
-  const view = mount();
-  await waitFor(() =>
-    expect(within(row('编辑与建议')).getByText('正常')).toBeVisible(),
-  );
-  // Editing and suggestions › Settings opens the same dialog.
-  await user.click(
-    within(row('编辑与建议')).getByRole('button', { name: '设置' }),
-  );
-  expect(
-    await screen.findByRole('dialog', { name: '每日分析、编辑与建议' }),
-  ).toBeVisible();
-  view.unmount();
-
   mount();
   await waitFor(() =>
     expect(within(row('每日分析')).getByText('正常')).toBeVisible(),
@@ -461,18 +450,19 @@ test('Daily analysis › Settings changes the model the analysis and editing run
   await user.click(
     within(row('每日分析')).getByRole('button', { name: '设置' }),
   );
-  const dialog = await screen.findByRole('dialog', {
-    name: '每日分析、编辑与建议',
-  });
+  const dialog = await screen.findByRole('dialog', { name: '每日分析' });
   expect(
     within(dialog).getByText(
-      '从「模型服务」里已启用的对话模型中选。两处用同一个模型，改了同时生效；对话栏没有单独选模型时，也用这个。',
+      '从「模型服务」里已启用的对话模型中选。编辑与建议、对话栏没有单独选模型时，也用这个。',
     ),
   ).toBeVisible();
+  expect(within(dialog).getByText(/运行时间在/)).toBeVisible();
   expect(within(dialog).getByRole('button', { name: '保存' })).toBeDisabled();
   await user.click(
     within(dialog).getByRole('combobox', { name: '用哪个模型' }),
   );
+  // Only the models themselves: following another row is Editing and suggestions' option.
+  expect(screen.queryByRole('option', { name: /和每日分析相同/ })).toBeNull();
   await user.click(
     await screen.findByRole('option', {
       name: 'OpenAI-compatible / deepseek-v4.1-pro',
@@ -490,6 +480,111 @@ test('Daily analysis › Settings changes the model the analysis and editing run
     }),
   );
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+// Each cloud model row picks its own model, as models are good at different things (2026-11-13 user decision).
+test('Editing and suggestions › Settings gives it a model of its own', async () => {
+  const user = userEvent.setup();
+  mount();
+  await waitFor(() =>
+    expect(within(row('编辑与建议')).getByText('正常')).toBeVisible(),
+  );
+  await user.click(
+    within(row('编辑与建议')).getByRole('button', { name: '设置' }),
+  );
+  const dialog = await screen.findByRole('dialog', { name: '编辑与建议' });
+  expect(
+    within(dialog).getByText(
+      '从「模型服务」里已启用的对话模型中选。不单独选时，用每日分析的模型。',
+    ),
+  ).toBeVisible();
+  expect(within(dialog).queryByText(/运行时间在/)).toBeNull();
+  expect(
+    within(dialog).getByRole('combobox', { name: '用哪个模型' }),
+  ).toHaveTextContent('和每日分析相同（deepseek-v4.1-flash）');
+  expect(within(dialog).getByRole('button', { name: '保存' })).toBeDisabled();
+  await user.click(
+    within(dialog).getByRole('combobox', { name: '用哪个模型' }),
+  );
+  await user.click(
+    await screen.findByRole('option', {
+      name: 'OpenAI-compatible / deepseek-v4.1-pro',
+    }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(state.action).toHaveBeenCalledWith('nrOnlineAI', 'setModel', {
+      method: 'POST',
+      body: {
+        role: 'editing',
+        modelService: 'openai-compatible',
+        model: 'deepseek-v4.1-pro',
+        projectId: '1',
+      },
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('Editing and suggestions with a model of its own names it and can go back to the daily analysis’s', async () => {
+  const user = userEvent.setup();
+  state.analysis.editing = {
+    choice: { modelService: 'openai-compatible', model: 'deepseek-v4.1-pro' },
+    model: 'deepseek-v4.1-pro',
+    available: true,
+  };
+  mount();
+  await waitFor(() =>
+    expect(within(row('编辑与建议')).getByText('正常')).toBeVisible(),
+  );
+  expect(
+    within(row('编辑与建议')).getByText('deepseek-v4.1-pro'),
+  ).toBeVisible();
+  expect(within(row('编辑与建议')).queryByText('和每日分析相同')).toBeNull();
+  expect(
+    within(row('每日分析')).getByText('deepseek-v4.1-flash'),
+  ).toBeVisible();
+  await user.click(
+    within(row('编辑与建议')).getByRole('button', { name: '设置' }),
+  );
+  const dialog = await screen.findByRole('dialog', { name: '编辑与建议' });
+  expect(
+    within(dialog).getByRole('combobox', { name: '用哪个模型' }),
+  ).toHaveTextContent('OpenAI-compatible / deepseek-v4.1-pro');
+  await user.click(
+    within(dialog).getByRole('combobox', { name: '用哪个模型' }),
+  );
+  await user.click(
+    await screen.findByRole('option', {
+      name: '和每日分析相同（deepseek-v4.1-flash）',
+    }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(state.action).toHaveBeenCalledWith('nrOnlineAI', 'setModel', {
+      method: 'POST',
+      body: { role: 'editing', model: null, projectId: '1' },
+    }),
+  );
+});
+
+test('an own editing model that is no longer available needs attention', async () => {
+  state.analysis.editing = {
+    choice: { modelService: 'removed', model: 'gemini-old' },
+    model: 'gemini-old',
+    available: false,
+  };
+  mount();
+  await waitFor(() =>
+    expect(within(row('编辑与建议')).getByText('需要处理')).toBeVisible(),
+  );
+  expect(within(row('编辑与建议')).getByText('gemini-old')).toBeVisible();
+  expect(detail('编辑与建议')).toHaveTextContent('所选的模型不可用。');
+  expect(
+    within(row('编辑与建议')).getByRole('button', { name: '设置' }),
+  ).toBeVisible();
+  // The daily analysis keeps running on its own model.
+  expect(within(row('每日分析')).getByText('正常')).toBeVisible();
 });
 
 test('Tasks › Settings picks the project default and says which agents can work', async () => {

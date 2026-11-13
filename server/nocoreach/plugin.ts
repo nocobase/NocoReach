@@ -19,6 +19,7 @@ import type { LegacyContext } from './legacy/context.js';
 import { AiQuestions } from './ai-questions.js';
 import { AiSearch } from './ai-search.js';
 import { OnlineProvider } from './execution/provider.js';
+import { EditingModel } from './cloud-models.js';
 import { AutomaticSources } from './automatic-sources.js';
 import { AnalysisRules } from './analysis-rules.js';
 import { SiteAudit } from './audit.js';
@@ -140,6 +141,8 @@ export class Connections{
   await this.proxyProfiles.migrateDefaultProxy(()=>this.projectIds()).then(moved=>{if(moved.length)this.app.logger.warn('NocoReach moved connections from other proxies to the default proxy',{moved});},e=>this.app.logger.warn('NocoReach default proxy migration skipped',{message:e?.message}));
   this.notifications=new Notifications(this);
   this.taskData=new TaskData(this);
+  // Editing and suggestions' own cloud model, which OnlineProvider reads for what a person asks for on a page.
+  this.editingModel=new EditingModel(this.db);
   
   this.keywordService=new KeywordService(this);this.keywordService.register();
   this.keywordSuggest=new KeywordSuggest(this);this.keywordSuggest.register();
