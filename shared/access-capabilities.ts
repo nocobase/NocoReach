@@ -86,6 +86,7 @@ export const TASK_COMMANDS = [
   'cancelTask',
   'archiveTask',
   'unarchiveTask',
+  'reopenReview',
   'snoozeTask',
   'unsnoozeTask',
   'confirmPublish',
@@ -272,6 +273,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'pagePlaces',
     ]),
     'nrArticles.targets',
+    'nrWorkshop.view',
   ],
   analyze: [
     'nrAiSearch.ask',
@@ -317,6 +319,10 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrArticles.search',
     'nrArticles.match',
     'nrArticles.languages',
+    // Content workshop › Hand off to agent: one task per form, each started.
+    'nrWorkshop.create',
+    // Content workshop › Trending now › Skip, which only the workshop reads.
+    'nrWorkshop.skip',
   ],
   knowledge: [
     ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),
@@ -335,6 +341,8 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'save',
     ]),
     'nrAgent.saveDefault',
+    // Content workshop › Brand and templates.
+    'nrWorkshop.saveBrand',
     ...list('nrSkills', ['readLink', 'setEnabled']),
     'nrProjects.edit',
   ],

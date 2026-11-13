@@ -41,6 +41,8 @@ export type Work = {
   // The website repository the task changes, kept at its start (2026-10-29, shared/repo-routing.ts); null when it
   // changes none. Tasks started before then have none kept.
   repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
+  // Content workshop (2026-11-13): what the task adapts, into which form and for where (shared/repurpose.ts).
+  repurpose?: import('../../../shared/repurpose.js').Repurpose;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit

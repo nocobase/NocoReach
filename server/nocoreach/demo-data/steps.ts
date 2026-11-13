@@ -15,6 +15,7 @@ import { projectWork, type Artifact } from '../execution/model.js';
 import { compare, type Partition } from '../execution/effect.js';
 import { opportunityHistory } from './opportunities.js';
 import { taskHistory } from './task-history.js';
+import { writeWorkshop } from './workshop-history.js';
 import { BUSINESS_MEMBER } from '../../access/service.js';
 import type { RoleAccess } from '../../../shared/access-capabilities.js';
 import {
@@ -165,6 +166,10 @@ export function demoSteps(host: DemoHost, language: string): DemoStep[] {
       key: 'tasks',
       weight: 2,
       run: (context) => writeTasks(host, content, context),
+    },
+    {
+      key: 'workshop',
+      run: (context) => writeWorkshop(host, content, context),
     },
     {
       key: 'opportunities',

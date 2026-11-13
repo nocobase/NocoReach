@@ -125,6 +125,11 @@ export type Growth = {
   category: GrowthCategory;
   figures: GrowthFigure[];
   evidence?: EvidenceTable;
+  /**
+   * The one keyword, topic or repository the growth is about, when it is about one (2026-11-13, for Content workshop's
+   * Trending now headlines). Growths computed before then have none.
+   */
+  subject?: string;
 };
 
 /**

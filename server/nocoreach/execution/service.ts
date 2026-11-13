@@ -28,6 +28,7 @@ import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
+import { FORM_RESULT_KIND, articleTitle, parseRepurpose, repurposeChecks } from '../../../shared/repurpose.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
@@ -86,6 +87,23 @@ export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script
 const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.replace(/\s+/g, ' ').trim().toLowerCase());
 // How long the start card's article lookup of a task's pages is reused (`TaskService.placesLookup`).
 const PLACES_MS = 2 * 60000;
+// A Content workshop task runs its form's playbook, and only those tasks run a Content workshop playbook.
+function fitsWork(p: any, w: Work) {
+  if (Boolean(p.form || p.category === 'repurpose') !== Boolean(w.repurpose) || (w.repurpose && p.form !== w.repurpose.form)) fail(systemMessageText('workshop.playbookMismatch'), 409);
+}
+
+// Content workshop's Adapt this (task-detail.tsx DoneCard): a live task whose page is a blog article, one the site's
+// content lists as a blog post or one a Write blog post task published, with the title the workshop gives it.
+export function adaptPage(task: any, work: Work, site: any, identity: PageIdentity): { url: string; title: string } | null {
+  const r = work.release, url = r?.state === 'live' ? String(r.pages?.[0] || '') : '';
+  if (!url) return null;
+  const key = (u: unknown) => { try { return pageKey(u, identity); } catch { return ''; } }, k = key(url);
+  const page = k ? (Array.isArray(site?.pages) ? site.pages : []).find((p: any) => p?.type === 'blog' && !p.noindex && key(p.url) === k) : null;
+  if (page) return { url, title: articleTitle(page) };
+  if (![work.playbookId, work.flow?.id].includes('blog-post')) return null;
+  return { url, title: work.article?.title || String(task.title || '') };
+}
+
 export class TaskService {
   private get simulated() { return (this.p as { mock?: MockEngine }).mock?.enabled === true; }
   private busy = false;
@@ -182,9 +200,9 @@ export class TaskService {
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
-    const identity = await this.pageIdentity(project, tx);
+    const site = await this.snapshot(`site-content:${project}`, tx), identity = pageIdentity(site);
     const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, identity, tx)];
-    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, pageIdentity: identity, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx, artifacts) };
+    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, pageIdentity: identity, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx, artifacts), adaptPage: adaptPage(task, work, site, identity) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), or
   // split off the same task for pages it leaves (2026-10-29: proposals sharing `group`, the first task's proposal or
@@ -201,10 +219,28 @@ export class TaskService {
     // Read them after committing the business transaction, since SQLite has a single connection.
     const agent = await this.agents.status(project, data.work.agentId, actor);
     // The project's AI content language: the primary language a start defaults to (shared/task-start.ts, 2026-10-30).
-    const language = (await this.p.project(project).catch(() => null))?.language || null;
+    const context = await this.p.project(project).catch(() => null), language = context?.language || null;
     // `repo`: the repository the task changes, or would by its pages (null when a person has to choose); `repos`: every one, for the start card.
     const repos = agent.repos.map(r => ({ id: r.id, repo: r.repo, baseBranch: r.baseBranch, allowedPaths: r.allowedPaths, urls: r.urls }));
-    return { ...data, language, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
+    return { ...data, language, ...(data.work.repurpose ? { repurpose: this.repurposeView(data, context) } : {}), agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
+  }
+  // A Content workshop task's automatic checks, worked out from each version's text by NocoReach (shared/repurpose.ts),
+  // never taken from what the Agent says of it; the identity check looks for the project's name.
+  private repurposeView(data: any, project: any) {
+    const r = data.work.repurpose, checks: Record<string, unknown[]> = {};
+    for (const a of data.artifacts || []) {
+      const parsed = a?.content ? parseRepurpose(r.form, a.content) : null;
+      if (parsed) checks[a.id] = repurposeChecks(r.form, parsed, { destination: r.destination, brand: project?.name });
+    }
+    return { checks };
+  }
+  // What a Content workshop run adapts: the source as chosen, with the article's body read when the task was created
+  // (WorkshopService), where a community post goes, the angle asked for, and the drafts of earlier adaptations of the
+  // same article or opportunity (approved, or waiting for review), kept when the task was created, for the Agent to take
+  // another angle.
+  private async repurposeInput(project: string, taskId: string, w: Work, tx: any) {
+    const stored = await this.snapshot(this.key('source', project, taskId), tx);
+    return { ...w.repurpose, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}), ...(stored?.earlier?.length ? { earlier: stored.earlier } : {}) };
   }
   // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
@@ -370,10 +406,12 @@ export class TaskService {
     const data = await this.p.taskData?.forRun(project, { url: (content as any)?.url, taskId }).catch(() => '') || '';
     const knowledge = await this.p.knowledge?.forAgent(project) || [];
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
-    const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
+    // A Content workshop playbook's result is read by the form it makes, a copy's too (shared/repurpose.ts).
+    const form = w.playbook?.form, resultKind = mode === 'plan' ? (form ? FORM_RESULT_KIND[form] : w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
+    const repurpose = w.repurpose ? { repurpose: await this.repurposeInput(project, taskId, w, tx) } : {};
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
     const unfinished = await this.unfinished(runs, stage.key, index, tx);
-    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });
+    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...repurpose, ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch, ...extra };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -775,12 +813,13 @@ export class TaskService {
         event.note = w.snooze.day; w.snooze = null;
       } else if (v.command === 'selectPlaybook') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStartedPlaybookCannotChange'), 409);
-        const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
+        const p = await this.playbooks.get(project, v.playbookId, tx); fitsWork(p, w); w.playbookId = p.id; event.note = p.name;
         await followPlaybook(p);
       } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStarted'), 409);
         const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
-        w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
+        fitsWork(p, w);
+        w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true, ...(p.form ? { form: p.form } : {}) };
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         // The pages it changes when it leaves some of its pages to other tasks (2026-10-29), from its own pages only.
@@ -858,7 +897,8 @@ export class TaskService {
             await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
             // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
             // daily analysis and later tasks know it; saved once the approval is committed.
-            if (w.stage === 'done' && w.playbook?.kind === 'plan' && this.p.knowledge?.saveDelivery) {
+            // Content workshop posts are not: they are written for another platform (2026-11-13).
+            if (w.stage === 'done' && w.playbook?.kind === 'plan' && !w.repurpose && this.p.knowledge?.saveDelivery) {
               const doc = w.results[index - 1]!, save = () => { void this.p.knowledge.saveDelivery(project, { taskId, title: task.title, text: doc.content }).catch(() => undefined); };
               if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
             }
@@ -868,7 +908,7 @@ export class TaskService {
               // The playbook's next steps as they are now, so a task started before they changed offers the current ones
               // (2026-10-28: Keyword research gained Write blog post); the start's copy once the playbook is gone.
               const nextSteps = (await this.playbooks.list(project, tx)).playbooks.find(p => p.id === w.playbook?.id)?.next ?? w.playbook?.next ?? [];
-              if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !nextSteps.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
+              if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || w.repurpose || !nextSteps.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
               const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
               // Titled as every handed-off task, by its playbook and the subject this task was about (task-title.ts).
               const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };
@@ -980,6 +1020,12 @@ export class TaskService {
         const live = w.stage === 'flow' && w.flow?.stages[w.stageIndex || 0]?.kind === 'observe';
         if (started && !w.cancelledAt && !live) return fail(systemMessageText('taskExecution.taskProgressStopBeforeClosing'), 409);
         w.archivedAt = at; w.archivedBy = actor;
+      } else if (v.command === 'reopenReview') {
+        // Content workshop (2026-11-13): an approved adaptation goes back to its review, to be edited and approved again.
+        const last = (w.flow?.stages.length ?? 0) - 1, output = w.results[last - 1];
+        if (!w.repurpose || w.stage !== 'done' || w.flow?.stages[last]?.kind !== 'review' || !output || output.rejectedAt) return fail(systemMessageText('workshop.reopenUnavailable'), 409);
+        const { approvedAt: _approvedAt, approvedBy: _approvedBy, ...kept } = output;
+        w.results[last - 1] = kept; w.stage = 'flow'; w.stageIndex = last; w.boardState = undefined; event.stageKey = w.flow!.stages[last].key;
       } else if (v.command === 'unarchiveTask') {
         // Reopen (2026-10-29 user decision): every closed task, back where it was closed with what was done and approved
         // (shared/task-reopen.ts). A task stopped halfway goes back to its step; an Agent step waits to be started again.

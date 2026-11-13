@@ -4,6 +4,7 @@ import {
   CalendarClock,
   FolderGit2,
   Globe,
+  MessagesSquare,
   Newspaper,
   Plug,
   Search,
@@ -38,6 +39,7 @@ const BRAND: Record<string, BrandLogoKey> = {
   bilibili: 'bilibili',
   xiaohongshu: 'xiaohongshu',
   youtube: 'youtube',
+  linkedin: 'linkedin',
   discord: 'discord',
   slack: 'slack',
 };
@@ -51,6 +53,8 @@ const ICON: Record<string, LucideIcon> = {
   competitors: Binoculars,
   rank: TrendingUp,
   'daily-analysis': CalendarClock,
+  // A community of the project's own (Content workshop's brand kit), whatever software it runs on.
+  community: MessagesSquare,
 };
 // `xs` is the bare mark, for a source named inside a button.
 const SIZE = {

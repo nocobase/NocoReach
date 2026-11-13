@@ -43,6 +43,7 @@ import {
   Globe2,
   Store,
   Settings2,
+  Shapes,
   KeyRound,
   BookHeart,
   TvMinimalPlay,
@@ -140,11 +141,20 @@ const nav = (key: string) => `nocoreach.nav.${key}`;
 export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // The main line, without a group title.
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
-  page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
+  // Adapt into short posts (Content workshop v4, 2026-11-13) opens the workshop's What to make step over a Trending now
+  // opportunity.
+  { ...page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }), children: [{ name: 'opportunity-repurpose', path: 'repurpose', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/workshop/pick.js') }] },
   {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
   // The article's reading page covers the task (RouteChildPage) at /actions/:taskId/article; it renders inside the task
   // page, which already passed the gates.
-  { ...page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')), children: [{ name: 'task-article', path: 'article', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/task-detail/article-reader.js') }] },
+  // Process this one (Content workshop's step 2 over the task, 2026-11-13) opens from a blog article task's live card.
+  { ...page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')), children: [{ name: 'task-article', path: 'article', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/task-detail/article-reader.js') }, { name: 'task-repurpose', path: 'repurpose', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/workshop/pick.js') }] },
+  // Content workshop (2026-11-13 user decision): a sibling of Tasks right below it, not a child route, so it renders on
+  // its own and the Tasks badge stays. Choose content to process and Brand and templates open as dialogs over it.
+  { ...page('content-workshop', '/workshop', () => import('./pages/workshop/index.js'), { title: nav('workshop'), icon: Shapes, order: 3.2 }), children: [
+    { name: 'workshop-pick', path: 'new', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/workshop/pick.js') },
+    { name: 'workshop-brand', path: 'brand', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/workshop/brand.js') },
+  ] },
   // 成果 is a dashboard; 全部成果 covers it at /results/all. A result's drawer opens over whichever of the two it was
   // opened from, so it is declared under both.
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [

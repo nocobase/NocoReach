@@ -18,11 +18,14 @@ export type PlaybookKind='plan'|'build';
 export type StepKind='analyze'|'change'|'review';
 // skills: ids of the Skills an Agent step always uses (see skill-model.ts), at most 5.
 export type Step={key:string;name:string;kind:StepKind;instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
-export type Category='research'|'create'|'optimize'|'technical';
-export const getCategories = (): [Category,string][] => ([['research',$t('common.researchAnalysis')],['create',$t('playbook.contentCreation')],['optimize',$t('playbook.contentOptimization')],['technical',$t('playbook.websiteTechnical')]]);
+export type Category='research'|'create'|'optimize'|'technical'|'repurpose';
+export const getCategories = (): [Category,string][] => ([['research',$t('common.researchAnalysis')],['create',$t('playbook.contentCreation')],['optimize',$t('playbook.contentOptimization')],['technical',$t('playbook.websiteTechnical')],['repurpose',$t('playbook.contentRepurposing')]]);
+// Content workshop playbooks (2026-11-13) need a source and a destination the workshop gives them: a task's playbook
+// picker and a new playbook's category leave them out.
+export const startableCategories = () => getCategories().filter(([k]) => k !== 'repurpose');
 export const categoryName=(c?:Category)=>getCategories().find(([k])=>k===c)?.[1]||$t('common.other');
-export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string};
-export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean};
+export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string;form?:import('../../shared/repurpose').RepurposeForm};
+export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean;form?:import('../../shared/repurpose').RepurposeForm};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
 // A playbook's own words, before a task says where it changes things (PlaybookSteps' place words a task's steps).
 export const getStepKinds = (): Record<StepKind,{name:string;label:string;hint:string}> => ({analyze:{name:$t('common.analyze'),label:$t('playbook.agentAnalysis'),hint:$t('playbook.writesDocumentWithoutChangingSite')},change:{name:$t('common.modify'),label:$t('playbook.agentChange'),hint:$t('playbook.changesSiteOrArticle')},review:{name:$t('common.review'),label:$t('playbook.review'),hint:$t('playbook.approveRequestChangesAfterReviewing')}});
@@ -97,7 +100,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'linkContent':return {who:$t('common.you'),text:$t('playbook.linkedPage')};
   case 'cancelTask':return {who:$t('common.you'),text:labelValue($t('playbook.closedTaskStoppedRun',{0:''}),$legacyText(e.note))};
   case 'archiveTask':return e.note?{who:$t('common.system'),text:$t('playbook.closedTaskValue',{0:$legacyText(e.note)})}:{who:$t('common.you'),text:$t('playbook.closedTask')};
-  // Reopened (2026-10-29): the step a task stopped halfway went back to.
+  // Reopened (2026-10-29): the step a task stopped halfway went back to; a Content workshop task goes back to its review.
+  case 'reopenReview':
   case 'unarchiveTask':return {who:$t('common.you'),text:e.stageKey?$t('playbook.reopenedTaskAt',{0:s}):$t('playbook.reopenedTask')};
   case 'prClosed':return {who:$t('common.localAgent'),text:$t('playbook.closedBranchKept',{0:e.note||'PR'})};
   case 'merged':return {who:$t('common.localAgent'),text:$t('playbook.merged',{0:e.note||'PR'})};

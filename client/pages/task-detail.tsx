@@ -30,6 +30,8 @@ import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-det
 import { againstPrevious, canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
 import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
+import { RepurposeResult } from './task-detail/repurpose-result.js';
+import { repurposeReviewTitle } from './workshop/model.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
 import { Card, Clamped, Field } from './task-detail/layout.js';
@@ -49,7 +51,7 @@ import {Outlet,useNavigate,useSearchParams} from 'react-router';
 import {createUuid,useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {History,BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine} from 'lucide-react';
+import {Shapes,History,BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -70,7 +72,7 @@ import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
 import {closeCommand,canReopen,closedWhen,reopenHint,restartOf,getCloseConfirm,closedLabel,isClosed,isSnoozed,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
-import {playbookRequest,playbookNameOf,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {playbookRequest,playbookNameOf,localizePlaybookList,getCategories,startableCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
 import {translatesArticle} from '../../shared/playbook-catalog';
 import './strategy/strategy.css';
 import './reach-workspace.css';
@@ -184,7 +186,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
     <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className="order-2"
      agentLocked={!access.allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined}
      onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))} agentPicker={agentPicker} onAgentPicker={setAgentPicker}/>
-    <TaskNumbers data={data} projectId={projectId} taskId={taskId} className="order-4"/>
+    {/* A Content workshop post has no page of its own to measure. */}
+    {!w.repurpose&&<TaskNumbers data={data} projectId={projectId} taskId={taskId} className="order-4"/>}
    </div>
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
@@ -242,7 +245,7 @@ function WhyCard({data,onEvidence}:{data:Data;onEvidence:()=>void}){
  const title=w.stage!=='done'&&!isClosed(w)&&stage?.kind==='review'&&Boolean(out?.pr||out?.article)?$t('taskDetail.whyChangeTitle'):$t('taskDetail.whyTitle');
  return <Card className="order-1" aria-label={title} title={<><Sparkles aria-hidden="true" className="size-4 shrink-0 text-agent"/>{title}</>}>
   {reason&&<div className="flex flex-col gap-1">
-   <p className={cn(text.body,'leading-6')}>{reason}</p>
+   <p className={cn(text.body,'leading-6')}>{why.from==='workshop'&&w.repurpose?.source.kind==='article'?$tj('workshop.whyArticle',{0:<a className="nr-link" href={w.repurpose.source.url} target="_blank" rel="noreferrer">{w.repurpose.source.title}</a>}):reason}</p>
    {(why.fact||why.more>0)&&<p className={cn(text.body,'leading-6')}>{why.fact}{why.more>0&&<span className="text-muted-foreground">{why.fact?' ':''}{$t('taskDetail.moreSignals',{0:why.more})}</span>}</p>}
   </div>}
   {hasEvidence&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}
@@ -259,6 +262,8 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
  const stage=w.flow&&w.stage!=='done'&&!isClosed(w)?w.flow.stages[w.stageIndex||0]:undefined;
  const run=stage?.kind==='agent'?data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]:undefined;
  const manual=allowed&&stage?.kind==='agent'&&run?.status!=='running';
+ // A finished Content workshop result goes back to review to be changed (reopenReview in service.ts).
+ const reopen=allowed&&Boolean(w.repurpose)&&w.stage==='done'&&!isClosed(w);
  const hasCode=w.results.some(r=>r?.pr)||Boolean(w.release?.pr||w.revert?.url),technical=hasCode||data.runs.length>0;
  const collab=w.collaborators||[],collabIds=collab.map(c=>c.id),others=members.filter(m=>m.id!==w.humanOwnerId);
  if(!technical&&!allowed)return null;
@@ -269,6 +274,7 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
    {allowed&&<DropdownMenuItem disabled={busy} onClick={onPage}><Link2/>{$t('common.relatedPage')}</DropdownMenuItem>}
    {allowed&&<DropdownMenuSub><DropdownMenuSubTrigger disabled={busy||!members.length}><Users/>{$t('taskDetail.collaborators')}</DropdownMenuSubTrigger>
     <DropdownMenuSubContent>{others.map(m=><DropdownMenuCheckboxItem key={m.id} checked={collabIds.includes(m.id)} onCheckedChange={on=>void update('setCollaborators',{userIds:on?[...collabIds,m.id]:collabIds.filter(x=>x!==m.id)})}>{m.name}</DropdownMenuCheckboxItem>)}{others.length===0&&<p className="nr-td-muted nr-td-menu-empty">{$t('taskDetail.noOtherMembers')}</p>}</DropdownMenuSubContent></DropdownMenuSub>}
+   {reopen&&<DropdownMenuItem disabled={busy} onClick={()=>void update('reopenReview')}><RotateCcw/>{$t('workshop.reopen')}</DropdownMenuItem>}
    {(snoozable||cmd)&&<DropdownMenuSeparator/>}
    {snoozable&&<DropdownMenuItem disabled={busy} onClick={snooze}><Clock/>{$t('taskSnooze.menu')}</DropdownMenuItem>}
    {cmd&&<><DropdownMenuItem variant="destructive" disabled={busy} onClick={async()=>{if(cmd==='archiveTask'||(await confirmAction({title:() => ($t('common.closeTaskValueConfirmation',{0:data.task.title})),description:() => (getCloseConfirm()),action:'common.closeTask'})))void update(cmd);}}><Archive/>{$t('common.closeTask')}</DropdownMenuItem></>}
@@ -358,7 +364,7 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
    <Select value={pick} disabled={busy||!list||!allowed} onValueChange={v=>{if(v!=null)setPick(String(v));}}>
     <SelectTrigger className="w-full" aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const n=playbookNameOf(v,list);return n?`${n}${v===data.playbookDefault?$t('taskDetail.recommended'):''}`:'';}}</SelectValue></SelectTrigger>
     <SelectContent className="max-w-[min(var(--container-md),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">
-     {getCategories().map(([k,label])=>{const items=(list?.playbooks||[]).filter(x=>x.category===k);return items.length?<SelectGroup key={k}><SelectLabel>{label}</SelectLabel>{items.map(x=><SelectItem key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t('taskDetail.recommended'):''}</SelectItem>)}</SelectGroup>:null;})}
+     {(data.work.repurpose?getCategories().filter(([k])=>k==='repurpose'):startableCategories()).map(([k,label])=>{const items=(list?.playbooks||[]).filter(x=>x.category===k&&(!data.work.repurpose||x.form===data.work.repurpose.form));return items.length?<SelectGroup key={k}><SelectLabel>{label}</SelectLabel>{items.map(x=><SelectItem key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t('taskDetail.recommended'):''}</SelectItem>)}</SelectGroup>:null;})}
     </SelectContent>
    </Select>
    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
@@ -534,15 +540,15 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  }
  if(stage.kind==='review'){
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
-  const label=nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
+  const label=w.repurpose?$t('workshop.approve'):nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
   const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
-  return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
+  return <StageCard title={w.repurpose?repurposeReviewTitle(w.repurpose):$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
     :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    <LastFeedback w={w} stage={stage} out={out}/>
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
-    {out.pr?<PageChange pr={out.pr} content={out.content}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
+    {out.pr?<PageChange pr={out.pr} content={out.content}/>:w.repurpose?<RepurposeResult data={data} out={out} review fallback={<Reading><Markdown content={out.content}/></Reading>}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
     <ScopeConfirm pr={out.pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
     {out.report&&<ReportNotes report={out.report}/>}
     <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
@@ -637,8 +643,11 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const shipped=(r?.article?.artifactId&&w.results.find(x=>x?.id===r.article!.artifactId))||accepted||undefined;
  const done=$t('common.completed');
  if(r?.state==='simulated')return <StageCard label={done} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><Field label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Field></StageCard>;
+ // A live blog article can be adapted for other platforms (Content workshop): its address and title open step 2. The
+ // server decides which pages are blog articles (service.ts adaptPage).
+ const a=data.adaptPage,adapt=r?.state==='live'&&a?<Button variant="outline" onClick={()=>void navigate(`repurpose?${new URLSearchParams({url:a.url,title:a.title})}`)}><Shapes/>{$t('workshop.adaptThis')}</Button>:null;
  if(r?.state==='live')return <StageCard label={done} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
-  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
+  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<><Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>{adapt}</>:adapt||undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'text-sm text-destructive':text.body} role={w.revert.state==='failed'?'alert':undefined} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
   <LiveChange data={data} artifact={shipped}/>
   <TargetRows data={data} r={r}/>
@@ -647,6 +656,9 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   <PageLinks pages={r.pages}/>
   {r.note&&!r.article&&<Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>}
  </StageCard>;
+ // A Content workshop result (2026-11-13 user decision): approving completes it; the pieces stay to copy, and Reopen
+ // in the ··· menu takes it back to review.
+ if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})}><RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}>{handed}<ReplyDrafts items={replies}/></StageCard>;
  return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>

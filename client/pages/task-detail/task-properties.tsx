@@ -335,7 +335,9 @@ function Source({
             ? $t('manualTask.newTask')
             : source.via === 'results'
               ? $t('taskSource.fromResults')
-              : entry
+              : source.via === 'workshop'
+                ? $t('taskSource.fromWorkshop')
+                : entry
                 ? $t('taskSource.handedOffFrom', { 0: t(entry) })
                 : source.via === 'dataPage'
                   ? $t('taskSource.handedOff')
@@ -378,7 +380,31 @@ function Source({
           {$t('taskSource.foundBy', { 0: source.name })}
         </span>
       ) : null}
-      {where && <span className='text-muted-foreground'>{where}</span>}
+      {source.via === 'workshop' && source.insight?.id ? (
+        // Made from a Trending now opportunity: "From Content workshop · O-35 · 11-13", the opportunity opening.
+        <span className='inline-flex flex-wrap items-center gap-x-1.5 text-muted-foreground'>
+          {label}
+          <span>·</span>
+          <button
+            type='button'
+            className='nr-link text-left'
+            onClick={() => onOpportunity(source.insight!.id!)}
+            data-workshop-opportunity=''
+          >
+            {source.insight.no
+              ? `O-${source.insight.no}`
+              : $t('common.opportunity')}
+          </button>
+          {at ? (
+            <>
+              <span>·</span>
+              {at}
+            </>
+          ) : null}
+        </span>
+      ) : (
+        where && <span className='text-muted-foreground'>{where}</span>
+      )}
     </span>
   );
 }

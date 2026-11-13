@@ -65,6 +65,7 @@ const enUS = {
   'nocoreach.nav.opportunities': 'Opportunities',
   'nocoreach.nav.tasks': 'Tasks',
   'nocoreach.nav.results': 'Results',
+  'nocoreach.nav.workshop': 'Content workshop',
   'nocoreach.nav.site': 'Site & product',
   'nocoreach.nav.pages': 'Pages',
   'nocoreach.nav.traffic': 'Traffic',

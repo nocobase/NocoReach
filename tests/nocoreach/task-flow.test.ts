@@ -140,13 +140,18 @@ for (const unavailable of ['missing', 'database-error']) {
 }
 
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
- assert.equal(SYSTEM_PLAYBOOKS.length,13);
+ assert.equal(SYSTEM_PLAYBOOKS.length,16);
  // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.
  {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### Reply/);assert.match(r.steps[0].instruction,/不发帖/);
   assert.equal(defaultPlaybookId({evidence:{insight:{signalIds:['community-unanswered']},context:{signals:{items:[{key:'community-unanswered',action:'reply'}]}}}}),'community-reply');}
- for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical'].includes(p.category));
+ for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical','repurpose'].includes(p.category));
   assert.equal(st.some(s=>s.kind==='release'),p.kind==='build',`${p.id}: only repository changes are released`);}
  assert.deepEqual(SYSTEM_PLAYBOOKS.filter(p=>p.category==='research').map(p=>p.id),['change-research','competitor-compare','keyword-research','community-summary']);
+ // Content workshop (2026-11-13): one playbook per form, the Agent adapts and you approve, which completes the task;
+ // nothing follows and nothing is saved to the knowledge base.
+ for(const [id,form,skill] of [['x-posts','x','x-posts'],['linkedin-post','linkedin','linkedin-post'],['community-post','community','community-post']]){const p=SYSTEM_PLAYBOOKS.find(x=>x.id===id);
+  assert.equal(p.category,'repurpose');assert.equal(p.form,form);assert.equal(p.kind,'plan');assert.deepEqual(p.next,[]);assert.deepEqual(stagesFor(p).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(p.steps[0].skills,[skill]);
+  for(const marker of form==='x'?['## Post 1','## Reply','Sections:']:form==='linkedin'?['## Post','Sections:']:['## Title','## Body','## Rules','Sections:'])assert.ok(p.steps[0].instruction.includes(marker),`${id} names ${marker}`);}
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='competitor-compare')).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]],'research is an analysis by the Agent');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')).map(s=>s.key),['build','review','release','observe'],'page work goes straight to a change you look at');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='tech-fix')).map(s=>s.key),['plan','approve-plan','build','review','release','observe'],'technical fixes show a plan first');
@@ -292,10 +297,10 @@ test('messages reach the next run; the playbook is fixed once started; removed c
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
  const f=fixture();await connectAgent(f);
- let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,13);
+ let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,16);
  // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
- assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,13);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
+ assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,16);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
  await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
  r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建一个文档页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
@@ -1224,4 +1229,30 @@ test('repositories: a check asks GitHub for the repository and branch and says w
  doc=await f.s.agents.checkRepo('1',{id:doc.repos[1].id},'1');
  assert.deepEqual([doc.repos[1].check.repo,doc.repos[1].check.branch,doc.repos[1].check.detail],['unknown','unknown','GitHub is unreachable']);
  await assert.rejects(f.s.agents.checkRepo('1',{id:'gone'},'1'),e=>e.status===409);
+});
+
+// Content workshop (2026-11-13): a task made from an article runs its form's playbook only, the Agent gets the source
+// and the place, NocoReach checks the text itself, approving completes it (no knowledge, no next playbook), and
+// Reopen for review takes it back to the review step.
+test('Content workshop task: the form playbook only, source in the run, checks from the text, approval completes, reopen returns to review',async()=>{
+ const repurpose={form:'community',source:{kind:'article',url:'https://example.com/blog/tickets',title:'Tickets in an afternoon'},destination:{kind:'reddit',subreddit:'selfhosted',discussions:12,weeks:4}},createdBy={id:'1',name:'Tester'};
+ const f=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose}});await connectAgent(f);
+ f.state.nrSnapshots.push({id:9001,key:f.s.key('source','1','1'),payload:{body:'## Why\nOne inbox for everything.\n\n## How\nTwo tables and a form.',locale:'en-US',readAt:'2026-11-13T00:00:00Z'}});
+ await assert.rejects(f.command('startTask',{playbookId:'x-posts'}),e=>e.status===409,'another form');
+ await assert.rejects(f.command('startTask',{playbookId:'change-research'}),e=>e.status===409,'not a workshop playbook');
+ await assert.rejects(f.command('reopenReview'),e=>e.status===409,'nothing to reopen yet');
+ let d=await f.command('startTask',{playbookId:'community-post'});assert.equal(d.work.playbook.form,'community');
+ const c=await claim(f);assert.equal(c.run.input.resultKind,'communityPost');assert.equal(c.run.input.repurpose.destination.subreddit,'selfhosted');assert.match(c.run.input.repurpose.body,/Two tables/);
+ const body='I work on Synthetic, so take this with that in mind. Our support team of four answered every request from one shared inbox, and nothing had an owner. We moved it to two tables and a public form in an afternoon; here is the setup, what broke in the first week and what we would do again.';
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:['## Title','We replaced our support inbox with a self-hosted ticket table','','## Body','Sections: 1-2',body,'','## Rules','- Disclose your affiliation','- No link-only posts'].join('\n')});
+ d=await f.view();assert.equal((await f.stage()).key,'accept');
+ assert.deepEqual(d.repurpose.checks[output(d).id].map(x=>[x.key,x.ok]),[['workshop.check.bodyComplete',true],['workshop.check.identityBrand',true],['workshop.check.titleWithin',true],['workshop.check.rulesRead',true]]);
+ await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:[],next:'new-doc'}),e=>e.status===409,'nothing follows');
+ const saveDelivery=vi.fn();f.s.p.knowledge={saveDelivery};
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:[]});
+ assert.equal(d.work.stage,'done');assert.equal(d.work.nextTaskId,undefined);assert.equal(saveDelivery.mock.calls.length,0,'not saved to the knowledge base');
+ d=await f.command('reopenReview');assert.equal(d.work.stage,'flow');assert.equal((await f.stage()).key,'accept');assert.equal(output(d).approvedAt,undefined);
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:[]});assert.equal(d.work.stage,'done');
+ // A task from anywhere else never runs a Content workshop playbook.
+ const g=fixture();await connectAgent(g);await assert.rejects(g.command('startTask',{playbookId:'x-posts'}),e=>e.status===409);
 });
