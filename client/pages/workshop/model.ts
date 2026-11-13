@@ -1,0 +1,157 @@
+import { $legacyText, $t } from '#i18n';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
+import type { Tone } from '#components/reach/tag';
+import {
+  destinationName,
+  type Destination,
+  type Repurpose,
+  type RepurposeForm,
+  type RepurposeSource,
+} from '../../../shared/repurpose.js';
+
+// Content workshop (2026-11-13 user decision): what `nrWorkshop.view` returns and the words the page, its dialogs and the
+// task page share. Recommendations are the site's own figures, never an AI's judgement; nothing is pre-ticked.
+
+export type Standing = 'todo' | 'doing' | 'review' | 'done' | 'closed' | 'snoozed';
+export type Made = {
+  form: RepurposeForm;
+  destination?: Destination;
+  taskId: string;
+  no: number | null;
+  standing: Standing;
+};
+export type Article = {
+  url: string;
+  title: string;
+  published?: string;
+  clicks7: number;
+  previous7: number;
+  clicks30: number;
+  clicks12m: number;
+  cited: number;
+  made: Made[];
+};
+export type WorkshopRecord = {
+  taskId: string;
+  no: number | null;
+  title: string;
+  updatedAt: string;
+  form: RepurposeForm;
+  destination?: Destination;
+  source: RepurposeSource;
+  standing: Standing;
+  failed?: boolean;
+  restart?: boolean;
+};
+export type Community = { name: string; url: string; sections: string[] };
+export type Brand = { revision: number; community: Community | null };
+export type WorkshopView = {
+  recent: Article[];
+  earlier: Article[];
+  searchConnected: boolean;
+  dataThrough: string | null;
+  articles: Article[];
+  records: WorkshopRecord[];
+  recordCount: number;
+  brand: Brand;
+  voice: string;
+  destinations: {
+    reddit: {
+      subreddits: { subreddit: string; discussions: number }[];
+      weeks: number;
+      recent: string[];
+    };
+  };
+};
+
+export const workshopRequest = <T>(
+  action: string,
+  projectId: number | string,
+  body: object = {},
+) =>
+  api.action<T>('nrWorkshop', action, {
+    method: 'POST',
+    body: { projectId: String(projectId), ...body },
+    unwrap: 'data',
+  });
+
+/** Each form's name, in the interface language. */
+export const getFormNames = (): Record<RepurposeForm, string> => ({
+  xhs: $t('workshop.formXhs'),
+  x: $t('workshop.formX'),
+  linkedin: $t('workshop.formLinkedin'),
+  community: $t('workshop.formCommunity'),
+});
+
+/** Where a community post goes, as lists name it: "Reddit r/selfhosted", "Forum · Tutorials". */
+export const destinationLabel = (d: Destination) =>
+  d.kind === 'own' ? `${d.name} · ${d.section}` : destinationName(d);
+
+/** What a task makes: "LinkedIn post", "Community post · Hacker News". */
+export const outputLabel = (form: RepurposeForm, destination?: Destination) =>
+  [getFormNames()[form], destination ? destinationLabel(destination) : '']
+    .filter(Boolean)
+    .join(' · ');
+
+/** The mark beside a form or destination (SourceLogo's names). */
+export const logoOf = (form: RepurposeForm, destination?: Destination) =>
+  form === 'x'
+    ? 'x'
+    : form === 'linkedin'
+      ? 'linkedin'
+      : form === 'xhs'
+        ? 'xiaohongshu'
+        : destination?.kind === 'reddit'
+          ? 'reddit'
+          : destination?.kind === 'hn'
+            ? 'hackernews'
+            : 'community';
+
+/** Where a workshop task stands, in the workshop's words: Agent working, waiting for your review, done. */
+export function recordState(r: Pick<WorkshopRecord, 'standing' | 'failed' | 'restart'>): {
+  text: string;
+  tone: Tone;
+} {
+  if (r.standing === 'review' && r.failed)
+    return { text: $t('taskList.runFailed', { 0: 'Agent' }), tone: 'red' };
+  if (r.standing === 'review' && r.restart)
+    return { text: $t('taskList.waitingRestart'), tone: 'amber' };
+  if (r.standing === 'review') return { text: $t('workshop.stateReview'), tone: 'violet' };
+  if (r.standing === 'doing') return { text: $t('workshop.stateDoing'), tone: 'blue' };
+  if (r.standing === 'done') return { text: $t('common.completed'), tone: 'green' };
+  if (r.standing === 'closed') return { text: $t('common.closed'), tone: 'slate' };
+  if (r.standing === 'snoozed') return { text: $t('common.snoozed'), tone: 'grey' };
+  return { text: $t('common.notStarted'), tone: 'grey' };
+}
+
+/** The forms an article was made into, each once: "X posts, Reddit r/selfhosted". */
+export const madeList = (made: Made[]) => [
+  ...new Set(
+    made.map((m) =>
+      m.form === 'community' && m.destination
+        ? destinationName(m.destination)
+        : getFormNames()[m.form],
+    ),
+  ),
+];
+
+/** The source's line in lists: the article's title, or the topic. */
+export const sourceLabel = (s: RepurposeSource) =>
+  s.kind === 'article' ? s.title : s.topic;
+
+/** A failed request's message in the interface language (the server's own text is Chinese). */
+export const errorText = (e: unknown, fallback: string) =>
+  e instanceof Error && e.message ? $legacyText(e.message) : fallback;
+
+/** The task's short number, as boards show it. */
+export const taskNo = (no: number | null | undefined) => (no ? `T-${no}` : '');
+
+/** What a result is called: "X posts", "LinkedIn post", "Reddit r/selfhosted post". */
+export const resultName = (form: RepurposeForm, destination?: Destination) =>
+  form === 'community' && destination
+    ? $t('workshop.communityPostAt', { 0: destinationName(destination) })
+    : getFormNames()[form];
+
+/** The review card's title: "X posts are written; approving completes the task". */
+export const repurposeReviewTitle = (r: Repurpose) =>
+  $t('workshop.reviewTitle', { 0: resultName(r.form, r.destination) });

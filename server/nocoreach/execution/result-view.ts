@@ -80,6 +80,8 @@ const latestDate = (dates: (string | undefined)[]) =>
  * Tasks. Simulated work (the demo install, a simulated release) follows the same rule and is marked as simulated.
  */
 export function hasOutcome(task: Task, work: Work = projectWork(task)) {
+  // Content workshop tasks produce posts a person publishes elsewhere (2026-11-13): Content workshop lists them.
+  if (work.repurpose) return false;
   if (work.observeFrom || work.release?.liveAt) return true;
   return taskStanding(work) === 'done';
 }

@@ -55,6 +55,8 @@ function harness(seed: Record<string, unknown> = {}) {
 }
 const marketing = BUILT_IN_SKILLS.filter((b: any) => b.since === 2);
 const own = BUILT_IN_SKILLS.filter((b: any) => b.since === 1);
+// Content workshop's Skills (2026-11-13), one per form it makes.
+const workshop = BUILT_IN_SKILLS.filter((b: any) => b.since === 3);
 
 it('bundles the chosen marketing Skills at one pinned commit, within the library limits and with their license', () => {
   expect(bundled.commit).toMatch(/^[0-9a-f]{40}$/);
@@ -132,7 +134,7 @@ it('adds the newer built-ins to an existing library once, never over a Skill of 
     'nr-skill:sk-imported': { body: 'mine', files: [] },
   });
   const names = (await s.list('1')).skills.map((x: any) => x.name);
-  expect(names).toHaveLength(2 + marketing.length - 1);
+  expect(names).toHaveLength(2 + marketing.length - 1 + workshop.length);
   // The own built-ins deleted before (research-report, seo-title-description) do not come back.
   expect(names).not.toContain('research-report');
   expect(names).not.toContain('seo-title-description');
@@ -170,7 +172,9 @@ it('upgrades an existing library when the application starts, and leaves a fresh
     expect(old.payload('nr-skills').builtIns).toBe(BUILT_IN_VERSION),
   );
   expect(old.payload('nr-skills').builtIns).toBe(BUILT_IN_VERSION);
-  expect(old.payload('nr-skills').skills).toHaveLength(marketing.length);
+  expect(old.payload('nr-skills').skills).toHaveLength(
+    marketing.length + workshop.length,
+  );
 });
 
 it('lets a step name a built-in that was imported under the same name, once', async () => {

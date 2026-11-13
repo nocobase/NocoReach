@@ -69,7 +69,16 @@ const envelope = z.object({
   message: z.string().optional(),
   report: z
     .object({
-      kind: z.enum(['communityReply', 'research', 'content']),
+      kind: z.enum([
+        'communityReply',
+        'research',
+        'content',
+        // Content workshop forms (shared/repurpose.ts FORM_RESULT_KIND).
+        'xhsCards',
+        'xPosts',
+        'linkedinPost',
+        'communityPost',
+      ]),
       sources: z.array(source).max(30),
       asOf: z.string().max(REPORT_AS_OF_MAX_LENGTH),
       uncertainties: z.array(z.string().max(1000)).max(20),
@@ -88,6 +97,14 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           `report.asOf 最多 ${REPORT_AS_OF_MAX_LENGTH} 字符，简要写数据截止时间和抓取时间；不同来源的详细时间说明放 content 正文，不确定事项放 uncertainties。`,
           '网页来源使用完整 HTTP/HTTPS url（不含凭据）；任务材料使用 material: context|sources|knowledge|skills，不使用文件路径、file:// 或 nocoreach:// URL。正文 content 最多 30000 字符，sources 最多 30 项，title 最多 300 字符，uncertainties 最多 20 项且每项最多 1000 字符。',
           '研究给出依据、建议和理由；社区回复逐帖给出可供审核的草稿并引用原帖；内容草稿区分事实与建议。没有仓库的研究或草稿无需创建 PR。',
+          // Content workshop results are read by their markers (shared/repurpose.ts parseRepurpose).
+          ...(['xPosts', 'linkedinPost', 'communityPost', 'xhsCards'].includes(
+            String(resultKind),
+          )
+            ? [
+                '内容加工：content 严格按步骤说明里的固定格式写，标记 ## Post、## Reply、## Title、## Body、## Rules 和 Sections: 保持英文原样；只写稿，不发帖、不评论、不修改仓库或文章。sources 列实际读过的文章和版规页面。',
+              ]
+            : []),
         ]
       : []),
     ...(mode === 'build'

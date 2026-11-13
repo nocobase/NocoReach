@@ -16,8 +16,8 @@ import { playbookForActions } from '../../../shared/opportunity-parts';
 // added by the system. The online AI does the daily analysis only; no task is run by it.
 // kind is derived for older code paths: build when a step changes the repository, plan when it only produces documents.
 // skills: ids of the Skills an Agent step must use (analyze and change steps only, at most 5).
-export const CATEGORIES = ['research', 'create', 'optimize', 'technical'] as const;
-export type PlaybookSnapshot = { id: string; name: string; kind: PlaybookKind; version: number; next: string[]; system?: boolean; edited?: boolean };
+export const CATEGORIES = ['research', 'create', 'optimize', 'technical', 'repurpose'] as const;
+export type PlaybookSnapshot = { id: string; name: string; kind: PlaybookKind; version: number; next: string[]; system?: boolean; edited?: boolean; form?: import('../../../shared/repurpose.js').RepurposeForm };
 
 const STEP_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/, SKILL_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const STEP_NAMES: Record<StepKind, string> = { analyze: systemMessageText('common.analyze'), change: systemMessageText('common.modify'), review: systemMessageText('common.review') };
@@ -102,7 +102,8 @@ export class PlaybookStore {
   key(project: string) { return `nr-playbooks:${project}`; }
   async doc(project: string, tx?: any): Promise<{ revision: number; playbooks: Playbook[] }> { return (await this.s.snapshot(this.key(project), tx)) || { revision: 0, playbooks: [] }; }
   private merge(stored: any[]): Playbook[] {
-    const builtIn = SYSTEM_PLAYBOOKS.map(b => { const o = stored.find(p => p.id === b.id); return o ? normalize({ ...o, system: true, edited: true }) : b; });
+    // An edited built-in keeps the form it makes (Content workshop), whatever was stored.
+    const builtIn = SYSTEM_PLAYBOOKS.map(b => { const o = stored.find(p => p.id === b.id); return o ? normalize({ ...o, ...(b.form ? { form: b.form, category: b.category } : {}), system: true, edited: true }) : b; });
     return [...builtIn, ...stored.filter(p => !SYSTEM_PLAYBOOKS.some(b => b.id === p.id)).map(normalize)];
   }
   async list(project: string, tx?: any) { const d = await this.doc(project, tx); return { revision: d.revision, playbooks: this.merge(d.playbooks) }; }
@@ -123,6 +124,8 @@ export class PlaybookStore {
     return this.write(project, v.revision, (mine, all, at) => {
       const clean = validatePlaybook(v, all.map(p => p.id).filter(id => id !== v.playbookId));
       const builtIn = SYSTEM_PLAYBOOKS.find(p => p.id === v.playbookId), i = mine.findIndex(p => p.id === v.playbookId);
+      // Content workshop playbooks need the form they make, which only the built-ins and their copies have.
+      if ((clean.category === 'repurpose') !== Boolean(builtIn ? builtIn.form : i >= 0 && mine[i].form)) return fail(systemMessageText('playbook.pickCategory'));
       if (builtIn) {
         const current = all.find(p => p.id === builtIn.id)!, p: Playbook = { ...clean, id: builtIn.id, system: true, edited: true, version: current.version + 1, updatedAt: at };
         if (i >= 0) mine[i] = p; else mine.push(p);

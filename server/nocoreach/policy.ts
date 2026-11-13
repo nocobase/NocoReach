@@ -33,7 +33,7 @@ const ADMIN_ONLY={
  nrAgent:['saveDefault','saveRepo','removeRepo','checkRepo'],
  nrOnlineAI:['setModel'],
  nrArticles:['saveTarget','removeTarget','setDefaultTarget','savePlaybookTargets','testTarget','detectCover','saveCover'],
- nrPlaybooks:['save','copy','remove','restore','draft'],
+ nrPlaybooks:['save','copy','remove','restore','draft'],nrWorkshop:['saveBrand'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],
  nrKnowledge:['add','edit','remove','saveMemory'],nrKnowledgeAdd:['suggest','confirm'],nrMemory:['sources','draft','check','accept','dismiss'],
  nrProjects:['create','edit'],nrAnalysisRules:['save','propose','apply','create','rename','activate','draft','addRule','updateRule'],nrMembers:['setRole'],

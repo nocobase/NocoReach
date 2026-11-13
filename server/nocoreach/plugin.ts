@@ -62,6 +62,7 @@ import { SiteContent } from './site-content.js';
 import { Skills } from './skills.js';
 import { SourceDiscovery } from './source-discovery.js';
 import { StrategyService } from './strategy-service.js';
+import { WorkshopService } from './workshop.js';
 import { TaskData } from './task-data.js';
 import { TrendsSource } from './trends-source.js';
 import type { LegacyApp } from './legacy/app.js';
@@ -90,6 +91,7 @@ export class Connections{
  skills: Skills;
  taskData: TaskData;
  strategy: StrategyService;
+ workshop: WorkshopService;
  dataViews: DataViews;
  siteContent: SiteContent;
  members: Members;
@@ -202,6 +204,7 @@ export class Connections{
   // Snoozed tasks come back on their day (execution/snooze.ts); checked every minute, so a restart misses none.
   this.snoozeCron=this.app.cronJobManager.addJob({name:'snoozeCron',cronTime:'15 * * * * *',onTick:()=>this.taskExecution.wakeSnoozed().catch(e=>this.app.logger.warn('NocoReach snooze tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();
+  this.workshop=new WorkshopService(this);this.workshop.register();
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,unreachableOf(e)?.message||systemMessageText('application.connectionRequestNotCompleteCheck'));}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
    status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL'),authorized=Boolean(this.env(secretKey(id))),authFailedAt=authorized&&link?.get('authFailedAt')||null;return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized,authFailedAt,testingWeek:Boolean(authFailedAt)&&lastedTestingWeek(link.get('authorizedAt'),authFailedAt),connection:link?.toJSON()||null,ga4PropertyName:(await this.project(id)).analyticsPropertyName||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),

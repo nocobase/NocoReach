@@ -6,7 +6,7 @@ import bundled from './skills-bundled.json' with { type: 'json' };
 // The Skills a new library starts with (SPEC §6.0). Once added they are ordinary Skills: edited or deleted like any
 // other, turned off in every project until someone turns them on (or a playbook step names them), and never restored.
 // `since` is the built-in version that introduced a Skill: an existing library gets the newer ones once (skills.ts).
-const BUILT_IN_VERSION=2;
+const BUILT_IN_VERSION=3;
 const OWN=[
  {id:'seo-title-description',name:'seo-title-description',description:systemMessageText('skillsBuiltin.useWhenWritingChangingWeb'),summary:'skillsBuiltin.useWhenWritingChangingWeb',
   body:`# 页面标题与描述
@@ -98,5 +98,68 @@ const camel=(name:string)=>name.replace(/-([a-z])/g,(_:string,c:string)=>c.toUpp
 const MARKETING=bundled.skills.map(s=>({id:s.name,name:s.name,description:s.description,summary:`skillSummaries.${camel(s.name)}`,originals:[s.description],body:s.body,
  files:[...s.files,{path:'LICENSE.md',text:`${bundled.license}\n\nSource: ${bundled.source} (commit ${bundled.commit})\n`}],
  source:`${bundled.source}/tree/${bundled.commit}/skills/${s.name}`,since:2}));
-const BUILT_IN_SKILLS=[...OWN,...MARKETING];
+// Version 3: the Content workshop's forms (2026-11-13), one Skill each, which its playbooks' adapt step names.
+const WORKSHOP=[
+ {id:'x-posts',name:'x-posts',description:systemMessageText('skillsBuiltin.useWhenWritingXPosts'),summary:'skillsBuiltin.useWhenWritingXPosts',
+  body:`# X 帖子
+
+把一篇文章或一个话题改编成 3 条可以单独发出的 X 帖子。
+
+## 每条帖子
+- 3 条各自成立：每条讲原文里的一个具体点（一个数字、一个做法、一个结论），不是把一段长文拆成三段。
+- 第一句就是要点，不写“你知道吗”“今天聊聊”这类开头，不用标题党。
+- 不超过 280 个字符。X 的算法：网址按 23 个字符，中文、日文、韩文和 emoji 按 2 个，其余按 1 个；中文帖子大约 140 字以内。
+- 帖子里不放链接，X 对带链接的帖子推荐得少；链接放在第一条回复。
+- 话题标签最多 1 个，只在确实有人搜这个词时用；不 @ 无关的账号。
+- 用原文的语言写；口吻按项目记忆里的“口吻与风格”。
+
+## 第一条回复
+- 一句话说明完整内容在哪里，附上文章链接。
+- 新话题没有文章时，用参考链接里最合适的一个；没有链接就写一句延伸说明，不编造网址。
+
+## 自查
+- 每条的数字、功能名、版本号都能在原文或参考资料里找到。
+- 三条之间没有重复的说法。
+`,files:[]},
+ {id:'linkedin-post',name:'linkedin-post',description:systemMessageText('skillsBuiltin.useWhenWritingLinkedinPost'),summary:'skillsBuiltin.useWhenWritingLinkedinPost',
+  body:`# LinkedIn 帖子
+
+把一篇文章或一个话题改编成一条 LinkedIn 长帖。
+
+## 写法
+- 不超过 1,300 个字符。前两行（约 200 个字符）显示在“…更多”之前，要单独成立、让人想展开。
+- 开头写一个具体的问题、数字或和直觉相反的结论，不写“很高兴宣布”“分享一下”。
+- 正文用短段落，每段 1–3 句，段落之间空一行；需要时用 3–5 条短列表。
+- 讲清楚遇到了什么问题、怎么做的、结果如何；产品只在它确实是答案的一部分时提到。
+- 链接只放一处，放在结尾；话题标签 0–3 个，放在最后一行。
+- 用原文的语言写；口吻按项目记忆里的“口吻与风格”，像一个做这件事的人在分享，不像广告。
+
+## 自查
+- 数字、功能名和结论都能在原文或参考资料里找到。
+- 去掉产品名后，这条帖子对读者仍然有用。
+`,files:[]},
+ {id:'community-post',name:'community-post',description:systemMessageText('skillsBuiltin.useWhenWritingCommunityPost'),summary:'skillsBuiltin.useWhenWritingCommunityPost',
+  body:`# 社区帖
+
+把一篇文章或一个话题写成发在某个社区的一篇完整帖子：Reddit 的一个版块、Hacker News，或项目自己的社区（论坛里的某个分区）。
+
+## 先读规矩
+- 动笔前打开这个去处的规则：Reddit 看版块的规则页（https://www.reddit.com/r/版块名/about/rules）和侧栏；Hacker News 看 https://news.ycombinator.com/newsguidelines.html 和 https://news.ycombinator.com/showhn.html；自有社区看分区的置顶帖和说明。
+- 再看这个去处最近热门的几篇帖子：标题怎么写、正文多长、大家欢迎什么、反感什么。
+- 把适用的规则逐条列出来交给审核的人。规则禁止自我推广、要求固定标题格式或只允许某天发帖时，照规则写；实在不能发的，在规则里写明，帖子照样写好，由人决定。
+
+## 写法
+- 正文写完整：读者不点链接也能看懂、得到有用的内容。只有一句话加链接的帖子会被删。
+- 第一段先写明身份：用一句话说清你和产品的关系，例如 “I work on <产品名>”。Reddit 和 Hacker News 都要求公开这层关系。
+- 写成社区成员分享经验：遇到了什么问题、怎么解决、踩过什么坑、有哪些数字和取舍；不用营销用语和形容词堆砌。
+- 链接最多一两个，放在正文后部。
+- 用这个社区的语言写（英文社区写英文），口吻按项目记忆里的“口吻与风格”。
+
+## 各个去处
+- Reddit：标题不超过 300 个字符，写具体内容；版块要求 flair 时，在规则里写明选哪个。
+- Hacker News：新版本、开源项目和能直接试用的东西用 “Show HN: 产品名 – 一句话说明”；其他用文章原标题，不改写、不加形容词。标题不超过 80 个字符，正文用纯文本。
+- 自有社区：按分区写。教程分区写成步骤，公告分区写变化和升级说明，讨论分区以一个问题结尾邀请回复。
+`,files:[]},
+].map(s=>({...s,since:3,originals:[systemMessageText(s.summary,{},'zh-CN'),systemMessageText(s.summary,{},'en-US')]}));
+const BUILT_IN_SKILLS=[...OWN,...MARKETING,...WORKSHOP];
 export { BUILT_IN_SKILLS, BUILT_IN_VERSION };
