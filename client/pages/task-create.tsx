@@ -176,7 +176,8 @@ function CreateTask({
       }),
     [api, scope.sessionId],
   );
-  // The same chat model as the daily analysis and the chat panel (Agent › Model services).
+  // Whether a chat model is connected. Organize with AI runs on the Agent page's Editing and suggestions model: its own,
+  // or the default chat model the daily analysis runs on.
   useEffect(() => {
     const controller = new AbortController();
     nocobaseClient

@@ -39,6 +39,7 @@ import {
   useOnlineResource,
   type Agent as OnlineAgent,
 } from '../../online-agent/api.js';
+import { TOOL_NAMES } from '../../../shared/agent-readiness.js';
 import type { OnlineAgentDefinition } from '../../../shared/online-agent.js';
 import { useProject } from '../reach-data.js';
 import { routeAccess } from './access.js';
@@ -81,6 +82,12 @@ type Status = {
 type AnalysisStatus = {
   model: string | null;
   analysis?: { last: { at?: string; ok?: boolean } | null };
+  // Editing and suggestions' own model, if one is chosen, and the model it runs on (`cloud-models.ts`).
+  editing?: {
+    choice: ModelRef | null;
+    model: string | null;
+    available: boolean;
+  };
 };
 type Action =
   { label: string; to: string } | { label: string; run: () => Promise<void> };
@@ -93,7 +100,7 @@ type Catalog = {
   defaultModel?: ModelRef | null;
 };
 type Row = {
-  key: 'analysis' | 'chat' | 'execution';
+  key: 'analysis' | 'editing' | 'chat' | 'execution';
   work: string;
   does: string;
   uses?: string;
@@ -101,13 +108,6 @@ type Row = {
   state: 'loading' | 'ready' | 'attention';
   detail?: string;
   action?: Action;
-};
-
-const TOOL_NAMES: Record<string, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-  pi: 'Pi',
 };
 
 // Why the agent's latest tasks failed and what to do, naming the computer and the tool when the run says which.
@@ -159,8 +159,8 @@ function healthText(health: Extract<AgentHealth, { state: 'attention' }>) {
 
 /**
  * Who does which work in NocoReach, as the people running marketing meet it (2026-10-21 user decision): cloud models
- * (the Model services tab) run the daily analysis and answer in the chat panel; local agents (a coding tool on a
- * computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where a local agent runs
+ * (the Model services tab) run the daily analysis, editing and suggestions, and the chat panel; local agents (a coding
+ * tool on a computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where a local agent runs
  * and who may use that computer, and a status read from how its latest work ended, not only from whether it is set up.
  * Every row has one Settings button for administrators, a dialog that changes what the row uses; while a row needs
  * attention, the button is the fix instead (2026-10-22 user decision).
@@ -178,7 +178,9 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const runtimesPage = useCan(routeAccess(runtimesRoute));
   const { can: canManageChat } = useBusinessAccess('nrOnline.manage');
   const { can: canSetModel } = useBusinessAccess('nrOnlineAI.setModel');
-  const [dialog, setDialog] = useState<'analysis' | 'execution' | null>(null);
+  const [dialog, setDialog] = useState<
+    'analysis' | 'editing' | 'execution' | null
+  >(null);
   const { can: canSaveDefault } = useBusinessAccess(
     'nrAgent.saveDefault',
     project?.id,
@@ -274,6 +276,9 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const addModel: Action | undefined = modelsPage.can
     ? { label: $t('agentRoles.addModel'), to: '/agents/models' }
     : undefined;
+  const viewModels: Action | undefined = modelsPage.can
+    ? { label: $t('agentRoles.viewModels'), to: '/agents/models' }
+    : undefined;
   const addRuntime: Action | undefined = runtimesPage.can
     ? { label: $t('agentsPage.addRuntime'), to: '/agents/runtimes/connect' }
     : undefined;
@@ -291,34 +296,79 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           run: async () => setDialog('analysis'),
         }
       : undefined;
+  // The default chat model Daily analysis runs on, and Editing and suggestions without a model of its own, as the
+  // analysis reports it: none without a model service, and none either when no enabled service offers a chat model
+  // (the plugin then has no effective default). Without the report, whether a model service exists.
+  const defaultModelState: Pick<Row, 'state' | 'detail' | 'action'> | null =
+    modelsLoading || analysis === undefined
+      ? { state: 'loading' }
+      : (analysis ? analysisModel : !noModels)
+        ? null
+        : noModels
+          ? {
+              state: 'attention',
+              detail: $t('agentRoles.noModel'),
+              action: addModel,
+            }
+          : {
+              state: 'attention',
+              detail: $t('agentRoles.noChatModel'),
+              action: viewModels,
+            };
   const analysisRow: Row = {
     key: 'analysis',
     work: $t('agentRoles.analysis'),
     does: $t('agentRoles.analysisWork'),
     uses: analysisModel,
-    ...(modelsLoading || analysis === undefined
-      ? { state: 'loading' }
-      : (analysis ? !analysisModel : noModels)
+    ...(defaultModelState
+      ? defaultModelState
+      : lastRun && lastRun.ok === false
         ? {
             state: 'attention',
-            detail: $t('agentRoles.noModel'),
-            action: addModel,
-          }
-        : lastRun && lastRun.ok === false
-          ? {
-              state: 'attention',
-              detail: $t('agentRoles.analysisFailed', {
-                0: formatDateTime(lastRun.at),
-              }),
-              action: analysisSettings,
-            }
-          : {
-              state: 'ready',
-              where: lastRun?.at
-                ? $t('agentRoles.lastRun', { 0: formatDateTime(lastRun.at) })
-                : $t('agentRoles.notRunYet'),
-              action: analysisSettings,
+            detail: $t('agentRoles.analysisFailed', {
+              0: formatDateTime(lastRun.at),
             }),
+            action: analysisSettings,
+          }
+        : {
+            state: 'ready',
+            where: lastRun?.at
+              ? $t('agentRoles.lastRun', { 0: formatDateTime(lastRun.at) })
+              : $t('agentRoles.notRunYet'),
+            action: analysisSettings,
+          }),
+  };
+  // Every model call a person asks for on a page is this row's work (2026-11-10 user decision; the list is in
+  // cloud-models.ts). It has a model of its own, as models are good at different things, else runs on the daily
+  // analysis's (2026-11-13 user decision).
+  const editing = analysis?.editing;
+  const editingSettings: Action | undefined =
+    canSetModel && services.length
+      ? {
+          label: $t('agentRoles.settings'),
+          run: async () => setDialog('editing'),
+        }
+      : undefined;
+  const editingRow: Row = {
+    key: 'editing',
+    work: $t('agentRoles.editing'),
+    does: $t('agentRoles.editingWork'),
+    uses: editing?.model || analysisModel,
+    ...(modelsLoading || analysis === undefined
+      ? { state: 'loading' }
+      : editing?.choice
+        ? editing.available
+          ? { state: 'ready', action: editingSettings }
+          : {
+              state: 'attention',
+              detail: $t('agentRoles.editingModelUnavailable'),
+              action: editingSettings,
+            }
+        : defaultModelState || {
+            state: 'ready',
+            where: $t('agentRoles.sameAsAnalysis'),
+            action: editingSettings,
+          }),
   };
 
   const definitions = online.data || [];
@@ -530,7 +580,7 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           : undefined,
     },
   ];
-  const settled = [analysisRow, chatRow, executionRow].every(
+  const settled = [analysisRow, editingRow, chatRow, executionRow].every(
     (row) => row.state !== 'loading',
   );
   const refreshAll = () => setInner((value) => value + 1);
@@ -578,6 +628,7 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
             hint={$t('agentRoles.cloudHint')}
           >
             <RoleRow row={analysisRow} busy={busy} />
+            <RoleRow row={editingRow} busy={busy} />
             <RoleRow row={chatRow} busy={busy} />
           </Group>
           <Group
@@ -632,9 +683,11 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           </ol>
         </div>
       )}
-      {dialog === 'analysis' && (
-        <AnalysisModelDialog
+      {(dialog === 'analysis' || dialog === 'editing') && (
+        <CloudModelDialog
+          work={dialog}
           catalog={models.data}
+          choice={editing?.choice ?? null}
           projectId={projectId}
           onClose={() => setDialog(null)}
           onSaved={refreshAll}
@@ -754,43 +807,78 @@ const refOf = (value: string): ModelRef | null => {
   }
 };
 
-// Daily analysis › Settings: the model it runs on, which is the Agents plugin's system default chat model.
-function AnalysisModelDialog({
+// The option for Editing and suggestions without a model of its own.
+const SAME_AS_ANALYSIS = '__default__';
+
+// Daily analysis › Settings and Editing and suggestions › Settings: the model each runs on. Daily analysis's is the
+// Agents plugin's system default chat model; Editing and suggestions' is its own, or the daily analysis's when it has
+// none, offered as the chat panel's dialog offers it.
+function CloudModelDialog({
+  work,
   catalog,
+  choice,
   projectId,
   onClose,
   onSaved,
 }: {
+  work: 'analysis' | 'editing';
   catalog?: Catalog;
+  choice: ModelRef | null;
   projectId?: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const items = (catalog?.services || []).flatMap((service) =>
-    service.models.map((model) => ({
-      value: JSON.stringify({ modelService: service.name, model: model.value }),
-      label: `${service.title || service.name} / ${model.label}`,
-    })),
-  );
-  const current = catalog?.defaultModel
-    ? JSON.stringify({
-        modelService: catalog.defaultModel.modelService,
-        model: catalog.defaultModel.model,
-      })
-    : '';
+  const editing = work === 'editing';
+  const items = [
+    ...(editing
+      ? [
+          {
+            value: SAME_AS_ANALYSIS,
+            label: catalog?.defaultModel
+              ? $t('onlineAgent.sameAsAnalysis', {
+                  0: catalog.defaultModel.model,
+                })
+              : $t('onlineAgent.defaultModel'),
+          },
+        ]
+      : []),
+    ...(catalog?.services || []).flatMap((service) =>
+      service.models.map((model) => ({
+        value: JSON.stringify({
+          modelService: service.name,
+          model: model.value,
+        }),
+        label: `${service.title || service.name} / ${model.label}`,
+      })),
+    ),
+  ];
+  const saved = editing ? choice : catalog?.defaultModel;
+  const current = saved
+    ? JSON.stringify({ modelService: saved.modelService, model: saved.model })
+    : editing
+      ? SAME_AS_ANALYSIS
+      : '';
+  // A chosen model that is no longer offered still shows, so the dialog says what is saved.
+  if (saved && !items.some((item) => item.value === current))
+    items.push({
+      value: current,
+      label: `${saved.modelService} / ${saved.model}`,
+    });
   const [value, setValue] = useState(current);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useMessageState('');
+  const same = editing && value === SAME_AS_ANALYSIS;
   async function save() {
     const ref = refOf(value);
-    if (!ref || busy) return;
+    if ((!ref && !same) || busy) return;
     setBusy(true);
     setError('');
     try {
       await api.action('nrOnlineAI', 'setModel', {
         method: 'POST',
         body: {
-          ...ref,
+          ...(editing ? { role: 'editing' } : {}),
+          ...(ref ?? { model: null }),
           ...(projectId ? { projectId: String(projectId) } : {}),
         },
       });
@@ -810,9 +898,13 @@ function AnalysisModelDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{$t('agentRoles.analysis')}</DialogTitle>
+          <DialogTitle>
+            {editing ? $t('agentRoles.editing') : $t('agentRoles.analysis')}
+          </DialogTitle>
           <DialogDescription>
-            {$t('agentRoles.analysisModelHint')}
+            {editing
+              ? $t('agentRoles.editingModelHint')
+              : $t('agentRoles.analysisModelHint')}
           </DialogDescription>
         </DialogHeader>
         <div className='flex flex-col gap-2 text-sm'>
@@ -840,9 +932,11 @@ function AnalysisModelDialog({
               </SelectGroup>
             </SelectContent>
           </Select>
-          <p className='text-xs text-muted-foreground'>
-            {$t('agentRoles.analysisTimeHint')}
-          </p>
+          {!editing && (
+            <p className='text-xs text-muted-foreground'>
+              {$t('agentRoles.analysisTimeHint')}
+            </p>
+          )}
           {error && <InlineError>{error}</InlineError>}
         </div>
         <DialogFooter>
@@ -850,7 +944,7 @@ function AnalysisModelDialog({
             {$t('common.cancel')}
           </Button>
           <Button
-            disabled={busy || !refOf(value) || value === current}
+            disabled={busy || (!refOf(value) && !same) || value === current}
             onClick={() => void save()}
           >
             {busy ? $t('common.saving') : $t('common.save')}
