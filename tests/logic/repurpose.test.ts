@@ -81,11 +81,10 @@ describe('lengths and checks', () => {
     ]);
   });
 
-  it('checks a LinkedIn post against 1,300 characters', () => {
+  it('counts a LinkedIn post against 1,300 characters in its heading, with no separate check', () => {
     const r = parseRepurpose('linkedin', `## Post\nSections: 1\n${'a'.repeat(1301)}`)!;
-    expect(repurposeChecks('linkedin', r)).toEqual([
-      { key: 'workshop.check.linkedinOver', ok: false, params: { 0: 1300, 1: 1301 } },
-    ]);
+    expect(repurposeChecks('linkedin', r)).toEqual([]);
+    expect(pieceLimit('linkedin', r.pieces[0])).toEqual({ length: 1301, max: 1300 });
   });
 
   it('checks a community post is written out, says who posts it and fits the place', () => {

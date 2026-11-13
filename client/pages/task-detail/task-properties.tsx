@@ -335,7 +335,9 @@ function Source({
             ? $t('manualTask.newTask')
             : source.via === 'results'
               ? $t('taskSource.fromResults')
-              : entry
+              : source.via === 'workshop'
+                ? $t('taskSource.fromWorkshop')
+                : entry
                 ? $t('taskSource.handedOffFrom', { 0: t(entry) })
                 : source.via === 'dataPage'
                   ? $t('taskSource.handedOff')

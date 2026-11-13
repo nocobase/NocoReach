@@ -1,7 +1,10 @@
 import { $legacyText, $t } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Tone } from '#components/reach/tag';
+import { getWorkColumns } from '../task-execution-types';
+import type { TaskStanding } from '../../../shared/task-pending.js';
 import {
+  destinationLabel,
   destinationName,
   type Destination,
   type Repurpose,
@@ -12,7 +15,7 @@ import {
 // Content workshop (2026-11-13 user decision): what `nrWorkshop.view` returns and the words the page, its dialogs and the
 // task page share. Recommendations are the site's own figures, never an AI's judgement; nothing is pre-ticked.
 
-export type Standing = 'todo' | 'doing' | 'review' | 'done' | 'closed' | 'snoozed';
+export type Standing = TaskStanding;
 export type Made = {
   form: RepurposeForm;
   destination?: Destination;
@@ -83,10 +86,6 @@ export const getFormNames = (): Record<RepurposeForm, string> => ({
   community: $t('workshop.formCommunity'),
 });
 
-/** Where a community post goes, as lists name it: "Reddit r/selfhosted", "Forum · Tutorials". */
-export const destinationLabel = (d: Destination) =>
-  d.kind === 'own' ? `${d.name} · ${d.section}` : destinationName(d);
-
 /** What a task makes: "LinkedIn post", "Community post · Hacker News". */
 export const outputLabel = (form: RepurposeForm, destination?: Destination) =>
   [getFormNames()[form], destination ? destinationLabel(destination) : '']
@@ -107,21 +106,19 @@ export const logoOf = (form: RepurposeForm, destination?: Destination) =>
             ? 'hackernews'
             : 'community';
 
-/** Where a workshop task stands, in the workshop's words: Agent working, waiting for your review, done. */
-export function recordState(r: Pick<WorkshopRecord, 'standing' | 'failed' | 'restart'>): {
+/** A task's status in the words of the task page header and the board: Needs you, In progress, Done. */
+export const standingText = (s: Standing): string =>
+  s === 'closed' ? $t('common.closed') : s === 'snoozed' ? $t('common.snoozed') : getWorkColumns()[s];
+
+/** What the Agent's last run left, as the task list's current step says it: waiting for a restart, or stopped. */
+export function runNote(r: Pick<WorkshopRecord, 'standing' | 'failed' | 'restart'>): {
   text: string;
   tone: Tone;
-} {
-  if (r.standing === 'review' && r.failed)
-    return { text: $t('taskList.runFailed', { 0: 'Agent' }), tone: 'red' };
-  if (r.standing === 'review' && r.restart)
-    return { text: $t('taskList.waitingRestart'), tone: 'amber' };
-  if (r.standing === 'review') return { text: $t('workshop.stateReview'), tone: 'violet' };
-  if (r.standing === 'doing') return { text: $t('workshop.stateDoing'), tone: 'blue' };
-  if (r.standing === 'done') return { text: $t('common.completed'), tone: 'green' };
-  if (r.standing === 'closed') return { text: $t('common.closed'), tone: 'slate' };
-  if (r.standing === 'snoozed') return { text: $t('common.snoozed'), tone: 'grey' };
-  return { text: $t('common.notStarted'), tone: 'grey' };
+} | null {
+  if (r.standing !== 'review') return null;
+  if (r.restart) return { text: $t('taskList.waitingRestart'), tone: 'amber' };
+  if (r.failed) return { text: $t('taskList.runFailed', { 0: 'Agent' }), tone: 'red' };
+  return null;
 }
 
 /** The forms an article was made into, each once: "X posts, Reddit r/selfhosted". */

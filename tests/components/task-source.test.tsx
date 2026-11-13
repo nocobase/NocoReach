@@ -69,7 +69,15 @@ test('says whether the AI or a person found a task, and from where', () => {
     by: 'person',
     via: 'content',
   });
-  // Created on Results, even when handed off as an opportunity.
+  // Made in Content workshop, by whoever handed it to the Agent there.
+  expect(
+    taskSource({
+      taskKey: 'workshop:1:7d2b6a6e:0',
+      createdAt: at,
+      evidence: { origin: 'workshop', createdBy: { id: '1', name: 'Li' } },
+    }),
+  ).toEqual({ by: 'person', via: 'workshop', name: 'Li', at });
+    // Created on Results, even when handed off as an opportunity.
   expect(
     taskSource({
       evidence: { resultSource: { taskId: '9' }, insight: { id: 'r-1' } },

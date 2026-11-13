@@ -145,7 +145,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
   // The article's reading page covers the task (RouteChildPage) at /actions/:taskId/article; it renders inside the task
   // page, which already passed the gates.
-  // Process this one (Content workshop's step 2 over the task, 2026-11-13) opens from an article task's live card.
+  // Process this one (Content workshop's step 2 over the task, 2026-11-13) opens from a blog article task's live card.
   { ...page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')), children: [{ name: 'task-article', path: 'article', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/task-detail/article-reader.js') }, { name: 'task-repurpose', path: 'repurpose', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/workshop/pick.js') }] },
   // Content workshop (2026-11-13 user decision): a sibling of Tasks right below it, not a child route, so it renders on
   // its own and the Tasks badge stays. Choose content to process and Brand and templates open as dialogs over it.

@@ -54,8 +54,6 @@ function checkText(c: RepurposeCheck): string {
             : $t('workshop.pieceXPost', { 0: n }),
         ),
     );
-  if (c.key === 'workshop.check.linkedinWithin' || c.key === 'workshop.check.linkedinOver')
-    params[1] = formatCount(Number(params[1]));
   if (typeof params[0] === 'number') params[0] = formatCount(params[0]);
   // A failed check that names what should be there reads as what is missing.
   return $t(!c.ok && MISSING.has(c.key) ? `${c.key}Missing` : c.key, params);

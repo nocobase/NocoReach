@@ -186,7 +186,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
     <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className="order-2"
      agentLocked={!access.allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined}
      onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))} agentPicker={agentPicker} onAgentPicker={setAgentPicker}/>
-    <TaskNumbers data={data} projectId={projectId} taskId={taskId} className="order-4"/>
+    {/* A Content workshop post has no page of its own to measure. */}
+    {!w.repurpose&&<TaskNumbers data={data} projectId={projectId} taskId={taskId} className="order-4"/>}
    </div>
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
@@ -244,7 +245,7 @@ function WhyCard({data,onEvidence}:{data:Data;onEvidence:()=>void}){
  const title=w.stage!=='done'&&!isClosed(w)&&stage?.kind==='review'&&Boolean(out?.pr||out?.article)?$t('taskDetail.whyChangeTitle'):$t('taskDetail.whyTitle');
  return <Card className="order-1" aria-label={title} title={<><Sparkles aria-hidden="true" className="size-4 shrink-0 text-agent"/>{title}</>}>
   {reason&&<div className="flex flex-col gap-1">
-   <p className={cn(text.body,'leading-6')}>{reason}</p>
+   <p className={cn(text.body,'leading-6')}>{why.from==='workshop'&&w.repurpose?.source.kind==='article'?$tj('workshop.whyArticle',{0:<a className="nr-link" href={w.repurpose.source.url} target="_blank" rel="noreferrer">{w.repurpose.source.title}</a>}):reason}</p>
    {(why.fact||why.more>0)&&<p className={cn(text.body,'leading-6')}>{why.fact}{why.more>0&&<span className="text-muted-foreground">{why.fact?' ':''}{$t('taskDetail.moreSignals',{0:why.more})}</span>}</p>}
   </div>}
   {hasEvidence&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}
@@ -642,8 +643,9 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const shipped=(r?.article?.artifactId&&w.results.find(x=>x?.id===r.article!.artifactId))||accepted||undefined;
  const done=$t('common.completed');
  if(r?.state==='simulated')return <StageCard label={done} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><Field label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Field></StageCard>;
- // A published article can be adapted for other platforms (Content workshop): its address and title open step 2.
- const adapt=r?.state==='live'&&r.article&&r.pages[0]?<Button variant="outline" onClick={()=>void navigate(`repurpose?${new URLSearchParams({url:r.pages[0],title:w.article?.title||data.task.title})}`)}><Shapes/>{$t('workshop.adaptThis')}</Button>:null;
+ // A live blog article can be adapted for other platforms (Content workshop): its address and title open step 2. The
+ // server decides which pages are blog articles (service.ts adaptPage).
+ const a=data.adaptPage,adapt=r?.state==='live'&&a?<Button variant="outline" onClick={()=>void navigate(`repurpose?${new URLSearchParams({url:a.url,title:a.title})}`)}><Shapes/>{$t('workshop.adaptThis')}</Button>:null;
  if(r?.state==='live')return <StageCard label={done} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<><Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>{adapt}</>:adapt||undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'text-sm text-destructive':text.body} role={w.revert.state==='failed'?'alert':undefined} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}

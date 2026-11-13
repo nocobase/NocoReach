@@ -53,7 +53,7 @@ import {
   errorText,
   getFormNames,
   madeList,
-  recordState,
+  standingText,
   taskNo,
   workshopRequest,
   type Article,
@@ -185,7 +185,7 @@ function Pick({
       title={$t('workshop.pick')}
       description={<Steps step={1} />}
       closeTo={closeTo}
-      className='sm:max-w-3xl'
+      className={DIALOG}
       footer={
         <>
           {tab === 'article' && chosen ? (
@@ -226,6 +226,9 @@ function Pick({
     </RouteDialog>
   );
 }
+
+// Both steps and both tabs of step 1 share one size, so the dialog stays put as they change; longer content scrolls.
+const DIALOG = 'h-[min(48rem,calc(100dvh-2rem))] sm:max-w-4xl';
 
 const links = (text: string) =>
   [...new Set(text.split(/\s+/).map((s) => s.trim()).filter(Boolean))];
@@ -586,7 +589,7 @@ function Step2({
       title={$t('workshop.pick')}
       description={<Steps step={2} />}
       closeTo={closeTo}
-      className='sm:max-w-4xl'
+      className={DIALOG}
       footer={
         <>
           <span className='mr-auto flex flex-wrap items-center gap-3 text-sm'>
@@ -809,7 +812,6 @@ function Step2({
 
 // Where a form or destination already stands for this article: done (open it), or the task still under way.
 function MadeNote({ made }: { made: Made }) {
-  const st = recordState(made);
   return (
     <Link
       to={`/actions/${made.taskId}`}
@@ -819,7 +821,7 @@ function MadeNote({ made }: { made: Made }) {
     >
       {made.standing === 'done'
         ? $t('workshop.madeDone', { 0: taskNo(made.no) })
-        : [st.text, taskNo(made.no)].filter(Boolean).join(' · ')}
+        : [standingText(made.standing), taskNo(made.no)].filter(Boolean).join(' · ')}
     </Link>
   );
 }

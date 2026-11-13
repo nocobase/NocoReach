@@ -28,7 +28,7 @@ import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
-import { FORM_RESULT_KIND, parseRepurpose, repurposeChecks } from '../../../shared/repurpose.js';
+import { FORM_RESULT_KIND, articleTitle, parseRepurpose, repurposeChecks } from '../../../shared/repurpose.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
@@ -90,6 +90,18 @@ const PLACES_MS = 2 * 60000;
 // A Content workshop task runs its form's playbook, and only those tasks run a Content workshop playbook.
 function fitsWork(p: any, w: Work) {
   if (Boolean(p.form || p.category === 'repurpose') !== Boolean(w.repurpose) || (w.repurpose && p.form !== w.repurpose.form)) fail(systemMessageText('workshop.playbookMismatch'), 409);
+}
+
+// Content workshop's Adapt this (task-detail.tsx DoneCard): a live task whose page is a blog article, one the site's
+// content lists as a blog post or one a Write blog post task published, with the title the workshop gives it.
+export function adaptPage(task: any, work: Work, site: any, identity: PageIdentity): { url: string; title: string } | null {
+  const r = work.release, url = r?.state === 'live' ? String(r.pages?.[0] || '') : '';
+  if (!url) return null;
+  const key = (u: unknown) => { try { return pageKey(u, identity); } catch { return ''; } }, k = key(url);
+  const page = k ? (Array.isArray(site?.pages) ? site.pages : []).find((p: any) => p?.type === 'blog' && !p.noindex && key(p.url) === k) : null;
+  if (page) return { url, title: articleTitle(page) };
+  if (![work.playbookId, work.flow?.id].includes('blog-post')) return null;
+  return { url, title: work.article?.title || String(task.title || '') };
 }
 
 export class TaskService {
@@ -188,9 +200,9 @@ export class TaskService {
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
-    const identity = await this.pageIdentity(project, tx);
+    const site = await this.snapshot(`site-content:${project}`, tx), identity = pageIdentity(site);
     const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, identity, tx)];
-    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, pageIdentity: identity, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx, artifacts) };
+    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, pageIdentity: identity, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx, artifacts), adaptPage: adaptPage(task, work, site, identity) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), or
   // split off the same task for pages it leaves (2026-10-29: proposals sharing `group`, the first task's proposal or

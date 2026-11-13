@@ -30,12 +30,14 @@ import {
   joinList,
 } from '#lib/format';
 import { useProject } from '../reach-data.js';
+import { getWorkColumns } from '../task-execution-types';
+import { TaskStandingTag } from '../task-status-tag';
 import {
   errorText,
   logoOf,
   madeList,
   outputLabel,
-  recordState,
+  runNote,
   taskNo,
   workshopRequest,
   type Article,
@@ -304,13 +306,10 @@ function Column({
 function Records({ view }: { view: WorkshopView }) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
+  // The board's columns: a stopped run or one waiting for a restart needs you too.
   const of = (f: Filter) => (r: WorkshopRecord) =>
-    f === 'all' ||
-    (f === 'review'
-      ? r.standing === 'review' && !r.failed && !r.restart
-      : f === 'doing'
-        ? r.standing === 'doing'
-        : r.standing === 'done');
+    f === 'all' || r.standing === f;
+  const columns = getWorkColumns();
   const counts = {
     review: view.records.filter(of('review')).length,
     doing: view.records.filter(of('doing')).length,
@@ -335,15 +334,11 @@ function Records({ view }: { view: WorkshopView }) {
             <TabsTrigger value='all'>
               {$t('common.allCount', { 0: view.recordCount })}
             </TabsTrigger>
-            <TabsTrigger value='review'>
-              {$t('workshop.filterReview', { 0: counts.review })}
-            </TabsTrigger>
-            <TabsTrigger value='doing'>
-              {$t('workshop.filterDoing', { 0: counts.doing })}
-            </TabsTrigger>
-            <TabsTrigger value='done'>
-              {$t('workshop.filterDone', { 0: counts.done })}
-            </TabsTrigger>
+            {(['review', 'doing', 'done'] as const).map((f) => (
+              <TabsTrigger key={f} value={f}>
+                {columns[f]} {counts[f]}
+              </TabsTrigger>
+            ))}
           </DataTableTabs>
           {rows.length ? (
             <Table>
@@ -358,8 +353,8 @@ function Records({ view }: { view: WorkshopView }) {
               </TableHeader>
               <TableBody>
                 {rows.map((r) => {
-                  const st = recordState(r),
-                    review = of('review')(r);
+                  const note = runNote(r),
+                    review = r.standing === 'review' && !note;
                   return (
                     <TableRow key={r.taskId} data-record={r.standing}>
                       <TableCell>
@@ -386,14 +381,17 @@ function Records({ view }: { view: WorkshopView }) {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Tag tone={st.tone}>{st.text}</Tag>
+                        <div className='flex flex-wrap items-center gap-1'>
+                          <TaskStandingTag state={r.standing} />
+                          {note ? <Tag tone={note.tone}>{note.text}</Tag> : null}
+                        </div>
                       </TableCell>
                       <TableCell className='text-xs text-muted-foreground tabular-nums'>
                         {formatDateTime(r.updatedAt)}
                       </TableCell>
                       <TableCell className='text-right'>
                         {/* While the Agent writes there is nothing to do here (mockup v3). */}
-                        {r.standing === 'doing' && !r.failed && !r.restart ? null : (
+                        {r.standing === 'doing' ? null : (
                           <Button
                             size='sm'
                             variant='outline'

@@ -11,8 +11,10 @@ import {
   POINTS_MAX,
   READY_FORMS,
   TOPIC_MAX,
+  articleTitle,
   destinationKey,
   isRepurposeForm,
+  repurposeBrief,
   sourceSubject,
   subredditName,
 } from '../../shared/repurpose.js';
@@ -44,12 +46,6 @@ const cleanUrl = (v: unknown) => {
     return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password && u.href.length <= 2000 ? u.href : '';
   } catch { return ''; }
 };
-// An article's title as its page gives it, without the site's name after a separator ("Title | Acme").
-export function articleTitle(page: { url: string; title?: string }) {
-  const t = String(page.title || '').trim().replace(/\s+[|·–—-]\s+[^|·–—-]{1,40}$/, '').trim();
-  if (t) return t.slice(0, 300);
-  try { return decodeURIComponent(new URL(page.url).pathname.split('/').filter(Boolean).at(-1) || page.url).replace(/[-_]+/g, ' '); } catch { return page.url; }
-}
 
 function cleanCommunity(c: any) {
   if (c == null) return null;
@@ -262,9 +258,11 @@ class WorkshopService {
     return { targetId: a.targetId, articleId: a.articleId, ...(hit ? { locale: hit[0], body: hit[1].body.slice(0, BODY_MAX) } : {}) };
   }
 
-  // One task per form and destination, written together, then each started with the chosen Agent as an accepted
-  // hand-over is (TaskService.startHandedOver): a task that cannot start waits at Start, its card saying why. Reads of
-  // playbooks and the publishing target happen before the write, and the starts after it (SQLite has one connection).
+  // One task per form and destination, written together with the chosen Agent, then each started as an accepted hand-over
+  // is (TaskService.startHandedOver): a task that cannot start waits at Start, its card saying why. The Agent is checked
+  // as Set Agent checks it but stored as the task is created, so the activity shows only that the task started; one
+  // that cannot be used leaves the tasks at Start. Reads of playbooks, the publishing target and the Agent happen before
+  // the write, and the starts after it (SQLite has one connection).
   async create(id: string, v: any, actor: string, actorName: string, locale?: string) {
     const requestId = typeof v.requestId === 'string' && /^[a-zA-Z0-9-]{20,80}$/.test(v.requestId) ? v.requestId : fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const source = cleanSource(v.source), brand = await this.brand(id), items = cleanItems(v.items, brand);
@@ -276,31 +274,33 @@ class WorkshopService {
     const chosen = items.map(it => playbooks.find((p: any) => p.id === FORM_PLAYBOOK[it.form]) || fail(systemMessageText('playbook.playbookNotExistRefreshPick'), 404));
     const body = source.kind === 'article' ? await this.articleBody(id, source).catch(() => null) : null;
     if (body) Object.assign(source, { targetId: body.targetId, articleId: body.articleId });
-    const brief = source.kind === 'article'
-      ? systemMessageText('workshop.articleBrief', { 0: source.title, 1: source.url }, locale)
-      : [systemMessageText('workshop.topicBrief', { 0: source.topic }, locale), source.points, ...(source.links || [])].filter(Boolean).join('\n\n');
+    const agentId = typeof v.agentId === 'string' && v.agentId ? v.agentId : null;
+    const agent = agentId ? await this.p.db.sequelize.transaction((tx: any) => this.p.taskExecution.agents.taskAgent(agentId, actor, tx, id)).catch((e: any) => {
+      this.p.app?.logger?.warn?.('NocoReach could not use the Agent chosen in Content workshop', { projectId: id, agentId, message: e?.message });
+      return null;
+    }) : null;
     const ids: string[] = [], at = new Date().toISOString();
     await this.p.db.sequelize.transaction(async (tx: any) => {
       for (const [i, item] of items.entries()) {
         const p = chosen[i], subject = item.destination ? `${sourceSubject(source)} → ${titleDestination(item.destination)}` : sourceSubject(source);
         const evidence = { origin: 'workshop', source: 'workshop', createdBy: { id: actor, name: actorName }, autoTitle: { subject: subject.slice(0, 160), ...(locale ? { locale } : {}) }, suggestedPlaybook: p.id };
-        const work = { ...projectWork({ evidence }), playbookId: p.id, repurpose: { form: item.form, source, ...(item.destination ? { destination: item.destination } : {}) } };
-        const row = await tasks.create({ values: { projectId: id, taskKey: keys[i], title: playbookTitle(p, subject.slice(0, 160), locale), brief, status: systemMessageText('common.pending'), evidence: { ...evidence, work } }, transaction: tx });
+        const repurpose = { form: item.form, source, ...(item.destination ? { destination: item.destination } : {}) };
+        const work = { ...projectWork({ evidence }), playbookId: p.id, repurpose, ...(agent ? { agentId: agent.id, agentName: agent.name } : {}) };
+        const row = await tasks.create({ values: { projectId: id, taskKey: keys[i], title: playbookTitle(p, subject.slice(0, 160), locale), brief: repurposeBrief(repurpose, locale), status: systemMessageText('common.pending'), evidence: { ...evidence, work } }, transaction: tx });
         const taskId = String(row.get('id'));
         ids.push(taskId);
         if (body?.body) await this.p.taskExecution.put(this.p.taskExecution.key('source', id, taskId), { body: body.body, locale: body.locale, readAt: at }, tx);
       }
     });
-    const agentId = typeof v.agentId === 'string' && v.agentId ? v.agentId : null, started = [];
-    for (const taskId of ids) if (await this.start(id, taskId, agentId, actor, actorName)) started.push(taskId);
+    const started = [];
+    if (!agentId || agent) for (const taskId of ids) if (await this.start(id, taskId, actor, actorName)) started.push(taskId);
     return { taskIds: ids, started };
   }
-  private async start(id: string, taskId: string, agentId: string | null, actor: string, actorName: string) {
+  private async start(id: string, taskId: string, actor: string, actorName: string) {
     try {
       const row = await this.p.db.getRepository('nrTasks').findOne({ filter: { id: taskId, projectId: id } }), w = projectWork(row.toJSON ? row.toJSON() : row);
       let revision = w.revision;
       const run = async (command: string, body: object = {}) => { revision = (await this.p.taskExecution.updateTask(id, { taskId, revision, requestId: randomUUID(), command, ...body }, actor, actorName)).work.revision; };
-      if (agentId) await run('setAgent', { agentId });
       await run('startTask', { playbookId: w.playbookId });
       return true;
     } catch (e: any) {

@@ -10,6 +10,7 @@ import {
 import {
   FORM_PLAYBOOK,
   FORM_RESULT_KIND,
+  repurposeBrief,
   sourceSubject,
   type Destination,
   type RepurposeSource,
@@ -159,24 +160,12 @@ export async function writeWorkshop(
       const subject = destination
         ? `${sourceSubject(source)} → ${titleDestination(destination)}`
         : sourceSubject(source);
-      const brief =
-        source.kind === 'article'
-          ? systemMessageText(
-              'workshop.articleBrief',
-              { 0: source.title, 1: source.url },
-              locale,
-            )
-          : [
-              systemMessageText(
-                'workshop.topicBrief',
-                { 0: source.topic },
-                locale,
-              ),
-              source.points,
-              ...(source.links ?? []),
-            ]
-              .filter(Boolean)
-              .join('\n\n');
+      const repurpose = {
+        form: d.form,
+        source,
+        ...(destination ? { destination } : {}),
+      };
+      const brief = repurposeBrief(repurpose, locale);
       const draft = d.draft[lang]
         .replaceAll('{date}', date[lang])
         .replaceAll('{name}', ownerName);
@@ -323,11 +312,7 @@ export async function writeWorkshop(
           system: true,
           edited: false,
         },
-        repurpose: {
-          form: d.form,
-          source,
-          ...(destination ? { destination } : {}),
-        },
+        repurpose,
         humanOwnerId: owner,
         humanOwnerName: ownerName,
         note: '',

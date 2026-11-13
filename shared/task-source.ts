@@ -1,6 +1,6 @@
 // Where a task came from (2026-10-22 user request): found by the AI (an opportunity from the daily analysis, or a
 // change on Insights the person only confirmed) or by a person (handed off from a data page, a new task, a page to
-// improve, or created from Results). The person is the one who created the task, who may not be its owner.
+// improve, created from Results, or made in Content workshop). The person is the one who created the task, who may not be its owner.
 // Hand-off tasks carry the source of the task they came from (TaskExecutionService copies it). Shared so the task
 // pages and the server's result rows say the same.
 
@@ -16,6 +16,7 @@ export type TaskSource = {
     | 'newTask'
     | 'content'
     | 'results'
+    | 'workshop'
     | 'other';
   insight?: { id?: string; no?: number };
   /** The page path a person handed the task off from, when recorded. */
@@ -74,6 +75,8 @@ export function taskSource(task: SourceTask): TaskSource {
   if (typeof e.signalKey === 'string')
     return { by: 'ai', via: 'change', ...(at ? { at } : {}) };
   if (e.origin === 'manual' || e.source === 'manual') return person('newTask');
+  if (e.origin === 'workshop' || key.startsWith('workshop:'))
+    return person('workshop');
   if (key.startsWith('content:') || e.content) return person('content');
   if (key.startsWith('strategy:') && e.goal)
     return { by: 'ai', via: 'plan', ...(at ? { at } : {}) };

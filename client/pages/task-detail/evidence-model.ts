@@ -105,8 +105,20 @@ export function whyText(data: TaskData): {
   fact?: string;
   more: number;
   /** Where the line comes from, so a page that already shows the brief need not repeat it. */
-  from?: 'why' | 'signal' | 'result' | 'objective' | 'brief';
+  from?: 'why' | 'signal' | 'result' | 'objective' | 'brief' | 'workshop';
 } {
+  // A Content workshop task says where it was made and from what, never its brief (which, in the demo, opens with
+  // the demo's notice).
+  const repurpose = data.work.repurpose?.source;
+  if (repurpose)
+    return {
+      text:
+        repurpose.kind === 'article'
+          ? $t('workshop.whyArticle', { 0: repurpose.title })
+          : $t('workshop.whyTopic', { 0: repurpose.topic }),
+      more: 0,
+      from: 'workshop',
+    };
   const { signals, brief, resultSource } = taskEvidence(data);
   const ev = (data.task.evidence || {}) as {
     why?: unknown;

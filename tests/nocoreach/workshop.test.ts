@@ -90,6 +90,12 @@ function fixture() {
       put: async (key, payload) => {
         state.nrSnapshots.push({ id: sequence++, key, payload });
       },
+      agents: {
+        taskAgent: vi.fn(async (agentId) => {
+          if (agentId === 'agent-1') return { id: 'agent-1', name: 'Agent One', type: 'runner' };
+          throw Object.assign(new Error('gone'), { status: 409 });
+        }),
+      },
       updateTask: vi.fn(async (_project, v) => {
         started.push([v.taskId, v.command, v.agentId ?? v.playbookId]);
         return { work: { revision: v.revision + 1 } };
@@ -248,7 +254,7 @@ describe('Content workshop create', () => {
     });
   const requestId = '7d2b6a6e-5f0d-4c1e-9b7a-1f2e3d4c5b6a';
 
-  it('makes one task per form and place in one go, then starts each with the chosen Agent', async () => {
+  it('makes one task per form and place in one go with the chosen Agent, then starts each', async () => {
     const f = fixture();
     brand(f);
     const r = await f.s.create(
@@ -290,12 +296,16 @@ describe('Content workshop create', () => {
       section: 'Tutorials',
     });
     expect(rows[0].evidence).toMatchObject({ origin: 'workshop', createdBy: { id: '1', name: 'Tester' }, suggestedPlaybook: 'x-posts' });
-    expect(rows[0].evidence.work).toMatchObject({ playbookId: 'x-posts', humanOwnerId: '1' });
-    expect(rows[0].brief).toContain(`${ORIGIN}/blog/new-board`);
-    expect(f.started.filter(([id]) => id === r.taskIds[0])).toEqual([
-      [r.taskIds[0], 'setAgent', 'agent-1'],
-      [r.taskIds[0], 'startTask', 'x-posts'],
+    expect(rows[0].evidence.work).toMatchObject({ playbookId: 'x-posts', humanOwnerId: '1', agentId: 'agent-1', agentName: 'Agent One' });
+    // Each brief names its own form and place.
+    expect(rows.map((t) => t.brief)).toEqual([
+      `把文章《New board》改编成三条 X 帖子。原文：${ORIGIN}/blog/new-board`,
+      `把文章《New board》改编成一篇发到 Reddit r/ProjectManagement 的社区帖。原文：${ORIGIN}/blog/new-board`,
+      `把文章《New board》改编成一篇发到 Acme Community · Tutorials 的社区帖。原文：${ORIGIN}/blog/new-board`,
+      `把文章《New board》改编成一篇发到 Hacker News 的社区帖。原文：${ORIGIN}/blog/new-board`,
     ]);
+    // The Agent was stored with the task, so starting is the only command.
+    expect(f.started.filter(([id]) => id === r.taskIds[0])).toEqual([[r.taskIds[0], 'startTask', 'x-posts']]);
     // The same request again (a lost response) finds the tasks it made.
     const again = await f.s.create('1', { requestId, source: { kind: 'topic', topic: 'x' }, items: [{ form: 'x' }] }, '1', 'Tester');
     expect(again.taskIds).toEqual(r.taskIds);
@@ -320,6 +330,23 @@ describe('Content workshop create', () => {
       points: 'Live demo',
       links: ['https://acme.example/events'],
     });
+    expect(f.state.nrTasks[0].brief).toBe('围绕话题“November meetup”写一篇 LinkedIn 帖子。\n\nLive demo\n\nhttps://acme.example/events');
+    expect(f.p.app.logger.warn).toHaveBeenCalled();
+  });
+
+  it('leaves the tasks at Start when the chosen Agent cannot be used', async () => {
+    const f = fixture();
+    const r = await f.s.create(
+      '1',
+      { requestId, agentId: 'gone', source: { kind: 'topic', topic: 'Meetup' }, items: [{ form: 'x' }] },
+      '1',
+      'Tester',
+      'en-US',
+    );
+    expect(r.started).toEqual([]);
+    expect(f.started).toEqual([]);
+    expect(f.state.nrTasks[0].evidence.work.agentId).toBeUndefined();
+    expect(f.state.nrTasks[0].brief).toBe('Write 3 X posts on the topic “Meetup”.');
     expect(f.p.app.logger.warn).toHaveBeenCalled();
   });
 

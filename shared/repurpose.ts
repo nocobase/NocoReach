@@ -1,3 +1,5 @@
+import { systemMessageText } from './i18n/messages.js';
+
 /**
  * Content workshop (2026-11-13 user decision): an article or a new topic adapted into posts for other platforms. The
  * Agent writes them and a person reviews; approving completes the task. NocoReach posts nowhere and does not track what
@@ -91,6 +93,10 @@ export function destinationName(d: Destination): string {
   if (d.kind === 'hn') return 'Hacker News';
   return d.name;
 }
+
+/** Where a community post goes, as lists name it: "Reddit r/selfhosted", "Forum · Tutorials". */
+export const destinationLabel = (d: Destination) =>
+  d.kind === 'own' ? `${d.name} · ${d.section}` : destinationName(d);
 
 /** Where a community post's title stops: Reddit allows 300 characters, Hacker News 80, Discourse 255 by default. */
 export const TITLE_LIMIT = { reddit: 300, hn: 80, own: 255 } as const;
@@ -243,9 +249,10 @@ const FIRST_PERSON =
   /(?:\b(?:i|i'm|i've|i am|we|we're|we've|our|my|disclosure)\b|我|我们|作者|披露)/i;
 
 /**
- * The checks shown on the review card: X and LinkedIn by length; a community post's body is written out rather than a
- * link, opens by saying who is posting (the brand named in its first paragraph by someone speaking for it), and its
- * title fits the platform. The rules the Agent read are counted from its list.
+ * The checks shown on the review card: X's posts by length; a community post's body is written out rather than a link,
+ * opens by saying who is posting (the brand named in its first paragraph by someone speaking for it), and its title fits
+ * the platform. The rules the Agent read are counted from its list. A LinkedIn post has none: its one length is in the
+ * post's own heading (pieceLimit).
  */
 export function repurposeChecks(
   form: RepurposeForm,
@@ -270,20 +277,6 @@ export function repurposeChecks(
             },
           }
         : { key: 'workshop.check.xWithin', ok: true, params: { 0: X_LIMIT } },
-    ];
-  }
-  if (form === 'linkedin') {
-    const post = posts[0],
-      length = post ? charLength(post.text) : 0;
-    return [
-      {
-        key:
-          length > LINKEDIN_LIMIT
-            ? 'workshop.check.linkedinOver'
-            : 'workshop.check.linkedinWithin',
-        ok: length <= LINKEDIN_LIMIT,
-        params: { 0: LINKEDIN_LIMIT, 1: length },
-      },
     ];
   }
   if (form !== 'community') return [];
@@ -325,3 +318,44 @@ export function repurposeChecks(
 /** The task title's subject: the article's title or the topic. */
 export const sourceSubject = (s: RepurposeSource) =>
   s.kind === 'article' ? s.title : s.topic;
+
+/** An article's title as its page gives it, without the site's name after a separator ("Title | Acme"). */
+export function articleTitle(page: { url: string; title?: string }): string {
+  const t = String(page.title || '')
+    .trim()
+    .replace(/\s+[|·–—-]\s+[^|·–—-]{1,40}$/, '')
+    .trim();
+  if (t) return t.slice(0, 300);
+  try {
+    return decodeURIComponent(
+      new URL(page.url).pathname.split('/').filter(Boolean).at(-1) || page.url,
+    ).replace(/[-_]+/g, ' ');
+  } catch {
+    return page.url;
+  }
+}
+
+/**
+ * A workshop task's brief, in the language it is created in: the article or topic and what this task makes of it ("Adapt
+ * the article “X” into a community post for Reddit r/selfhosted. Source: URL"), then a topic's points and links.
+ */
+export function repurposeBrief(r: Repurpose, locale?: string): string {
+  const text = (key: string, params: Record<string, string> = {}) =>
+    systemMessageText(key, params, locale);
+  const into =
+    r.form === 'x'
+      ? text('workshop.briefX')
+      : r.form === 'linkedin'
+        ? text('workshop.briefLinkedin')
+        : r.form === 'community' && r.destination
+          ? text('workshop.briefCommunity', {
+              0: destinationLabel(r.destination),
+            })
+          : text(`workshop.form${r.form === 'xhs' ? 'Xhs' : 'Community'}`);
+  const s = r.source;
+  if (s.kind === 'article')
+    return text('workshop.articleBrief', { 0: s.title, 1: into, 2: s.url });
+  return [text('workshop.topicBrief', { 0: s.topic, 1: into }), s.points, ...(s.links || [])]
+    .filter(Boolean)
+    .join('\n\n');
+}
