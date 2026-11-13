@@ -3,6 +3,15 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Tone } from '#components/reach/tag';
 import { getWorkColumns } from '../task-execution-types';
 import type { TaskStanding } from '../../../shared/task-pending.js';
+import type {
+  GrowthFigure,
+  GrowthKind,
+  GrowthText,
+} from '../../../shared/growth.js';
+import type {
+  ArticleReason,
+  HotDiscussion,
+} from '../../../shared/workshop-recommend.js';
 import {
   destinationLabel,
   destinationName,
@@ -22,6 +31,7 @@ export type Made = {
   taskId: string;
   no: number | null;
   standing: Standing;
+  at?: string;
 };
 export type Article = {
   url: string;
@@ -32,6 +42,47 @@ export type Article = {
   clicks30: number;
   clicks12m: number;
   cited: number;
+  made: Made[];
+};
+/** A recommended article's clicks: 8 weeks, or 12 months for a steady one, oldest first. */
+export type Spark = { unit: 'week' | 'month'; points: number[] };
+export type Suggested = Article & {
+  reasons: ArticleReason[];
+  spark: Spark | null;
+  /** Its last adaptation: when, what it made, and the change in weekly clicks since, for a rising or new article. */
+  last?: { at: string; made: Made[]; since?: number };
+};
+/** A task handed off from the opportunity on Opportunities. */
+export type Handed = {
+  taskId: string;
+  no: number | null;
+  standing: Standing;
+  playbook: string | null;
+};
+/** One of Opportunities' live Trending now opportunities (server/nocoreach/workshop.ts hotItems). */
+export type HotItem = {
+  id: string;
+  no: number | null;
+  kind: GrowthKind;
+  title: string;
+  firstSeenAt?: string;
+  foundAt?: string;
+  headline: GrowthText | null;
+  figures: GrowthFigure[];
+  logos: string[];
+  chart: {
+    unit: 'week' | 'month' | 'day';
+    label: GrowthText;
+    points: number[];
+  } | null;
+  discussions: HotDiscussion[];
+  discussionCount: number;
+  communities: {
+    subreddits: { subreddit: string; discussions: number }[];
+    hn: number;
+  };
+  material: { title: string; url: string }[];
+  handed: Handed[];
   made: Made[];
 };
 export type WorkshopRecord = {
@@ -49,8 +100,8 @@ export type WorkshopRecord = {
 export type Community = { name: string; url: string; sections: string[] };
 export type Brand = { revision: number; community: Community | null };
 export type WorkshopView = {
-  recent: Article[];
-  earlier: Article[];
+  hot: HotItem[];
+  suggested: Suggested[];
   searchConnected: boolean;
   dataThrough: string | null;
   articles: Article[];
@@ -132,9 +183,25 @@ export const madeList = (made: Made[]) => [
   ),
 ];
 
-/** The source's line in lists: the article's title, or the topic. */
+/** The source's line in lists: the article's title, the topic, or what is hot. */
 export const sourceLabel = (s: RepurposeSource) =>
-  s.kind === 'article' ? s.title : s.topic;
+  s.kind === 'article' ? s.title : s.kind === 'topic' ? s.topic : s.headline;
+
+/** An opportunity's short number, as Opportunities shows it. */
+export const opportunityNo = (no: number | null | undefined) =>
+  no ? `O-${no}` : '';
+
+/** Where a record came from: "From “…”", "From the topic “…”", "From trending O-35 “…”". */
+export const fromLine = (s: RepurposeSource) =>
+  s.kind === 'article'
+    ? $t('workshop.fromArticle', { 0: s.title })
+    : s.kind === 'topic'
+      ? $t('workshop.fromTopic', { 0: s.topic })
+      : $t('workshop.fromHot', { 0: opportunityNo(s.no), 1: s.headline });
+
+/** A Trending now headline in the reader's language, else the opportunity's own title. */
+export const hotHeadlineText = (h: Pick<HotItem, 'headline' | 'title'>) =>
+  h.headline ? $t(h.headline.key, h.headline.params) : $legacyText(h.title);
 
 /** A failed request's message in the interface language (the server's own text is Chinese). */
 export const errorText = (e: unknown, fallback: string) =>

@@ -217,7 +217,10 @@ export async function writeWorkshop(
           output:
             source.kind === 'article'
               ? `# ${source.title}`
-              : [source.topic, source.points].join('\n\n'),
+              : [
+                  source.kind === 'topic' ? source.topic : source.headline,
+                  source.points,
+                ].join('\n\n'),
         },
         {
           type: 'thinking',

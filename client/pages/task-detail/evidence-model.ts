@@ -115,7 +115,12 @@ export function whyText(data: TaskData): {
       text:
         repurpose.kind === 'article'
           ? $t('workshop.whyArticle', { 0: repurpose.title })
-          : $t('workshop.whyTopic', { 0: repurpose.topic }),
+          : repurpose.kind === 'topic'
+            ? $t('workshop.whyTopic', { 0: repurpose.topic })
+            : $t('workshop.whyHot', {
+                0: repurpose.no ? `O-${repurpose.no}` : '',
+                1: repurpose.headline,
+              }),
       more: 0,
       from: 'workshop',
     };

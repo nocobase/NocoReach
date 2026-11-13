@@ -235,10 +235,11 @@ export class TaskService {
     return { checks };
   }
   // What a Content workshop run adapts: the source as chosen, with the article's body read when the task was created
-  // (WorkshopService), and where a community post goes.
+  // (WorkshopService), where a community post goes, the angle asked for, and the approved drafts of earlier adaptations
+  // of the same article or opportunity, kept when the task was created, for the Agent to take another angle.
   private async repurposeInput(project: string, taskId: string, w: Work, tx: any) {
     const stored = await this.snapshot(this.key('source', project, taskId), tx);
-    return { ...w.repurpose, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}) };
+    return { ...w.repurpose, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}), ...(stored?.earlier?.length ? { earlier: stored.earlier } : {}) };
   }
   // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {

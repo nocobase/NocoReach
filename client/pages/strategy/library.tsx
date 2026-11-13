@@ -1,7 +1,7 @@
 import { useMessageState, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 import {useEffect,useState,type ReactNode} from 'react';
-import {Link,useNavigate,useSearchParams} from 'react-router';
+import {Link,Outlet,useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon} from 'lucide-react';
 import {Tooltip,TooltipContent,TooltipTrigger} from '#components/ui/tooltip';
 import {PageContainer,PageHeader} from '#components/reach/page';
@@ -34,6 +34,7 @@ import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
 import {CATEGORY} from './growth-category';
 import {GROWTH_CATEGORIES,categoryOf,growthOf,isGrowthCategory,newPageOf,type GrowthCategory} from '../../../shared/growth.js';
 import {Segmented} from '#components/reach/segmented';
+import {isHot} from '../../../shared/workshop-recommend.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
@@ -74,6 +75,9 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const playbooks=localizePlaybookList(rawPlaybooks);
  useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(rows=>{setTasks(rows);cache?.replace(taskListKey(project.id),rows);}).catch(()=>undefined);},[project?.id]);
  const byId=new Map(tasks.map(t=>[String(t.id),t]));
+ // Content workshop's tasks made from an opportunity (v4): listed with its own tasks, never as its hand-off.
+ const workshopTasks=(id:string)=>tasks.filter(t=>{const s=t.evidence?.work?.repurpose?.source;return s?.kind==='opportunity'&&s.id===id;});
+ const reloadTasks=()=>{if(project)void taskRecords<WatchTask>(project.id).then(rows=>{setTasks(rows);cache?.replace(taskListKey(project.id),rows);}).catch(()=>undefined);};
  const rows:Item[]=state?rowsFor(state).map(r=>{const st=opportunityState(r,state),t=st.state==='task'&&r.taskId?byId.get(String(r.taskId)):undefined;return {...r,...st,...(t?{task:taskStanding({work:t.evidence?.work,status:t.status})}:{}),...(st.state==='task'&&r.tasks.length>1?{taskStates:r.tasks.map(x=>standingOf(byId.get(String(x.taskId))))}:{})};}):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
@@ -107,7 +111,10 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  function handed(row:Row,r:HandOffDone){setHanding(undefined);setState(r.state);setError('');refreshNavBadges();go({tab:'done',item:row.card.id});
   setNotice({ok:true,text:()=>$t('opportunityTasks.created',{0:r.taskIds.length})});if(project)void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else go({item:r.card.id});}
- const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
+ // Adapt into short posts (v4): a live Trending now opportunity opens Content workshop's step 2 over this page.
+ const repurpose=(r:Item)=>{const p=new URLSearchParams(params);p.set('opportunity',r.card.id);void navigate({pathname:'repurpose',search:`?${p}`});};
+ const hot=(r:Item)=>Boolean(state)&&isHot(r,state!,taskId=>standingOf(byId.get(String(taskId))));
+ const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} workshop={workshopTasks(r.card.id)} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)} onRepurpose={hot(r)?()=>repurpose(r):undefined}/>;
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
@@ -133,9 +140,10 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
    <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
   </Sheet>
+  <Outlet context={{onCreated:()=>{reloadTasks();refreshNavBadges();}}}/>
  </PageContainer>;
 }
-type WatchTask={id:number;title?:string;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
+type WatchTask={id:number;title?:string;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work&{repurpose?:{source?:{kind?:string;id?:string}}}}};
 // 观察中: one line per change — what changed, its numbers when watching started and now, what the AI waits for and the
 // day it must decide by; 忽略 ends it. Below, 最近结束: how the watches of the last 7 days ended.
 const short=(d?:string)=>formatDate(d);
@@ -260,7 +268,7 @@ const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.pr
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
-function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+function Detail({row,tasks,workshop,busy,onGive,onIgnore,onRestore,onOpen,onRepurpose}:{row:Item;tasks:Map<string,WatchTask>;workshop:WatchTask[];busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void;onRepurpose?:()=>void}){
  const card=row.card,c=leadChip(row),growth=growthOf(card.growth),newPage=newPageOf(card.newPage),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
  const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
@@ -282,10 +290,11 @@ function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;task
   {newPage?<Block title={$t('strategy.briefWhere')}><span className="block break-words">{$t('growth.where.newPage',{0:newPage.section})}</span>{newPage.linkFrom.length>0&&<span className="block break-words">{$t('growth.where.linkFrom',{0:newPage.linkFrom.join(' · ')})}</span>}</Block>
    :card.target?.trim()?<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='existing'>{$t('growth.where.existing',{0:card.target})}</span></Block>
    :card.offsite?.trim()&&<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='offsite'>{$t('growth.where.offsite',{0:card.offsite})}</span></Block>}
-  {several&&<OpportunityTasks row={row} tasks={tasks}/>}
+  {(several||workshop.length>0)&&<OpportunityTasks row={row} tasks={tasks} extra={workshop}/>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-   {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}
+   {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button>{onRepurpose&&<Button variant="outline" onClick={onRepurpose}>{$t('workshop.repurposeOpportunity')}</Button>}<Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}
    {row.state==='task'&&!several&&<Button variant="outline" onClick={onOpen}>{$tj('strategy.openTask',{0:row.taskNo?` ${taskNo(row.taskNo)}`:''})}<ArrowRightIcon/></Button>}
+   {row.state==='task'&&onRepurpose&&<Button variant="outline" onClick={onRepurpose}>{$t('workshop.repurposeOpportunity')}</Button>}
    {row.state==='task'&&several&&places>open&&<Button variant="outline" disabled={busy} onClick={onGive}>{handOffLabel()}</Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>{$t('strategy.restorePending')}</Button>}
    {card.limitation&&<span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">{$t('strategy.briefLimitation')}<InfoTip label={$t('strategy.briefLimitation')} side="left"><p>{card.limitation}</p></InfoTip></span>}

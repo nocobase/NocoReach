@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Link,
   useLocation,
@@ -29,11 +29,12 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '#components/ui/tabs';
 import { Textarea } from '#components/ui/textarea';
 import { useBusinessAccess } from '#hooks/use-business-access';
-import { formatCount, formatDate } from '#lib/format';
+import { formatCount, formatDate, joinClauses, withDetail } from '#lib/format';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import {
+  ANGLE_MAX,
   destinationKey,
   destinationName,
   LINKS_MAX,
@@ -49,14 +50,19 @@ import { AgentMenu } from '../task-detail/agent-menu.js';
 import { taskAgentOf, type AgentStatus } from '../task-agents.js';
 import type { TaskData } from '../task-execution-types.js';
 import type { WorkshopOutlet } from './index.js';
+import { CategoryTag } from '../strategy/growth';
 import {
   errorText,
   getFormNames,
+  hotHeadlineText,
   madeList,
+  opportunityNo,
+  resultName,
   standingText,
   taskNo,
   workshopRequest,
   type Article,
+  type HotItem,
   type Made,
   type WorkshopView,
 } from './model.js';
@@ -66,15 +72,21 @@ const itemKey = (i: Item) => `${i.form}|${destinationKey(i.destination)}`;
 
 /**
  * Pick content (mockup v3 frames 2 and 3): step 1 chooses what to adapt, any blog article or a new topic; step 2 the
- * forms, a task each, a community post once per destination. Nothing is ticked for you. A recommendation's Adapt and
- * a published article task's Adapt this article open step 2 directly (`?url=&title=`). Under the workshop page it
- * reads the page's data; under a task it loads its own.
+ * forms, a task each, a community post once per destination. Nothing is ticked for you, except (v4) the subreddit
+ * holding most of a trending item's discussions. A recommendation's Adapt and a published article task's Adapt this
+ * article open step 2 directly (`?url=&title=`), as Adapt now and Opportunities' Adapt into short posts do for a
+ * Trending now item (`?opportunity=`). Under the workshop page it reads the page's data; under a task or an
+ * opportunity it loads its own, and under an opportunity it tells the page when tasks were made.
  */
 export default function WorkshopPick() {
   useNocoReachLocale();
   const { project } = useProject();
   const outlet = useOutletContext<Partial<WorkshopOutlet> | undefined>();
   const fromPage = outlet && 'reload' in outlet ? outlet : null;
+  const onCreated =
+    outlet && 'onCreated' in outlet
+      ? (outlet as { onCreated?: () => void }).onCreated
+      : undefined;
   const projectId = project ? String(project.id) : '';
   const [own, setOwn] = useState<{
     projectId: string;
@@ -110,6 +122,7 @@ export default function WorkshopPick() {
       view={view}
       error={error}
       onRetry={() => setRetry((n) => n + 1)}
+      onCreated={onCreated}
     />
   );
 }
@@ -119,32 +132,40 @@ function Pick({
   view,
   error,
   onRetry,
+  onCreated,
 }: {
   projectId: string;
   view?: WorkshopView;
   error?: string;
   onRetry: () => void;
+  onCreated?: () => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
-  const given = params.get('url') && params.get('title');
+  const hotId = params.get('opportunity');
+  const given = (params.get('url') && params.get('title')) || hotId;
+  const hot = hotId ? view?.hot.find((h) => h.id === hotId) : undefined;
   const [step, setStep] = useState<1 | 2>(given ? 2 : 1);
   const [tab, setTab] = useState<'article' | 'topic'>('article');
   const [chosen, setChosen] = useState<{ url: string; title: string } | null>(
     given ? { url: params.get('url')!, title: params.get('title')! } : null,
   );
   const [topic, setTopic] = useState({ topic: '', points: '', links: '' });
-  const source: RepurposeSource | null =
-    tab === 'topic' && !given
+  const source: RepurposeSource | null = hot
+    ? {
+        kind: 'opportunity',
+        id: hot.id,
+        ...(hot.no ? { no: hot.no } : {}),
+        headline: hotHeadlineText(hot),
+      }
+    : tab === 'topic' && !given
       ? topic.topic.trim()
         ? {
             kind: 'topic',
             topic: topic.topic.trim(),
             ...(topic.points.trim() ? { points: topic.points.trim() } : {}),
-            ...(links(topic.links).length
-              ? { links: links(topic.links) }
-              : {}),
+            ...(links(topic.links).length ? { links: links(topic.links) } : {}),
           }
         : null
       : chosen
@@ -162,9 +183,20 @@ function Pick({
         : links(topic.links).length > LINKS_MAX
           ? $t('workshop.linksMax', { 0: LINKS_MAX })
           : '';
+  // Back to the workshop, or to the opportunity it was opened from (its tab and selection kept); under a task, back to it.
+  const kept = new URLSearchParams(params);
+  for (const k of ['opportunity', 'url', 'title']) kept.delete(k);
   const closeTo = location.pathname.startsWith('/workshop')
     ? '/workshop'
-    : undefined;
+    : location.pathname.startsWith('/opportunities')
+      ? `/opportunities${kept.size ? `?${kept}` : ''}`
+      : undefined;
+  const created = () => {
+    if (closeTo?.startsWith('/opportunities')) {
+      onCreated?.();
+      void navigate(closeTo, { replace: true });
+    } else void navigate('/workshop', { replace: true });
+  };
   if (step === 2 && source && view)
     return (
       <Step2
@@ -172,12 +204,19 @@ function Pick({
         view={view}
         source={source}
         article={article}
+        hot={hot}
         onChange={() => {
-          // From a recommendation or a task the article came with the address: Change opens step 1 to pick another.
-          if (given) void navigate({ search: '' }, { replace: true });
+          // From a recommendation, a task or an opportunity the source came with the address: Change opens step 1 to
+          // pick another.
+          if (given)
+            void navigate(
+              { search: kept.size ? `?${kept}` : '' },
+              { replace: true },
+            );
           setStep(1);
         }}
         closeTo={closeTo}
+        onCreated={created}
       />
     );
   return (
@@ -230,8 +269,14 @@ function Pick({
 // Both steps and both tabs of step 1 share one size, so the dialog stays put as they change; longer content scrolls.
 const DIALOG = 'h-[min(48rem,calc(100dvh-2rem))] sm:max-w-4xl';
 
-const links = (text: string) =>
-  [...new Set(text.split(/\s+/).map((s) => s.trim()).filter(Boolean))];
+const links = (text: string) => [
+  ...new Set(
+    text
+      .split(/\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ),
+];
 
 function Steps({ step }: { step: 1 | 2 }) {
   return (
@@ -449,24 +494,45 @@ function Step1({
   );
 }
 
+// A trending item's subreddits and Hacker News, as places to post: the subreddit with most of its discussions is
+// ticked (v4, approved: a fact about where it is discussed, not a suggestion), unless it was already made for it.
+function hotPicks(hot: HotItem | undefined): Map<string, Item> {
+  const top = hot?.communities.subreddits[0];
+  if (!top) return new Map<string, Item>();
+  const item: Item = {
+    form: 'community',
+    destination: { kind: 'reddit', subreddit: top.subreddit },
+  };
+  const made = hot.made.some(
+    (m) =>
+      m.form === 'community' &&
+      destinationKey(m.destination) === destinationKey(item.destination),
+  );
+  return new Map<string, Item>(made ? [] : [[itemKey(item), item]]);
+}
+
 function Step2({
   projectId,
   view,
   source,
   article,
+  hot,
   onChange,
   closeTo,
+  onCreated,
 }: {
   projectId: string;
   view: WorkshopView;
   source: RepurposeSource;
   article?: Article;
+  hot?: HotItem;
   onChange: () => void;
   closeTo?: string;
+  onCreated: () => void;
 }) {
-  const navigate = useNavigate();
   const { can } = useBusinessAccess('nrWorkshop.create', projectId);
-  const [picked, setPicked] = useState<Map<string, Item>>(() => new Map());
+  const [picked, setPicked] = useState<Map<string, Item>>(() => hotPicks(hot));
+  const [angle, setAngle] = useState('');
   const [extra, setExtra] = useState<string[]>([]);
   const [other, setOther] = useState('');
   const [agents, setAgents] = useState<AgentStatus>();
@@ -494,9 +560,26 @@ function Step2({
     };
   }, [projectId]);
   // One request id per choice: a retry after a lost response finds the tasks it already made, a changed choice is new.
-  const choice = JSON.stringify([source, [...picked.keys()].sort(), agentId]);
+  const choice = JSON.stringify([
+    source,
+    [...picked.keys()].sort(),
+    agentId,
+    angle.trim(),
+  ]);
   const [request, setRequest] = useState<{ choice: string; id: string }>();
-  const made = article?.made || [];
+  const made = hot ? hot.made : article?.made || [];
+  // An article adapted before: the approved drafts the Agent reads to take another angle (the server's `earlier`).
+  const earlier = hot
+    ? []
+    : [...made]
+        .filter((m) => m.standing === 'done')
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+        .slice(0, 3);
+  const withAngle = Boolean(hot) || earlier.length > 0;
+  const angleProblem =
+    angle.trim().length > ANGLE_MAX
+      ? $t('workshop.angleTooLong', { 0: ANGLE_MAX })
+      : '';
   const toggle = (item: Item, on: boolean) =>
     setPicked((m) => {
       const next = new Map(m);
@@ -507,9 +590,17 @@ function Step2({
   const isOn = (item: Item) => picked.has(itemKey(item));
   const reddit = view.destinations.reddit;
   const subs = [
+    ...(hot?.communities.subreddits || []).map((s) => ({
+      subreddit: s.subreddit,
+      note: $t('workshop.hot.here', { 0: s.discussions }),
+      discussions: 0,
+    })),
     ...reddit.subreddits.map((s) => ({
       subreddit: s.subreddit,
-      note: $t('workshop.redditDiscussions', { 0: s.discussions, 1: reddit.weeks }),
+      note: $t('workshop.redditDiscussions', {
+        0: s.discussions,
+        1: reddit.weeks,
+      }),
       discussions: s.discussions,
     })),
     ...(reddit.subreddits.length
@@ -531,7 +622,10 @@ function Step2({
     if (!otherName) return;
     setExtra((list) => [...list, otherName]);
     toggle(
-      { form: 'community', destination: { kind: 'reddit', subreddit: otherName } },
+      {
+        form: 'community',
+        destination: { kind: 'reddit', subreddit: otherName },
+      },
       true,
     );
     setOther('');
@@ -560,29 +654,37 @@ function Step2({
           source,
           items: [...picked.values()],
           ...(agentId ? { agentId } : {}),
+          ...(withAngle && angle.trim() ? { angle: angle.trim() } : {}),
         },
       );
       toast.success(() => $t('workshop.handedOff', { 0: r.taskIds.length }));
       const stuck = r.taskIds.length - r.started.length;
       if (stuck > 0)
         toast.warning(() => $t('workshop.notStarted', { 0: stuck }));
-      void navigate('/workshop', { replace: true });
+      onCreated();
     } catch (e) {
       setFailure(errorText(e, $t('workshop.createFailed')));
     } finally {
       setBusy(false);
     }
   };
-  const status = (item: Item) => {
+  const madeFor = (item: Item) => {
     const key = destinationKey(item.destination);
     const mine = made.filter(
       (m) => m.form === item.form && destinationKey(m.destination) === key,
     );
-    const shown =
+    return (
       mine.find((m) => m.standing === 'done') ||
-      mine.find((m) => m.standing !== 'closed');
+      mine.find((m) => m.standing !== 'closed')
+    );
+  };
+  const status = (item: Item) => {
+    const shown = madeFor(item);
     return shown ? <MadeNote made={shown} /> : null;
   };
+  // A trending item is made into each form once (v4): a form already made from it is marked and cannot be ticked.
+  // An article's stays open, to be told again from another angle.
+  const locked = (item: Item) => Boolean(hot && madeFor(item));
   const names = getFormNames();
   return (
     <RouteDialog
@@ -607,7 +709,9 @@ function Step2({
           </span>
           <Cancel />
           <Button
-            disabled={!count || busy || !can || !agentId}
+            disabled={
+              !count || busy || !can || !agentId || Boolean(angleProblem)
+            }
             title={
               !can
                 ? $t('workshop.noAccess')
@@ -623,43 +727,97 @@ function Step2({
       }
     >
       <div className='space-y-4'>
-        <div
-          className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm'
-          data-source={source.kind}
-        >
-          <span className='text-muted-foreground'>{$t('workshop.adapt')}</span>
-          <b className='min-w-0 font-semibold'>
-            {source.kind === 'article'
-              ? source.title
-              : $t('workshop.topicSource', { 0: source.topic })}
-          </b>
-          {article ? (
-            <span className='text-xs text-muted-foreground'>
-              {[
-                article.published
-                  ? $t('workshop.publishedOn', {
-                      0: formatDate(article.published),
-                    })
-                  : '',
-                view.searchConnected
-                  ? $t('workshop.clicks7', {
-                      0: formatCount(article.clicks7),
-                    })
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          ) : null}
-          <Button
-            variant='link'
-            size='sm'
-            className='ml-auto h-auto p-0'
-            onClick={onChange}
+        {hot ? (
+          <HotHeader hot={hot} onChange={onChange} />
+        ) : (
+          <div
+            className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm'
+            data-source={source.kind}
           >
-            {$t('workshop.change')}
-          </Button>
-        </div>
+            <span className='text-muted-foreground'>
+              {$t('workshop.adapt')}
+            </span>
+            <b className='min-w-0 font-semibold'>
+              {source.kind === 'article'
+                ? source.title
+                : source.kind === 'topic'
+                  ? $t('workshop.topicSource', { 0: source.topic })
+                  : source.headline}
+            </b>
+            {article ? (
+              <span className='text-xs text-muted-foreground'>
+                {[
+                  article.published
+                    ? $t('workshop.publishedOn', {
+                        0: formatDate(article.published),
+                      })
+                    : '',
+                  view.searchConnected
+                    ? $t('workshop.clicks7', {
+                        0: formatCount(article.clicks7),
+                      })
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            ) : null}
+            <Button
+              variant='link'
+              size='sm'
+              className='ml-auto h-auto p-0'
+              onClick={onChange}
+            >
+              {$t('workshop.change')}
+            </Button>
+          </div>
+        )}
+        {earlier.length ? (
+          <p
+            className='rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm'
+            data-again=''
+          >
+            {$t('workshop.again', {
+              0: earlier
+                .map((m) =>
+                  withDetail(
+                    resultName(m.form, m.destination),
+                    joinClauses(
+                      [taskNo(m.no), m.at ? formatDate(m.at) : ''].filter(
+                        Boolean,
+                      ),
+                    ),
+                  ),
+                )
+                .join($t('common.listSeparator')),
+            })}
+          </p>
+        ) : null}
+        {withAngle ? (
+          <div className='space-y-1.5' data-angle=''>
+            <Label htmlFor='workshop-angle' className='gap-1.5'>
+              {$t('workshop.angle')}
+              <span className='text-xs font-normal text-muted-foreground'>
+                {hot ? $t('workshop.angleHotHint') : $t('workshop.optional')}
+              </span>
+            </Label>
+            <Input
+              id='workshop-angle'
+              value={angle}
+              maxLength={ANGLE_MAX + 50}
+              placeholder={
+                hot
+                  ? $t('workshop.angleHotPlaceholder')
+                  : $t('workshop.angleAgainPlaceholder')
+              }
+              onChange={(e) => setAngle(e.target.value)}
+              aria-invalid={Boolean(angleProblem)}
+            />
+            {angleProblem ? (
+              <p className='text-xs text-destructive'>{angleProblem}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div className='grid gap-3 sm:grid-cols-3'>
           <FormCard
             form='xhs'
@@ -675,7 +833,16 @@ function Step2({
             checked={isOn({ form: 'x' })}
             onCheckedChange={(on) => toggle({ form: 'x' }, on)}
             status={status({ form: 'x' })}
-            preview={<PostsPreview lines={[[90, 70, 40], [80, 55], [85, 60]]} />}
+            locked={locked({ form: 'x' })}
+            preview={
+              <PostsPreview
+                lines={[
+                  [90, 70, 40],
+                  [80, 55],
+                  [85, 60],
+                ]}
+              />
+            }
           />
           <FormCard
             form='linkedin'
@@ -684,6 +851,7 @@ function Step2({
             checked={isOn({ form: 'linkedin' })}
             onCheckedChange={(on) => toggle({ form: 'linkedin' }, on)}
             status={status({ form: 'linkedin' })}
+            locked={locked({ form: 'linkedin' })}
             preview={<PostsPreview lines={[[95, 88, 92]]} />}
           />
           <div
@@ -719,6 +887,7 @@ function Step2({
                       checked={isOn(item)}
                       onCheckedChange={(on) => toggle(item, on)}
                       status={status(item)}
+                      locked={locked(item)}
                     />
                   );
                 })
@@ -752,6 +921,7 @@ function Step2({
                     checked={isOn(item)}
                     onCheckedChange={(on) => toggle(item, on)}
                     status={status(item)}
+                    locked={locked(item)}
                   />
                 );
               })}
@@ -787,8 +957,15 @@ function Step2({
               <Destination
                 logo='hackernews'
                 name='Hacker News'
-                note={$t('workshop.hnNote')}
-                checked={isOn({ form: 'community', destination: { kind: 'hn' } })}
+                note={
+                  hot?.communities.hn
+                    ? $t('workshop.hot.here', { 0: hot.communities.hn })
+                    : $t('workshop.hnNote')
+                }
+                checked={isOn({
+                  form: 'community',
+                  destination: { kind: 'hn' },
+                })}
                 onCheckedChange={(on) =>
                   toggle({ form: 'community', destination: { kind: 'hn' } }, on)
                 }
@@ -796,10 +973,22 @@ function Step2({
                   form: 'community',
                   destination: { kind: 'hn' },
                 })}
+                locked={locked({
+                  form: 'community',
+                  destination: { kind: 'hn' },
+                })}
               />
             </div>
           </div>
         </div>
+        {hot && count ? (
+          <p className='text-xs text-muted-foreground' data-link-note=''>
+            {$t('workshop.hot.linkNote', {
+              0: count,
+              1: opportunityNo(hot.no),
+            })}
+          </p>
+        ) : null}
         {failure ? (
           <p className='text-sm text-destructive' role='alert'>
             {failure}
@@ -807,6 +996,72 @@ function Step2({
         ) : null}
       </div>
     </RouteDialog>
+  );
+}
+
+// Trending now's step 2 head (v4): what is hot, then what the Agent is given with it: the opportunity's analysis, its
+// discussions and the site's material.
+function HotHeader({ hot, onChange }: { hot: HotItem; onChange: () => void }) {
+  const first = hot.discussions[0];
+  const rows: [string, ReactNode][] = [
+    [
+      $t('workshop.hot.analysisLabel'),
+      $t('workshop.hot.analysis', { 0: opportunityNo(hot.no) }),
+    ],
+    ...(first
+      ? [
+          [
+            $t('workshop.hot.discussionsLabel'),
+            <span key='d' className='inline-flex min-w-0 items-center gap-1.5'>
+              <SourceLogo source={first.logo} size='xs' />
+              <span className='truncate'>{first.title}</span>
+              {hot.discussionCount > 1 ? (
+                <span className='shrink-0 text-muted-foreground'>
+                  {$t('workshop.hot.moreDiscussions', {
+                    0: hot.discussionCount,
+                  })}
+                </span>
+              ) : null}
+            </span>,
+          ] as [string, ReactNode],
+        ]
+      : []),
+    ...(hot.material.length
+      ? [
+          [
+            $t('workshop.hot.materialLabel'),
+            hot.material.map((m) => m.title).join(' · '),
+          ] as [string, ReactNode],
+        ]
+      : []),
+  ];
+  return (
+    <div
+      className='rounded-lg border bg-muted/40 px-4 py-2.5 text-sm'
+      data-source='opportunity'
+    >
+      <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+        <span className='text-muted-foreground'>{$t('workshop.adapt')}</span>
+        <CategoryTag category='trending' />
+        <b className='min-w-0 font-semibold'>{hotHeadlineText(hot)}</b>
+        <Button
+          variant='link'
+          size='sm'
+          className='ml-auto h-auto p-0'
+          onClick={onChange}
+        >
+          {$t('workshop.change')}
+        </Button>
+      </div>
+      <dl className='mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs'>
+        {rows.map(([k, v]) => (
+          <Fragment key={k}>
+            <dt className='text-muted-foreground'>{k}</dt>
+            <dd className='min-w-0 truncate'>{v}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </div>
   );
 }
 
@@ -821,7 +1076,9 @@ function MadeNote({ made }: { made: Made }) {
     >
       {made.standing === 'done'
         ? $t('workshop.madeDone', { 0: taskNo(made.no) })
-        : [standingText(made.standing), taskNo(made.no)].filter(Boolean).join(' · ')}
+        : [standingText(made.standing), taskNo(made.no)]
+            .filter(Boolean)
+            .join(' · ')}
     </Link>
   );
 }
@@ -835,6 +1092,7 @@ function FormCard({
   checked = false,
   onCheckedChange,
   status,
+  locked = false,
 }: {
   form: RepurposeForm;
   name: string;
@@ -844,6 +1102,8 @@ function FormCard({
   checked?: boolean;
   onCheckedChange?: (on: boolean) => void;
   status?: ReactNode;
+  /** Already made from this trending item: marked, and not ticked again. */
+  locked?: boolean;
 }) {
   const id = `workshop-form-${form}`;
   return (
@@ -859,13 +1119,10 @@ function FormCard({
         htmlFor={id}
         className={cn(
           'flex items-center gap-2 pr-7 text-sm font-semibold',
-          !disabled && 'cursor-pointer',
+          !disabled && !locked && 'cursor-pointer',
         )}
       >
-        <SourceLogo
-          source={form === 'xhs' ? 'xiaohongshu' : form}
-          size='sm'
-        />
+        <SourceLogo source={form === 'xhs' ? 'xiaohongshu' : form} size='sm' />
         {name}
         {disabled ? (
           <Tag tone='grey' className='ml-1'>
@@ -877,7 +1134,7 @@ function FormCard({
         id={id}
         className='absolute top-4 right-4'
         checked={checked}
-        disabled={disabled}
+        disabled={disabled || locked}
         onCheckedChange={(on) => onCheckedChange?.(Boolean(on))}
         aria-label={name}
       />
@@ -931,6 +1188,7 @@ function Destination({
   checked,
   onCheckedChange,
   status,
+  locked = false,
 }: {
   logo: string;
   name: string;
@@ -938,12 +1196,19 @@ function Destination({
   checked: boolean;
   onCheckedChange: (on: boolean) => void;
   status?: ReactNode;
+  locked?: boolean;
 }) {
   return (
-    <div className='flex flex-wrap items-center gap-2 py-0.5' data-destination=''>
-      <label className='flex cursor-pointer items-center gap-2'>
+    <div
+      className='flex flex-wrap items-center gap-2 py-0.5'
+      data-destination=''
+    >
+      <label
+        className={cn('flex items-center gap-2', !locked && 'cursor-pointer')}
+      >
         <Checkbox
           checked={checked}
+          disabled={locked}
           onCheckedChange={(on) => onCheckedChange(Boolean(on))}
           aria-label={note ? `${name} · ${note}` : name}
         />

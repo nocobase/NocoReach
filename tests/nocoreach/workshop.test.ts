@@ -12,6 +12,8 @@ vi.mock('../../server/nocoreach/ai-questions.js', () => ({
 
 import { WorkshopService } from '../../server/nocoreach/workshop.js';
 import { projectWork } from '../../server/nocoreach/execution/model.js';
+import { clickPeriods } from '../../shared/workshop-recommend.js';
+import { taskSource } from '../../shared/task-source.js';
 
 // Content workshop (2026-11-13): the page's recommendations come from the site's own figures, its records from the
 // project's workshop tasks, and creating hands one task per form and place to the chosen Agent.
@@ -115,13 +117,22 @@ const page = (path, lastmod, extra = {}) => ({
   firstSeenAt: '2026-09-01T08:00:00Z',
   ...extra,
 });
-const clicks = (path, periods) =>
-  periods.map((n, period) => ({ host: 'acme.example', path, period, clicks: n }));
+// Search Console clicks per day back from the last synced day (day 0), summed into the periods the view asks for.
+const END = '2026-11-12';
+const daily = (path, perDay) =>
+  clickPeriods(END).map((p, period) => {
+    let clicks = 0;
+    for (let d = Math.round((Date.parse(END) - Date.parse(p.end)) / 86400000); d <= Math.round((Date.parse(END) - Date.parse(p.start)) / 86400000); d++)
+      clicks += perDay(d);
+    return { host: 'acme.example', path, period, clicks };
+  });
+const ago = (days) => new Date(Date.parse(NOW) - days * 86400000).toISOString();
 const task = (f, id, work, extra = {}) =>
   f.state.nrTasks.push({
     id,
     projectId: '1',
     title: `T${id}`,
+    createdAt: `2026-11-${String(id).padStart(2, '0')}T09:00:00Z`,
     updatedAt: `2026-11-${String(id).padStart(2, '0')}T10:00:00Z`,
     evidence: { no: id, work: { ...projectWork({ evidence: {} }), ...work } },
     ...extra,
@@ -139,39 +150,41 @@ afterEach(() => {
 });
 
 describe('Content workshop view', () => {
-  it('recommends by the site figures, dates pages only from what is known, and lists the workshop tasks', async () => {
+  it('recommends site articles by their reasons, after a while again, and lists the workshop tasks', async () => {
     const f = fixture();
     f.site.pages = [
       ...Array.from({ length: 10 }, (_, i) => page(`/docs/p${i}`, STAMP)),
       page('/blog/new-board', '2026-11-04'),
       page('/blog/compare', STAMP),
       page('/blog/old-hit', '2025-06-10'),
-      page('/blog/done-all', '2026-11-01'),
+      page('/blog/done-all', '2025-01-01'),
+      page('/blog/again', '2025-02-01'),
+      page('/blog/steady-old', '2024-03-01'),
+      page('/blog/steady-recent', '2024-04-01'),
       page('/blog/partly', '2025-03-01'),
-      page('/blog/new-seen', STAMP, { firstSeenAt: '2026-11-08T08:00:00Z' }),
       page('/blog/hidden', '2026-11-05', { noindex: true }),
       page('/blog/quiet', STAMP),
     ];
     sums.rows = [
-      ...clicks('/blog/new-board', [860, 253, 40, 0]),
-      ...clicks('/blog/compare', [100, 50, 120, 900]),
-      ...clicks('/blog/old-hit', [30, 30, 60, 18600]),
-      ...clicks('/blog/done-all', [900, 0, 0, 0]),
-      ...clicks('/blog/partly', [10, 9, 20, 12900]),
-      ...clicks('/blog/new-seen', [12, 0, 0, 0]),
-      ...clicks('/blog/quiet', [15, 12, 30, 400]),
-      ...clicks('/docs/p0', [5000, 5000, 9000, 90000]),
+      // Published inside the week before: no full week to compare with, so new only.
+      ...daily('/blog/new-board', (d) => (d <= 8 ? 120 : 0)),
+      ...daily('/blog/compare', (d) => (d < 7 ? 15 : d < 14 ? 7 : 3)),
+      ...daily('/blog/old-hit', () => 50),
+      ...daily('/blog/done-all', (d) => (d < 7 ? 10 : d < 14 ? 5 : 1)),
+      ...daily('/blog/again', (d) => (d < 7 ? 20 : d < 14 ? 10 : 2)),
+      ...daily('/blog/steady-old', () => 2),
+      ...daily('/blog/steady-recent', () => 2),
+      ...daily('/blog/partly', (d) => (d % 40 ? 0 : 3)),
+      ...daily('/blog/quiet', (d) => (d % 30 ? 0 : 1)),
+      ...daily('/docs/p0', () => 900),
     ];
     cited.questions = [
       { sources: [{ own: true, url: `${ORIGIN}/blog/new-board` }] },
       { sources: [{ own: true, url: `${ORIGIN}/blog/new-board/` }, { own: false, url: 'https://other.example/' }] },
     ];
-    task(f, 1, { stage: 'done', repurpose: { form: 'x', source: article('/blog/done-all') } });
-    task(f, 2, { stage: 'done', repurpose: { form: 'linkedin', source: article('/blog/done-all') } });
-    task(f, 3, {
-      stage: 'done',
-      repurpose: { form: 'community', source: article('/blog/done-all'), destination: { kind: 'hn' } },
-    });
+    // Adapted 5 days ago: not recommended for 14 days.
+    for (const [id, form, destination] of [[1, 'x'], [2, 'linkedin'], [3, 'community', { kind: 'hn' }]])
+      task(f, id, { stage: 'done', repurpose: { form, source: article('/blog/done-all'), ...(destination ? { destination } : {}) } }, { createdAt: ago(5), taskKey: 'workshop:r1:0' });
     task(f, 4, {
       stage: 'flow',
       stageIndex: 0,
@@ -190,29 +203,44 @@ describe('Content workshop view', () => {
     task(f, 6, { stage: 'done', cancelledAt: '2026-11-06', repurpose: { form: 'x', source: article('/blog/new-board') } });
     // A published article task: NocoReach knows when the page went out.
     task(f, 7, { stage: 'done', release: { state: 'live', pages: [`${ORIGIN}/blog/compare`], article: { published: { at: '2026-10-20T09:00:00Z' } } } });
+    // Adapted 20 days ago at 30 clicks a week; 140 now.
+    task(f, 8, { stage: 'done', repurpose: { form: 'x', source: article('/blog/again'), baseline: { clicks7: 30, cited: 0 } } }, { createdAt: ago(20), taskKey: 'workshop:r8:0' });
+    // Steady: back 90 days after its adaptation, not 30.
+    task(f, 9, { stage: 'done', repurpose: { form: 'linkedin', source: article('/blog/steady-old') } }, { createdAt: ago(100), taskKey: 'workshop:r9:0' });
+    task(f, 10, { stage: 'done', repurpose: { form: 'linkedin', source: article('/blog/steady-recent') } }, { createdAt: ago(30), taskKey: 'workshop:r10:0' });
 
     const v = await f.s.view('1');
     expect(v.searchConnected).toBe(true);
-    expect(v.dataThrough).toBe('2026-11-12');
-    // Published in 30 days, or clicks up 30% on 20 or more; never a page whose every form has a task.
-    expect(v.recent.map((a) => [a.url.slice(ORIGIN.length), a.published, a.clicks7, a.previous7])).toEqual([
-      // Published within the week before: no full week to compare with.
-      ['/blog/new-board', '2026-11-04', 860, 0],
-      ['/blog/compare', '2026-10-20', 100, 50],
-      ['/blog/new-seen', '2026-11-08', 12, 0],
+    expect(v.dataThrough).toBe(END);
+    expect(v.suggested.map((a) => [a.url.slice(ORIGIN.length), a.reasons, a.clicks7, a.spark?.unit])).toEqual([
+      // Rising leads; its clicks all year make it steady too.
+      ['/blog/again', ['rising', 'steady'], 140, 'week'],
+      ['/blog/compare', ['rising', 'new'], 105, 'week'],
+      ['/blog/new-board', ['new'], 840, 'week'],
+      ['/blog/old-hit', ['steady'], 350, 'month'],
+      ['/blog/steady-old', ['steady'], 14, 'month'],
     ]);
-    expect(v.recent[0]).toMatchObject({ title: 'new-board', cited: 2, made: [] });
-    // Most clicks in 12 months, never adapted, not already in the left column.
-    expect(v.earlier.map((a) => [a.url.slice(ORIGIN.length), a.published, a.clicks12m])).toEqual([
-      ['/blog/old-hit', '2025-06-10', 18720],
-      ['/blog/quiet', undefined, 457],
-    ]);
+    const again = v.suggested[0];
+    expect(again.spark.points).toEqual([14, 14, 14, 14, 14, 14, 70, 140]);
+    expect(again.last).toMatchObject({
+      at: ago(20),
+      made: [{ form: 'x', taskId: '8', no: 8, standing: 'done', at: ago(20) }],
+    });
+    expect(again.last.since).toBeCloseTo(140 / 30 - 1);
+    expect(v.suggested[2]).toMatchObject({ title: 'new-board', cited: 2, published: '2026-11-04' });
+    expect(v.suggested[2].last).toBeUndefined();
+    expect(v.suggested[4].last).toMatchObject({ at: ago(100) });
+    expect(v.suggested[4].last.since).toBeUndefined();
+    expect(v.suggested.every((a) => !('series' in a) && !('partial' in a))).toBe(true);
     const partly = v.articles.find((a) => a.url.endsWith('/blog/partly'));
-    expect(partly.made).toEqual([{ form: 'x', taskId: '4', no: 4, standing: 'review' }]);
+    expect(partly.made).toEqual([{ form: 'x', taskId: '4', no: 4, standing: 'review', at: '2026-11-04T09:00:00Z' }]);
     expect(v.articles.some((a) => a.url.endsWith('/hidden'))).toBe(false);
     expect(v.articles.some((a) => a.url.includes('/docs/'))).toBe(false);
-    // Records: workshop tasks only, newest first, a failed run marked.
+    // Records: workshop tasks only, newest first, a failed run marked, nothing kept for the server.
     expect(v.records.map((r) => [r.taskId, r.form, r.standing, r.failed ?? false])).toEqual([
+      ['10', 'linkedin', 'done', false],
+      ['9', 'linkedin', 'done', false],
+      ['8', 'x', 'done', false],
       ['6', 'x', 'closed', false],
       ['5', 'community', 'done', false],
       ['4', 'x', 'review', true],
@@ -220,7 +248,9 @@ describe('Content workshop view', () => {
       ['2', 'linkedin', 'done', false],
       ['1', 'x', 'done', false],
     ]);
-    expect(v.recordCount).toBe(6);
+    expect(v.records.some((r) => 'internal' in r)).toBe(false);
+    expect(v.recordCount).toBe(9);
+    expect(v.hot).toEqual([]);
     expect(v.voice).toBe('Plain and direct.');
     expect(v.brand).toEqual({ revision: 0, community: null });
     expect(v.destinations.reddit).toEqual({
@@ -233,17 +263,88 @@ describe('Content workshop view', () => {
     });
   });
 
-  it('without Search Console recommends recent pages by date only and nothing from earlier traffic', async () => {
+  it('without Search Console recommends new articles by date only', async () => {
     const f = fixture();
     f.p.sync.link = async () => ({ get: () => null });
     f.site.pages = [page('/blog/a', '2026-11-10'), page('/blog/b', '2024-01-01')];
     const v = await f.s.view('1');
     expect(v.searchConnected).toBe(false);
-    expect(v.recent.map((a) => a.url)).toEqual([`${ORIGIN}/blog/a`]);
-    expect(v.earlier).toEqual([]);
+    expect(v.suggested.map((a) => [a.url, a.reasons, a.spark])).toEqual([[`${ORIGIN}/blog/a`, ['new'], null]]);
     expect(v.articles).toHaveLength(2);
   });
+
+  it('lists live Trending now opportunities with what is hot, their discussions, material and tasks', async () => {
+    const f = fixture();
+    f.site.pages = [page('/blog/compare', STAMP, { title: 'Compare boards | Acme' }), page('/', STAMP)];
+    hot(f);
+    task(f, 31, { stage: 'flow', playbook: { name: 'Write blog post' } }, { status: '进行中' });
+    task(f, 32, { stage: 'done', repurpose: { form: 'x', source: { kind: 'opportunity', id: 'o35', no: 35, headline: 'h' } } });
+    const v = await f.s.view('1');
+    expect(v.hot).toHaveLength(1);
+    expect(v.hot[0]).toMatchObject({
+      id: 'o35',
+      no: 35,
+      kind: 'rising',
+      headline: { key: 'workshop.hot.searchRise', params: { 0: 'ai project assistant', 1: '126%' } },
+      figures: [{ value: 2750 }, { value: 1.26 }],
+      chart: { unit: 'month', label: { key: 'workshop.hot.chartSearches' }, points: [900, 1200, 2750] },
+      discussionCount: 3,
+      communities: { subreddits: [{ subreddit: 'projectmanagement', discussions: 2 }, { subreddit: 'agile', discussions: 1 }], hn: 0 },
+      material: [{ title: 'Compare boards', url: `${ORIGIN}/blog/compare` }],
+      handed: [{ taskId: '31', no: 31, playbook: 'Write blog post' }],
+      made: [{ form: 'x', taskId: '32', no: 32, standing: 'done' }],
+    });
+    expect(v.hot[0].discussions.map((d) => d.title)).toEqual(['Who writes weekly updates?', 'AI status reports']);
+    expect(v.hot[0].foundAt).toBe('2026-11-13T06:00:00Z');
+  });
 });
+
+// One Trending now opportunity, O-35, with its analysis, three Reddit discussions and a page of the site; a blog post
+// was handed off from it as T-31.
+function hot(f) {
+  const opportunity = {
+    id: 'o35',
+    no: 35,
+    title: 'Write a starter guide to AI project assistants',
+    priority: 'high',
+    reason: 'Searches for AI project assistants more than doubled.',
+    meaning: 'Few tools answer it yet.',
+    suggestion: 'Explain where an assistant saves a project manager time.',
+    target: `${ORIGIN}/blog/compare`,
+    signalIds: [],
+    growth: {
+      kind: 'rising',
+      category: 'trending',
+      subject: 'ai project assistant',
+      figures: [
+        { label: { key: 'growth.figure.monthlySearches' }, value: 2750 },
+        { label: { key: 'growth.figure.threeMonthChange' }, value: 1.26, format: 'change' },
+      ],
+      evidence: {
+        columns: [{ key: 'month' }, { key: 'volume' }, { key: 'discussion' }, { key: 'source' }],
+        rows: [
+          { month: '2026-08', volume: 900 },
+          { month: '2026-09', volume: 1200 },
+          { month: '2026-10', volume: 2750 },
+          { discussion: 'Who writes weekly updates?', source: 'Reddit · r/projectmanagement', url: 'https://www.reddit.com/r/projectmanagement/1' },
+          { discussion: 'AI status reports', source: 'Reddit · r/agile', url: 'https://www.reddit.com/r/agile/2' },
+          { discussion: 'Status by AI', source: 'Reddit · r/projectmanagement', url: 'https://www.reddit.com/r/projectmanagement/3' },
+        ],
+        total: 6,
+        unit: 'rows',
+        link: '/keywords',
+      },
+    },
+  };
+  const S = {
+    insights: { generatedAt: '2026-11-13T06:00:00Z', items: [opportunity], evidence: { signals: { items: [] } } },
+    insightHistory: [],
+    proposals: [{ id: 'p1', insight: { id: 'o35' }, taskId: 31, taskNo: 31 }],
+    opportunityMeta: {},
+  };
+  f.p.strategy = { state: async () => S };
+  return S;
+}
 
 describe('Content workshop create', () => {
   const brand = (f) =>
@@ -284,10 +385,12 @@ describe('Content workshop create', () => {
       '社区帖：New board → Acme Community · Tutorials',
       '社区帖：New board → Hacker News',
     ]);
+    // The article's clicks and AI citations now, for when it is recommended again.
     expect(rows[1].evidence.work.repurpose).toEqual({
       form: 'community',
       source: { kind: 'article', url: `${ORIGIN}/blog/new-board`, title: 'New board' },
       destination: { kind: 'reddit', subreddit: 'ProjectManagement', discussions: 2, weeks: 4 },
+      baseline: { clicks7: 0, cited: 0 },
     });
     expect(rows[2].evidence.work.repurpose.destination).toEqual({
       kind: 'own',
@@ -310,6 +413,64 @@ describe('Content workshop create', () => {
     const again = await f.s.create('1', { requestId, source: { kind: 'topic', topic: 'x' }, items: [{ form: 'x' }] }, '1', 'Tester');
     expect(again.taskIds).toEqual(r.taskIds);
     expect(f.state.nrTasks).toHaveLength(4);
+  });
+
+  it('makes a trending opportunity into posts linked to it, with its analysis, discussions, material and the angle', async () => {
+    const f = fixture();
+    f.site.pages = [page('/blog/compare', STAMP, { title: 'Compare boards | Acme' })];
+    hot(f);
+    const r = await f.s.create(
+      '1',
+      { requestId, agentId: 'agent-1', source: { kind: 'opportunity', id: 'o35' }, angle: '  Start from  weekly status reports ', items: [{ form: 'linkedin' }] },
+      '1',
+      'Tester',
+      'en-US',
+    );
+    expect(r.taskIds).toHaveLength(1);
+    const t = f.state.nrTasks.find((x) => String(x.id) === r.taskIds[0]);
+    const { source, angle } = t.evidence.work.repurpose;
+    expect(source).toMatchObject({ kind: 'opportunity', id: 'o35', no: 35, headline: 'Searches for “ai project assistant” up 126% in 3 months' });
+    expect(source.links).toEqual([
+      'https://www.reddit.com/r/projectmanagement/1',
+      'https://www.reddit.com/r/agile/2',
+      'https://www.reddit.com/r/projectmanagement/3',
+      `${ORIGIN}/blog/compare`,
+    ]);
+    expect(angle).toBe('Start from weekly status reports');
+    expect(t.title).toBe('LinkedIn 帖子: Searches for “ai project assistant” up 126% in 3 months');
+    expect(t.brief).toContain('Write a LinkedIn post on the trending opportunity O-35: Searches for “ai project assistant” up 126% in 3 months.');
+    expect(t.brief).toContain('Few tools answer it yet.');
+    expect(t.brief).toContain('Who writes weekly updates? — r/projectmanagement, https://www.reddit.com/r/projectmanagement/1');
+    expect(t.brief).toContain(`Compare boards — ${ORIGIN}/blog/compare`);
+    expect(t.brief).toContain('Angle for this piece: Start from weekly status reports');
+    // Linked to the opportunity as made in Content workshop, never as its hand-off.
+    expect(taskSource(t)).toMatchObject({ by: 'person', via: 'workshop', insight: { id: 'o35', no: 35 } });
+    expect(t.evidence.insight).toBeUndefined();
+    // Gone from Trending now since the page loaded.
+    f.p.strategy = { state: async () => ({ ...(await hot(f)), opportunityMeta: { o35: { status: 'ignored' } } }) };
+    await expect(
+      f.s.create('1', { requestId: '8d2b6a6e-5f0d-4c1e-9b7a-1f2e3d4c5b6a', source: { kind: 'opportunity', id: 'o35' }, items: [{ form: 'x' }] }, '1', 'Tester'),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      f.s.create('1', { requestId: '9d2b6a6e-5f0d-4c1e-9b7a-1f2e3d4c5b6a', source: { kind: 'topic', topic: 't' }, angle: 'x'.repeat(301), items: [{ form: 'x' }] }, '1', 'Tester'),
+    ).rejects.toThrow();
+  });
+
+  it('gives the Agent the approved drafts of earlier adaptations to take another angle', async () => {
+    const f = fixture();
+    f.site.pages = [page('/blog/again', '2025-02-01')];
+    sums.rows = daily('/blog/again', (d) => (d < 7 ? 20 : 2));
+    task(f, 8, { stage: 'done', results: [{ approvedAt: '2026-10-28T10:00:00Z', content: 'Earlier X thread' }], repurpose: { form: 'x', source: article('/blog/again') } }, { createdAt: '2026-10-28T09:00:00Z' });
+    task(f, 9, { stage: 'flow', repurpose: { form: 'linkedin', source: article('/blog/again') } });
+    await f.s.create('1', { requestId, source: article('/blog/again'), items: [{ form: 'x' }] }, '1', 'Tester', 'en-US');
+    const t = f.state.nrTasks.at(-1);
+    expect(t.evidence.work.repurpose).toMatchObject({
+      earlier: [{ taskId: '8', no: 8, form: 'x', at: '2026-10-28T09:00:00Z' }],
+      baseline: { clicks7: 140, cited: 0 },
+    });
+    expect(t.brief).toContain('Adapted before: X posts T-8, 2026-10-28. Their approved drafts are in the context.');
+    const kept = f.state.nrSnapshots.find((x) => x.key === `nr-task-source:1:${t.id}:`);
+    expect(kept.payload.earlier).toEqual([{ no: 8, form: 'x', at: '2026-10-28T09:00:00Z', text: 'Earlier X thread' }]);
   });
 
   it('keeps a topic with its points and links, and a task that cannot start waits at Start', async () => {

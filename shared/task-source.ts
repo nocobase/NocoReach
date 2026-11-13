@@ -43,6 +43,9 @@ export function taskSource(task: SourceTask): TaskSource {
       content?: unknown;
       entry?: unknown;
       context?: { capturedAt?: unknown } | null;
+      work?: {
+        repurpose?: { source?: { kind?: unknown; id?: unknown; no?: unknown } };
+      } | null;
     },
     key = String(task.taskKey || ''),
     at = typeof task.createdAt === 'string' ? task.createdAt : undefined;
@@ -75,8 +78,19 @@ export function taskSource(task: SourceTask): TaskSource {
   if (typeof e.signalKey === 'string')
     return { by: 'ai', via: 'change', ...(at ? { at } : {}) };
   if (e.origin === 'manual' || e.source === 'manual') return person('newTask');
-  if (e.origin === 'workshop' || key.startsWith('workshop:'))
-    return person('workshop');
+  // Made in Content workshop from a Trending now opportunity (v4): linked to it, as a hand-off task is.
+  if (e.origin === 'workshop' || key.startsWith('workshop:')) {
+    const from = e.work?.repurpose?.source;
+    return from?.kind === 'opportunity' && typeof from.id === 'string'
+      ? {
+          ...person('workshop'),
+          insight: {
+            id: from.id,
+            ...(typeof from.no === 'number' ? { no: from.no } : {}),
+          },
+        }
+      : person('workshop');
+  }
   if (key.startsWith('content:') || e.content) return person('content');
   if (key.startsWith('strategy:') && e.goal)
     return { by: 'ai', via: 'plan', ...(at ? { at } : {}) };

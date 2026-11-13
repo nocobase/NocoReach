@@ -14,15 +14,14 @@ import {
   formatPercent,
 } from '#lib/format';
 import { cn } from '#lib/utils';
+import { figureValue, say } from './growth-text';
 import {
   type EvidenceCell,
   type EvidenceColumn,
   type EvidenceTable,
   type Growth,
   type GrowthCategory,
-  type GrowthFigure,
   type GrowthKind,
-  type GrowthText,
 } from '../../../shared/growth.js';
 
 // A growth opportunity's parts on Opportunities (2026-11-10, ui-references/growth-opportunities-2026-11-10): its category
@@ -49,7 +48,7 @@ const KIND: Record<GrowthKind, string> = {
   'ai-dropped': 'growth.kind.aiDropped',
   'page-issue': 'growth.kind.pageIssue',
 };
-const say = (text?: GrowthText) => (text ? $t(text.key, text.params) : '');
+
 
 /** The category tag, as the list, the detail and Insights' decisions show it. */
 export function CategoryTag({
@@ -66,7 +65,11 @@ export function CategoryTag({
 }
 
 /** Its category, then its kind: "Trending now" "Rising searches". */
-export function GrowthTags({ growth }: { growth: Growth }): ReactElement {
+export function GrowthTags({
+  growth,
+}: {
+  growth: Pick<Growth, 'kind' | 'category'>;
+}): ReactElement {
   return (
     <>
       <CategoryTag category={growth.category} />
@@ -76,19 +79,6 @@ export function GrowthTags({ growth }: { growth: Growth }): ReactElement {
     </>
   );
 }
-
-const figureValue = (f: GrowthFigure): string =>
-  typeof f.value !== 'number'
-    ? f.format === 'date'
-      ? formatDate(f.value)
-      : f.value
-    : f.format === 'percent'
-      ? formatPercent(f.value)
-      : f.format === 'change'
-        ? formatChange(f.value)
-        : f.format === 'position'
-          ? formatCount(f.value, 1)
-          : formatCount(f.value);
 
 /** Growth potential: up to four figures side by side, each a label over a number and its unit. */
 export function GrowthRow({ growth }: { growth: Growth }): ReactElement {

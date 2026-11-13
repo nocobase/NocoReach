@@ -237,7 +237,7 @@ test('imports the demo through the API and clears all business data while preser
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [
-    [main, 'Acme', 'acme.example', 57],
+    [main, 'Acme', 'acme.example', 58],
     [second, 'Acme CRM', 'crm.acme.example', 39],
   ] as const) {
     const project = await runtime.plugin.projects.get(id);

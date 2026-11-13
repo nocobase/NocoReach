@@ -48,7 +48,20 @@ export type TopicSource = {
   points?: string;
   links?: string[];
 };
-export type RepurposeSource = ArticleSource | TopicSource;
+/**
+ * A Trending now opportunity (2026-11-13): what is hot as the workshop's card says it, and what the Agent reads of it:
+ * the opportunity's analysis, its discussions and the site's material with their links (`points`), the links again as
+ * a list (`links`).
+ */
+export type OpportunitySource = {
+  kind: 'opportunity';
+  id: string;
+  no?: number;
+  headline: string;
+  points?: string;
+  links?: string[];
+};
+export type RepurposeSource = ArticleSource | TopicSource | OpportunitySource;
 
 /** Where a community post goes: the project's own community (a section of it), a subreddit or Hacker News. */
 export type Destination =
@@ -56,12 +69,28 @@ export type Destination =
   | { kind: 'reddit'; subreddit: string; discussions?: number; weeks?: number }
   | { kind: 'hn' };
 
+/** An earlier task of the same article or opportunity, whose approved drafts the Agent reads to take another angle. */
+export type EarlierAdaptation = {
+  taskId: string;
+  no?: number;
+  form: RepurposeForm;
+  destination?: Destination;
+  at: string;
+};
+
 /** What a workshop task is about, kept on its work (`evidence.work.repurpose`). */
 export type Repurpose = {
   form: RepurposeForm;
   source: RepurposeSource;
   destination?: Destination;
+  /** The angle asked for this time; the Agent picks one when there is none. */
+  angle?: string;
+  earlier?: EarlierAdaptation[];
+  /** An article's clicks in its last 7 days and the AI answers citing it when the task was made (its next recommendation). */
+  baseline?: { clicks7: number; cited: number };
 };
+
+export const ANGLE_MAX = 300;
 
 export const TOPIC_MAX = 200;
 export const POINTS_MAX = 3000;
@@ -315,9 +344,9 @@ export function repurposeChecks(
   return checks;
 }
 
-/** The task title's subject: the article's title or the topic. */
+/** The task title's subject: the article's title, the topic, or what is hot. */
 export const sourceSubject = (s: RepurposeSource) =>
-  s.kind === 'article' ? s.title : s.topic;
+  s.kind === 'article' ? s.title : s.kind === 'opportunity' ? s.headline : s.topic;
 
 /** An article's title as its page gives it, without the site's name after a separator ("Title | Acme"). */
 export function articleTitle(page: { url: string; title?: string }): string {
@@ -336,8 +365,9 @@ export function articleTitle(page: { url: string; title?: string }): string {
 }
 
 /**
- * A workshop task's brief, in the language it is created in: the article or topic and what this task makes of it ("Adapt
- * the article “X” into a community post for Reddit r/selfhosted. Source: URL"), then a topic's points and links.
+ * A workshop task's brief, in the language it is created in: the article, topic or trending opportunity and what this
+ * task makes of it ("Adapt the article “X” into a community post for Reddit r/selfhosted. Source: URL"), then a topic's
+ * or an opportunity's points and links, the angle asked for, and the earlier adaptations to differ from.
  */
 export function repurposeBrief(r: Repurpose, locale?: string): string {
   const text = (key: string, params: Record<string, string> = {}) =>
@@ -353,9 +383,44 @@ export function repurposeBrief(r: Repurpose, locale?: string): string {
             })
           : text(`workshop.form${r.form === 'xhs' ? 'Xhs' : 'Community'}`);
   const s = r.source;
-  if (s.kind === 'article')
-    return text('workshop.articleBrief', { 0: s.title, 1: into, 2: s.url });
-  return [text('workshop.topicBrief', { 0: s.topic, 1: into }), s.points, ...(s.links || [])]
+  const lead =
+    s.kind === 'article'
+      ? [text('workshop.articleBrief', { 0: s.title, 1: into, 2: s.url })]
+      : s.kind === 'opportunity'
+        ? [
+            text('workshop.hotBrief', {
+              0: s.headline,
+              1: into,
+              2: s.no ? `O-${s.no}` : '',
+            }),
+            s.points,
+          ]
+        : [
+            text('workshop.topicBrief', { 0: s.topic, 1: into }),
+            s.points,
+            ...(s.links || []),
+          ];
+  const earlier = (r.earlier || [])
+    .map((e) =>
+      [
+        e.form === 'community' && e.destination
+          ? text('workshop.communityPostAt', { 0: destinationName(e.destination) })
+          : text(`workshop.form${FORM_KEY[e.form]}`),
+        [e.no ? `T-${e.no}` : '', e.at.slice(0, 10)].filter(Boolean).join(', '),
+      ].join(' '),
+    )
+    .join('; ');
+  return [
+    ...lead,
+    r.angle ? text('workshop.angleBrief', { 0: r.angle }) : '',
+    earlier ? text('workshop.againBrief', { 0: earlier }) : '',
+  ]
     .filter(Boolean)
     .join('\n\n');
 }
+const FORM_KEY: Record<RepurposeForm, string> = {
+  xhs: 'Xhs',
+  x: 'X',
+  linkedin: 'Linkedin',
+  community: 'Community',
+};

@@ -141,7 +141,8 @@ const nav = (key: string) => `nocoreach.nav.${key}`;
 export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // The main line, without a group title.
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
-  page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
+  // Adapt into short posts (Content workshop v4, 2026-11-13) opens step 2 of Pick content over a Trending now opportunity.
+  { ...page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }), children: [{ name: 'opportunity-repurpose', path: 'repurpose', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/workshop/pick.js') }] },
   {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
   // The article's reading page covers the task (RouteChildPage) at /actions/:taskId/article; it renders inside the task
   // page, which already passed the gates.

@@ -1,5 +1,6 @@
 import type {
   AiQuestion,
+  Change,
   L,
   Page,
   PerLanguage,
@@ -281,7 +282,11 @@ export const WORKSHOP_PAGES: readonly Page[] = [
     ],
     1.6,
     430,
-    [{ kind: 'launch', at: 430, ramp: 14 }],
+    [
+      { kind: 'launch', at: 430, ramp: 14 },
+      // Shared in a client-services newsletter: more searches since last week, so it rises again (2026-11-13 v4).
+      { kind: 'step', at: 8, to: 1.6, over: 2 },
+    ],
   ),
   page(
     '/blog/project-kickoff',
@@ -394,8 +399,9 @@ const head = (
   en: string,
   impressions: number,
   position: number,
+  own?: Change[],
 ): PerLanguage<Query> => {
-  const changes = changesOf(path);
+  const changes = own || changesOf(path);
   const query = {
     path,
     impressions,
@@ -449,6 +455,16 @@ const HEAD_QUERIES = [
     'project kickoff agenda template',
     110,
     4.4,
+  ),
+  // Acme's own estimation article is a planning-season topic: 2.5 times the searches since ten days ago, so Content
+  // workshop recommends it again after its X posts of 16 days ago (2026-11-13 v4).
+  head(
+    '/blog/estimation',
+    '任務估時 怎麼校準',
+    'how to calibrate task estimates',
+    80,
+    3.4,
+    [{ kind: 'step', at: 10, to: 2.5, over: 1 }],
   ),
 ];
 export const WORKSHOP_QUERIES: PerLanguage<Query[]> = {
@@ -528,6 +544,36 @@ const english = (text: string): L => ({ zh: text, en: text });
 
 /** Oldest first, so their task numbers follow the order they were made in. */
 export const WORKSHOP_DRAFTS: readonly WorkshopDraft[] = [
+  // Adapted four months ago: a steady article that Site articles recommends again after 90 days (2026-11-13 v4).
+  {
+    key: 'kickoff-linkedin',
+    form: 'linkedin',
+    source: { kind: 'article', path: '/blog/project-kickoff' },
+    state: 'done',
+    owner: 'content',
+    created: 121.2,
+    approved: 120.8,
+    draft: t(
+      `## Post
+Sections: 1–2
+项目启动会开了两个小时，散会时还是没人知道谁负责什么。这种情况我们见得太多了。
+
+我们现在的启动会只开 45 分钟，只做四件事：目标和范围 10 分钟，认领负责人 10 分钟，对齐里程碑 15 分钟，约定沟通方式 10 分钟。
+
+最重要的一条规矩：会后当天，把每个决定写成任务或里程碑，并指定负责人。没有负责人的决定，不算定下来。
+
+完整的议程模板放在评论区，可以直接拿去用。`,
+      `## Post
+Sections: 1–2
+A two-hour kickoff, and at the end nobody knows who owns what. We have seen it too many times.
+
+Our kickoffs now take 45 minutes and do four things: goals and scope for 10 minutes, owners for 10, milestones for 15, and how we communicate for 10.
+
+The one rule that matters most: the same day, turn every decision into a task or milestone with an owner. A decision without an owner is not settled.
+
+The full agenda template is in the first comment, ready to copy.`,
+    ),
+  },
   {
     key: 'estimation-x',
     form: 'x',

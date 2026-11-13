@@ -952,11 +952,13 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'keywords',
       priority: 'high',
       effort: 'medium',
-      growth: () =>
-        rising(
+      growth: (lang) => ({
+        ...rising(
           [850, 900, 880, 940, 910, 980, 1050, 1150, 1450, 2100, 2850, 3300],
           month,
         ),
+        subject: lang === 'zh' ? 'AI 專案管理' : 'ai project management',
+      }),
     },
     {
       key: 'acme-growth-client-portal',
@@ -1290,14 +1292,16 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'github',
       priority: 'low',
       effort: 'medium',
-      growth: () =>
-        topicHeat(64, 23, 18400, [
+      growth: () => ({
+        subject: 'kanban',
+        ...topicHeat(64, 23, 18400, [
           ['openboard/openboard', 1240, dayBefore(now, 6), 'TypeScript'],
           ['laneflow/laneflow', 410, dayBefore(now, 5), 'Go'],
           ['kanbanui/react-kanban-kit', 260, dayBefore(now, 4), 'TypeScript'],
           ['taskdeck/taskdeck', 180, dayBefore(now, 6), 'Rust'],
           ['boardsync/boardsync', 95, dayBefore(now, 2), 'Python'],
         ]),
+      }),
     },
     {
       key: 'acme-growth-openboard',
@@ -1325,13 +1329,15 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'github',
       priority: 'high',
       effort: 'medium',
-      growth: () =>
-        newRepo('project-management', 9_600, [
+      growth: () => ({
+        subject: 'openboard/openboard',
+        ...newRepo('project-management', 9_600, [
           ['openboard/openboard', 1240, dayBefore(now, 6), 'TypeScript'],
           ['planr/planr', 520, dayBefore(now, 5), 'TypeScript'],
           ['sprintly/sprintly', 330, dayBefore(now, 3), 'Go'],
           ['roadmap-kit/roadmap-kit', 140, dayBefore(now, 6), 'TypeScript'],
         ]),
+      }),
     },
     {
       key: 'acme-growth-okr',
@@ -1995,11 +2001,13 @@ export function crmGrowthBriefs(now: Date): GrowthBrief[] {
       source: 'keywords',
       priority: 'medium',
       effort: 'medium',
-      growth: () =>
-        rising(
+      growth: (lang) => ({
+        ...rising(
           [720, 760, 740, 800, 780, 820, 900, 1000, 1250, 1800, 2400, 3000],
           month,
         ),
+        subject: lang === 'zh' ? 'AI CRM' : 'ai crm',
+      }),
     },
     {
       key: 'crm-growth-pipeline-snippet',

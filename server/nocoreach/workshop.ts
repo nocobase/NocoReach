@@ -4,7 +4,23 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { pageIdentity, pageKey } from '../../shared/page-identity.js';
 import { topicKey } from '../../shared/followed-topics.js';
 import { awaitingRestart } from '../../shared/task-pending.js';
+import { growthOf, newPageOf } from '../../shared/growth.js';
 import {
+  ARTICLES_MAX as SUGGESTED_MAX,
+  articleOrder,
+  articleReasons,
+  clickPeriods,
+  hotDiscussions,
+  hotHeadline,
+  hotRows,
+  hotSignals,
+  hotSubject,
+  recommendation,
+  seriesOf,
+  weeklyDiscussions,
+} from '../../shared/workshop-recommend.js';
+import {
+  ANGLE_MAX,
   COMMUNITY_SECTIONS_MAX,
   FORM_PLAYBOOK,
   LINKS_MAX,
@@ -26,16 +42,21 @@ import { fail, projectWork, taskStanding } from './execution/model.js';
 import { playbookTitle } from './execution/task-title.js';
 import { memoryOf } from './execution/memory.js';
 
-// Content workshop (2026-11-13 user decision): articles and topics adapted into posts for other platforms. The page
-// recommends articles from the site's own figures (no paid lookups, no AI judgement), lists the workshop's tasks, and
-// creates one task per chosen form and destination, each started with the chosen Agent. The brand kit holds what the
+// Content workshop (2026-11-13 user decision): articles, topics and trending opportunities adapted into posts for other
+// platforms. The page recommends what to adapt from data already collected (no paid lookups, no AI judgement; the rules
+// are in shared/workshop-recommend.ts): Opportunities' live Trending now opportunities, and the site's articles by why
+// they are worth adapting now. It lists the workshop's tasks, and creates one task per chosen form and destination, each
+// started with the chosen Agent. A task made from an opportunity keeps it on its source, which is how Opportunities
+// lists it among the opportunity's tasks; the opportunity itself stays as it was. The brand kit holds what the
 // adaptations need about the brand beyond Memory: for now, the project's own community and its sections.
 
 const DAY = 86400000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 const addDays = (d: string, n: number) => iso(Date.parse(`${d}T00:00:00Z`) + n * DAY);
-// Recently doing well: published in the last 30 days, or clicks up by 30% or more on the week before with 20 or more.
-const RECENT_DAYS = 30, RISE = 0.3, RISE_MIN = 20, ROWS = 5, ARTICLES_MAX = 500, RECORDS_MAX = 200, SUM_TTL = 3600000;
+const ARTICLES_MAX = 500, RECORDS_MAX = 200, SUM_TTL = 3600000;
+// A trending card shows two discussions and three pieces of the site's material; the Agent gets up to eight links, and
+// the approved text of the three latest earlier adaptations.
+const HOT_DISCUSSIONS = 2, MATERIAL_MAX = 3, HOT_LINKS = 8, EARLIER_MAX = 3, EARLIER_TEXT = 8000, CHART_POINTS = { week: 8, month: 12, day: 14 };
 // Reddit destinations: the subreddits with the most threads on the followed topics in the last four weeks.
 const REDDIT_WEEKS = 4, REDDIT_MAX = 3, RECENT_SUBREDDITS = 5, BODY_MAX = 60000;
 
@@ -57,6 +78,11 @@ function cleanCommunity(c: any) {
 }
 
 function cleanSource(s: any) {
+  // A trending opportunity is read from Opportunities when the tasks are made (WorkshopService.hotSource).
+  if (s?.kind === 'opportunity') {
+    const id = clean(s.id, 200);
+    return id ? { kind: 'opportunity', id } : fail(systemMessageText('workshop.pickSource'));
+  }
   if (s?.kind === 'article') {
     const url = cleanUrl(s.url), title = clean(s.title, 300);
     if (!url || !title) return fail(systemMessageText('workshop.pickSource'));
@@ -107,6 +133,34 @@ function cleanItems(items: any, brand: any) {
   return out;
 }
 
+// Where a form or destination already stands for an article or a trending opportunity.
+const madeOf = (r: any) => ({ form: r.form, ...(r.destination ? { destination: r.destination } : {}), taskId: r.taskId, no: r.no, standing: r.standing, at: r.createdAt });
+// What the page is sent of a record and an article.
+const shown = ({ internal: _internal, ...r }: any) => r;
+const shownArticle = ({ series: _series, partial: _partial, ...a }: any) => a;
+// How many discussions a growth rests on: all its rows when every row is one (it keeps fewer than it counts), else
+// those read.
+const discussionCount = (g: any, discussions: any[]) =>
+  discussions.length && g.evidence?.rows.every((r: any) => typeof r.discussion === 'string' && r.discussion)
+    ? Math.max(discussions.length, g.evidence.total || 0)
+    : discussions.length;
+
+// A trending card's small chart, from data already collected: a discussion growth's weekly discussions, a rising
+// keyword's monthly searches, a new repository's stars and a GitHub topic's new repositories a week (GitHub trends);
+// none when there is no series.
+function chartOf(g: any, subject: string, ght: any) {
+  const series = (unit: 'week' | 'month' | 'day', label: string, points: number[]) =>
+    points.length >= 3 ? { unit, label: { key: label }, points: points.slice(-CHART_POINTS[unit]) } : null;
+  const dated = (o: any) => Object.entries(o || {}).filter(([, v]) => Number.isFinite(v)).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => Number(v));
+  const weekly = weeklyDiscussions(g);
+  if (weekly.length) return series('week', 'workshop.hot.chartDiscussions', weekly);
+  if (g.kind === 'rising' && g.evidence?.columns.some((c: any) => c.key === 'month'))
+    return series('month', 'workshop.hot.chartSearches', g.evidence.rows.filter((r: any) => typeof r.month === 'string' && Number.isFinite(r.volume)).sort((a: any, b: any) => a.month.localeCompare(b.month)).map((r: any) => r.volume));
+  if (g.kind === 'new-repo' && subject) return series('day', 'workshop.hot.chartStars', dated(ght?.stars?.[subject]));
+  if (g.kind === 'topic-heat' && subject) return series('week', 'workshop.hot.chartRepos', dated(ght?.weekly?.[subject]));
+  return null;
+}
+
 // How a destination reads in a task title: "r/selfhosted", "Hacker News", "Forum · Tutorials".
 const titleDestination = (d: any) => d.kind === 'reddit' ? `r/${d.subreddit}` : d.kind === 'hn' ? 'Hacker News' : `${d.name} · ${d.section}`;
 
@@ -134,8 +188,9 @@ class WorkshopService {
     });
   }
 
-  // Search Console clicks of every address in four periods back from the last synced day: days 1-7, 8-14, 15-30 and
-  // 31-365. Kept for an hour per synced day, so the page is worked out again after each daily sync.
+  // Search Console clicks of every address in the periods shared/workshop-recommend.ts sums them in (clickPeriods): the
+  // last eight weeks and twelve months back from the last synced day. Kept for an hour per synced day, so the page is
+  // worked out again after each daily sync.
   async clicks(id: string) {
     let link, snaps;
     try { [link, snaps] = await Promise.all([this.p.sync.link(id), this.p.sync.snapshots(id)]); } catch { return null; }
@@ -143,34 +198,41 @@ class WorkshopService {
     if (!site || !end) return null;
     const k = `${id}|${site}|${end}`, kept = this.sums.get(k);
     if (kept && kept.at > Date.now() - SUM_TTL) return kept.value;
-    const periods = [[0, 6], [7, 13], [14, 29], [30, 364]].map(([a, b]) => ({ start: addDays(end, -b), end: addDays(end, -a) }));
+    const periods = clickPeriods(end);
     const sum = await sumPageDays(this.p.db, String(id), 'gsc', site, periods, { logger: this.p.app?.logger, stopped: () => Boolean(this.p.sync?.stopped) });
     const rows = sum.rows.map((r: any) => ({ url: `https://${r.host}${r.path}`, period: r.period, clicks: Number(r.clicks) || 0 }));
-    const value = { end, rows };
+    const value = { end, periods, rows };
     for (const old of this.sums.keys()) if (old.startsWith(`${id}|`)) this.sums.delete(old);
     this.sums.set(k, { at: Date.now(), value });
     return value;
   }
 
-  // The project's tasks the workshop reads: its own (with where each stands) and, from every task, when NocoReach
-  // published an article to a page (the first date a page is known to have gone out).
+  // The project's tasks the workshop reads: its own, with where each stands, when it was made, its approved draft and
+  // the figures kept when it was made; where every task stands, by id, with its number and playbook (the tasks handed
+  // off from a trending opportunity); and when NocoReach published an article to a page (the first date a page is known
+  // to have gone out).
   async tasks(id: string, key: (u: string) => string) {
-    const records = [], published = new Map<string, string>();
-    for await (const rows of pagesById(this.p.db.getRepository('nrTasks'), { filter: { projectId: id }, fields: ['id', 'title', 'evidence', 'updatedAt'], size: 200 }))
+    const records = [], published = new Map<string, string>(), info = new Map<string, any>();
+    for await (const rows of pagesById(this.p.db.getRepository('nrTasks'), { filter: { projectId: id }, fields: ['id', 'title', 'taskKey', 'evidence', 'createdAt', 'updatedAt'], size: 200 }))
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, raw = t.evidence?.work;
         const at = String(raw?.release?.article?.published?.at || '').slice(0, 10);
         if (at) for (const u of raw.release.pages || []) { const k = key(u); if (k && !(published.get(k) <= at)) published.set(k, at); }
+        const w = projectWork(t), standing = taskStanding(w);
+        info.set(String(t.id), { no: t.evidence?.no ?? null, standing, playbook: w.playbook?.name || null });
         if (!raw?.repurpose) continue;
-        const w = projectWork(t), st = w.flow?.stages[w.stageIndex || 0], agentStep = w.stage === 'flow' && st?.kind === 'agent';
+        const st = w.flow?.stages[w.stageIndex || 0], agentStep = w.stage === 'flow' && st?.kind === 'agent';
+        const approved = [...(w.results || [])].reverse().find((x: any) => x?.approvedAt && !x.rejectedAt && x.content);
         records.push({
-          taskId: String(t.id), no: t.evidence?.no ?? null, title: t.title, updatedAt: t.updatedAt,
+          taskId: String(t.id), no: t.evidence?.no ?? null, title: t.title, createdAt: t.createdAt, updatedAt: t.updatedAt,
           form: w.repurpose.form, ...(w.repurpose.destination ? { destination: w.repurpose.destination } : {}), source: w.repurpose.source,
-          standing: taskStanding(w), ...(agentStep && w.latestRun?.status === 'failed' ? { failed: true } : {}), ...(agentStep && awaitingRestart(w) ? { restart: true } : {}),
+          standing, ...(agentStep && w.latestRun?.status === 'failed' ? { failed: true } : {}), ...(agentStep && awaitingRestart(w) ? { restart: true } : {}),
+          // For the server only: the page is sent the records without them (shown()).
+          internal: { approved: approved ? { text: String(approved.content), at: approved.approvedAt } : null, baseline: w.repurpose.baseline || null, batch: String(t.taskKey || '').replace(/:\d+$/, '') },
         });
       }
     records.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-    return { records, published };
+    return { records, published, info };
   }
 
   // The Reddit destinations: subreddits discussing the followed topics in the last four weeks, most threads first; and
@@ -200,13 +262,20 @@ class WorkshopService {
     return cited;
   }
 
-  async view(id: string) {
+  // What the page and the dialog read: the site's pages by key, the tasks, Search Console's clicks, AI citations, the
+  // Reddit destinations and GitHub's trends.
+  async inputs(id: string) {
     const [site, brand, project] = await Promise.all([this.p.siteContent?.state(id).catch(() => null), this.brand(id), this.p.projects.get(id).catch(() => null)]);
     const identity = pageIdentity(site), key = (u: string) => { try { return pageKey(u, identity); } catch { return ''; } };
-    const { records, published } = await this.tasks(id, key);
-    const [sums, cited, reddit] = await Promise.all([this.clicks(id).catch(() => null), this.citations(id, key), this.reddit(id, records)]);
-    const clicks = new Map<string, number[]>();
-    for (const r of sums?.rows || []) { const k = key(r.url); if (!k) continue; const o = clicks.get(k) || [0, 0, 0, 0]; o[r.period] += r.clicks; clicks.set(k, o); }
+    const { records, published, info } = await this.tasks(id, key);
+    const [sums, cited, reddit, ght] = await Promise.all([this.clicks(id).catch(() => null), this.citations(id, key), this.reddit(id, records), this.p.githubTrends?.state(id).catch(() => null)]);
+    return { site, brand, project, key, records, published, info, sums, cited, reddit, ght };
+  }
+
+  async view(id: string) {
+    const input = await this.inputs(id), { site, brand, project, key, records, published, sums, cited, reddit } = input;
+    const periods = sums?.periods || [], clicks = new Map<string, number[]>();
+    for (const r of sums?.rows || []) { const k = key(r.url); if (!k) continue; const o = clicks.get(k) || periods.map(() => 0); o[r.period] += r.clicks; clicks.set(k, o); }
     // A page's date: when NocoReach published it, else its sitemap date, else when the sitemap first listed it. A
     // sitemap date half the site's pages share is its build time, and pages listed at the first read have no known
     // date: neither is used, and a page without a date shows none.
@@ -214,10 +283,10 @@ class WorkshopService {
     const stamps = new Map<string, number>(), firstRead = all.map((p: any) => String(p.firstSeenAt || '')).filter(Boolean).sort()[0] || '';
     for (const p of all) { const d = String(p.lastmod || '').slice(0, 10); if (d) stamps.set(d, (stamps.get(d) || 0) + 1); }
     const buildStamp = (d: string) => all.length >= 5 && (stamps.get(d) || 0) >= all.length / 2;
-    const made = new Map<string, any[]>();
+    const mine = new Map<string, any[]>();
     for (const r of records) if (r.source?.kind === 'article' && r.standing !== 'closed') {
       const k = key(r.source.url);
-      if (k) made.set(k, [...(made.get(k) || []), { form: r.form, ...(r.destination ? { destination: r.destination } : {}), taskId: r.taskId, no: r.no, standing: r.standing }]);
+      if (k) mine.set(k, [...(mine.get(k) || []), r]);
     }
     const byKey = new Map<string, any>();
     for (const p of pages) {
@@ -225,26 +294,120 @@ class WorkshopService {
       if (!k || byKey.has(k)) continue;
       const lastmod = String(p.lastmod || '').slice(0, 10), seen = String(p.firstSeenAt || '').slice(0, 10);
       const date = published.get(k) || (lastmod && !buildStamp(lastmod) ? lastmod : '') || (seen && firstRead && seen > firstRead.slice(0, 10) ? seen : '');
-      const c = clicks.get(k) || [0, 0, 0, 0];
+      const series = seriesOf(clicks.get(k) || [], periods);
       // A page that went out after the week before began has no full week to compare with.
       const partial = Boolean(date && sums && date > addDays(sums.end, -13));
-      byKey.set(k, { url: p.url, title: articleTitle(p), ...(date ? { published: date } : {}), clicks7: c[0], previous7: partial ? 0 : c[1], clicks30: c[0] + c[1] + c[2], clicks12m: c[0] + c[1] + c[2] + c[3], cited: cited.get(k) || 0, made: (made.get(k) || []) });
+      byKey.set(k, {
+        url: p.url, title: articleTitle(p), ...(date ? { published: date } : {}),
+        clicks7: series.weeks[0], previous7: partial ? 0 : series.weeks[1], clicks30: series.months[0], clicks12m: series.months.reduce((n, c) => n + c, 0),
+        cited: cited.get(k) || 0, made: (mine.get(k) || []).map(madeOf), series, partial,
+      });
     }
-    const articles = [...byKey.values()];
-    const complete = (a: any) => READY_FORMS.every(f => a.made.some((m: any) => m.form === f));
-    const since = iso(Date.now() - (RECENT_DAYS - 1) * DAY);
-    const recent = articles.filter(a => !complete(a) && ((a.published && a.published >= since) || (sums && a.previous7 > 0 && a.clicks7 >= RISE_MIN && (a.clicks7 - a.previous7) / a.previous7 >= RISE)))
-      .sort((a, b) => b.clicks7 - a.clicks7 || String(b.published || '').localeCompare(String(a.published || ''))).slice(0, ROWS);
-    const shown = new Set(recent.map(a => a.url));
-    const earlier = sums ? articles.filter(a => !a.made.length && !shown.has(a.url) && a.clicks12m > 0).sort((a, b) => b.clicks12m - a.clicks12m).slice(0, ROWS) : [];
+    // Site articles: each with the reasons it is worth adapting now, unless it was adapted too recently
+    // (shared/workshop-recommend.ts). The last adaptation is the latest request's tasks.
+    const now = Date.now(), today = iso(now), suggested = [];
+    for (const [k, a] of byKey) {
+      const figures = { ...a.series, published: a.published, cited: a.cited, partial: a.partial };
+      const reasons = articleReasons(figures, { today, searched: Boolean(sums) });
+      if (!reasons.length) continue;
+      const made = [...(mine.get(k) || [])].sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt))), latest = made[0];
+      const last = latest ? { at: String(latest.createdAt), ...(latest.internal.baseline ? { clicks7: latest.internal.baseline.clicks7, cited: latest.internal.baseline.cited } : {}) } : undefined;
+      const r = recommendation(figures, reasons, last, { now, end: sums?.end || null });
+      if (!r.show) continue;
+      const weekly = reasons[0] !== 'steady';
+      suggested.push({
+        ...figures, title: a.title, reasons,
+        article: shownArticle(a),
+        spark: sums ? { unit: weekly ? 'week' : 'month', points: [...(weekly ? a.series.weeks : a.series.months)].reverse() } : null,
+        ...(latest ? { last: { at: last.at, made: made.filter(m => m.internal.batch === latest.internal.batch).map(madeOf), ...(r.since !== null ? { since: r.since } : {}) } } : {}),
+      });
+    }
+    suggested.sort(articleOrder);
+    const hot = await this.hotItems(id, input).catch((e: any) => {
+      this.p.app?.logger?.warn?.('NocoReach could not read the trending opportunities for Content workshop', { projectId: id, message: e?.message });
+      return [];
+    });
     return {
-      recent, earlier, searchConnected: Boolean(sums), dataThrough: sums?.end || null,
-      articles: articles.sort((a, b) => b.clicks30 - a.clicks30 || a.title.localeCompare(b.title)).slice(0, ARTICLES_MAX),
-      records: records.slice(0, RECORDS_MAX), recordCount: records.length,
+      hot: hot.map(h => h.item),
+      suggested: suggested.slice(0, SUGGESTED_MAX).map(({ article, reasons, spark, last }) => ({ ...article, reasons, spark, ...(last ? { last } : {}) })),
+      searchConnected: Boolean(sums), dataThrough: sums?.end || null,
+      articles: [...byKey.values()].sort((a, b) => b.clicks30 - a.clicks30 || a.title.localeCompare(b.title)).slice(0, ARTICLES_MAX).map(shownArticle),
+      records: records.slice(0, RECORDS_MAX).map(shown), recordCount: records.length,
       brand: { revision: brand.revision, community: brand.community || null },
       // The voice adaptations follow (Memory › Voice and style), shown in the brand kit with a link to change it.
       voice: project ? memoryOf(project).voice : '',
       destinations: { reddit },
+    };
+  }
+
+  // Opportunities' live Trending now opportunities as the workshop's cards (shared/workshop-recommend.ts), each with
+  // its opportunity: what is hot and its chart, the growth's first two figures, up to two discussions, the site's pages
+  // it rests on, the tasks handed off from it and the workshop's own made from it.
+  async hotItems(id: string, { site, key, records, info, ght }: any) {
+    const state = await this.p.strategy?.state(id);
+    if (!state) return [];
+    const pages = new Map<string, any>();
+    for (const p of site?.pages || []) { const k = key(p.url); if (k && !pages.has(k)) pages.set(k, p); }
+    let origin = '';
+    try { origin = new URL(site?.pages?.[0]?.url).origin; } catch { /* no pages read yet */ }
+    const standing = (taskId: number) => info.get(String(taskId))?.standing;
+    const pageTitle = (u: string) => { const p = pages.get(key(u)); return p ? articleTitle(p) : undefined; };
+    return hotRows(state, standing).map(row => {
+      const card = row.card, g = growthOf(card.growth), signals = hotSignals(row), subject = hotSubject(card, signals, pageTitle);
+      const discussions = hotDiscussions(card.growth), subs = new Map<string, { subreddit: string; discussions: number }>();
+      let hn = 0;
+      for (const d of discussions)
+        if (d.subreddit) { const o = subs.get(d.subreddit.toLowerCase()) || { subreddit: d.subreddit, discussions: 0 }; o.discussions++; subs.set(d.subreddit.toLowerCase(), o); }
+        else if (d.logo === 'hackernews') hn++;
+      const material = [], seen = new Set<string>();
+      const add = (u: unknown) => {
+        let href = '';
+        try { href = new URL(String(u || ''), origin || undefined).href; } catch { return; }
+        const k = key(href), page = k ? pages.get(k) : null;
+        if (!page || seen.has(k) || new URL(page.url).pathname === '/') return;
+        seen.add(k); material.push({ title: articleTitle(page), url: page.url });
+      };
+      add(card.target);
+      for (const path of newPageOf(card.newPage)?.linkFrom || []) add(path);
+      for (const r of g.evidence?.rows || []) add(r.url);
+      for (const s of signals) add(s.url);
+      const item = {
+        id: card.id, no: card.no ?? null, kind: g.kind, title: card.title, firstSeenAt: row.firstSeenAt, foundAt: row.batch.generatedAt,
+        headline: hotHeadline(card, signals, pageTitle), figures: g.figures.slice(0, 2),
+        logos: [...new Set([...discussions.map(d => d.logo), ...signals.map(s => s.source).filter(Boolean)])].slice(0, 4),
+        chart: chartOf(g, subject, ght),
+        discussions: discussions.slice(0, HOT_DISCUSSIONS), discussionCount: discussionCount(g, discussions),
+        communities: { subreddits: [...subs.values()].sort((a, b) => b.discussions - a.discussions || a.subreddit.localeCompare(b.subreddit)), hn },
+        material: material.slice(0, MATERIAL_MAX),
+        handed: row.tasks.map(t => ({ taskId: String(t.taskId), no: t.taskNo ?? info.get(String(t.taskId))?.no ?? null, standing: info.get(String(t.taskId))?.standing || 'todo', playbook: info.get(String(t.taskId))?.playbook || null })).filter(t => t.standing !== 'closed'),
+        made: records.filter((r: any) => r.source?.kind === 'opportunity' && r.source.id === card.id && r.standing !== 'closed').map(madeOf),
+      };
+      return { item, card, discussions, material };
+    });
+  }
+
+  // A trending opportunity as the tasks' source, in the language they are made in: what is hot, and for the Agent the
+  // opportunity's analysis, its discussions and the site's material, with their links. Gone from Trending now (ignored,
+  // expired or closed since the page loaded), it is refused.
+  async hotSource(id: string, opportunityId: string, input: any, locale?: string) {
+    const found = (await this.hotItems(id, input)).find(h => h.item.id === opportunityId);
+    if (!found) return fail(systemMessageText('workshop.hotGone'), 409);
+    const { item, card, discussions, material } = found, text = (k: string, p: Record<string, unknown> = {}) => systemMessageText(k, p, locale);
+    const line = (label: string, value?: string) => value?.trim() ? text('common.labelValue', { 0: text(label), 1: value.trim() }) : '';
+    const list = (label: string, rows: string[]) => rows.length ? `${text('common.labelValue', { 0: text(label), 1: '' }).trim()}\n${rows.map(r => `- ${r}`).join('\n')}` : '';
+    const shownDiscussions = discussions.slice(0, 5);
+    const points = [
+      line('strategy.briefWhatHappened', card.reason || card.observation),
+      line('strategy.briefWhyWorthDoing', card.meaning),
+      line('strategy.briefWhatToDo', card.suggestion),
+      list('workshop.hot.discussionsLabel', shownDiscussions.map(d => [d.title, [d.place, d.url].filter(Boolean).join(', ')].join(' — '))),
+      list('workshop.hot.materialLabel', material.map(m => `${m.title} — ${m.url}`)),
+    ].filter(Boolean).join('\n\n');
+    const links = [...new Set([...shownDiscussions.map(d => d.url), ...material.map(m => m.url)].filter(Boolean))].slice(0, HOT_LINKS);
+    return {
+      kind: 'opportunity', id: item.id, ...(item.no ? { no: item.no } : {}),
+      headline: (item.headline ? text(item.headline.key, item.headline.params) : card.title).slice(0, 300),
+      ...(points ? { points: points.slice(0, POINTS_MAX) } : {}), ...(links.length ? { links } : {}),
     };
   }
 
@@ -265,15 +428,35 @@ class WorkshopService {
   // the write, and the starts after it (SQLite has one connection).
   async create(id: string, v: any, actor: string, actorName: string, locale?: string) {
     const requestId = typeof v.requestId === 'string' && /^[a-zA-Z0-9-]{20,80}$/.test(v.requestId) ? v.requestId : fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
-    const source = cleanSource(v.source), brand = await this.brand(id), items = cleanItems(v.items, brand);
+    let source = cleanSource(v.source);
+    const brand = await this.brand(id), items = cleanItems(v.items, brand);
+    const angle = typeof v.angle === 'string' ? v.angle.trim().replace(/\s+/g, ' ') : '';
+    if (angle.length > ANGLE_MAX) fail(systemMessageText('workshop.angleTooLong', { 0: ANGLE_MAX }));
     // A repeated request (a response lost on the way) returns the tasks it made instead of making them again.
     const tasks = this.p.db.getRepository('nrTasks'), prefix = `workshop:${actor}:${requestId}:`, keys = items.map((_, i) => `${prefix}${i}`);
     const existing = await tasks.find({ filter: { projectId: id, taskKey: { $startsWith: prefix } }, fields: ['id', 'taskKey'], limit: 20 });
     if (existing.length) return { taskIds: existing.map((r: any) => [String(r.get('id')), Number(String(r.get('taskKey')).slice(prefix.length))] as const).sort((a, b) => a[1] - b[1]).map(([taskId]) => taskId), started: [] };
     const { playbooks } = await this.p.taskExecution.playbooks.list(id);
     const chosen = items.map(it => playbooks.find((p: any) => p.id === FORM_PLAYBOOK[it.form]) || fail(systemMessageText('playbook.playbookNotExistRefreshPick'), 404));
+    // An article or a trending opportunity adapted before: the Agent reads the approved drafts of the latest earlier
+    // tasks and takes another angle. An article keeps its figures now, for when it is recommended again.
+    const input = source.kind === 'topic' ? null : await this.inputs(id);
+    if (source.kind === 'opportunity') source = await this.hotSource(id, source.id, input, locale);
+    const k = source.kind === 'article' ? input.key(source.url) : '';
+    const same = (r: any) => source.kind === 'article' ? r.source?.kind === 'article' && Boolean(k) && input.key(r.source.url) === k : source.kind === 'opportunity' && r.source?.kind === 'opportunity' && r.source.id === source.id;
+    const earlier = input ? input.records.filter((r: any) => same(r) && r.internal.approved).sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, EARLIER_MAX) : [];
+    let baseline = null;
+    if (k && input.sums) {
+      const byPeriod = input.sums.periods.map(() => 0);
+      for (const r of input.sums.rows) if (input.key(r.url) === k) byPeriod[r.period] += r.clicks;
+      baseline = { clicks7: seriesOf(byPeriod, input.sums.periods).weeks[0], cited: input.cited.get(k) || 0 };
+    }
     const body = source.kind === 'article' ? await this.articleBody(id, source).catch(() => null) : null;
     if (body) Object.assign(source, { targetId: body.targetId, articleId: body.articleId });
+    const kept = {
+      ...(body?.body ? { body: body.body, locale: body.locale } : {}),
+      ...(earlier.length ? { earlier: earlier.map((e: any) => ({ ...(e.no ? { no: e.no } : {}), form: e.form, ...(e.destination ? { destination: e.destination } : {}), at: e.createdAt, text: e.internal.approved.text.slice(0, EARLIER_TEXT) })) } : {}),
+    };
     const agentId = typeof v.agentId === 'string' && v.agentId ? v.agentId : null;
     const agent = agentId ? await this.p.db.sequelize.transaction((tx: any) => this.p.taskExecution.agents.taskAgent(agentId, actor, tx, id)).catch((e: any) => {
       this.p.app?.logger?.warn?.('NocoReach could not use the Agent chosen in Content workshop', { projectId: id, agentId, message: e?.message });
@@ -284,12 +467,16 @@ class WorkshopService {
       for (const [i, item] of items.entries()) {
         const p = chosen[i], subject = item.destination ? `${sourceSubject(source)} → ${titleDestination(item.destination)}` : sourceSubject(source);
         const evidence = { origin: 'workshop', source: 'workshop', createdBy: { id: actor, name: actorName }, autoTitle: { subject: subject.slice(0, 160), ...(locale ? { locale } : {}) }, suggestedPlaybook: p.id };
-        const repurpose = { form: item.form, source, ...(item.destination ? { destination: item.destination } : {}) };
+        const repurpose = {
+          form: item.form, source, ...(item.destination ? { destination: item.destination } : {}), ...(angle ? { angle } : {}),
+          ...(earlier.length ? { earlier: earlier.map((e: any) => ({ taskId: e.taskId, ...(e.no ? { no: e.no } : {}), form: e.form, ...(e.destination ? { destination: e.destination } : {}), at: e.createdAt })) } : {}),
+          ...(baseline ? { baseline } : {}),
+        };
         const work = { ...projectWork({ evidence }), playbookId: p.id, repurpose, ...(agent ? { agentId: agent.id, agentName: agent.name } : {}) };
         const row = await tasks.create({ values: { projectId: id, taskKey: keys[i], title: playbookTitle(p, subject.slice(0, 160), locale), brief: repurposeBrief(repurpose, locale), status: systemMessageText('common.pending'), evidence: { ...evidence, work } }, transaction: tx });
         const taskId = String(row.get('id'));
         ids.push(taskId);
-        if (body?.body) await this.p.taskExecution.put(this.p.taskExecution.key('source', id, taskId), { body: body.body, locale: body.locale, readAt: at }, tx);
+        if (Object.keys(kept).length) await this.p.taskExecution.put(this.p.taskExecution.key('source', id, taskId), { ...kept, readAt: at }, tx);
       }
     });
     const started = [];
