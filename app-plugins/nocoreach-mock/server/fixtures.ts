@@ -87,6 +87,8 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'backlinks/history',
       'serp/google/organic/live/advanced',
       'serp/google/organic/live/regular',
+      'serp/google/organic/task_post',
+      'serp/google/organic/task_get/advanced/{id}',
       'serp/youtube/organic/live/advanced',
       'serp/youtube/video_info/live/advanced',
       'keywords_data/google_ads/keywords_for_keywords/live',
@@ -1455,6 +1457,69 @@ function youtubeVideo(
 }
 const seoTarget = (b: ObjectValue, c: FixtureContext): string =>
   string(b.target, string(b.target1, fixtureProduct(c).domain));
+// DataForSEO's Standard queue (NocoReach's rank checks and Reddit searches): a posted task is done at once and its id
+// carries the request, so reading it answers what the live endpoint answers.
+const SERP_QUEUE =
+  /^serp\/google\/organic\/(?:task_post|task_get\/advanced\/([A-Za-z0-9_-]+))$/;
+function queuedSerp(
+  c: FixtureContext,
+  operation: string,
+  b: ObjectValue,
+  id: string,
+): Response | undefined {
+  if (id) {
+    const [keyword, location_code, language_code, depth, search_param] =
+      JSON.parse(Buffer.from(id, 'base64url').toString('utf8')) as unknown[];
+    return dataforseo(
+      new URL(
+        'https://api.dataforseo.com/v3/serp/google/organic/live/advanced',
+      ),
+      {
+        method: 'POST',
+        body: JSON.stringify([
+          {
+            keyword,
+            location_code,
+            language_code,
+            depth,
+            ...(search_param ? { search_param } : {}),
+          },
+        ]),
+      },
+      c,
+    );
+  }
+  return json({
+    version: '0.1.20261012',
+    status_code: 20000,
+    status_message: 'Ok. (fictional mock data)',
+    time: '0 sec.',
+    cost: 0,
+    tasks_count: 1,
+    tasks_error: 0,
+    tasks: [
+      {
+        id: Buffer.from(
+          JSON.stringify([
+            b.keyword,
+            b.location_code,
+            b.language_code,
+            b.depth,
+            b.search_param ?? null,
+          ]),
+        ).toString('base64url'),
+        status_code: 20100,
+        status_message: 'Task Created.',
+        time: '0 sec.',
+        cost: 0,
+        result_count: 0,
+        path: ['v3', ...operation.split('/')],
+        data: b,
+        result: null,
+      },
+    ],
+  });
+}
 function dataforseo(
   u: URL,
   init: RequestInit,
@@ -1463,6 +1528,8 @@ function dataforseo(
   if (u.hostname !== 'api.dataforseo.com') return undefined;
   const operation = u.pathname.replace(/^\/v3\//, '').replace(/\/$/, ''),
     b = taskInput(init);
+  const queued = operation.match(SERP_QUEUE);
+  if (queued) return queuedSerp(c, operation, b, queued[1] ?? '');
   const wrap = (result: unknown[]): Response =>
     seoEnvelope(c, operation, result);
   const result = (rows: ObjectValue[], extra: ObjectValue = {}): Response =>

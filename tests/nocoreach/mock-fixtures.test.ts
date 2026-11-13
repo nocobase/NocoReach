@@ -79,17 +79,27 @@ const request = async (url: string, input?: unknown, context = ctx) =>
   ).json();
 const seo = (path: string, input: unknown, context = ctx) =>
   request(`https://api.dataforseo.com/v3/${path}`, [input], context);
+// A Standard-queue spec (`queue`) posts a task and reads it back by its id, as DataForSeo.read does.
 const runSpec = async (
   spec: {
     path?: string;
     request?: unknown;
     requests?: { path: string; body: unknown }[];
+    queue?: string;
   },
   context = ctx,
-) =>
-  spec.requests
-    ? Promise.all(spec.requests.map((r) => seo(r.path, r.body, context)))
-    : seo(spec.path!, spec.request, context);
+) => {
+  if (spec.requests)
+    return Promise.all(spec.requests.map((r) => seo(r.path, r.body, context)));
+  const raw = await seo(spec.path!, spec.request, context);
+  return spec.queue
+    ? request(
+        `https://api.dataforseo.com/v3/${spec.queue}/task_get/advanced/${raw.tasks[0].id}`,
+        undefined,
+        context,
+      )
+    : raw;
+};
 
 describe('NocoBloom deterministic raw fixtures', () => {
   it('never calls the network and ignores run/revision for stable payload identities', async () => {

@@ -214,7 +214,7 @@ describe('NocoReach semantic-key translations', () => {
       '告诉我产品名或网站域名（最多 5 个词），我在 Hacker News 上找提到它们的帖子和评论。这是公开数据，不需要账号，也不保存作者；先读最近 30 天给你看，确认后补读一年，之后每天更新。':
         '按产品名或网站域名（最多 5 个词）查找 Hacker News 上提到它们的帖子和评论。这是公开数据，不需要账号，也不保存作者。先读取最近 30 天供你查看，确认后补读一年，之后每天更新。',
       '告诉我产品名（最多 5 个词），我每周在 Google 里搜一次 Reddit 上提到它的帖子，记下标题、版块和链接。Reddit 官方接口用于品牌监测要签付费的商业协议，所以走 Google；这样只看得到 Google 收录了的帖子，也看不到点赞和评论数。需要先接入 DataForSEO，每次搜索约 $0.002。':
-        '按产品名（最多 5 个词）每周在 Google 中搜索一次 Reddit 上提到它的帖子，记录标题、版块和链接。Reddit 官方接口用于品牌监测需要签订付费商业协议，因此通过 Google 搜索；只能看到 Google 已收录的帖子，也看不到点赞和评论数。需要先接入 DataForSEO，每次搜索约 $0.002。',
+        '按产品名（最多 5 个词）每周在 Google 中搜索一次 Reddit 上提到它的帖子，记录标题、版块和链接。Reddit 官方接口用于品牌监测需要签订付费商业协议，因此通过 Google 搜索；只能看到 Google 已收录的帖子，也看不到点赞和评论数。需要先接入 DataForSEO，每次搜索约 $0.03。',
       '告诉我产品名，竞品自动用“竞品”页的列表（最多 4 个），我每周查一次 Google Trends：过去 12 个月大家对它们的关注度，以及和产品相关、正在上升的搜索。Google 官方的 Trends 接口还在内测、要申请，所以通过已接入的 DataForSEO 查，每次约 $0.022，算进月度预算。':
         '填写产品名，竞品取自“竞品”页的列表（最多 4 个）。每周查询一次 Google Trends：过去 12 个月的关注度，以及与产品相关、正在上升的搜索。Google 官方的 Trends 接口仍在内测且需要申请，因此通过已接入的 DataForSEO 查询，每次约 $0.022，计入月度预算。',
       '告诉我你的包叫什么（npm、PyPI 或 Docker Hub，可以贴包的页面地址）。这些都是公开数据，不需要账号；我先读出来给你确认，之后每天记录下载量。':
@@ -421,6 +421,9 @@ describe('NocoReach semantic-key translations', () => {
       // Average position's ⓘ follows the arrow on Search performance, where ↑ is a ranking that rose (2026-11-07).
       '本站在 Google 搜索结果里的平均位置，按曝光加权。数字越小越靠前，所以下降算变好。':
         '本站在 Google 搜索结果里的平均位置，按曝光加权。数字越小越靠前，所以 ↑ 表示排名上升（平均排名数字变小），↓ 表示排名下降。',
+      // Reddit searches moved to DataForSEO's Standard queue (2026-11-11): about $0.03 a term, not $0.002.
+      '多个词用逗号分开，最多 5 个；按整个词组搜。每周每个词在 Google 搜一次 site:reddit.com，约 $0.002，算进 DataForSEO 的月度预算。只看得到 Google 收录了的帖子，看不到点赞和评论数；不保存作者。':
+        '多个词用逗号分开，最多 5 个；按整个词组搜。每周每个词在 Google 搜一次 site:reddit.com，约 $0.03，算进 DataForSEO 的月度预算。只看得到 Google 收录了的帖子，看不到点赞和评论数；不保存作者。',
       // The online model's glossary entry names Model services' default chat model and Editing and suggestions
       // (2026-11-10).
       '服务器上的模型（NocoBase AI 插件），每天分析数据、提出机会，也帮你起草做法。':

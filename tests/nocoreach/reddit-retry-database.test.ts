@@ -24,7 +24,23 @@ test('persisted request keys survive a collector restart and rolled-back result 
     network: {
       bind() {},
       mockCacheKey: () => 'isolated-test',
-      fetch: async () => {
+      // DataForSEO's Standard queue: the post (counted, it is the paid request) creates a task read back for free.
+      fetch: async (_connection: string, url: string) => {
+        if (url.includes('/task_get/'))
+          return {
+            ok: true,
+            json: async () => ({
+              status_code: 20000,
+              cost: 0,
+              tasks: [
+                {
+                  status_code: 20000,
+                  id: 'safe-task',
+                  result: [{ items: [] }],
+                },
+              ],
+            }),
+          };
         requests++;
         const payload = (
           await db
@@ -36,10 +52,8 @@ test('persisted request keys survive a collector restart and rolled-back result 
           ok: true,
           json: async () => ({
             status_code: 20000,
-            cost: 0.002,
-            tasks: [
-              { status_code: 20000, id: 'safe-task', result: [{ items: [] }] },
-            ],
+            cost: 0.006,
+            tasks: [{ status_code: 20100, id: 'safe-task', result: null }],
           }),
         };
       },

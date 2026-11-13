@@ -14,6 +14,13 @@ import { TOPIC_WORDS } from './script/search.js';
 import type { Research, AiQuestion } from './script/types.js';
 import type { World } from './world.js';
 import { youtubeSerp } from './youtube.js';
+import {
+  RESULT_SITES,
+  breadcrumb,
+  otherResult,
+  siteName,
+  traditional,
+} from './serp-titles.js';
 
 type Keyword = Research & { topic: string };
 
@@ -274,6 +281,7 @@ function serpItem(
   title: string,
   rank: number,
   etv: number,
+  site: string,
 ) {
   return {
     type: 'organic',
@@ -284,7 +292,8 @@ function serpItem(
     title,
     description: '',
     etv,
-    breadcrumb: `https://${domain}${path}`,
+    breadcrumb: breadcrumb(domain, path),
+    website_name: site,
   };
 }
 
@@ -292,18 +301,12 @@ function serpItem(
 function serp(world: World, keyword: string, depth: number) {
   const k = find(world, keyword);
   const ownPage = k.path ? world.page(k.path) : undefined;
-  const others = [
-    'wikipedia.org',
-    'medium.com',
-    'g2.example',
-    'capterra.example',
-    'stackoverflow.com',
-    'youtube.com',
-    'dev.to',
-    'zhihu.com',
-    'csdn.net',
-    'github.com',
-  ];
+  const others = RESULT_SITES[world.lang];
+  // The Chinese demo's market is Taiwan: its titles are shown in Traditional characters (serp-titles.ts).
+  const shown = (title: string) =>
+    world.lang === 'zh' ? traditional(title) : title;
+  const rivals = world.competitors,
+    shift = world.seeded.int(`serp:${keyword}`, 3);
   const rows = [];
   for (let rank = 1; rank <= Math.min(depth, 100); rank++) {
     if (k.position && Math.round(k.position) === rank && ownPage) {
@@ -311,44 +314,50 @@ function serp(world: World, keyword: string, depth: number) {
         serpItem(
           world.project.domain,
           ownPage.path,
-          world.text(ownPage.title),
+          shown(world.text(ownPage.title)),
           rank,
           Math.round(k.volume * 0.05),
+          world.project.name,
         ),
       );
       continue;
     }
-    const rival =
-      world.competitors[
-        (rank + world.seeded.int(`serp:${keyword}`, 3)) %
-          world.competitors.length
-      ];
+    // Every fourth result is a competitor's page: the competitors take turns, and each shows another of its pages.
+    const slot = Math.floor(rank / 4) + shift,
+      rival = rivals.length ? rivals[slot % rivals.length] : undefined;
     if (rank % 4 === 2 && rival) {
-      const page = rival.pages[rank % rival.pages.length];
+      const page =
+        rival.pages[Math.floor(slot / rivals.length) % rival.pages.length];
+      const title = shown(world.text(page[1]));
       rows.push(
         serpItem(
           rival.domain,
           page[0],
-          world.text(page[1]),
+          title.includes(rival.name) ? title : `${title} | ${rival.name}`,
           rank,
           Math.round(k.volume * 0.02),
+          rival.name,
         ),
       );
       continue;
     }
-    const site =
-      others[
-        (rank + world.seeded.int(`o:${keyword}`, others.length)) % others.length
-      ];
+    const turn = rank + world.seeded.int(`o:${keyword}`, others.length),
+      site = others[turn % others.length];
+    const other = otherResult(
+      world.lang,
+      site,
+      keyword,
+      Math.floor(turn / others.length),
+      world.seeded.hash(`o:${keyword}:${rank}`),
+    );
     rows.push(
       serpItem(
         site,
-        `/${encodeURIComponent(keyword.replaceAll(' ', '-'))}-${rank}`,
-        world.lang === 'zh'
-          ? `${keyword}：${site === 'youtube.com' ? '操作影片' : site === 'github.com' ? '開源工具與範例' : '實作指南與使用心得'}`
-          : `${keyword}: ${site === 'youtube.com' ? 'video tutorial' : site === 'github.com' ? 'open source tools and examples' : 'practical guide and reviews'}`,
+        other.path,
+        other.title,
         rank,
         Math.round(k.volume * 0.01),
+        siteName(site, world.lang),
       ),
     );
   }
@@ -790,6 +799,69 @@ function questionRows(world: World, pool: readonly AiQuestion[], b: Json) {
   }));
 }
 
+// DataForSEO's Standard queue (rank checks and Reddit searches since 2026-11-11): a posted task is done at once, and its
+// id carries the request, so reading it answers what the live endpoint answers.
+const QUEUE =
+  /^serp\/google\/organic\/(?:task_post|task_get\/advanced\/([A-Za-z0-9_-]+))$/;
+const taskId = (b: Json) =>
+  Buffer.from(
+    JSON.stringify([
+      b.keyword,
+      b.location_code,
+      b.language_code,
+      b.depth,
+      b.search_param ?? null,
+    ]),
+  ).toString('base64url');
+function queuedTask(world: World, operation: string, b: Json, id: string) {
+  if (id) {
+    const [keyword, location_code, language_code, depth, search_param] =
+      JSON.parse(Buffer.from(id, 'base64url').toString('utf8')) as unknown[];
+    return dataforseo(
+      world,
+      new URL(
+        'https://api.dataforseo.com/v3/serp/google/organic/live/advanced',
+      ),
+      {
+        method: 'POST',
+        body: JSON.stringify([
+          {
+            keyword,
+            location_code,
+            language_code,
+            depth,
+            ...(search_param ? { search_param } : {}),
+          },
+        ]),
+      },
+    );
+  }
+  const pages = Math.ceil(Number(b.depth ?? 10) / 10),
+    cost = 0.0006 * pages * (text(b.keyword).includes('site:') ? 5 : 1);
+  return json({
+    version: '0.1.20261014',
+    status_code: 20000,
+    status_message: 'Ok.',
+    time: '0.0610 sec.',
+    cost,
+    tasks_count: 1,
+    tasks_error: 0,
+    tasks: [
+      {
+        id: taskId(b),
+        status_code: 20100,
+        status_message: 'Task Created.',
+        time: '0.0040 sec.',
+        cost,
+        result_count: 0,
+        path: ['v3', ...operation.split('/')],
+        data: b,
+        result: null,
+      },
+    ],
+  });
+}
+
 export function dataforseo(
   world: World,
   u: URL,
@@ -804,6 +876,8 @@ export function dataforseo(
       throw new WorldUnsupported('a DataForSEO request with several tasks');
     b = object(parsed[0]);
   }
+  const queued = operation.match(QUEUE);
+  if (queued) return queuedTask(world, operation, b, queued[1] ?? '');
   const wrap = (result: unknown[], cost?: number) =>
     envelope(world, operation, result, cost);
   const page = (rows: unknown[], extra: Json = {}) =>
@@ -1058,6 +1132,7 @@ export function dataforseo(
                   world.text(page.title),
                   Math.round(position),
                   Math.round(k.volume * 0.04),
+                  world.project.name,
                 )
               : serpItem(
                   target,
@@ -1065,6 +1140,7 @@ export function dataforseo(
                   rp ? world.text(rp[1]) : target,
                   Math.round(position),
                   Math.round(k.volume * 0.03),
+                  rival?.name ?? target,
                 );
           return {
             se_type: 'google',

@@ -61,6 +61,8 @@ const currentSystemText = new Map<string, MessageKey>(
     'playbooks.linkBuildingDescription',
     'playbooks.linkBuildingInstruction',
     'playbooks.linkBuildingStep',
+    // A search left in DataForSEO's Standard queue for two days (2026-11-11), stored in the run's error.
+    'dataforseo.queuedTaskNotFinished',
   ].map((key) => [chinese[key as MessageKey], key as MessageKey]),
 );
 

@@ -442,7 +442,7 @@ test('Followed topics sit below Competitors as chips, with the sources that sear
       [...row.querySelectorAll('[data-topic]')].map((x) => x.textContent),
     ).toEqual(['workflow automation', 'internal tools']);
     expect(row.querySelector('[data-topic-sources]')).toHaveTextContent(
-      'Reddit、Hacker News、YouTube、趋势、GitHub 热点、AI 问题都按这些话题找讨论和热点 · 每个话题每月约 $0.62 的 DataForSEO 费用',
+      'Reddit、Hacker News、YouTube、趋势、GitHub 热点、AI 问题都按这些话题找讨论和热点 · 每个话题每月约 $0.56 的 DataForSEO 费用',
     );
     expect(within(row).queryByText('请删减到 10 个')).not.toBeInTheDocument();
     // The topics count as one more item beside the nine sections.
