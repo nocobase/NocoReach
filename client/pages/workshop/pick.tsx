@@ -798,7 +798,7 @@ function Step2({
             <Label htmlFor='workshop-angle' className='gap-1.5'>
               {$t('workshop.angle')}
               <span className='text-xs font-normal text-muted-foreground'>
-                {hot ? $t('workshop.angleHotHint') : $t('workshop.optional')}
+                {$t(hot ? 'workshop.angleHotHint' : 'workshop.angleAgainHint')}
               </span>
             </Label>
             <Input
@@ -1074,11 +1074,12 @@ function MadeNote({ made }: { made: Made }) {
       data-made={made.standing}
       onClick={(e) => e.stopPropagation()}
     >
-      {made.standing === 'done'
-        ? $t('workshop.madeDone', { 0: taskNo(made.no) })
-        : [standingText(made.standing), taskNo(made.no)]
-            .filter(Boolean)
-            .join(' · ')}
+      {made.no
+        ? $t('workshop.madeView', {
+            0: standingText(made.standing),
+            1: taskNo(made.no),
+          })
+        : standingText(made.standing)}
     </Link>
   );
 }

@@ -219,7 +219,9 @@ class WorkshopService {
         const at = String(raw?.release?.article?.published?.at || '').slice(0, 10);
         if (at) for (const u of raw.release.pages || []) { const k = key(u); if (k && !(published.get(k) <= at)) published.set(k, at); }
         const w = projectWork(t), standing = taskStanding(w);
-        info.set(String(t.id), { no: t.evidence?.no ?? null, standing, playbook: w.playbook?.name || null });
+        // The playbook it runs, else the one suggested when it was handed off (a task not started yet): the page names a
+        // built-in one in the interface language (playbookNameOf), as the stored name is the server's.
+        info.set(String(t.id), { no: t.evidence?.no ?? null, standing, playbook: w.playbook?.name || null, playbookId: w.playbookId || t.evidence?.suggestedPlaybook || null });
         if (!raw?.repurpose) continue;
         const st = w.flow?.stages[w.stageIndex || 0], agentStep = w.stage === 'flow' && st?.kind === 'agent';
         const approved = [...(w.results || [])].reverse().find((x: any) => x?.approvedAt && !x.rejectedAt && x.content);
@@ -379,7 +381,7 @@ class WorkshopService {
         discussions: discussions.slice(0, HOT_DISCUSSIONS), discussionCount: discussionCount(g, discussions),
         communities: { subreddits: [...subs.values()].sort((a, b) => b.discussions - a.discussions || a.subreddit.localeCompare(b.subreddit)), hn },
         material: material.slice(0, MATERIAL_MAX),
-        handed: row.tasks.map(t => ({ taskId: String(t.taskId), no: t.taskNo ?? info.get(String(t.taskId))?.no ?? null, standing: info.get(String(t.taskId))?.standing || 'todo', playbook: info.get(String(t.taskId))?.playbook || null })).filter(t => t.standing !== 'closed'),
+        handed: row.tasks.map(t => ({ taskId: String(t.taskId), no: t.taskNo ?? info.get(String(t.taskId))?.no ?? null, standing: info.get(String(t.taskId))?.standing || 'todo', playbook: info.get(String(t.taskId))?.playbook || null, playbookId: info.get(String(t.taskId))?.playbookId || null })).filter(t => t.standing !== 'closed'),
         made: records.filter((r: any) => r.source?.kind === 'opportunity' && r.source.id === card.id && r.standing !== 'closed').map(madeOf),
       };
       return { item, card, discussions, material };

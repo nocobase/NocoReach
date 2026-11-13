@@ -57,7 +57,9 @@ export type Handed = {
   taskId: string;
   no: number | null;
   standing: Standing;
+  /** The playbook's stored name, and its id (the suggested one before the task starts). */
   playbook: string | null;
+  playbookId: string | null;
 };
 /** One of Opportunities' live Trending now opportunities (server/nocoreach/workshop.ts hotItems). */
 export type HotItem = {
@@ -159,16 +161,23 @@ export const logoOf = (form: RepurposeForm, destination?: Destination) =>
 
 /** A task's status in the words of the task page header and the board: Needs you, In progress, Done. */
 export const standingText = (s: Standing): string =>
-  s === 'closed' ? $t('common.closed') : s === 'snoozed' ? $t('common.snoozed') : getWorkColumns()[s];
+  s === 'closed'
+    ? $t('common.closed')
+    : s === 'snoozed'
+      ? $t('common.snoozed')
+      : getWorkColumns()[s];
 
 /** What the Agent's last run left, as the task list's current step says it: waiting for a restart, or stopped. */
-export function runNote(r: Pick<WorkshopRecord, 'standing' | 'failed' | 'restart'>): {
+export function runNote(
+  r: Pick<WorkshopRecord, 'standing' | 'failed' | 'restart'>,
+): {
   text: string;
   tone: Tone;
 } | null {
   if (r.standing !== 'review') return null;
   if (r.restart) return { text: $t('taskList.waitingRestart'), tone: 'amber' };
-  if (r.failed) return { text: $t('taskList.runFailed', { 0: 'Agent' }), tone: 'red' };
+  if (r.failed)
+    return { text: $t('taskList.runFailed', { 0: 'Agent' }), tone: 'red' };
   return null;
 }
 

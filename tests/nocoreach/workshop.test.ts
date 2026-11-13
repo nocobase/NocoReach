@@ -277,7 +277,7 @@ describe('Content workshop view', () => {
     const f = fixture();
     f.site.pages = [page('/blog/compare', STAMP, { title: 'Compare boards | Acme' }), page('/', STAMP)];
     hot(f);
-    task(f, 31, { stage: 'flow', playbook: { name: 'Write blog post' } }, { status: '进行中' });
+    task(f, 31, { stage: 'flow', playbook: { name: 'Write blog post' }, playbookId: 'write-blog-post' }, { status: '进行中' });
     task(f, 32, { stage: 'done', repurpose: { form: 'x', source: { kind: 'opportunity', id: 'o35', no: 35, headline: 'h' } } });
     const v = await f.s.view('1');
     expect(v.hot).toHaveLength(1);
@@ -291,7 +291,7 @@ describe('Content workshop view', () => {
       discussionCount: 3,
       communities: { subreddits: [{ subreddit: 'projectmanagement', discussions: 2 }, { subreddit: 'agile', discussions: 1 }], hn: 0 },
       material: [{ title: 'Compare boards', url: `${ORIGIN}/blog/compare` }],
-      handed: [{ taskId: '31', no: 31, playbook: 'Write blog post' }],
+      handed: [{ taskId: '31', no: 31, playbook: 'Write blog post', playbookId: 'write-blog-post' }],
       made: [{ form: 'x', taskId: '32', no: 32, standing: 'done' }],
     });
     expect(v.hot[0].discussions.map((d) => d.title)).toEqual(['Who writes weekly updates?', 'AI status reports']);

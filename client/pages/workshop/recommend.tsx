@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { FileText, Flame } from 'lucide-react';
-import { $t, $tj } from '#i18n';
+import { $legacyText, $t, $tj } from '#i18n';
 import { InfoTip } from '#components/reach/info-tip';
 import { Segmented } from '#components/reach/segmented';
 import { EmptyState } from '#components/reach/states';
@@ -20,6 +20,7 @@ import {
 import { cn } from '#lib/utils';
 import type { ArticleReason } from '../../../shared/workshop-recommend.js';
 import { TOPICS_EDIT_PATH } from '../followed-topics-scope';
+import { playbookNameOf } from '../playbook-model';
 import { GrowthTags } from '../strategy/growth';
 import { figureValue, say } from '../strategy/growth-text';
 import {
@@ -28,7 +29,9 @@ import {
   opportunityNo,
   standingText,
   taskNo,
+  type Handed,
   type HotItem,
+  type Made,
   type Suggested,
   type WorkshopView,
 } from './model.js';
@@ -147,6 +150,46 @@ const suitsOf = (h: HotItem) => [
   })),
   ...(h.communities.hn ? [{ logo: 'hackernews', name: 'Hacker News' }] : []),
 ];
+
+/**
+ * What Content workshop already made from a hot item, by status: "Already adapted into X posts, LinkedIn post (T-59,
+ * T-60, In progress)". Closed tasks are left out; nothing when none is left.
+ */
+function madeLine(h: HotItem): string {
+  const groups = new Map<string, { names: string[]; nos: string[] }>();
+  for (const m of [...h.made].sort((a, b) => (a.no ?? 0) - (b.no ?? 0))) {
+    if (m.standing === 'closed') continue;
+    const g = groups.get(m.standing) || { names: [], nos: [] };
+    const name = madeList([m])[0];
+    if (name && !g.names.includes(name)) g.names.push(name);
+    if (m.no) g.nos.push(taskNo(m.no));
+    groups.set(m.standing, g);
+  }
+  if (!groups.size) return '';
+  return $t('workshop.hot.made', {
+    0: [...groups]
+      .map(([standing, g]) =>
+        withDetail(
+          g.names.join($t('common.listSeparator')),
+          joinClauses(
+            [
+              g.nos.join($t('common.listSeparator')),
+              standingText(standing as Made['standing']),
+            ].filter(Boolean),
+          ),
+        ),
+      )
+      .join($t('common.entrySeparator')),
+  });
+}
+
+/** A handed-off task's playbook in the interface language: built-in names come from the server untranslated. */
+const handedName = (t: Handed) =>
+  t.playbook
+    ? $legacyText(t.playbook)
+    : t.playbookId
+      ? playbookNameOf(t.playbookId)
+      : '';
 
 function HotCard({ h }: { h: HotItem }) {
   const navigate = useNavigate();
@@ -273,7 +316,7 @@ function HotCard({ h }: { h: HotItem }) {
             0: h.handed
               .map((t) =>
                 withDetail(
-                  t.playbook || $t('workshop.hot.task'),
+                  handedName(t) || $t('workshop.hot.task'),
                   joinClauses(
                     [taskNo(t.no), standingText(t.standing)].filter(Boolean),
                   ),
@@ -283,8 +326,14 @@ function HotCard({ h }: { h: HotItem }) {
           })}
         </p>
       ) : null}
-      <div className='mt-auto flex flex-wrap items-center gap-2 border-t pt-3'>
-        <span className='mr-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground'>
+      {madeLine(h) ? (
+        <p className='text-xs text-muted-foreground' data-made=''>
+          {madeLine(h)}
+        </p>
+      ) : null}
+      {/* The button stays on the right; a long list of places wraps beside it. */}
+      <div className='mt-auto flex items-center gap-2 border-t pt-3'>
+        <span className='flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground'>
           {$t('common.labelValue', { 0: $t('workshop.hot.suits'), 1: '' })}
           {suitsOf(h).map((s) => (
             <span
@@ -298,6 +347,7 @@ function HotCard({ h }: { h: HotItem }) {
         </span>
         <Button
           size='sm'
+          className='shrink-0'
           onClick={() =>
             void navigate({
               pathname: 'new',
@@ -367,6 +417,13 @@ function ArticleCard({ a }: { a: Suggested }) {
       pathname: 'new',
       search: `?${new URLSearchParams({ url: a.url, title: a.title })}`,
     });
+  const since = a.last?.since ?? 0;
+  const footer = a.last
+    ? $t('workshop.lastAdapted', {
+        0: formatDate(a.last.at),
+        1: madeList(a.last.made).join($t('common.listSeparator')),
+      })
+    : $t('workshop.notMade');
   return (
     <article
       className='flex min-w-0 flex-col gap-2.5 rounded-lg border bg-card p-4 text-card-foreground'
@@ -406,6 +463,17 @@ function ArticleCard({ a }: { a: Suggested }) {
               ) : null}
             </>
           )}
+          {since > 0 ? (
+            <span className='mt-1 block' data-since=''>
+              {$tj('workshop.sinceClicks', {
+                0: (
+                  <b className='font-semibold text-nr-ink-green tabular-nums'>
+                    +{formatChangeSize(since)}
+                  </b>
+                ),
+              })}
+            </span>
+          ) : null}
         </p>
         {a.spark ? (
           <MiniChart
@@ -420,22 +488,12 @@ function ArticleCard({ a }: { a: Suggested }) {
         ) : null}
       </div>
       <div className='mt-auto flex items-center gap-2 border-t pt-3'>
-        <span className='min-w-0 flex-1 text-xs leading-snug text-muted-foreground'>
-          {a.last
-            ? [
-                $t('workshop.lastAdapted', {
-                  0: formatDate(a.last.at),
-                  1: madeList(a.last.made).join($t('common.listSeparator')),
-                }),
-                a.last.since !== undefined && a.last.since > 0
-                  ? $t('workshop.sinceClicks', {
-                      0: `+${formatChangeSize(a.last.since)}`,
-                    })
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')
-            : $t('workshop.notMade')}
+        {/* One line, so the footers of a row line up; the whole text stays in its title. */}
+        <span
+          className='min-w-0 flex-1 truncate text-xs text-muted-foreground'
+          title={footer}
+        >
+          {footer}
         </span>
         <Button size='sm' variant='outline' onClick={adapt}>
           {a.last ? $t('workshop.adaptAgain') : $t('workshop.adapt')}
