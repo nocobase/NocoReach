@@ -163,7 +163,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
   expect(data).toEqual(before);
 });
 
-test('every canonical built-in name, instruction and review item is localized in English and restored in Chinese', () => {
+test('every canonical built-in name and instruction is localized in English and restored in Chinese', () => {
   for (const p of SYSTEM_PLAYBOOKS) {
     const data = task(p.id),
       original = structuredClone(data);
@@ -173,8 +173,6 @@ test('every canonical built-in name, instruction and review item is localized in
     for (const stage of view.flow!.stages) {
       expect(stage.name).not.toMatch(/[一-鿿]/u);
       expect(stage.instruction || '').not.toMatch(/[一-鿿]/u);
-      for (const item of stage.checklist || [])
-        expect(item.label).not.toMatch(/[一-鿿]/u);
     }
     setDictionary(null);
     expect(localizeWorkSnapshots(data.work)).toEqual(data.work);
@@ -276,10 +274,21 @@ test('View steps on a Write blog post task started under the old wording shows t
   expect(zh).not.toHaveTextContent('博客目录');
 });
 
+// Review steps listed items to tick until 2026-11-15; a snapshot taken before still has the built-in one.
+const OLD_ITEM = {
+  key: 'facts',
+  label: '引用的数据与事实准确',
+  required: true,
+};
+const withOldItem = (data: TaskData) => {
+  Object.assign(data.work.flow!.stages[1], { checklist: [OLD_ITEM] });
+  return data;
+};
+
 test.each(['system', 'legacy'] as const)(
-  'View steps on a started %s research task shows its review items in English',
+  'View steps on a %s research task started with a review item shows no item, in English',
   async (variant) => {
-    const data = task('change-research');
+    const data = withOldItem(task('change-research'));
     if (variant === 'legacy') {
       delete data.work.flow!.system;
       delete data.work.flow!.edited;
@@ -291,16 +300,14 @@ test.each(['system', 'legacy'] as const)(
     expect(steps).toHaveTextContent(
       english['playbooks.changeResearchInstruction'],
     );
-    expect(steps).toHaveTextContent(
-      `Confirm: ${english['playbooks.citedDataFactsAccurate']}`,
-    );
+    expect(steps).not.toHaveTextContent(/Confirm/);
     expect(steps).not.toHaveTextContent(/[一-鿿]/u);
   },
 );
 
-// The current step reads the same snapshot: the items to confirm on Review.
-test('the current review lists its built-in items in the reader language', async () => {
-  const data = task('change-research');
+// The current step reads the same snapshot: nothing to tick before accepting (T-79 waited at Accept with the item).
+test('the current review of a snapshot that still requires an item asks for nothing before Accept', async () => {
+  const data = withOldItem(task('change-research'));
   data.work.results = [
     {
       id: 'artifact-1',
@@ -314,21 +321,22 @@ test('the current review lists its built-in items in the reader language', async
   ];
   data.work.stageIndex = 1;
   const runtime = await setup(data);
-  const items = (dictionary: Record<string, string>) =>
-    screen.getByRole('group', {
-      name: dictionary['taskDetail.confirmFollowing'],
-    });
-  expect(items(english)).toHaveTextContent(
-    english['playbooks.citedDataFactsAccurate'],
+  const accept = english['taskDetail.acceptHandAgent'].replace(
+    '{0}',
+    english['playbooks.improveExistingPage'],
+  );
+  expect(screen.getByRole('button', { name: accept })).toBeEnabled();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(document.body).not.toHaveTextContent(
+    /Confirm the following|Cited data/,
   );
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(items(chinese)).toHaveTextContent(
-    chinese['playbooks.citedDataFactsAccurate'],
-  );
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(document.body).not.toHaveTextContent(/确认以下事项|引用的数据/);
 });
 
 test.each(['custom', 'edited'] as const)(
-  'View steps on a started %s playbook keeps its own instruction and review items',
+  'View steps on a started %s playbook keeps its own instruction',
   async (variant) => {
     const data = task('change-research');
     const flow = data.work.flow!,
@@ -342,27 +350,24 @@ test.each(['custom', 'edited'] as const)(
       flow.version = playbook.version = 4;
     }
     flow.name = playbook.name = '分析变化';
-    // An instruction the person wrote, and a review item still worded as the built-in's: both stay as stored.
+    // An instruction the person wrote stays as stored; the review item it was started with is not shown.
     flow.stages[0].instruction = '分析。任务。 {0}';
+    withOldItem(data);
     const before = structuredClone(data);
     await setup(data);
     const steps = await viewSteps('分析变化');
     expect(steps).toHaveTextContent('分析。任务。 {0}');
-    expect(steps).toHaveTextContent(
-      `Confirm: ${chinese['playbooks.citedDataFactsAccurate']}`,
-    );
+    expect(steps).not.toHaveTextContent(/Confirm|引用的数据/);
     expect(data).toEqual(before);
   },
 );
 
-test('unknown instructions and review items stay raw even with system provenance', () => {
+test('unknown instructions stay raw even with system provenance', () => {
   setDictionary(english);
   const data = task('change-research');
   data.work.flow!.stages[0].instruction = '分析。任务。 {0}';
-  data.work.flow!.stages[1].checklist![0].label = '分析。任务。 {0}';
   const view = localizeWorkSnapshots(data.work);
   expect(view.flow!.stages[0].instruction).toBe('分析。任务。 {0}');
-  expect(view.flow!.stages[1].checklist![0].label).toBe('分析。任务。 {0}');
 });
 
 test('unknown names stay raw even with system provenance, without fuzzy translation', () => {
@@ -404,6 +409,30 @@ test('a legacy snapshot with an older list of next steps is still the built-in',
   data.work.playbook!.next = [];
   expect(workTypeLabel(data.work)).toBe('Change investigation · Analysis');
 });
+
+// Review items were dropped from the built-ins on 2026-11-15: a legacy snapshot taken with them, the built-in's item on
+// Accept or an empty list on another review, is still the built-in.
+test.each(['change-research', 'tech-fix'])(
+  'a legacy %s snapshot taken with review items is still the built-in',
+  (id) => {
+    setDictionary(english);
+    const data = task(id);
+    delete data.work.flow!.system;
+    delete data.work.flow!.edited;
+    delete data.work.playbook!.system;
+    delete data.work.playbook!.edited;
+    for (const stage of data.work.flow!.stages)
+      if (stage.kind === 'review')
+        Object.assign(stage, {
+          checklist: stage.key === 'accept' ? [OLD_ITEM] : [],
+        });
+    expect(workTypeLabel(data.work)).toBe(
+      id === 'tech-fix'
+        ? 'Technical fix · Write plan'
+        : 'Change investigation · Analysis',
+    );
+  },
+);
 
 test('legacy compatibility compares every available field and rejects incomplete or changed pairs', () => {
   setDictionary(english);
@@ -451,12 +480,6 @@ test('legacy compatibility compares every available field and rejects incomplete
     },
     (d) => {
       d.work.flow!.stages[0].skills = ['custom-skill'];
-    },
-    (d) => {
-      d.work.flow!.stages[1].checklist![0].label = '用户文字';
-    },
-    (d) => {
-      d.work.flow!.stages[1].checklist![0].required = false;
     },
     (d) => {
       d.work.flow!.stages = [...d.work.flow!.stages].reverse();

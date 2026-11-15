@@ -2,7 +2,7 @@
 import { systemMessageKey, systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { SYSTEM_PLAYBOOKS, stagesFor, type StageKind, type Stage } from '../../../shared/playbook-catalog';
-export type { StageKind, Stage, ChecklistItem, AgentMode } from '../../../shared/playbook-catalog';
+export type { StageKind, Stage, AgentMode } from '../../../shared/playbook-catalog';
 import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
@@ -42,11 +42,6 @@ export function validateFlow(v: any): { name: string; description: string; stage
     if (s.kind === 'agent' && (s.mode === 'analyze' || s.mode === 'change')) stage.mode = s.mode;
     if (producesOutput(stage)) stage.instruction = text(s.instruction, 4000);
     if (stage.kind === 'agent' && Array.isArray(s.skills) && s.skills.length) stage.skills = s.skills;
-    if (stage.kind === 'review') {
-      if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail(systemMessageText('flow.up10ChecklistItems'));
-      stage.checklist = (s.checklist || []).map((c: any, j: number) => ({ key: typeof c?.key === 'string' && KEY.test(c.key) ? c.key : `item-${j + 1}`, label: text(c?.label, 120), required: c?.required !== false }));
-      if (new Set(stage.checklist!.map(c => c.key)).size !== stage.checklist!.length) return fail(systemMessageText('flow.duplicateChecklistItems'));
-    }
     return stage;
   });
   const at = (k: StageKind) => stages.map((s, i) => s.kind === k ? i : -1).filter(i => i >= 0);

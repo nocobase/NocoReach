@@ -261,7 +261,6 @@ async function draftAndApprove(
   d = await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   return { run, d };
@@ -340,7 +339,6 @@ test('an article task reads the CMS source, drafts without a repository and publ
   d = await f.command('approveStage', {
     stageKey: stage.key,
     artifactId: edited.id,
-    checked: [],
   });
   expect(d.work.release).toMatchObject({
     state: 'publishing',
@@ -415,7 +413,6 @@ test('a CMS edit to the same field during review blocks publishing; rebasing kee
   await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   d = await f.view();
@@ -725,7 +722,6 @@ test('a blog post becomes a new article on the target; a code change to exported
   await c('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: d.work.results[d.work.stageIndex - 1].id,
-    checked: [],
   });
   ({ run } = await claim(f));
   expect(run.input.protectedPaths).toEqual([
@@ -756,7 +752,6 @@ test('a blog post becomes a new article on the target; a code change to exported
     c('approveStage', {
       stageKey: d.work.flow.stages[d.work.stageIndex].key,
       artifactId: d.work.results[d.work.stageIndex - 1].id,
-      checked: [],
     }),
   ).rejects.toMatchObject({ status: 409 });
 });
@@ -794,7 +789,6 @@ async function approveCurrent(f) {
   await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   return f.view();
@@ -1133,7 +1127,6 @@ test('languages: the primary is written and approved first, then translated, and
   d = await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   // Approving the primary publishes nothing yet: the Agent translates it.
   expect(d.work.flow.stages[d.work.stageIndex].kind).toBe('agent');
@@ -1174,7 +1167,6 @@ test('languages: the primary is written and approved first, then translated, and
   d = await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   expect(f.cms.state.rows.find((r) => r.slug === 'new-post')).toMatchObject({
@@ -1320,7 +1312,6 @@ test('languages: a new article in a primary chosen at start other than the first
   d = await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   ({ run } = await claim(f));
   expect(run.input.article.languages).toMatchObject({
@@ -1608,7 +1599,6 @@ test('translation: the published article is translated into the languages it lac
   d = await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   // One approval publishes: there is no primary round to approve first.
   expect(d.work.release.state).toBe('publishing');
@@ -1704,7 +1694,6 @@ async function acceptOutline(f, next, extra = {}) {
   return f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: ['facts'],
     next,
     ...extra,
   });
@@ -1848,7 +1837,6 @@ test('languages: the primary can change before it is approved, writing a new ver
   await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   ({ run } = await claim(f));
   await finish(f, {
@@ -2035,7 +2023,6 @@ test('release note: the record says what the approved version changed, not where
   d = await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
     release: { note: '负责人写的发布说明' },
   });
   expect(d.work.release.note).toBe('负责人写的发布说明');
@@ -2258,7 +2245,6 @@ test('message images reach the run numbered; publishing uploads only the images 
   await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   d = await f.view();
@@ -2366,7 +2352,6 @@ test('Edit directly: an image pasted into the body is linked when the edit is sa
   await f.command('approveStage', {
     stageKey,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   expect((await f.view()).work.release.state).toBe('verifying');
@@ -2440,7 +2425,6 @@ test('covers: the Agent cover is dropped; one set on the card is linked, noted, 
   await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   d = await f.view();
@@ -2500,7 +2484,6 @@ test('covers: a site that requires one refuses to approve a new published articl
     f.command('approveStage', {
       stageKey,
       artifactId: review(d).id,
-      checked: [],
     }),
   ).rejects.toMatchObject({
     status: 409,
@@ -2520,7 +2503,6 @@ test('covers: a site that requires one refuses to approve a new published articl
   await f.command('approveStage', {
     stageKey,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   expect(f.cms.state.rows.find((r) => r.slug === 'new-post')).toMatchObject({
@@ -2596,7 +2578,6 @@ test('a hand edit that removes the Agent phrase is released with a sentence from
   await f.command('approveStage', {
     stageKey,
     artifactId: review(d).id,
-    checked: [],
   });
   await f.settle();
   d = await f.view();

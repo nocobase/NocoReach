@@ -862,12 +862,7 @@ function storyTask(
           mode: 'analyze',
           instruction: story.brief,
         },
-        {
-          key: 'review',
-          name: flow.review,
-          kind: 'review',
-          checklist: [{ key: 'facts', label: flow.checklist, required: true }],
-        },
+        { key: 'review', name: flow.review, kind: 'review' },
       ],
     };
     work.stageIndex = 1;

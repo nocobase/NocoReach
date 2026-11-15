@@ -31,7 +31,7 @@ export interface DemoContent {
   taskNote: string;
   flows: Record<
     'content' | 'research',
-    { name: string; draft: string; review: string; checklist: string }
+    { name: string; draft: string; review: string }
   >;
   sourcePage: string;
   uncertainty: string;
@@ -105,13 +105,11 @@ const ZH_CN: DemoContent = {
       name: '内容起草与人工复核',
       draft: '准备内容稿',
       review: '核对事实与适用边界',
-      checklist: '核对引用、权限与不确定项',
     },
     research: {
       name: '问题研究与人工复核',
       draft: '整理研究资料',
       review: '核对事实与适用边界',
-      checklist: '核对引用、权限与不确定项',
     },
   },
   sourcePage: '演示项目页面',

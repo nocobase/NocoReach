@@ -71,7 +71,7 @@ test('closed at review: reopening returns straight to the review with the delive
   assert.equal(output(d).id, delivered.id, 'the delivered result is kept');
   assert.equal(reopened(d).stageKey, (await f.stage()).key);
   assert.equal(reopened(d).note, undefined);
-  d = await f.command('approveStage', { stageKey: (await f.stage()).key, artifactId: delivered.id, checked: ['facts'] });
+  d = await f.command('approveStage', { stageKey: (await f.stage()).key, artifactId: delivered.id });
   assert.equal(d.work.stage, 'done', 'the review goes on as if it was never closed');
 });
 
