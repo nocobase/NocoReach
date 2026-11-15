@@ -39,6 +39,7 @@ import {
 import {
   isTaskImageType,
   taskImageRef,
+  type MessageDocument,
   type MessageImage,
 } from '../../shared/task-images.js';
 
@@ -314,8 +315,9 @@ export class ManualTasks {
   ): Promise<TaskMediaView> {
     await this.authorizeUpload(actor, projectId, taskId);
     const stored = await validateTaskMedia(file);
-    // A started task takes images only: a message's images and an article's are PNG, JPEG, WebP or GIF.
-    if (taskId && !isTaskImageType(stored.type))
+    // A started task takes images and documents, checked as a new task's (2026-11-15): a message carries both, an
+    // article only images, which linking checks (linkImages). Videos stay with New task.
+    if (taskId && !isTaskImageType(stored.type) && !isTaskDocument(stored.type))
       denied(
         'TASK_MEDIA_INVALID',
         'Unsupported media type or size.',
@@ -661,17 +663,71 @@ export class ManualTasks {
     taskId: string,
     ids: readonly string[],
   ): Promise<MessageImage[]> {
+    const files = await this.link(
+      connection,
+      { actorId, projectId, taskId, ids },
+      isTaskImageType,
+      [
+        'TASK_IMAGE_UNAVAILABLE',
+        'An image is no longer available. Add it again.',
+      ],
+    );
+    return files.map((file) => this.messageImage(file));
+  }
+
+  /**
+   * Link the documents a message or change request carries (2026-11-15), as images are linked: the actor's own
+   * documents of this project, of a type a new task takes, not yet linked or already this task's.
+   */
+  async linkDocuments(
+    connection: DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<MessageDocument[]> {
+    const files = await this.link(
+      connection,
+      { actorId, projectId, taskId, ids },
+      isTaskDocument,
+      ['TASK_FILE_UNAVAILABLE', 'A file is no longer available. Add it again.'],
+    );
+    return files.map((file) => ({
+      id: file.id,
+      name: file.filename,
+      ref: taskImageRef(file.id, file.ext),
+      type: file.mimeType,
+      size: Number(file.size),
+    }));
+  }
+
+  private async link(
+    connection: DatabaseConnection,
+    {
+      actorId,
+      projectId,
+      taskId,
+      ids,
+    }: {
+      actorId: string;
+      projectId: string;
+      taskId: string;
+      ids: readonly string[];
+    },
+    accepts: (type: string) => boolean,
+    [reason, message]: [string, string],
+  ): Promise<TaskMediaRecord[]> {
     const media = connection.repository<TaskMediaRecord>('nrTaskMedia');
-    const out: MessageImage[] = [];
+    const out: TaskMediaRecord[] = [];
     for (const id of ids) {
       const file = await media.findOne({ filter: { id } });
       const mine =
         file &&
         !file.deleting &&
         file.projectId === projectId &&
-        isTaskImageType(file.mimeType);
+        accepts(file.mimeType);
       if (mine && file.taskId === taskId) {
-        out.push(this.messageImage(file));
+        out.push(file);
         continue;
       }
       if (
@@ -680,22 +736,13 @@ export class ManualTasks {
         file.ownerId !== actorId ||
         new Date(file.expiresAt).getTime() <= Date.now()
       )
-        denied(
-          'TASK_IMAGE_UNAVAILABLE',
-          'An image is no longer available. Add it again.',
-          'NOT_FOUND',
-        );
+        denied(reason, message, 'NOT_FOUND');
       const linked = await media.updateMany({
         filter: { id, taskId: null, deleting: false },
         values: { taskId },
       });
-      if (linked.updatedCount !== 1)
-        denied(
-          'TASK_IMAGE_UNAVAILABLE',
-          'An image is no longer available. Add it again.',
-          'NOT_FOUND',
-        );
-      out.push(this.messageImage(file));
+      if (linked.updatedCount !== 1) denied(reason, message, 'NOT_FOUND');
+      out.push(file);
     }
     return out;
   }
@@ -758,12 +805,15 @@ export class ManualTasks {
         .getRepository('nrTasks')
         .findOne({ filter: { id: file.taskId, projectId: file.projectId } });
       const evidence = row ? evidenceOf(row) : {};
-      // New task's attachments, or images linked once the task started (messages and Edit directly).
+      // New task's attachments, or images and documents linked once the task started (messages, change requests
+      // and Edit directly).
       const ids = evidence.attachmentIds,
-        images = (evidence.work as { images?: unknown } | undefined)?.images;
+        work = evidence.work as
+          { images?: unknown; documents?: unknown } | undefined;
       if (
-        !(Array.isArray(ids) && ids.includes(id)) &&
-        !(Array.isArray(images) && images.includes(id))
+        ![ids, work?.images, work?.documents].some(
+          (list) => Array.isArray(list) && list.includes(id),
+        )
       )
         denied('TASK_MEDIA_LINK_DENIED', 'File access denied.');
     } else if (

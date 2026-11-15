@@ -38,9 +38,9 @@ import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag, TaskStandingTag } from './task-status-tag';
 import { choiceRepo, startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
-import { AddImageButton, ComposerImages, ImageProblem, MessageImages } from './task-detail/task-images.js';
-import { TaskImageContext, readImages, useComposerImages } from './task-detail/task-images-model.js';
-import { TASK_IMAGES_PER_MESSAGE } from '../../shared/task-images.js';
+import { AttachButton, ComposerDocuments, ComposerImages, ImageProblem, MessageDocuments, MessageImages } from './task-detail/task-images.js';
+import { TaskImageContext, readMessageFiles, useComposerFiles } from './task-detail/task-images-model.js';
+import { TASK_FILES_PER_MESSAGE } from '../../shared/task-images.js';
 import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { SnoozeDialog, SnoozedCard } from './task-detail/task-snooze.js';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -490,7 +490,7 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy}:{data:Dat
   <ArticleReview key={out.id} data={data} article={a} {...agentNotes(out)} tab={tab} onTab={setTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}
    body={allowed?<ArticleEditFields data={data} article={a} session={session} tab={tab} onTab={setTab} id={submit.id} errors={submit.errors} fullScreenTo={fullScreen}/>:undefined}/>
   {asking&&<RequestChangesBox session={session} nextVersion={nextVersion(versions,out)} busy={busy} onCancel={()=>setAsking(false)}
-   onSend={async(comment,imageIds)=>{const d=await versioned('requestStageChanges',{comment,...(imageIds.length?{imageIds}:{})});if(d)setAsking(false);return Boolean(d);}}/>}
+   onSend={async(comment,files)=>{const d=await versioned('requestStageChanges',{comment,...files});if(d)setAsking(false);return Boolean(d);}}/>}
  </StageCard>;
 }
 function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;busy:boolean;list?:PlaybookList;members:Member[]}){
@@ -791,11 +791,12 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  const showArticle=()=>document.getElementById(ARTICLE_REVIEW_ID)?.scrollIntoView?.({block:'start',behavior:'smooth'});
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
  // Images go with the message (2026-11-03 user request, task-detail/task-images.tsx): pasted, dropped or added, numbered
- // in the order they were added so the text can say "Image 1"; they stay with the draft until it is sent.
+ // in the order they were added so the text can say "Image 1"; documents too (2026-11-15), shown by name. They stay
+ // with the draft until it is sent.
  const [storedImages,setStoredImages,clearImages]=useTaskDraft('commentImages','');
- const images=useComposerImages({stored:readImages(storedImages),store:list=>{if(list.length)setStoredImages(JSON.stringify(list));else clearImages();},max:TASK_IMAGES_PER_MESSAGE});
+ const images=useComposerFiles({stored:readMessageFiles(storedImages),store:list=>{if(list.length)setStoredImages(JSON.stringify(list));else clearImages();},max:TASK_FILES_PER_MESSAGE});
  // An article's edits not made a version yet become one first, which the Agent then works from (2026-11-04).
- async function send(){const extra=images.ids.length?{imageIds:images.ids}:{};let target=review;if(review&&articleEdit?.artifactId===review.artifactId){const v=await articleEdit.version();if(!v){onFailed();return;}target={...review,artifactId:v.artifactId,revision:v.revision};}
+ async function send(){const extra=images.payload();let target=review;if(review&&articleEdit?.artifactId===review.artifactId){const v=await articleEdit.version();if(!v){onFailed();return;}target={...review,artifactId:v.artifactId,revision:v.revision};}
   const d=target?await update('requestStageChanges',{...target,comment:message,...extra}):await update('comment',{comment:message,...extra});if(d){clearMessage();images.sent();}else onFailed();}
  const composer=(!done&&!closed)||Boolean(message),writing=!done&&!closed;
  return <Card ref={cardRef} className="order-5 scroll-mt-4" aria-label={$t('common.activity')} title={$t('common.activity')}>
@@ -803,7 +804,7 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
   <ol className="flex flex-col gap-3">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    // Until the members load, a person's name is a placeholder bar, not "Member" that turns into the name (UI review 2026-10-22).
    const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
-   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p>{e.images&&<MessageImages images={e.images}/>}</div></li>;
+   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p>{e.images&&<MessageImages images={e.images}/>}{e.documents&&<MessageDocuments documents={e.documents}/>}</div></li>;
    const artifact=VERSION_EVENTS.includes(e.action)&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const unversioned=e.action===UNVERSIONED?edits:null,mine=Boolean(unversioned&&me?.id&&unversioned.savedBy===me.id);
    const line=unversioned?unversionedLine(unversioned,mine):!artifact?plain[e.action]||t!.text:e.action==='editArticleDraft'?editsLine($t('taskDetail.editedArticleVersion',{0:artifact.version}),artifact.edits):e.action==='restoreArticleVersion'?(artifact.restoredFrom?$t('taskDetail.restoredArticleVersion',{0:artifact.restoredFrom.version,1:artifact.version}):t!.text):$t('taskDetail.deliveredVersion',{0:artifact.version,1:stepOf(artifact)});
@@ -814,8 +815,8 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
   {/* The send button is disabled while the box is empty; the box itself stays as it is. */}
   {composer&&(writing?<InputGroup className='has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30' onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={images.onDrop}>
    <InputGroupTextarea id='nr-composer' aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-60 min-h-8 px-2.5 pt-2' value={message} disabled={busy} placeholder={hint} onChange={e=>{setMessage(e.target.value);}} onPaste={images.onPaste}/>
-   {images.entries.length>0&&<InputGroupAddon align='block-end' className='font-normal'><ComposerImages images={images.entries} disabled={busy} onRemove={images.remove}/></InputGroupAddon>}
-   <InputGroupAddon align='block-end' className='flex-wrap gap-x-3 gap-y-1 font-normal'><AddImageButton disabled={busy||images.entries.length>=TASK_IMAGES_PER_MESSAGE} onFiles={images.add}/><Button className='ml-auto' size='sm' disabled={busy||!message.trim()||images.uploading} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></InputGroupAddon>
+   {images.count>0&&<InputGroupAddon align='block-end' className='flex-col items-stretch gap-2 font-normal'><ComposerImages images={images.images} disabled={busy} onRemove={images.remove}/><ComposerDocuments documents={images.documents} onRemove={images.remove}/></InputGroupAddon>}
+   <InputGroupAddon align='block-end' className='flex-wrap gap-x-3 gap-y-1 font-normal'><AttachButton disabled={busy||images.count>=TASK_FILES_PER_MESSAGE} onFiles={images.add}/><Button className='ml-auto' size='sm' disabled={busy||!message.trim()||images.uploading} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></InputGroupAddon>
   </InputGroup>:<Textarea aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-40 min-h-8 resize-none py-1.5' value={message} readOnly/>)}
   <ImageProblem>{writing&&images.problem}</ImageProblem>
   {error&&<p role="alert" className="nr-error">{error}</p>}

@@ -42,7 +42,8 @@ interface RunInput {
   evidence?: { insight?: { target?: string } } | null;
   data?: string;
   knowledge?: { title?: string }[];
-  feedback?: string[];
+  /** A request's text, or with images or documents its text and their names (execution/flow.ts runMessage). */
+  feedback?: (string | { text?: string; documents?: { name?: string }[] })[];
 }
 
 const clip = (value: unknown, limit: number): string => {
@@ -51,6 +52,9 @@ const clip = (value: unknown, limit: number): string => {
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 };
 const tokens = (value: string) => Math.max(1, Math.ceil(value.length / 4));
+
+// A request quoted inside a sentence, without its own closing punctuation.
+const sentence = (text: string) => text.replace(/[\s。．.！!？?；;]+$/u, '');
 
 const COPY = {
   zh: {
@@ -69,11 +73,12 @@ const COPY = {
     readKnowledge:
       '对照项目知识里的写作约定和产品定位，避免写出和定位不符的内容。',
     noKnowledge: '项目知识为空。',
+    readDocuments: '审核意见附有文档，先阅读文档，再按其中的要求修改。',
     think: (finding: string) =>
       `${finding ? `数据里最明显的信号是：${finding}。` : ''}结合任务背景，读者在这一步卡住的原因更可能是缺少可以照着做的例子，而不是概念讲得不够。先给出具体场景和验收方法，再补充背景说明。`,
     audit: (line: string) => `另外，${line}，这次一起处理。`,
-    feedback: (items: string) =>
-      `上一版的审核意见是：${items}。这次重点修正这些问题。`,
+    feedback: (items: string[]) =>
+      `上一版的审核意见是：${items.map(sentence).join('；')}。这次重点修正这些问题。`,
     writing: (plan: boolean) =>
       plan ? '开始整理分析结论和建议。' : '开始起草修改稿。',
     written: (chars: number) => `已写入 result.json（${chars} 个字符）`,
@@ -130,12 +135,14 @@ const COPY = {
     readKnowledge:
       "Checking the project's writing rules and positioning so the draft stays on message.",
     noKnowledge: 'The project knowledge is empty.',
+    readDocuments:
+      'The review includes documents; reading them first, then revising as they ask.',
     think: (finding: string) =>
       `${finding ? `The clearest signal in the data: ${finding}. ` : ''}Given the brief, readers more likely get stuck for lack of an example they can follow than for lack of concepts. Lead with a concrete scenario and how to check it, then the background.`,
     audit: (line: string) =>
       `The site audit also flags this page — ${line}; this draft addresses it too.`,
-    feedback: (items: string) =>
-      `The last review asked for: ${items}. This version fixes those first.`,
+    feedback: (items: string[]) =>
+      `The last review asked for: ${items.map(sentence).join('; ')}. This version fixes those first.`,
     writing: (plan: boolean) =>
       plan
         ? 'Writing up the findings and recommendations.'
@@ -209,8 +216,14 @@ export async function executeDemoAgent(
   );
   const knowledge = (input.knowledge || []).slice(0, 6);
   const feedback = (input.feedback || [])
-    .map((item) => clip(item, 160))
+    .map((item) => clip(typeof item === 'string' ? item : item?.text, 160))
     .filter(Boolean);
+  // The documents sent with the requests, read as a Runner Agent reads them from the materials (documents.json).
+  const documents = (input.feedback || []).flatMap((item) =>
+    typeof item === 'object' && item && Array.isArray(item.documents)
+      ? item.documents.map((d) => clip(d?.name, 120)).filter(Boolean)
+      : [],
+  );
   const read = url
     ? await readPage(run.projectId, url).catch(() => null)
     : null;
@@ -218,7 +231,7 @@ export async function executeDemoAgent(
   const thought = [
     c.think(finding),
     audit ? c.audit(audit) : '',
-    feedback.length ? c.feedback(feedback.join('; ')) : '',
+    feedback.length ? c.feedback(feedback) : '',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -303,6 +316,24 @@ export async function executeDemoAgent(
         ? knowledge.map((item) => `- ${clip(item.title, 80)}`).join('\n')
         : c.noKnowledge,
     },
+  );
+  if (documents.length)
+    steps.push(
+      { pauseMs: 1200, type: 'thinking', content: c.readDocuments },
+      {
+        pauseMs: 800,
+        type: 'toolUse',
+        tool: 'Read',
+        input: { file_path: 'documents.json' },
+      },
+      {
+        pauseMs: 1300,
+        type: 'toolResult',
+        tool: 'Read',
+        output: documents.map((name) => `- ${name}`).join('\n'),
+      },
+    );
+  steps.push(
     { pauseMs: 2600, type: 'thinking', content: thought },
     { pauseMs: 1200, type: 'text', content: c.writing(plan) },
   );
