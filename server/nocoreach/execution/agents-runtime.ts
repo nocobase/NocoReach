@@ -26,7 +26,9 @@ import {
   TASK_MATERIALS_MOUNT,
   attachmentIdsOf,
   imagePlan,
+  documentPlan,
   messageImageIdsOf,
+  messageDocumentIdsOf,
   attachmentPlan,
   taskMaterials,
   type TaskAttachmentReader,
@@ -329,6 +331,8 @@ export class TaskAgentsRuntime {
                 // Images sent with messages and change requests (2026-11-03): one way to add them, no purpose to pick;
                 // the text says what each is for.
                 'notes（留言）和 feedback（审核意见）里带 images 的条目附有图片：number 就是文字里说的“图 1”“Image 1”，图片在 materials.images 指向的 images.json 里按 ref 找到，先把 base64 解码成图片再查看。图片做什么用看文字：只用来指出问题的截图（例如圈出要改的地方）是参考，不放进成果；文字要求放进文章或页面的图片才放进去。',
+                // Documents sent with messages and change requests (2026-11-15): part of what the message asks.
+                'notes（留言）和 feedback（审核意见）里带 documents 的条目附有文档：文档是这条留言或审核意见的一部分，和文字一起读。文档在 materials.documents 指向的 documents.json 里按 ref 找到，先把 base64 解码成原文件（用 name 的文件名）再阅读；带 omitted 的文档未提供，需要时在成果里说明。',
                 'data.unfinished 存在时，是这一步上一次没做完时已经拿到的内容：先核对，再在此基础上补齐，不必从头再做。',
                 ...resultRules(run.mode, input.resultKind),
                 `完成后优先通过 ${commandRef(claim.cli, 'task result')} --content-file result.json 提交完整成果 JSON。校验失败时保留正文，只按错误修正格式，最多重试两次；成功后不要修改成果，最终回答仍返回同一份 JSON。命令不可用时使用最终 JSON 回答。运行说明不要写入成果。`,
@@ -375,6 +379,7 @@ export class TaskAgentsRuntime {
     const input = JSON.parse(run.input) as TaskInput;
     const ids = attachmentIdsOf(input),
       imageIds = messageImageIdsOf(input),
+      documentIds = messageDocumentIdsOf(input),
       reader = this.tasks.p.taskAttachments;
     const attachments =
       ids.length && reader
@@ -385,12 +390,18 @@ export class TaskAgentsRuntime {
       imageIds.length && reader
         ? await reader.forAgent(conn, run.projectId, run.taskId, imageIds)
         : [];
+    // And the documents sent with them (2026-11-15), likewise.
+    const documents =
+      documentIds.length && reader
+        ? await reader.forAgent(conn, run.projectId, run.taskId, documentIds)
+        : [];
     let contents: Map<string, string> | undefined;
     if (withContent) {
       contents = new Map();
       for (const { file, entry } of [
         ...attachmentPlan(attachments),
         ...imagePlan(images),
+        ...documentPlan(documents),
       ])
         if ('base64' in entry && file.read && !contents.has(file.id))
           contents.set(file.id, (await file.read()).toString('base64'));
@@ -400,6 +411,7 @@ export class TaskAgentsRuntime {
       attachments,
       contents,
       images,
+      documents,
     );
   }
   private transaction(tx: LegacyTransaction): Tx {

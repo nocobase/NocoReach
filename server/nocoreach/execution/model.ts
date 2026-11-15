@@ -47,6 +47,8 @@ export type Work = {
   // directly. `imageUrls` is where each was uploaded when an article that uses it was published, per target;
   // `coverUrls` the value each target's cover field took for an image set as the cover (2026-11-05).
   images?: string[];
+  // Documents sent with messages and change requests (2026-11-15), kept apart from images: never placed in an article.
+  documents?: string[];
   imageUrls?: Record<string, Record<string, string>>;
   coverUrls?: Record<string, Record<string, string>>;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
