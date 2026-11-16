@@ -12,12 +12,13 @@ export const EDITING_MODEL_KEY = 'editing-suggestions:model';
 
 /**
  * The model calls of Daily analysis: the analysis with its custom rules, the weekly project knowledge check with its
- * topic suggestions, and the automatic mapping of sources. Every other call (`OnlineProvider.complete` or `.stream`)
- * is one a person asks for on a page and is Editing and suggestions': rewriting a selected passage in the review
- * editor (article-rewrite), New task › Organize with AI (task-draft), Keywords' AI suggestions (keyword-seeds,
- * keyword-curate, keyword-names), suggested competitors (competitor-suggest), Knowledge › Add (knowledge-suggest),
- * Project knowledge › Generate (memory-draft), Analysis rules' proposals and new rules (analysis-rules-propose,
- * analysis-rule-draft) and New playbook's draft. A new scheduled or background use belongs in this list.
+ * topic suggestions, the automatic mapping of sources, the weekly topic discovery (topic-discovery) and the monthly
+ * read of other markets, with the markets the AI suggests and their local keywords (market-suggest, market-keywords).
+ * Every other call (`OnlineProvider.complete` or `.stream`) is one a person asks for on a page and is Editing and
+ * suggestions': rewriting a selected passage in the review editor (article-rewrite), New task › Organize with AI
+ * (task-draft), Keywords' AI suggestions (keyword-seeds, keyword-curate, keyword-names), suggested competitors
+ * (competitor-suggest), Knowledge › Add (knowledge-suggest), Project knowledge › Generate (memory-draft), Analysis
+ * rules' proposals and new rules (analysis-rules-propose, analysis-rule-draft) and New playbook's draft. A new scheduled or background use belongs in this list.
  */
 const ANALYSIS_OPERATIONS: ReadonlySet<string> = new Set([
   'daily-report',
@@ -28,6 +29,9 @@ const ANALYSIS_OPERATIONS: ReadonlySet<string> = new Set([
   'memory-check',
   'memory-topics',
   'content-source-map',
+  'topic-discovery',
+  'market-suggest',
+  'market-keywords',
 ]);
 
 export type CloudModelWork = 'analysis' | 'editing';

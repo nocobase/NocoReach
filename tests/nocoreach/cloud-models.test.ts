@@ -68,6 +68,9 @@ test('scheduled and background model calls are the daily analysis’s, everythin
     'memory-check',
     'memory-topics',
     'content-source-map',
+    'topic-discovery',
+    'market-suggest',
+    'market-keywords',
   ])
     expect(cloudModelWork(operation)).toBe('analysis');
   for (const operation of [
