@@ -255,15 +255,17 @@ export function failureOf(
 
 /**
  * How often the step failed in a row and how often for the same cause as the latest run. Runs a NocoReach restart
- * interrupted say nothing about the step, so both counts pass over them; a cause the task gives no reason for
- * (`task`) never counts as the same.
+ * interrupted, and runs a person stopped (2026-11-11: a stop is not a failure), say nothing about the step, so both
+ * counts pass over them; a cause the task gives no reason for (`task`) never counts as the same.
  */
 export function failureStreak(
   stageRuns: Run[],
   group: FailureGroup,
   data: Pick<TaskData, 'execution'>,
 ) {
-  const runs = stageRuns.filter((r) => !r.restartedAt);
+  const runs = stageRuns.filter(
+    (r) => !r.restartedAt && r.error !== 'cancelled',
+  );
   const streak = runs.findIndex((r) => r.status !== 'failed');
   const failures = group === 'restart' ? 0 : streak < 0 ? runs.length : streak;
   let same = 0;

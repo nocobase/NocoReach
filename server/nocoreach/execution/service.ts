@@ -28,6 +28,7 @@ import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
+import { RESTART_ACTION, attemptField, attemptOf, playbookChangeBlock, sameAttempt, type PlaybookChangeBlock, type ReplacedPlaybook } from '../../../shared/playbook-change.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
@@ -57,6 +58,8 @@ const inputRepo = (r: Run): TaskRepo | null => { try { return JSON.parse(r.input
 // A related task as the task page lists it: its title, number and where it stands.
 const relatedTask = (r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; };
 const ID = /^[1-9]\d{0,15}$/;
+// Why Change playbook is refused (shared/playbook-change.ts); a closed task is refused before, as for any command.
+const PLAYBOOK_CHANGE_BLOCKED: Record<PlaybookChangeBlock, string> = { notStarted: 'taskExecution.playbookChangeNotStarted', closed: 'taskExecution.taskArchivedRestoreFirst', running: 'taskExecution.playbookChangeRunning', published: 'taskExecution.playbookChangePublished', done: 'taskExecution.playbookChangeDone' };
 const HOUR = 3600000;
 // What says where a task came from (who found it, from which page or change), carried into a task it hands off to.
 const foundBy = (e: any) => Object.fromEntries(['createdBy', 'origin', 'signalKey', 'resultSource', 'entry'].filter(k => e?.[k] != null).map(k => [k, e[k]]));
@@ -268,9 +271,10 @@ export class TaskService {
     return typeof draft?.content === 'string' && draft.content.trim() ? { content: draft.content, savedAt: draft.savedAt, draft: true } : null;
   }
   // What the step's latest failed runs got, for its next run to continue from (`unfinished` in the input). A run someone
-  // stopped, or one that succeeded, ends the search: the step starts over from there.
-  private async unfinished(runs: Run[], stepId: string, index: number, tx: any) {
-    const latest = runs.filter(r => r.stepId === stepId && r.flowStage === index && r.planVersion === 0).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  // stopped, or one that succeeded, ends the search: the step starts over from there. Runs of an earlier playbook
+  // (another attempt) never count, whatever their step's key.
+  private async unfinished(runs: Run[], w: Work, stepId: string, index: number, tx: any) {
+    const latest = runs.filter(r => sameAttempt(r, w) && r.stepId === stepId && r.flowStage === index && r.planVersion === 0).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     for (const r of latest) {
       if (r.status !== 'failed' || r.error === 'cancelled' || r.error === 'replaced_by_manual') return null;
       const got = await this.partialOf(r, tx);
@@ -302,7 +306,7 @@ export class TaskService {
   }
   // Used by article-flow.ts, which handles the article commands under the same lock.
   flowStageOf(w: Work, key: unknown, kinds: StageKind[]) { return this.flowStage(w, key, kinds); }
-  flowArtifactOf(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any) { return this.flowArtifact(project, taskId, stageKey, content, actor, at, tx); }
+  flowArtifactOf(project: string, taskId: string, w: Work, stageKey: string, content: string, actor: string, at: string, tx: any) { return this.flowArtifact(project, taskId, w, stageKey, content, actor, at, tx); }
   enterStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) { return this.enterFlowStage(project, taskId, task, w, index, tx, actor, at); }
   /**
    * The images sent with a message or a change request (2026-11-03): the person's own uploads (`imageIds`, in the order
@@ -329,9 +333,10 @@ export class TaskService {
   private async repoOf(project: string, task: any, w: Work, tx: any) {
     return startedRepo((await this.agents.doc(project, tx)).repos, w, await this.taskPages(project, task, w, tx));
   }
-  private async flowArtifact(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
+  // A version of the step's output, numbered after the step's versions in this attempt (shared/playbook-change.ts).
+  private async flowArtifact(project: string, taskId: string, w: Work, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
     const versions: Artifact[] = await this.list('artifact', project, taskId, tx);
-    const artifact: Artifact = { id: randomUUID(), stepId: stageKey, planVersion: 0, version: 1 + Math.max(0, ...versions.filter(a => a.stepId === stageKey && a.planVersion === 0).map(a => a.version)), content, createdAt: at, createdBy: actor, ...(runId ? { runId } : {}) };
+    const artifact: Artifact = { id: randomUUID(), stepId: stageKey, planVersion: 0, version: 1 + Math.max(0, ...versions.filter(a => sameAttempt(a, w) && a.stepId === stageKey && a.planVersion === 0).map(a => a.version)), content, createdAt: at, createdBy: actor, ...(runId ? { runId } : {}), ...attemptField(w) };
     await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
     return artifact;
   }
@@ -372,9 +377,9 @@ export class TaskService {
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
     const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
-    const unfinished = await this.unfinished(runs, stage.key, index, tx);
+    const unfinished = await this.unfinished(runs, w, stage.key, index, tx);
     const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });
-    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch, ...extra };
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch, ...attemptField(w), ...extra };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
@@ -396,7 +401,7 @@ export class TaskService {
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const branch = `nocoreach/task-${taskId}`, input = JSON.stringify({ mode: 'merge', repo, branch, taskId, title: task.title, pr: w.release.pr });
-    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: ['pr.merge'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'merge' }, flowStage: index, mode: 'merge', branch };
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: ['pr.merge'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'merge' }, flowStage: index, mode: 'merge', branch, ...attemptField(w) };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status }; w.release = { ...w.release, state: 'merging', error: undefined };
@@ -616,7 +621,7 @@ export class TaskService {
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
-    if (['startTask', 'approveStage', 'retryStage', 'retryMerge', 'retryPublish', 'revertRelease', 'confirmPublish'].includes(v.command) && this.p.db.access)
+    if (['startTask', RESTART_ACTION, 'approveStage', 'retryStage', 'retryMerge', 'retryPublish', 'revertRelease', 'confirmPublish'].includes(v.command) && this.p.db.access)
       await this.p.db.access.requireFor(actor, 'nrTaskWork', 'execute', project);
     // Read plugin state outside the business lock (SQLite may have a single connection).
     // Recheck ownership, revision, current stage and run eligibility under the lock below.
@@ -635,7 +640,7 @@ export class TaskService {
       recoverySummary = await this.runtime.completedSummary(run);
     }
     // Article commands read the publishing target here, outside the lock; the result is rechecked under it.
-    const articleRead = ['linkArticle', 'rebaseArticle'].includes(v.command) || (v.command === 'startTask' && Array.isArray(v.delivery?.also) && v.delivery.also.length) ? (await this.authorized(actor, project), await this.articleFlow.preRead(project, taskId, v)) : {};
+    const articleRead = ['linkArticle', 'rebaseArticle'].includes(v.command) || ((v.command === 'startTask' || v.command === RESTART_ACTION) && Array.isArray(v.delivery?.also) && v.delivery.also.length) || (v.command === RESTART_ACTION && v.link?.articleId) ? (await this.authorized(actor, project), await this.articleFlow.preRead(project, taskId, v)) : {};
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
       const task = await this.task(project, taskId, tx), w = projectWork(task);
@@ -648,9 +653,10 @@ export class TaskService {
       if (w.archivedAt && !['unarchiveTask', 'comment'].includes(v.command)) return fail(systemMessageText('taskExecution.taskArchivedRestoreFirst'), 409);
       if (w.humanOwnerId && String(w.humanOwnerId) !== String(actor) && !OPEN_TO_ALL.includes(v.command) && await policy.roleOf(this.p.db, actor) !== 'admin') return fail(systemMessageText('messages.reviewsTaskLeaveComment', { 0: w.humanOwnerName || '负责人' }), 403);
       const at = now(), event: any = { at, actor, action: v.command, stage: w.stage, step: w.step }, after: { at: string; actor: string; action: string; note: string }[] = [];
-      // An automatic title follows the playbook chosen before the start (task-title.ts), recorded after the choice.
-      const followPlaybook = async (p: { name: string; system?: boolean; edited?: boolean }) => {
-        const title = retitle(task, p);
+      // An automatic title follows the playbook chosen before the start (task-title.ts), recorded after the choice; on a
+      // change of playbook, only while it is still the one the replaced playbook gave.
+      const followPlaybook = async (p: { name: string; system?: boolean; edited?: boolean }, from?: { name: string; system?: boolean; edited?: boolean }) => {
+        const title = retitle(task, p, from);
         if (!title) return;
         await this.repo('nrTasks').update({ filterByTk: task.id, values: { title }, transaction: tx });
         task.title = title;
@@ -779,33 +785,37 @@ export class TaskService {
         await followPlaybook(p);
       } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStarted'), 409);
-        const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
-        w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
-        w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
-        w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
-        // The pages it changes when it leaves some of its pages to other tasks (2026-10-29), from its own pages only.
-        const identity = await this.pageIdentity(project, tx);
-        if (v.pages !== undefined) {
-          const own = new Set(pageUrlsOf({ task, work: w, pageIdentity: identity }).map(u => pageKey(u, identity))), pages = distinctPages(Array.isArray(v.pages) ? v.pages : [], undefined, identity);
-          if (!pages.length || pages.some(u => !own.has(pageKey(u, identity)))) return fail(systemMessageText('taskPages.notOwnPages'), 409);
-          w.pages = pages;
+        await this.beginFlow(project, taskId, task, w, v, tx, actor, actorName, at, event, articleRead, followPlaybook);
+      } else if (v.command === RESTART_ACTION) {
+        // Change playbook (2026-11-11, shared/playbook-change.ts): the task starts again from the first step of the
+        // playbook chosen, in one transaction, as Start does. Its brief, pages, attachments, owner, Agent and messages
+        // stay; the earlier playbook's progress is cleared, and its runs, reviews and versions stay in Activity under
+        // the attempt they belong to, which nothing read by step key or position reads again.
+        const blocked = playbookChangeBlock(w, await this.list('run', project, taskId, tx) as Run[]);
+        if (blocked) return fail(systemMessageText(PLAYBOOK_CHANGE_BLOCKED[blocked]), 409);
+        // The playbook is named: without one the start would take the task's own again.
+        await this.playbooks.get(project, v.playbookId, tx);
+        const from = w.flow!, was = w.playbook || from;
+        // The start card saves the only Agent and links the article found from the task's pages as the start is
+        // confirmed (setAgent, linkArticle before Start); here they go with the change, recorded before it.
+        if (v.agentId !== undefined) {
+          const agent = await this.agents.taskAgent(v.agentId, actor, tx, project);
+          w.agentId = agent.id; w.agentName = agent.name;
+          w.history.push({ at, actor, action: 'setAgent', stage: w.stage, step: w.step, note: agent.name });
         }
-        w.startedPages = startedPageUrls({ task, work: w, pageIdentity: identity });
-        if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
-        w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
-        await followPlaybook(p);
-        await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
-        // The repository is chosen at the start and kept (2026-10-29): the one the start card names, else the one
-        // serving the task's pages. Its later steps, pull request, release and revert use it, whatever changes in
-        // the settings afterwards. Pages that several repositories serve, or none of several, need a person's choice.
-        if (!articleTask(w)) {
-          const repos = (await this.agents.doc(project, tx)).repos, first = w.flow.stages[0];
-          const chosen = v.repoId ? repos.find(r => r.id === v.repoId) : routeRepo(repos, await this.taskPages(project, task, w, tx)).repo;
-          if (v.repoId && !chosen) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
-          if (!chosen && repos.length > 1 && first?.kind === 'agent' && !withoutRepo(w, first) && !this.p.demoConfiguration?.enabled) return fail(systemMessageText('taskExecution.chooseTaskRepository'), 409);
-          w.repo = chosen ? taskRepo(chosen) : null;
+        if (v.link !== undefined) {
+          const linked = { at, actor, action: 'linkArticle', stage: w.stage, step: w.step };
+          await this.articleFlow.link(project, taskId, w, v.link, at, tx, articleRead, linked);
+          w.history.push(linked);
         }
-        await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
+        const replaced: ReplacedPlaybook = { id: from.id, name: was.name, ...(was.system !== undefined ? { system: was.system } : {}), ...(was.edited !== undefined ? { edited: was.edited } : {}), version: from.version, attempt: attemptOf(w), stages: from.stages.map(s => ({ key: s.key, name: s.name, kind: s.kind })) };
+        event.from = replaced;
+        w.attempt = attemptOf(w) + 1;
+        w.flow = undefined; w.playbook = undefined; w.stage = 'plan'; w.stageIndex = undefined; w.step = 0; w.results = [];
+        w.release = undefined; w.delivery = undefined; w.repo = undefined; w.pages = undefined; w.startedPages = undefined;
+        w.latestRun = undefined; w.boardState = undefined; w.observeFrom = undefined; w.receipt = null; w.verification = null;
+        await this.beginFlow(project, taskId, task, w, v, tx, actor, actorName, at, event, articleRead, p => followPlaybook(p, was));
+        event.to = { id: w.playbook!.id, name: w.playbook!.name, system: w.playbook!.system === true, edited: w.playbook!.edited === true };
       } else if (v.command === 'comment') {
         // A message for the executor; the next run reads the latest ones.
         if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
@@ -844,7 +854,7 @@ export class TaskService {
           if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
             // The note says whether the other languages are translated or updated in place (2026-10-28).
             event.note = await this.articleFlow.approvePrimary(w, output, actor, at, tx);
-            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at, ...attemptField(w) }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
             if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, w, output, optional(v.release?.note, 2000), tx);
@@ -854,7 +864,7 @@ export class TaskService {
               w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
             }
             w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
-            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at, ...attemptField(w) }, tx);
             await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
             // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
             // daily analysis and later tasks know it; saved once the approval is committed.
@@ -886,13 +896,13 @@ export class TaskService {
           if (images.length) event.images = images;
           w.results[index - 1] = { ...output, rejectedAt: at };
           // Feedback is filed under the stage that redoes the work, so its next run reads it.
-          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, ...(images.length ? { images } : {}), reviewerId: actor, at }, tx);
+          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, ...(images.length ? { images } : {}), reviewerId: actor, at, ...attemptField(w) }, tx);
           await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
         }
       } else if (v.command === 'editStageOutput') {
         const { index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeSaving'), 409);
-        const artifact = await this.flowArtifact(project, taskId, producer.key, text(v.content), actor, at, tx);
+        const artifact = await this.flowArtifact(project, taskId, w, producer.key, text(v.content), actor, at, tx);
         w.results[index - 1] = artifact; event.artifactId = artifact.id;
       } else if (v.command === 'recordManual') {
         // Until the local Agent is connected, a person can make the repository change and record what was done.
@@ -904,7 +914,7 @@ export class TaskService {
             await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
           }
         }
-        const artifact = { ...(await this.flowArtifact(project, taskId, stage.key, text(v.content, 10000), actor, at, tx)), manual: true };
+        const artifact = { ...(await this.flowArtifact(project, taskId, w, stage.key, text(v.content, 10000), actor, at, tx)), manual: true };
         await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
         w.results[index] = artifact; event.artifactId = artifact.id;
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
@@ -919,7 +929,7 @@ export class TaskService {
         await this.requireMember(run.ownerId);
         const result = resultOf(recoverySummary, run.mode, (JSON.parse(run.input) as TaskInput).resultKind, run.taskId);
         if (!result.ok) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
-        const artifact = { ...(await this.flowArtifact(project, taskId, run.stepId, text(result.content), 'agent', at, tx)), runId: run.id, ...(result.report ? { report: result.report } : {}) };
+        const artifact = { ...(await this.flowArtifact(project, taskId, w, run.stepId, text(result.content), 'agent', at, tx)), runId: run.id, ...(result.report ? { report: result.report } : {}) };
         await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
         // Preserve the failed execution and its diagnostics; recovery is a separate audited action.
         await this.put(this.key('run', project, taskId, run.id), { ...run, artifactId: artifact.id }, tx);
@@ -931,11 +941,14 @@ export class TaskService {
         this.flowStage(w, v.stageKey, ['agent']);
         await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
       } else if (v.command === 'cancelRun') {
-        // A queued run is dropped at once; a running one is stopped by the Agent program, which pushes nothing.
+        // A queued run is dropped at once; a running one is stopped by the Agent program, which pushes nothing. A stop is
+        // the person's choice, not a failure (2026-11-11): the step waits to be started again, and Activity names it.
         const r = ((await this.list('run', project, taskId, tx)) as Run[]).find(x => x.id === v.runId && active(x) && Boolean(x.pluginRunId));
         if (!r) return fail(systemMessageText('taskExecution.noRunStop'), 409);
         await this.put(this.key('run', project, taskId, r.id), r.status === 'queued' ? { ...r, status: 'failed', error: 'cancelled', endedAt: at } : { ...r, cancelRequested: true }, tx);
+        if (r.status === 'queued' && w.latestRun?.id === r.id) w.latestRun = { id: r.id, status: 'failed', stopped: true };
         event.runId = r.id;
+        if (r.flowStage !== undefined && w.flow?.stages[r.flowStage]?.key === r.stepId) event.stageKey = r.stepId;
       } else if (['retryMerge', 'markMerged', 'confirmLive', 'waitLonger'].includes(v.command)) {
         const { index } = this.flowStage(w, v.stageKey, ['release']), r = w.release;
         if (!r) return fail(systemMessageText('taskExecution.nothingPublish'), 409);
@@ -1014,6 +1027,38 @@ export class TaskService {
     }
     return this.withAgent(project, data, actor);
   }
+  // Start: the playbook's snapshot, the pages and where the change goes, the repository, then its first step. The
+  // start of a task and a change of playbook (restartWithPlaybook) both run it, on a task not started or cleared.
+  private async beginFlow(project: string, taskId: string, task: any, w: Work, v: any, tx: any, actor: string, actorName: string, at: string, event: any, articleRead: any, followPlaybook: (p: { name: string; system?: boolean; edited?: boolean }) => Promise<void>) {
+    const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
+    w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
+    w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
+    // The start card's optional note (until 2026-10-24); a change of playbook without one keeps the note the task had.
+    if (typeof v.note === 'string' || v.command === 'startTask') w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
+    // The pages it changes when it leaves some of its pages to other tasks (2026-10-29), from its own pages only.
+    const identity = await this.pageIdentity(project, tx);
+    if (v.pages !== undefined) {
+      const own = new Set(pageUrlsOf({ task, work: w, pageIdentity: identity }).map(u => pageKey(u, identity))), pages = distinctPages(Array.isArray(v.pages) ? v.pages : [], undefined, identity);
+      if (!pages.length || pages.some(u => !own.has(pageKey(u, identity)))) return fail(systemMessageText('taskPages.notOwnPages'), 409);
+      w.pages = pages;
+    }
+    w.startedPages = startedPageUrls({ task, work: w, pageIdentity: identity });
+    if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
+    w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
+    await followPlaybook(p);
+    await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
+    // The repository is chosen at the start and kept (2026-10-29): the one the start card names, else the one
+    // serving the task's pages. Its later steps, pull request, release and revert use it, whatever changes in
+    // the settings afterwards. Pages that several repositories serve, or none of several, need a person's choice.
+    if (!articleTask(w)) {
+      const repos = (await this.agents.doc(project, tx)).repos, first = w.flow.stages[0];
+      const chosen = v.repoId ? repos.find(r => r.id === v.repoId) : routeRepo(repos, await this.taskPages(project, task, w, tx)).repo;
+      if (v.repoId && !chosen) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
+      if (!chosen && repos.length > 1 && first?.kind === 'agent' && !withoutRepo(w, first) && !this.p.demoConfiguration?.enabled) return fail(systemMessageText('taskExecution.chooseTaskRepository'), 409);
+      w.repo = chosen ? taskRepo(chosen) : null;
+    }
+    await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
+  }
   // Accept and start (2026-10-24 user decision): the task an accepted document is handed over to starts at once with
   // what its start card preselects (shared/task-start.ts): the playbook just chosen, the project's default Agent or the
   // only one, and the default publishing target. It runs the start card's commands, each checked as usual, after the
@@ -1077,7 +1122,7 @@ export class TaskService {
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
         // Preserve a late result as a candidate even if a human edited or replanned meanwhile.
-        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}), ...(result.article ? { article: result.article } : {}) };
+        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => sameAttempt(a, run) && a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}), ...(result.article ? { article: result.article } : {}), ...attemptField(run) };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
@@ -1088,7 +1133,8 @@ export class TaskService {
         if (failure.failureReason) fresh.failureReason = failure.failureReason;
         if (failure.partial) { fresh.partialAt = now(); await this.put(this.key('partial', run.projectId, run.taskId, run.id), { ...failure.partial, savedAt: fresh.partialAt }, tx); }
       }
-      await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
+      // A run someone stopped reads as stopped, not failed, wherever the task's latest run is shown (2026-11-11).
+      await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status, ...(fresh.error === 'cancelled' ? { stopped: true } : {}) };
       w.history.push({ at: now(), actor: 'system', action: result ? 'runSucceeded' : 'runFailed', runId: fresh.id, artifactId: fresh.artifactId, note: fresh.error });
       // A finished run hands over to the next stage; if it cannot start, the task waits for a retry.
       if (result && !stale && run.flowStage !== undefined) {
@@ -1149,7 +1195,7 @@ export class TaskService {
         if (w.cancelledAt || w.archivedAt || w.stage !== 'flow' || stage?.kind !== 'agent' || stage.key !== run.stepId || w.humanOwnerId !== owner) return;
         const failed = runs.find(r => r.id === run.id);
         if (w.latestRun?.id !== run.id || failed?.restartedAt !== restartedAt || failed.cancelRequested) return;
-        if (runs.some(active) || runs.some(r => r.stepId === run.stepId && r.autoRetry?.restartedAt === restartedAt)) return;
+        if (runs.some(active) || runs.some(r => sameAttempt(r, w) && r.stepId === run.stepId && r.autoRetry?.restartedAt === restartedAt)) return;
         const at = now();
         await this.queueAgentRun(run.projectId, run.taskId, task, w, tx, run.actor, at, { autoRetry: { of: run.id, restartedAt } });
         w.history.push({ at, actor: 'system', action: 'retryStage', stage: w.stage, step: w.step, stageKey: stage.key, runId: w.latestRun?.id, note: 'serverRestart' });

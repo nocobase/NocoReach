@@ -2,6 +2,7 @@
 import type { TaskResultSource } from '../../../shared/task-result.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { taskState } from '../../../shared/task-pending.js';
+import { sameAttempt } from '../../../shared/playbook-change.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
 import type { FlowSnapshot } from './flow';
@@ -13,7 +14,7 @@ export function text(v: unknown, max = 30000): string {
 }
 export type Step = { id: string; title: string; owner: 'human' | 'local'; instruction: string; acceptance: string };
 export type Plan = { deliverable: string; verification: string; steps: Step[] };
-export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo; article?: any; restoredFrom?: import('../../../shared/article-versions.js').RestoredFrom; edits?: import('../../../shared/article-edit.js').ArticleEdits };
+export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo; article?: any; restoredFrom?: import('../../../shared/article-versions.js').RestoredFrom; edits?: import('../../../shared/article-edit.js').ArticleEdits; attempt?: number };
 // What the local Agent program reports for a build step: the PR it opened or updated, the files and the checks.
 // release/verifyText/pages come from the Agent's change note; changes hold before/after text of changed text files.
 export type FileChange = { path: string; before: string; after: string; truncated?: boolean };
@@ -30,7 +31,7 @@ export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
   agentId?: string; agentName?: string;
-  humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
+  humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string; stopped?: boolean }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; snooze?: import('../../../shared/task-pending.js').TaskSnooze | null; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
   // The pages a task was started to change when it left some of its pages to other tasks (2026-10-29).
@@ -41,6 +42,9 @@ export type Work = {
   // The website repository the task changes, kept at its start (2026-10-29, shared/repo-routing.ts); null when it
   // changes none. Tasks started before then have none kept.
   repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
+  // How many times the playbook was changed after the start (2026-11-11, shared/playbook-change.ts): runs, reviews and
+  // versions keep the attempt they belong to. None before the first change.
+  attempt?: number;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit
@@ -60,7 +64,7 @@ export type Work = {
 export type RunEvent = { seq: number; at: string; type: string; content?: string; tool?: string; input?: unknown; output?: unknown; meta?: Record<string, unknown> };
 // A failed run keeps the official reason (`failureReason`), and `partialAt` says the content the Agent got before it
 // stopped was kept under the `partial` key (TaskService.finish).
-export type Run = { demoAgentId?: string; simulated?: boolean; transcript?: RunEvent[]; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; restartedAt?: string; autoRetry?: { of: string; restartedAt: string }; failureReason?: string; partialAt?: string; };
+export type Run = { demoAgentId?: string; simulated?: boolean; transcript?: RunEvent[]; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; restartedAt?: string; autoRetry?: { of: string; restartedAt: string }; failureReason?: string; partialAt?: string; attempt?: number; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail(systemMessageText('taskWork.planNeeds16Steps'));
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
@@ -103,7 +107,7 @@ export function makeArtifact(w: Work, content: unknown, actor: string, now: stri
 }
 export function canApplyRun(w: Work, run: Run): boolean {
   if (w.cancelledAt || run.cancelRequested) return false;
-  if (run.flowStage !== undefined) return w.stage === 'flow' && w.stageIndex === run.flowStage && w.flow?.stages[run.flowStage]?.key === run.stepId && w.humanOwnerId === run.ownerId && (w.results[run.flowStage]?.id || null) === run.baseArtifactId && w.results[run.flowStage]?.rejectedAt === run.baseRejectedAt;
+  if (run.flowStage !== undefined) return w.stage === 'flow' && sameAttempt(run, w) && w.stageIndex === run.flowStage && w.flow?.stages[run.flowStage]?.key === run.stepId && w.humanOwnerId === run.ownerId && (w.results[run.flowStage]?.id || null) === run.baseArtifactId && w.results[run.flowStage]?.rejectedAt === run.baseRejectedAt;
   return w.stage === 'work' && w.planVersion === run.planVersion && w.approvedPlanVersion === run.planVersion && w.plan?.steps[w.step]?.id === run.stepId && w.humanOwnerId === run.ownerId && (w.results[w.step]?.id || null) === run.baseArtifactId && w.results[w.step]?.rejectedAt === run.baseRejectedAt;
 }
 
