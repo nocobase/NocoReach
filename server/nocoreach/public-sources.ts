@@ -26,7 +26,15 @@ interface PublicTransport {
   signal?: AbortSignal;
   /** Bytes one read may return; 2 MB unless a caller needs a larger document (an npm package's full metadata). */
   limit?: number;
+  /** What the read asks for: pages, JSON and text unless the caller reads something else (an image). */
+  accept?: string;
+  /**
+   * Whether a redirect may lead to another host (an image's CDN). Every hop is still resolved, checked for public
+   * addresses and pinned like the first; pages and repositories stay on the host they were given.
+   */
+  anyHost?: boolean;
 }
+const ACCEPT = 'application/json,text/html,text/plain,application/xml,text/xml';
 const LIMIT = 2 * 1024 * 1024;
 const tooLarge = (limit: number) =>
   limit === LIMIT
@@ -49,7 +57,11 @@ async function downloadViaProxy(
     profile,
     u,
     {
-      headers: { 'User-Agent': 'NocoReach/0.1', 'Accept-Encoding': 'identity' },
+      headers: {
+        'User-Agent': 'NocoReach/0.1',
+        'Accept-Encoding': 'identity',
+        ...(transport.accept ? { Accept: transport.accept } : {}),
+      },
       signal: transport.signal || AbortSignal.timeout(15000),
     },
     { address, hostname: u.hostname },
@@ -58,7 +70,7 @@ async function downloadViaProxy(
   if ([301, 302, 303, 307, 308].includes(res.status)) {
     if (hops >= 3) fail(systemMessageText('publicSources.tooManyRedirects'));
     const next = new URL(res.headers.get('location') || '', u);
-    if (next.hostname !== u.hostname)
+    if (next.hostname !== u.hostname && !transport.anyHost)
       fail(systemMessageText('publicSources.pageRedirectsAnotherDomainProvide'));
     return download(next.href, hops + 1, transport);
   }
@@ -97,7 +109,7 @@ async function download(
   if (transport?.network.simulation?.enabled || await transport?.network.inDemoProject()) {
     const response = await transport.network.fetch(transport.connection, u, {
       signal: transport.signal || AbortSignal.timeout(15000),
-      headers: { Accept: 'application/json,text/html,text/plain,application/xml,text/xml' },
+      headers: { Accept: transport.accept || ACCEPT },
     });
     if (response.status !== 200) fail(systemMessageText('messages.sourceReturned', { 0: response.status }), 502);
     const body = Buffer.from(await response.arrayBuffer());
@@ -136,8 +148,7 @@ async function download(
         signal: transport?.signal,
         headers: {
           'User-Agent': 'NocoReach/0.1',
-          Accept:
-            'application/json,text/html,text/plain,application/xml,text/xml',
+          Accept: transport?.accept || ACCEPT,
           'Accept-Encoding': 'identity',
         },
         lookup: (_host, opts, cb) =>
@@ -150,7 +161,7 @@ async function download(
           res.resume();
           if (hops >= 3) return reject(new Error(systemMessageText('publicSources.tooManyRedirects')));
           const next = new URL(res.headers.location || '', u);
-          if (next.hostname !== u.hostname)
+          if (next.hostname !== u.hostname && !transport?.anyHost)
             return reject(new Error(systemMessageText('publicSources.pageRedirectsAnotherDomainProvide')));
           return download(next.href, hops + 1, transport).then(resolve, reject);
         }

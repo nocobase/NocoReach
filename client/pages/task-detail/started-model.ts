@@ -8,6 +8,7 @@ import {
   type Step,
 } from '../playbook-model';
 import type { TaskData, Work } from '../task-execution-types';
+import { namedPlaybook, type PlaybookOrigin } from '../playbook-snapshot';
 import { startedPageUrls } from './article-model';
 import { articlePageUrl } from './article-page';
 
@@ -17,7 +18,8 @@ import { articlePageUrl } from './article-page';
 /** The brief as the Agent gets it: the document an accepted task handed over, else the task's brief, as plain text. */
 export function startBrief(data: TaskData, started: boolean) {
   const handoff = data.task.evidence?.handoff as
-      { playbook?: string; content?: string } | undefined,
+      | { playbook?: string; playbookOrigin?: PlaybookOrigin; content?: string }
+      | undefined,
     plain = (handoff?.content || data.task.brief || '')
       .replace(/[#*>`_]/g, '')
       .replace(/^[ \t]+/gm, '')
@@ -25,7 +27,9 @@ export function startBrief(data: TaskData, started: boolean) {
       .trim();
   return {
     title: handoff?.content
-      ? $t('taskDetail.documentDelivered', { 0: handoff.playbook })
+      ? $t('taskDetail.documentDelivered', {
+          0: namedPlaybook(handoff.playbook, handoff.playbookOrigin),
+        })
       : $t(
           started
             ? 'taskDetail.whatAgentReceived'
