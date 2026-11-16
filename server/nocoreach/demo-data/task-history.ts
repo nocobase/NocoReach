@@ -294,7 +294,6 @@ export function taskHistory(
       decision: story.rejected ? 'requestChanges' : 'approve',
       reviewerId: reviewer,
       at: reviewAt,
-      checklist: story.rejected ? [] : ['facts'],
       ...(comment ? { comment } : {}),
     });
     work.history.push({

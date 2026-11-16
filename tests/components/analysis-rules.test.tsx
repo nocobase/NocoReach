@@ -14,6 +14,7 @@ import { setDictionary } from '#i18n';
 import english from '../../shared/i18n/en.json';
 import { RULES } from '../../server/nocoreach/analysis-rules';
 import type { View } from '#pages/analysis-rules/types';
+import type { GrowthSourcesView } from '#pages/analysis-rules/growth-sources-data';
 import { notifyPageChange } from '../../client/online-agent/page-changes';
 const { action, context, success } = vi.hoisted(() => ({
   action: vi.fn(),
@@ -58,6 +59,8 @@ vi.mock('../../client/online-agent/page-entry', () => ({
   ),
 }));
 let data: View;
+// What nrGrowthSources:view returns (step 2b): the AI's markets, and GA4 without site search.
+let growthSources: GrowthSourcesView;
 // The daily analysis workflow's schedule, as nrAnalysis:status returns it; null when there is none.
 let schedule: {
   workflowId: number;
@@ -67,6 +70,28 @@ let schedule: {
 } | null;
 beforeEach(() => {
   schedule = null;
+  growthSources = {
+    markets: {
+      list: ['jp', 'de', 'kr'],
+      by: 'ai',
+      options: [
+        'jp',
+        'de',
+        'fr',
+        'es',
+        'mx',
+        'br',
+        'kr',
+        'tw',
+        'it',
+        'nl',
+        'id',
+        'vn',
+      ],
+    },
+    siteSearch: { status: 'not-enabled', at: '2026-11-10T09:00:00Z', terms: 0 },
+    budgetUntil: null,
+  };
   setDictionary(null);
   context.allowed = true;
   context.actions = null;
@@ -94,6 +119,8 @@ beforeEach(() => {
     ) => {
       if (resource === 'nrAnalysis' && op === 'status')
         return { running: false, last: null, runs: [], schedule };
+      if (resource === 'nrGrowthSources' && op === 'view')
+        return structuredClone(growthSources);
       if (op === 'view') return structuredClone(data);
       if (op === 'save') {
         if (body.rules)
@@ -118,7 +145,8 @@ const start = async () => {
   await screen.findByText('规则');
   return ui;
 };
-const calls = (op: string) => action.mock.calls.filter((c) => c[1] === op);
+const calls = (op: string) =>
+  action.mock.calls.filter((c) => c[0] !== 'nrGrowthSources' && c[1] === op);
 test('renders full catalog without native disclosures or truncated rule titles', async () => {
   const { container } = await start();
   expect(container.querySelectorAll('[data-rule]')).toHaveLength(RULES.length);
@@ -129,6 +157,31 @@ test('renders full catalog without native disclosures or truncated rule titles',
   expect(container.querySelector('[data-rule] h4')?.className).not.toContain(
     'truncate',
   );
+});
+test('step 2b rules: a paid rule says its monthly cost, Other-language markets its markets, Site search how to turn it on', async () => {
+  data.rules = data.rules.map((r) =>
+    r.id === 'other-market' ? { ...r, costUsd: 0.45 } : r,
+  );
+  const { container } = await start();
+  const market = container.querySelector(
+    '[data-rule="other-market"]',
+  ) as HTMLElement;
+  await waitFor(() =>
+    expect(market.querySelector('[data-markets]')).not.toBeNull(),
+  );
+  expect(market.querySelector('[data-markets]')).toHaveAttribute(
+    'data-markets',
+    'jp,de,kr',
+  );
+  expect(market.querySelector('[data-cost]')?.textContent).toContain('$0.45');
+  expect(
+    container.querySelector('[data-rule="site-search"] [data-cost]'),
+  ).toBeNull();
+  expect(
+    container.querySelector(
+      '[data-rule="site-search"] [data-site-search="not-enabled"]',
+    ),
+  ).not.toBeNull();
 });
 test('manual editing validates parameters, retains all rules, and a switch does not erase custom values', async () => {
   const { container } = await start();
@@ -292,7 +345,8 @@ test('rule groups omit connection health and collection times while retaining co
   await userEvent.click(tab);
   expect(tab).toHaveAttribute('aria-selected', 'true');
   expect(section).toBeVisible();
-  expect(within(section).getAllByRole('switch')).toHaveLength(3);
+  // YouTube's three rules and Popular videos on followed topics (step 2b).
+  expect(within(section).getAllByRole('switch')).toHaveLength(4);
   expect(calls('save')).toHaveLength(0);
 });
 

@@ -1,3 +1,4 @@
+import { cms } from './cms.js';
 import { collector } from './collectors.js';
 import { community, discord, hackernews, slack, xApi } from './communities.js';
 import { github } from './github.js';
@@ -58,6 +59,7 @@ export async function worldResponse(
     community(world, u) ??
     packages(world, u) ??
     hackernews(world, u) ??
+    cms(world, u) ??
     website(world, u);
   if (!response)
     throw new WorldUnsupported(`${method} ${u.origin}${u.pathname}`);

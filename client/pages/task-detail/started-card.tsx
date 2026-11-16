@@ -58,11 +58,14 @@ export function StartedCard({
   list,
   projectId,
   taskId,
+  onChangePlaybook,
 }: {
   data: TaskData;
   list?: PlaybookList;
   projectId: number;
   taskId: string;
+  /** Change playbook (shared/playbook-change.ts), offered on the playbook's line while the playbook can change. */
+  onChangePlaybook?: () => void;
 }) {
   const w = data.work,
     [viewing, setViewing] = useState(false);
@@ -103,7 +106,13 @@ export function StartedCard({
     delivery?.kind === 'article' ? (
       <span data-started-where='article'>
         {joinNames(delivery.targets.map(targetName))} ·{' '}
-        {$t('articleTask.publishDirect')}
+        {$t(
+          delivery.isNew &&
+            data.articleTargets?.find((t) => t.id === delivery.targets[0])
+              ?.status
+            ? 'articleTask.asDraft'
+            : 'articleTask.publishDirect',
+        )}
       </span>
     ) : delivery?.repo ? (
       <span data-started-where='repo'>
@@ -146,6 +155,20 @@ export function StartedCard({
             >
               {$t('taskDetail.viewSteps')}
             </Button>
+            {onChangePlaybook && (
+              <>
+                {' '}
+                ·{' '}
+                <Button
+                  variant='link'
+                  size='sm'
+                  className='h-auto p-0 align-baseline font-normal'
+                  onClick={onChangePlaybook}
+                >
+                  {$t('taskDetail.changePlaybook')}
+                </Button>
+              </>
+            )}
           </p>
           <PlaybookDrawer
             playbook={playbook}

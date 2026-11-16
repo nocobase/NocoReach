@@ -69,6 +69,8 @@ export interface YouTubeState {
   topicVideos?: Record<string, TopicVideo>;
   /** When each followed topic (by topicKey) was last searched; a topic is searched once a week. */
   topicReads?: Record<string, string>;
+  /** When a topic's search last failed, until it is searched again (topic-weeks.ts tells it from one not made yet). */
+  topicMisses?: Record<string, string>;
 }
 /** A video found on followed topics, with the topics it came up under; likes and comments for the first few only. */
 export interface TopicVideo extends FoundVideo {
@@ -497,7 +499,8 @@ export class YouTubeSource {
       }
       // The followed topics due this week: their videos, and the details of the first few new ones.
       const topicFound = new Map<string, TopicVideo>(),
-        topicRead = new Map<string, string>();
+        topicRead = new Map<string, string>(),
+        topicMissed = new Map<string, string>();
       const topics = budget ? [] : await this.dueTopics(id, state);
       for (const topic of topics) {
         stop();
@@ -506,7 +509,10 @@ export class YouTubeSource {
         );
         if (!result) break;
         costUsd += result.costUsd;
-        if (!result.ok) continue;
+        if (!result.ok) {
+          topicMissed.set(topicKey(topic), at);
+          continue;
+        }
         topicRead.set(topicKey(topic), at);
         let detailed = 0;
         for (const video of result.videos) {
@@ -590,6 +596,14 @@ export class YouTubeSource {
           topicReads: {
             ...(current.topicReads ?? {}),
             ...Object.fromEntries(topicRead),
+          },
+          topicMisses: {
+            ...Object.fromEntries(
+              Object.entries(current.topicMisses ?? {}).filter(
+                ([key]) => !topicRead.has(key),
+              ),
+            ),
+            ...Object.fromEntries(topicMissed),
           },
           analysisVideoIds: videos.slice(0, 15).map((video) => video.id),
           verifiedAt: current.verifiedAt || fetchedAt,

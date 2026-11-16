@@ -1,10 +1,12 @@
+import { RESTART_ACTION } from './playbook-change.js';
+
 export type TaskState = 'todo' | 'doing' | 'review' | 'done';
 export type TaskWork = {
   boardState?: TaskState;
   stage?: string;
   flow?: { stages: { kind: string; key?: string }[] };
   stageIndex?: number;
-  latestRun?: { id?: string; status: string } | null;
+  latestRun?: { id?: string; status: string; stopped?: boolean } | null;
   history?: { action?: string; stageKey?: string; note?: string }[];
   release?: { state: string };
   receipt?: { note: string } | null;
@@ -35,14 +37,16 @@ export type PendingTask = {
   };
 };
 
-// Release states that wait for a person: the merge failed, the change was not seen online, or an article could not be
-// published or exported (server/nocoreach/execution/article-flow.ts).
+// Release states that wait for a person: the merge failed, the change was not seen online, an article could not be
+// published or exported, or a new article waits as a draft for someone to publish it in the CMS (2026-11-12)
+// (server/nocoreach/execution/article-flow.ts).
 const RELEASE_WAITS = [
   'merge_failed',
   'not_seen',
   'publish_failed',
   'publish_conflict',
   'export_late',
+  'awaiting_cms',
 ];
 
 /**
@@ -63,9 +67,15 @@ export function awaitingRestart(
     (e.note !== 'stopped' && e.note !== 'withdrawn')
   )
     return;
+  // Started again, finished by hand, or started over with another playbook (shared/playbook-change.ts).
   return h
     .slice(i + 1)
-    .some((x) => x.action === 'runQueued' || x.action === 'recordManual')
+    .some(
+      (x) =>
+        x.action === 'runQueued' ||
+        x.action === 'recordManual' ||
+        x.action === RESTART_ACTION,
+    )
     ? undefined
     : e.note;
 }

@@ -4,6 +4,11 @@ import {
   ACME_STORIES,
   ACME_DISCUSSIONS,
 } from '../../acme-content.js';
+import {
+  WORKSHOP_AI,
+  WORKSHOP_QUERIES,
+  WORKSHOP_SEARCH_TERMS,
+} from '../../workshop-content.js';
 import type { Media } from './media.js';
 import {
   t,
@@ -373,27 +378,30 @@ export const ACME_MEDIA: Media[] = ACME_STORIES.slice(0, 15).map((s, i) => ({
     i % 3
   ],
 }));
-export const ACME_AI: AiQuestion[] = ACME_PAGES.slice(0, 10).map((p, i) => ({
-  // The one a competitor answers for asks without naming Acme: an answer to a question naming the product names it.
-  question:
-    i === 8
-      ? t(
-          `哪个项目管理工具的${p.title.zh}做得好？`,
-          `Which project management tool handles ${p.title.en.toLowerCase()} best?`,
-        )
-      : t(
-          `Acme 如何处理${p.title.zh}？`,
-          `How does Acme handle ${p.title.en.toLowerCase()}?`,
-        ),
-  answer: t(
-    `虚构演示资料说明：${p.description.zh}`,
-    `The fictional demo explains: ${p.description.en}`,
-  ),
-  cites: i === 8 ? [] : [p.path],
-  ...(i === 8 ? { rival: 'nimbus.example' } : {}),
-  volume: 90 + i * 35,
-  topics: ['project management', 'team collaboration', 'task management'],
-}));
+export const ACME_AI: AiQuestion[] = [
+  ...ACME_PAGES.slice(0, 10).map((p, i) => ({
+    // The one a competitor answers for asks without naming Acme: an answer to a question naming the product names it.
+    question:
+      i === 8
+        ? t(
+            `哪个项目管理工具的${p.title.zh}做得好？`,
+            `Which project management tool handles ${p.title.en.toLowerCase()} best?`,
+          )
+        : t(
+            `Acme 如何处理${p.title.zh}？`,
+            `How does Acme handle ${p.title.en.toLowerCase()}?`,
+          ),
+    answer: t(
+      `虚构演示资料说明：${p.description.zh}`,
+      `The fictional demo explains: ${p.description.en}`,
+    ),
+    cites: i === 8 ? [] : [p.path],
+    ...(i === 8 ? { rival: 'nimbus.example' } : {}),
+    volume: 90 + i * 35,
+    topics: ['project management', 'team collaboration', 'task management'],
+  })),
+  WORKSHOP_AI,
+];
 export const ACME_BACKLINKS: Backlink[] = ACME_PAGES.slice(0, 9).map(
   (p, i) => ({
     domain: `project-guide-${i + 1}.example`,
@@ -673,6 +681,7 @@ const SEARCH_TERMS: Record<string, PerLanguage<readonly string[]>> = {
     zh: ['Acme CRM', 'Acme CRM 客戶管理', '如何使用 Acme CRM'],
     en: ['acme crm', 'acme crm for sales teams', 'how to use acme crm'],
   },
+  ...WORKSHOP_SEARCH_TERMS,
 };
 
 export const ACME_QUERIES: PerLanguage<Query[]> = {
@@ -699,6 +708,7 @@ export const ACME_QUERIES: PerLanguage<Query[]> = {
       impressions: 63,
       position: 9.2,
     },
+    ...WORKSHOP_QUERIES.zh,
   ],
   en: [
     {
@@ -723,6 +733,7 @@ export const ACME_QUERIES: PerLanguage<Query[]> = {
       impressions: 80,
       position: 9.2,
     },
+    ...WORKSHOP_QUERIES.en,
   ],
 };
 export const ACME_RESEARCH: PerLanguage<(Research & { topic: string })[]> = {

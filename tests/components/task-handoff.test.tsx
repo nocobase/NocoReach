@@ -61,7 +61,7 @@ const PLAYBOOKS = [
 ];
 const STAGES = [
   { key: 'analyze', name: '写大纲', kind: 'agent', mode: 'analyze' },
-  { key: 'accept', name: '审核', kind: 'review', checklist: [] },
+  { key: 'accept', name: '审核', kind: 'review' },
 ];
 const OUTLINE = {
   id: 'outline-1',

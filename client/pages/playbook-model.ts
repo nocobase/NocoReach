@@ -6,10 +6,10 @@ import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
 import {localeName} from './article-targets-api';
+import {namedPlaybook,recordedPlaybookName,type PlaybookOrigin} from './playbook-snapshot';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
-export type ChecklistItem={key:string;label:string;required:boolean};
-export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
+export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;skills?:string[]};
 export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;edited?:boolean;stages:Stage[]};
 // Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no change to the site) or changes the
 // site, its repository by PR or an article in a publishing target; you review. Publish and Track impact follow by
@@ -17,12 +17,15 @@ export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;e
 export type PlaybookKind='plan'|'build';
 export type StepKind='analyze'|'change'|'review';
 // skills: ids of the Skills an Agent step always uses (see skill-model.ts), at most 5.
-export type Step={key:string;name:string;kind:StepKind;instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
-export type Category='research'|'create'|'optimize'|'technical';
-export const getCategories = (): [Category,string][] => ([['research',$t('common.researchAnalysis')],['create',$t('playbook.contentCreation')],['optimize',$t('playbook.contentOptimization')],['technical',$t('playbook.websiteTechnical')]]);
+export type Step={key:string;name:string;kind:StepKind;instruction?:string;skills?:string[]};
+export type Category='research'|'create'|'optimize'|'technical'|'repurpose';
+export const getCategories = (): [Category,string][] => ([['research',$t('common.researchAnalysis')],['create',$t('playbook.contentCreation')],['optimize',$t('playbook.contentOptimization')],['technical',$t('playbook.websiteTechnical')],['repurpose',$t('playbook.contentRepurposing')]]);
+// Content workshop playbooks (2026-11-13) need a source and a destination the workshop gives them: a task's playbook
+// picker and a new playbook's category leave them out.
+export const startableCategories = () => getCategories().filter(([k]) => k !== 'repurpose');
 export const categoryName=(c?:Category)=>getCategories().find(([k])=>k===c)?.[1]||$t('common.other');
-export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string};
-export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean};
+export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string;form?:import('../../shared/repurpose').RepurposeForm};
+export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean;form?:import('../../shared/repurpose').RepurposeForm};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
 // A playbook's own words, before a task says where it changes things (PlaybookSteps' place words a task's steps).
 export const getStepKinds = (): Record<StepKind,{name:string;label:string;hint:string}> => ({analyze:{name:$t('common.analyze'),label:$t('playbook.agentAnalysis'),hint:$t('playbook.writesDocumentWithoutChangingSite')},change:{name:$t('common.modify'),label:$t('playbook.agentChange'),hint:$t('playbook.changesSiteOrArticle')},review:{name:$t('common.review'),label:$t('playbook.review'),hint:$t('playbook.approveRequestChangesAfterReviewing')}});
@@ -33,7 +36,7 @@ export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mo
 export const withoutRepo=(s:Stage|undefined,stages:Stage[])=>s?.kind==='agent'&&s.mode==='analyze'&&!stages.some(x=>x.kind==='agent'&&!readsOnly(x));
 // Built-in playbooks come from the server in Chinese; an unedited one is shown in the UI language (2026-10-07). Edited
 // and custom playbooks keep their own words.
-export const localizePlaybook=(p:Playbook):Playbook=>p.system&&!p.edited?{...p,name:$legacyText(p.name),description:$legacyText(p.description),steps:p.steps.map(s=>({...s,name:$legacyText(s.name),...(s.instruction?{instruction:$legacyText(s.instruction)}:{}),...(s.checklist?{checklist:s.checklist.map(c=>({...c,label:$legacyText(c.label)}))}:{})}))}:p;
+export const localizePlaybook=(p:Playbook):Playbook=>p.system&&!p.edited?{...p,name:$legacyText(p.name),description:$legacyText(p.description),steps:p.steps.map(s=>({...s,name:$legacyText(s.name),...(s.instruction?{instruction:$legacyText(s.instruction)}:{})}))}:p;
 // Keep stored responses in their original language. Translate only the display copy; an open editor keeps its own draft.
 // A playbook named by its id: from the project's list, else the built-in's own name while the list loads, never the
 // id itself (2026-10-28: Studio showed "Accept and start optimize-page" before the list arrived). Empty when unknown.
@@ -46,7 +49,7 @@ export async function playbookRequest<T>(action:'list'|'save'|'copy'|'remove'|'r
 
 // Same stage list as the server's stagesFor, for previews before a task starts.
 export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
- const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review',checklist:s.checklist||[]}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||'',...(s.skills?.length?{skills:s.skills}:{})});
+ const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review'}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||'',...(s.skills?.length?{skills:s.skills}:{})});
  return p.steps.some(s=>s.kind==='change')?[...stages,{key:'release',name:$t('common.live'),kind:'release'},{key:'observe',name:$t('common.watch'),kind:'observe'}]:stages;
 }
 // How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “发布上线”. The release step is named by the interface,
@@ -55,22 +58,30 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
 // task went back to is named Translate wherever the current step is named: the step tags, Tasks and Tasks › By Agent.
 // It is Update other languages when the article already has some of them and they get the primary's changes in place
 // (2026-10-28).
-type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:unknown;delivery?:{articleId?:string|null;locales?:string[];translateFrom?:{published?:boolean}|null};article?:{locales?:string[]}};
+type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:{article?:{draft?:boolean}}|null;delivery?:{articleId?:string|null;locales?:string[];translateFrom?:{published?:boolean}|null};article?:{locales?:string[]}};
 export const translatingStage=(s:Stage,w?:StepWork)=>Boolean(w?.delivery?.translateFrom&&!w.release&&w.stage!=='done'&&s.kind==='agent'&&w.flow?.stages[w.stageIndex||0]?.key===s.key);
-export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t(inPlaceLocales(w!.delivery,w!.article?.locales).length?'articleTask.updateStep':'articleTask.translateStep'):s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
-export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s);
+// A new article pushed to the CMS as a draft is published there by a person (2026-11-12): its release step is Publish in
+// CMS, once released (`release.article.draft`) or, before, when the task page knows its target keeps drafts (`draft`).
+export const stageName=(s:Stage,w?:StepWork,draft?:boolean)=>translatingStage(s,w)?$t(inPlaceLocales(w!.delivery,w!.article?.locales).length?'articleTask.updateStep':'articleTask.translateStep'):s.kind==='release'?$t(draft||w?.release?.article?.draft?'articleTask.publishInCms':'playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
+export const stageLabel=(s:Stage,w?:StepWork,draft?:boolean)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s,w,draft);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
 // What a task timeline says for each recorded event. Which events Activity shows is ACTIVITY_EVENTS in
 // shared/task-activity.ts, which also gives a task its latest activity time; each of them has words here.
-export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
+export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string;from?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;to?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;playbook?:PlaybookOrigin|null},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
  const s=stageName(e.stageKey);
  const snoozeTime=()=>snooze&&snooze.at===e.at?formatDateTime(snooze.until):formatDate(e.note);
+ // The playbook an event names by its stored name: a built-in one in the reader's language (playbook-snapshot.ts).
+ const playbook=()=>namedPlaybook(e.note,e.playbook);
  switch(e.action){
-  case 'startTask':return {who:$t('common.you'),text:$t('playbook.startedTask',{0:e.note?$t('playbook.playbook',{0:e.note}):''})};
+  case 'startTask':return {who:$t('common.you'),text:$t('playbook.startedTask',{0:e.note?$t('playbook.playbook',{0:playbook()}):''})};
   // An automatic title that followed the playbook chosen before the start (server task-title.ts).
   case 'retitle':return {who:$t('common.system'),text:$t('playbook.retitled',{0:e.note||''})};
-  case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
+  case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:playbook()})};
+  // Change playbook after the start (2026-11-11, shared/playbook-change.ts): the playbook replaced and the one chosen.
+  case 'restartWithPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybookFromTo',{0:recordedPlaybookName(e.from)||EMPTY,1:recordedPlaybookName(e.to)||playbook()||EMPTY})};
+  // A person stopped the Agent's step (2026-11-11): not a failure; it waits to be started again.
+  case 'cancelRun':return {who:$t('common.you'),text:$t('playbook.stoppedStep',{0:s})};
   // Snooze (2026-10-28, server execution/snooze.ts): the day and what it waits for, a new day, ended by hand, by acting
   // on the task, or come back on its day.
   case 'snoozeTask':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozedBecause',{0:snoozeTime(),1:e.comment}):$t('playbook.snoozed',{0:snoozeTime()})};
@@ -78,13 +89,13 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'unsnoozeTask':return {who:$t('common.you'),text:$t('playbook.unsnoozed')};
   case 'snoozeEnded':return {who:$t('common.you'),text:$t('playbook.snoozeEnded')};
   case 'snoozeDue':return {who:$t('common.system'),text:$t('playbook.snoozeDue')};
-  case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||"")})};
+  case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:playbook()})};
   case 'runQueued':return {who:executor,text:$t('playbook.started',{0:(e.note||$t('common.run'))})};
   case 'runSucceeded':return {who:executor,text:$t('playbook.finishedDeliveredNewVersion')};
   case 'runFailed':return {who:$t('common.system'),text:$t('playbook.runNotCompleteRetried',{0:parenthetical($legacyText(e.note))})};
   case 'flowWaiting':return {who:$t('common.system'),text:$t('playbook.nextStepNotStart',{0:$legacyText(e.note||"")})};
   // A primary language approved before its translation (2026-10-24) says so instead of handing over.
-  case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):e.note==='update'?$t('articleTask.approvedPrimaryUpdate'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
+  case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):e.note==='update'?$t('articleTask.approvedPrimaryUpdate'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:playbook()}):''})};
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
   // Another primary language before it was approved (2026-10-30): the step wrote a new version in it.
   case 'changePrimary':return {who:$t('common.you'),text:$t('playbook.primaryChanged',{0:localeName(e.note||'',getCurrentLocale())})};
@@ -97,7 +108,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'linkContent':return {who:$t('common.you'),text:$t('playbook.linkedPage')};
   case 'cancelTask':return {who:$t('common.you'),text:labelValue($t('playbook.closedTaskStoppedRun',{0:''}),$legacyText(e.note))};
   case 'archiveTask':return e.note?{who:$t('common.system'),text:$t('playbook.closedTaskValue',{0:$legacyText(e.note)})}:{who:$t('common.you'),text:$t('playbook.closedTask')};
-  // Reopened (2026-10-29): the step a task stopped halfway went back to.
+  // Reopened (2026-10-29): the step a task stopped halfway went back to; a Content workshop task goes back to its review.
+  case 'reopenReview':
   case 'unarchiveTask':return {who:$t('common.you'),text:e.stageKey?$t('playbook.reopenedTaskAt',{0:s}):$t('playbook.reopenedTask')};
   case 'prClosed':return {who:$t('common.localAgent'),text:$t('playbook.closedBranchKept',{0:e.note||'PR'})};
   case 'merged':return {who:$t('common.localAgent'),text:$t('playbook.merged',{0:e.note||'PR'})};
@@ -129,6 +141,12 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'articleExported':return {who:$t('common.system'),text:$t('taskDetail.eventArticleExported')};
   case 'articleExportLate':return {who:$t('common.system'),text:$t('taskDetail.eventArticleExportLate')};
   case 'articleDrift':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDrift')};
+  // A new article pushed to the CMS as a draft and published there by a person (2026-11-12); `note` names the target.
+  case 'articleDrafted':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDrafted',{0:e.note||''})};
+  case 'articleCmsLive':return {who:$t('common.system'),text:$t('taskDetail.eventArticleCmsLive',{0:e.note||''})};
+  case 'articleCmsPublished':return {who:$t('common.system'),text:$t('taskDetail.eventArticleCmsPublished',{0:e.note||''})};
+  case 'articleDraftMissing':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDraftMissing',{0:e.note||''})};
+  case 'repushDraft':return {who:$t('common.you'),text:$t('taskDetail.eventRepushDraft',{0:e.note||''})};
   default:return null;
  }
 }

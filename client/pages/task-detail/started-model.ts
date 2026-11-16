@@ -8,6 +8,7 @@ import {
   type Step,
 } from '../playbook-model';
 import type { TaskData, Work } from '../task-execution-types';
+import { namedPlaybook, type PlaybookOrigin } from '../playbook-snapshot';
 import { startedPageUrls } from './article-model';
 import { articlePageUrl } from './article-page';
 
@@ -17,7 +18,8 @@ import { articlePageUrl } from './article-page';
 /** The brief as the Agent gets it: the document an accepted task handed over, else the task's brief, as plain text. */
 export function startBrief(data: TaskData, started: boolean) {
   const handoff = data.task.evidence?.handoff as
-      { playbook?: string; content?: string } | undefined,
+      | { playbook?: string; playbookOrigin?: PlaybookOrigin; content?: string }
+      | undefined,
     plain = (handoff?.content || data.task.brief || '')
       .replace(/[#*>`_]/g, '')
       .replace(/^[ \t]+/gm, '')
@@ -25,7 +27,9 @@ export function startBrief(data: TaskData, started: boolean) {
       .trim();
   return {
     title: handoff?.content
-      ? $t('taskDetail.documentDelivered', { 0: handoff.playbook })
+      ? $t('taskDetail.documentDelivered', {
+          0: namedPlaybook(handoff.playbook, handoff.playbookOrigin),
+        })
       : $t(
           started
             ? 'taskDetail.whatAgentReceived'
@@ -68,6 +72,8 @@ export function startedDelivery(data: TaskData) {
       pages: a ? [{ url: url || a.slug, title: a.title || a.slug }] : [],
       targets: [d.targetId, ...(d.also || []).map((x) => x.targetId)],
       locales: d.locales || [],
+      // Started without an article: a new one, saved as a draft where its target keeps a status (2026-11-12).
+      isNew: !a,
     };
   }
   return {
@@ -105,12 +111,7 @@ export function startedPlaybook(
     .filter((s) => s.kind === 'agent' || s.kind === 'review')
     .map((s) =>
       s.kind === 'review'
-        ? {
-            key: s.key,
-            name: s.name,
-            kind: 'review',
-            checklist: s.checklist || [],
-          }
+        ? { key: s.key, name: s.name, kind: 'review' }
         : {
             key: s.key,
             name: s.name,

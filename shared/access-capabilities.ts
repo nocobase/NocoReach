@@ -69,6 +69,7 @@ export const TASK_COMMANDS = [
   'verify',
   'selectPlaybook',
   'startTask',
+  'restartWithPlaybook',
   'comment',
   'approveStage',
   'requestStageChanges',
@@ -86,6 +87,7 @@ export const TASK_COMMANDS = [
   'cancelTask',
   'archiveTask',
   'unarchiveTask',
+  'reopenReview',
   'snoozeTask',
   'unsnoozeTask',
   'confirmPublish',
@@ -93,6 +95,7 @@ export const TASK_COMMANDS = [
   'editArticleDraft',
   'restoreArticleVersion',
   'retryPublish',
+  'repushDraft',
   'rebaseArticle',
 ] as const;
 
@@ -247,6 +250,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrDataViews', ['overview', 'ranks']),
     ...list('nrDomains', ['list', 'getRun']),
     'nrGitHubTrends.view',
+    'nrGrowthSources.view',
     ...list('nrHealth', ['list', 'connected']),
     'nrInsights.summary',
     ...list('nrKeywordSuggest', ['view', 'notPicked']),
@@ -272,6 +276,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'pagePlaces',
     ]),
     'nrArticles.targets',
+    'nrWorkshop.view',
   ],
   analyze: [
     'nrAiSearch.ask',
@@ -317,10 +322,21 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrArticles.search',
     'nrArticles.match',
     'nrArticles.languages',
+    // Content workshop › Hand off to agent: one task per form, each started.
+    'nrWorkshop.create',
+    // Content workshop › Trending now › Skip, which only the workshop reads.
+    'nrWorkshop.skip',
   ],
   knowledge: [
-    ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),
+    ...list('nrKnowledge', [
+      'add',
+      'edit',
+      'remove',
+      'saveMemory',
+      'followTopic',
+    ]),
     ...list('nrKnowledgeAdd', ['suggest', 'confirm']),
+    'nrGrowthSources.setMarkets',
     ...list('nrMemory', ['sources', 'draft', 'check', 'accept', 'dismiss']),
     ...list('nrPlaybooks', ['save', 'copy', 'remove', 'restore', 'draft']),
     ...list('nrAnalysisRules', [
@@ -335,6 +351,8 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'save',
     ]),
     'nrAgent.saveDefault',
+    // Content workshop › Brand and templates.
+    'nrWorkshop.saveBrand',
     ...list('nrSkills', ['readLink', 'setEnabled']),
     'nrProjects.edit',
   ],
@@ -354,8 +372,6 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'setDefaultTarget',
       'savePlaybookTargets',
       'testTarget',
-      'detectCover',
-      'saveCover',
     ]),
   ],
   'app.projects': ['nrProjects.create'],

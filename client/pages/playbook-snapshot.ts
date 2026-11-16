@@ -45,14 +45,21 @@ const stepText = (value: string) => {
 const names = knownText(SYSTEM_PLAYBOOKS.map((p) => p.name));
 const canonicalStages = SYSTEM_PLAYBOOKS.flatMap((p) => stagesFor(p));
 const stageNames = knownText(canonicalStages.map((s) => s.name));
-// A built-in step's instruction and its review items are stored as Chinese system text too (View steps on a started
-// task showed them in Chinese in every language until 2026-11-04).
+// A built-in step's instruction is stored as Chinese system text too (View steps on a started task showed it in
+// Chinese in every language until 2026-11-04).
 const instructions = knownText(
   canonicalStages.flatMap((s) => (s.instruction ? [s.instruction] : [])),
 );
-const checklistLabels = knownText(
-  canonicalStages.flatMap((s) => (s.checklist || []).map((c) => c.label)),
-);
+// Review steps listed items to tick until 2026-11-15; a snapshot taken before still has them, which no longer count.
+const withoutChecklist = (flow: FlowSnapshot) => ({
+  ...flow,
+  stages: flow.stages.map((stage) => {
+    const { checklist: _checklist, ...rest } = stage as typeof stage & {
+      checklist?: unknown;
+    };
+    return rest;
+  }),
+});
 
 // Compare the complete JSON shape, including unknown fields, without depending on
 // property order. A version or an ID by itself is not evidence of canonical text.
@@ -100,7 +107,7 @@ function isCanonicalLegacy(
       kind: p.kind,
       version: p.version,
     }) &&
-    sameSnapshot(flow, {
+    sameSnapshot(withoutChecklist(flow), {
       id: p.id,
       name: p.name,
       version: p.version,
@@ -132,15 +139,6 @@ function localizeFlowSnapshot(
       ...(stage.instruction && instructions.has(stage.instruction)
         ? { instruction: stepText(stage.instruction) }
         : {}),
-      ...(stage.checklist
-        ? {
-            checklist: stage.checklist.map((item) =>
-              checklistLabels.has(item.label)
-                ? { ...item, label: stepText(item.label) }
-                : item,
-            ),
-          }
-        : {}),
     })),
   };
 }
@@ -164,4 +162,55 @@ export function localizeWorkSnapshots<
         }
       : {}),
   };
+}
+
+type Replaced = {
+  id?: string;
+  name?: string;
+  system?: boolean;
+  edited?: boolean;
+  stages?: { key: string; name: string; kind: string }[];
+};
+// A record from before snapshots kept their origin is built-in when it bears a built-in's id and name.
+const builtInRecord = (p: Replaced) =>
+  p.system === true
+    ? p.edited !== true
+    : p.system === undefined &&
+      p.edited === undefined &&
+      SYSTEM_PLAYBOOKS.some(
+        (x) => x.id === p.id && sameText(x.name, p.name || ''),
+      );
+
+/** A playbook a change of playbook recorded (shared/playbook-change.ts), named in the reader's language. */
+export function recordedPlaybookName(p?: Replaced | null): string {
+  if (!p?.name) return '';
+  return builtInRecord(p) && names.has(p.name) ? $legacyText(p.name) : p.name;
+}
+
+export type PlaybookOrigin = {
+  id?: string;
+  system?: boolean;
+  edited?: boolean;
+};
+/**
+ * A playbook an event or a hand-over names by its stored name (Start, the playbook chosen before it, a hand-over), in
+ * the reader's language when it is built-in and as typed when a person made it, even under a built-in's name. Records
+ * from before they kept the playbook's origin (2026-11-12) are matched by the name alone.
+ */
+export function namedPlaybook(
+  name?: string,
+  origin?: PlaybookOrigin | null,
+): string {
+  if (!name) return '';
+  if (origin) return recordedPlaybookName({ ...origin, name });
+  return names.has(name) ? $legacyText(name) : name;
+}
+
+/** The steps of the playbook a change replaced, so Activity names its steps as they were then. */
+export function recordedStages(p: Replaced) {
+  const builtIn = builtInRecord(p);
+  return (p.stages || []).map((s) => ({
+    ...s,
+    name: builtIn && stageNames.has(s.name) ? stepText(s.name) : s.name,
+  }));
 }

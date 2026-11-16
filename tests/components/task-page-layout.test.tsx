@@ -1,6 +1,7 @@
 import { formatDateTime } from '../../client/lib/format';
 import { NavigationGuardProvider } from '@nocobase/app-client';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -25,6 +26,10 @@ import {
 import { TaskDetail } from '../../client/pages/task-detail';
 import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
+import {
+  ARTICLE_AUTOSAVE_MS,
+  ARTICLE_LEASE_HEARTBEAT_MS,
+} from '../../shared/article-edit';
 import spanish from '../../shared/i18n/es-ES.json';
 import russian from '../../shared/i18n/ru-RU.json';
 
@@ -691,17 +696,18 @@ test('before the start, the message box is where the instructions go', () => {
   );
 });
 
-// 2026-11-04 user request: Add image is the chat composer's round paperclip button, and the box takes pasted and
-// dropped images without a line saying so; a limit shows only once a file breaks it.
+// 2026-11-04 user request: the attach button is the chat composer's round paperclip button, and the box takes pasted
+// and dropped images without a line saying so; a limit shows only once a file breaks it. 2026-11-15: it is Add
+// attachment, and takes documents too.
 const composerOf = () =>
   screen
     .getByRole('textbox', { name: '给执行者的话' })
     .closest<HTMLElement>('[data-slot=input-group]')!;
-test('the message box adds images with an icon-only button and shows no paste or limits line', () => {
+test('the message box adds attachments with an icon-only button and shows no paste or limits line', () => {
   mount();
   const box = composerOf();
-  const add = within(box).getByRole('button', { name: '添加图片' });
-  expect(add).toHaveAttribute('title', '添加图片');
+  const add = within(box).getByRole('button', { name: '添加附件' });
+  expect(add).toHaveAttribute('title', '添加附件');
   expect(add).toHaveTextContent(/^$/);
   expect(add.querySelector('svg')).not.toBeNull();
   expect(box).not.toHaveTextContent(/粘贴|拖入|PNG|MB|最多/);
@@ -746,8 +752,9 @@ test('a limit of the message box shows only when an added image breaks it', asyn
     fireEvent.change(picker, {
       target: { files: [new File(['x'], 'scan.bmp', { type: 'image/bmp' })] },
     });
+    // The refusal says what the box takes (2026-11-15), not only images.
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'scan.bmp 不是 PNG、JPG、WebP 或 GIF 图片。',
+      '无法添加 scan.bmp。可添加 PNG、JPG、WebP、GIF 图片，以及 Word（.docx）、Excel（.xlsx）、PDF、CSV、Markdown（.md）和纯文本（.txt）文件。',
     );
     const large = png('large.png');
     Object.defineProperty(large, 'size', { value: 21 * 1024 * 1024 });
@@ -761,10 +768,10 @@ test('a limit of the message box shows only when an added image breaks it', asyn
         getData: () => '',
       },
     });
-    expect(screen.getByRole('alert')).toHaveTextContent('每条最多 10 张图片。');
+    expect(screen.getByRole('alert')).toHaveTextContent('每条最多 10 个附件。');
     await waitFor(() => expect(uploads).toBe(10));
     expect(
-      within(box).getByRole('button', { name: '添加图片' }),
+      within(box).getByRole('button', { name: '添加附件' }),
     ).toBeDisabled();
     fireEvent.click(within(box).getByRole('button', { name: '删除图 10' }));
     fail = true;
@@ -772,6 +779,234 @@ test('a limit of the message box shows only when an added image breaks it', asyn
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'again.png 上传失败，请重试。',
     );
+  } finally {
+    Object.assign(URL, objectUrls);
+    vi.unstubAllGlobals();
+  }
+});
+
+// 2026-11-15 user request (a .txt sent with a change request was refused): a message or change request takes the
+// documents a new task takes. Uploads answer with the stored file as the server does, one id a file in the order sent.
+function stubDocumentUploads() {
+  const uploaded: string[] = [];
+  const type: Record<string, string> = {
+    md: 'text/markdown',
+    txt: 'text/plain',
+    png: 'image/png',
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST')
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      const file = (init.body as FormData).get('file') as File;
+      const id = `d${uploaded.push(file.name)}`,
+        ext = file.name.slice(file.name.lastIndexOf('.') + 1);
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          data: {
+            id,
+            filename: file.name,
+            mimeType: type[ext],
+            size: file.size,
+            contentUrl: `/uploads/task-media/${id}.${ext}`,
+          },
+        }),
+      });
+    }),
+  );
+  return uploaded;
+}
+const documentsFor = (box: HTMLElement) =>
+  within(box).getByRole('list', { name: '文档' });
+
+test('a change request in Activity takes documents as chips, keeps them with the draft and lists them once sent', async () => {
+  const user = userEvent.setup();
+  stubDocumentUploads();
+  const data = underReview('document');
+  const comment = '按附件里的意见改标题和第一段';
+  const documents = [
+    {
+      id: 'd1',
+      name: 'notes.md',
+      ref: '/uploads/task-media/d1.md',
+      type: 'text/markdown',
+      size: 7,
+    },
+    {
+      id: 'd2',
+      name: 'feedback.txt',
+      ref: '/uploads/task-media/d2.txt',
+      type: 'text/plain',
+      size: 13,
+    },
+  ];
+  const revising = structuredClone(data);
+  revising.work.revision++;
+  revising.work.stageIndex = 0;
+  revising.work.results = [
+    { ...data.work.results[0]!, rejectedAt: '2026-11-15T02:20:00Z' },
+  ];
+  revising.work.history = [
+    ...(data.work.history || []),
+    {
+      at: '2026-11-15T02:20:00Z',
+      actor: '1',
+      action: 'requestStageChanges',
+      stageKey: 'review',
+      artifactId: 'artifact-1',
+      comment,
+      documents,
+    },
+  ];
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance' || command === 'get'
+        ? revising
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : command === 'members'
+            ? [{ id: '1', name: 'Super Admin' }]
+            : [],
+    ),
+  );
+  // The task page closes and opens again inside the same signed-in session, which keeps the drafts.
+  const Page = ({ open }: { open: boolean }) => (
+    <MemoryRouter initialEntries={['/actions/1']}>
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          {open && <TaskDetail projectId={1} taskId='1' initial={data} />}
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
+    </MemoryRouter>
+  );
+  try {
+    const view = render(<Page open />);
+    const box = composerOf();
+    const picker = box.querySelector<HTMLInputElement>('input[type=file]')!;
+    fireEvent.change(picker, {
+      target: {
+        files: [
+          new File(['# Notes'], 'notes.md'),
+          new File(['Shorter title'], 'feedback.txt', { type: 'text/plain' }),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(within(box).queryByLabelText(/^正在上传/)).toBeNull(),
+    );
+    expect(documentsFor(box)).toHaveTextContent('notes.md');
+    expect(documentsFor(box)).toHaveTextContent('feedback.txt');
+    expect(screen.queryByRole('alert')).toBeNull();
+    // A file of another kind is named, with what the box takes.
+    fireEvent.change(picker, {
+      target: {
+        files: [new File(['x'], 'site.zip', { type: 'application/zip' })],
+      },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '无法添加 site.zip。可添加 PNG、JPG、WebP、GIF 图片，以及 Word（.docx）、Excel（.xlsx）、PDF、CSV、Markdown（.md）和纯文本（.txt）文件。',
+    );
+    // Leaving the task and coming back keeps them with the draft.
+    view.rerender(<Page open={false} />);
+    view.rerender(<Page open />);
+    const again = composerOf();
+    expect(documentsFor(again)).toHaveTextContent('notes.md');
+    expect(documentsFor(again)).toHaveTextContent('feedback.txt');
+    expect(
+      within(again).getByRole('button', { name: '删除 notes.md' }),
+    ).toBeTruthy();
+    await user.type(within(again).getByRole('textbox'), comment);
+    await user.click(screen.getByRole('button', { name: '发送意见' }));
+    await waitFor(() =>
+      expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(true),
+    );
+    const sent = action.mock.calls.find(([, c]) => c === 'advance')![2].body;
+    expect(sent).toMatchObject({
+      command: 'requestStageChanges',
+      comment,
+      documentIds: ['d1', 'd2'],
+    });
+    expect(sent).not.toHaveProperty('imageIds');
+    // Activity lists them under the request; each previews or downloads as a new task's attachments do.
+    const activity = screen.getByRole('region', { name: '动态' });
+    expect(
+      within(activity).getByRole('button', { name: '预览 notes.md' }),
+    ).toBeVisible();
+    expect(
+      within(activity).getByLabelText('下载 feedback.txt'),
+    ).toHaveAttribute(
+      'href',
+      expect.stringMatching(/\/uploads\/task-media\/d2\.txt$/),
+    );
+    expect(
+      within(composerOf()).queryByRole('list', { name: '文档' }),
+    ).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("an article's change request box takes documents beside images and sends them as the request's", async () => {
+  const user = userEvent.setup();
+  stubDocumentUploads();
+  const objectUrls = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+  };
+  Object.assign(URL, {
+    createObjectURL: () => 'blob:image',
+    revokeObjectURL: () => undefined,
+  });
+  const data = underReview('article');
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance' || command === 'get'
+        ? data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  try {
+    mount(data);
+    const card = screen.getByRole('region', { name: '等你处理' });
+    await user.click(within(card).getByRole('button', { name: '提修改意见' }));
+    const box = within(card)
+      .getByRole('textbox', { name: '提修改意见，整篇交给 Agent 修改' })
+      .closest<HTMLElement>('[data-slot=input-group]')!;
+    expect(
+      within(box).getByRole('button', { name: '添加附件' }),
+    ).toHaveAttribute('title', '添加附件');
+    fireEvent.change(box.querySelector('input[type=file]')!, {
+      target: {
+        files: [
+          new File(['x'], 'circled.png', { type: 'image/png' }),
+          new File(['Use the brand terms'], 'terms.txt', {
+            type: 'text/plain',
+          }),
+        ],
+      },
+    });
+    await waitFor(() => expect(within(box).queryByRole('status')).toBeNull());
+    expect(within(box).getByRole('list', { name: '图片' })).toBeTruthy();
+    expect(documentsFor(box)).toHaveTextContent('terms.txt');
+    await user.type(within(box).getByRole('textbox'), '按图 1 和附件改');
+    await user.click(
+      within(card).getByRole('button', { name: '发送给 Agent' }),
+    );
+    await waitFor(() =>
+      expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(true),
+    );
+    expect(
+      action.mock.calls.find(([, c]) => c === 'advance')![2].body,
+    ).toMatchObject({
+      command: 'requestStageChanges',
+      comment: '按图 1 和附件改',
+      imageIds: ['d1'],
+      documentIds: ['d2'],
+    });
   } finally {
     Object.assign(URL, objectUrls);
     vi.unstubAllGlobals();
@@ -808,12 +1043,7 @@ const OPTIMIZE = {
       kind: 'change',
       instruction: '读取当前页面，改标题和描述。',
     },
-    {
-      key: 'review',
-      name: '看效果并发布',
-      kind: 'review',
-      checklist: [{ key: 'goal', label: '改动符合目标', required: true }],
-    },
+    { key: 'review', name: '看效果并发布', kind: 'review' },
   ],
 };
 
@@ -830,7 +1060,6 @@ test('View steps opens the playbook over the task page, with a way to the Playbo
   const steps = within(drawer).getByRole('list', { name: '步骤' });
   expect(steps).toHaveTextContent('Agent 修改');
   expect(steps).toHaveTextContent('读取当前页面，改标题和描述。');
-  expect(steps).toHaveTextContent('确认：改动符合目标');
   expect(
     within(drawer).getByRole('link', { name: '在做法页查看或编辑' }),
   ).toHaveAttribute('href', '/playbooks?id=optimize-page');
@@ -983,6 +1212,22 @@ test('a started article keeps its brief, playbook, article with its languages an
     started.compareDocumentPosition(activity) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+});
+
+// A new article waits in a CMS that keeps a status as a draft (2026-11-12), so the start no longer says it is published.
+test('a started new article says it is saved as a draft where its target keeps a status', () => {
+  const data = articleStarted();
+  delete data.work.article;
+  data.work.delivery = { ...data.work.delivery!, articleId: null, also: [] };
+  data.articleTargets = data.articleTargets!.map((t) => ({
+    ...t,
+    status: true,
+  }));
+  mount(data);
+  const started = screen.getByRole('region', { name: STARTED });
+  expect(started.querySelector('[data-started-where]')).toHaveTextContent(
+    'NocoBase CMS · 存为草稿',
+  );
 });
 
 test('a started change of the site names its pages and the repository kept at the start; View steps shows the steps it started with', async () => {
@@ -1676,6 +1921,75 @@ test('kept edits open again with when they were saved, and Approve makes a versi
       revision: edited.work.revision,
     }),
   ]);
+});
+
+// 2026-11-12 user report: what was typed went away by itself. The lease's heartbeat reads the kept edits; one answered
+// after a newer save must not put the older text back while the page holds the article.
+test('a heartbeat answered after a newer save keeps what was typed since', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const lease = {
+      userId: '1',
+      name: 'Super Admin',
+      until: '2099-01-01T00:00:00Z',
+    };
+    const kept = (title: string) => ({
+      artifactId: 'artifact-1',
+      form: { locales: { en: { title } } },
+      ai: 0,
+      savedAt: '2026-11-04T10:20:00Z',
+      savedBy: '1',
+      savedByName: 'Super Admin',
+    });
+    let opens = 0;
+    let answer: (state: unknown) => void = () => {};
+    articleEdit.mockImplementation(
+      (o: {
+        body: { op: string; form?: { locales: { en: { title: string } } } };
+      }) => {
+        if (o.body.op === 'save')
+          return Promise.resolve({
+            lease,
+            mine: true,
+            draft: kept(o.body.form!.locales.en.title),
+          });
+        if (o.body.op !== 'open')
+          return Promise.resolve({ lease, mine: true, draft: null });
+        if (++opens === 1)
+          return Promise.resolve({
+            lease,
+            mine: true,
+            draft: kept('Kept title'),
+          });
+        // The heartbeat: read before the save below, answered after it.
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      },
+    );
+    mount(reviewArticle());
+    const card = screen.getByRole('region', { name: '等你处理' });
+    const title = within(card).getByRole('textbox', { name: '标题' });
+    await waitFor(() => expect(title).toHaveValue('Kept title'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ARTICLE_LEASE_HEARTBEAT_MS);
+    });
+    expect(opens).toBeGreaterThan(1);
+    await user.type(title, '!');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ARTICLE_AUTOSAVE_MS + 100);
+    });
+    expect(
+      articleEdit.mock.calls.filter(([o]) => o.body.op === 'save'),
+    ).not.toHaveLength(0);
+    await act(async () => {
+      answer({ lease, mine: true, draft: kept('Kept title') });
+    });
+    expect(title).toHaveValue('Kept title!');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('Discard unversioned changes takes the article back to its version', async () => {

@@ -81,7 +81,15 @@ export function writeMarkdown(editor: Editor, source: MarkdownSource): string {
   const flush = () => {
     if (!fresh.length) return;
     if (out && !out.endsWith('\n\n')) out += out.endsWith('\n') ? '\n' : '\n\n';
-    out += `${manager.serialize({ type: 'doc', content: fresh })}\n\n`;
+    // Each block one blank line from the next, without the blank lines a renderer puts around its own (a table's),
+    // which would grow the space around a table each time it is edited.
+    out += `${fresh
+      .map((node) =>
+        manager
+          .serialize({ type: 'doc', content: [node] })
+          .replace(/^\n+|\n+$/g, ''),
+      )
+      .join('\n\n')}\n\n`;
     fresh = [];
   };
   let i = 0,

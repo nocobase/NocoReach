@@ -63,14 +63,18 @@ import { SiteContent } from './site-content.js';
 import { Skills } from './skills.js';
 import { SourceDiscovery } from './source-discovery.js';
 import { StrategyService } from './strategy-service.js';
+import { WorkshopService } from './workshop.js';
 import { TaskData } from './task-data.js';
 import { TrendsSource } from './trends-source.js';
 import type { LegacyApp } from './legacy/app.js';
 import { YouTubeSource } from './youtube-source.js';
 import { XSource } from './x-source.js';
+import { TopicWeeks } from './topic-weeks.js';
+import { TopicDiscovery } from './topic-discovery.js';
+import { GrowthSources } from './growth-sources.js';
 import { TaskService } from './execution/service.js';
 import { projectId, secretKey, requireAccess, callbackUri, CALLBACK_PATH } from './policy.js';
-import { lastedTestingWeek } from './google-authorization.js';
+import { failedAttempt, lastedTestingWeek } from './google-authorization.js';
 
 const CONFIG='NOREACH_GOOGLE_';
 // The classic plugin's entry point (plugins/connections/server/index.js), run on the legacy layer: the same services in
@@ -91,6 +95,7 @@ export class Connections{
  skills: Skills;
  taskData: TaskData;
  strategy: StrategyService;
+ workshop: WorkshopService;
  dataViews: DataViews;
  siteContent: SiteContent;
  members: Members;
@@ -128,6 +133,9 @@ export class Connections{
  // Data sources › Google shows it, and the next authorization clears it (google-oauth-callback.ts). Only for the
  // authorization that was refused, never one saved while the request was out; recording never fails the read.
  async authFailed(id,refresh){try{if(this.env(secretKey(id))!==refresh)return;const link=await this.link(id);if(link&&link.get('status')!=='disconnected'&&!link.get('authFailedAt'))await this.metadata(id,{authFailedAt:new Date().toISOString()});}catch(e){this.app.logger.warn('NocoReach could not record the refused Google authorization',{message:e?.message});}}
+ // The last authorization attempt that failed (google-oauth-callback.ts), kept with its callback reason until one
+ // succeeds or the account is disconnected: Data sources › Google and Data health say when and why. Never fails.
+ async authAttemptFailed(id: string,reason: string){try{await this.metadata(id,{authAttemptFailedAt:new Date().toISOString(),authAttemptReason:reason});}catch(e){this.app.logger.warn('NocoReach could not record the failed Google authorization',{message:e?.message});}}
  async resources(id){const token=await this.token(id),analytics=[];let pageToken='';do{const url=new URL(g.GOOGLE_ENDPOINTS.analyticsAdmin+'/accountSummaries');url.searchParams.set('pageSize','200');if(pageToken)url.searchParams.set('pageToken',pageToken);const result=await this.googleJson(id,url,{...g.jsonRequest(token),signal:AbortSignal.timeout(20000)});for(const account of result.accountSummaries||[])for(const property of account.propertySummaries||[])analytics.push({id:property.property.replace('properties/',''),name:property.displayName});pageToken=result.nextPageToken||'';if(analytics.length>10000)throw new Error('Resource limit');}while(pageToken);const sites=await this.googleJson(id,g.GOOGLE_ENDPOINTS.searchConsole+'/sites',{...g.jsonRequest(token),signal:AbortSignal.timeout(20000)});return {analytics,searchConsole:(sites.siteEntry||[]).filter(s=>s.permissionLevel!=='siteUnverifiedUser').map(s=>({id:s.siteUrl,name:s.siteUrl}))};}
  googleFetch(id){return (url,init)=>this.network.fetch('google',url,init,String(id));}
  googleJson(id,url,init){return g.googleJson(url,init,this.googleFetch(id));}
@@ -191,6 +199,10 @@ export class Connections{
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   // Followed topics (2026-11-10): the sources' own topic lists move into Memory once; a failure is retried next start.
   this.followedTopics=new FollowedTopics(this);
+  // Opportunities' step 2b (2026-11-10): the followed topics' weekly counts, the AI's weekly reading of their discussions
+  // and the first batch of new data (other-language markets, site search, People also ask, link gap).
+  this.topicWeeks=new TopicWeeks(this);this.topicDiscovery=new TopicDiscovery(this);
+  this.growthSources=new GrowthSources(this);this.growthSources.register();
   // Rank checks saved while Google hid result links (late October 2026) become uncertain once; see rank-tracking.ts.
   await this.rankTracking.reviewHiddenLinks().then(marked=>{if(marked)this.app.logger.info('NocoReach marked rank checks with hidden result links uncertain',{checks:marked});},e=>this.app.logger.warn('NocoReach rank check review skipped',{message:e?.message}));
   await this.followedTopics.migrate().then(moved=>{if(moved)this.app.logger.info('NocoReach moved followed topics into Memory',{projects:moved});},e=>this.app.logger.warn('NocoReach followed topics move skipped',{message:e?.message}));
@@ -205,9 +217,10 @@ export class Connections{
   // Snoozed tasks come back on their day (execution/snooze.ts); checked every minute, so a restart misses none.
   this.snoozeCron=this.app.cronJobManager.addJob({name:'snoozeCron',cronTime:'15 * * * * *',onTick:()=>this.taskExecution.wakeSnoozed().catch(e=>this.app.logger.warn('NocoReach snooze tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();
+  this.workshop=new WorkshopService(this);this.workshop.register();
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,unreachableOf(e)?.message||systemMessageText('application.connectionRequestNotCompleteCheck'));}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
-   status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL'),authorized=Boolean(this.env(secretKey(id))),authFailedAt=authorized&&link?.get('authFailedAt')||null;return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized,authFailedAt,testingWeek:Boolean(authFailedAt)&&lastedTestingWeek(link.get('authorizedAt'),authFailedAt),connection:link?.toJSON()||null,ga4PropertyName:(await this.project(id)).analyticsPropertyName||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
+   status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL'),authorized=Boolean(this.env(secretKey(id))),authFailedAt=authorized&&link?.get('authFailedAt')||null;return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized,authFailedAt,testingWeek:Boolean(authFailedAt)&&lastedTestingWeek(link.get('authorizedAt'),authFailedAt),failedAttempt:failedAttempt(link),connection:link?.toJSON()||null,ga4PropertyName:(await this.project(id)).analyticsPropertyName||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
    configure:wrap(async function(ctx,id,v){const clientId=String(v.clientId||'').trim(),secret=ctx.request.headers['x-noreach-google-secret'];const redirectUri=callbackUri(String(v.baseUrl||''));if(!clientId.endsWith('.apps.googleusercontent.com')||!secret)ctx.throw(400,systemMessageText('application.provideValidClientIdClient'));if(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_ID')!==clientId)ctx.throw(409,systemMessageText('application.migratingExistingConnectionsReviewedBefore'));await this.variable(CONFIG+'CLIENT_ID',clientId);await this.variable(CONFIG+'CLIENT_SECRET',String(secret),true);await this.variable(CONFIG+'BASE_URL',new URL(redirectUri).origin);return {configured:true,redirectUri};}),
    authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.network.mockContext('google',String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
    callback:(ctx: LegacyContext,next: () => Promise<unknown>)=>googleOAuthCallback(this,ctx,next),
@@ -240,6 +253,10 @@ export class Connections{
   this.competitorCron=this.app.cronJobManager.addJob({name:'competitorCron',cronTime:'0 50 * * * *',onTick:()=>this.competitors.tick().catch(e=>this.app.logger.warn('NocoReach competitor tick failed',{message:e?.message}))});
   this.competitorResearchCron=this.app.cronJobManager.addJob({name:'competitorResearchCron',cronTime:'0 20 4 * * *',onTick:()=>this.competitorResearch.tick().catch(e=>this.app.logger.warn('NocoReach competitor research tick failed',{message:e?.message}))});
   this.aiQuestionsCron=this.app.cronJobManager.addJob({name:'aiQuestionsCron',cronTime:'0 40 4 * * *',onTick:()=>this.aiQuestions.tick().catch(e=>this.app.logger.warn('NocoReach AI questions tick failed',{message:e?.message}))});
+  // Step 2b: each project's discussions read by the AI once a week, the new data for Opportunities once an hour (each
+  // part only when due); both before the daily analysis reads them.
+  this.topicDiscoveryCron=this.app.cronJobManager.addJob({name:'topicDiscoveryCron',cronTime:'0 25 * * * *',onTick:()=>this.topicDiscovery.tick().catch(e=>this.app.logger.warn('NocoReach topic discovery tick failed',{message:e?.message}))});
+  this.growthSourcesCron=this.app.cronJobManager.addJob({name:'growthSourcesCron',cronTime:'0 45 * * * *',onTick:()=>this.growthSources.tick().catch(e=>this.app.logger.warn('NocoReach growth sources tick failed',{message:e?.message}))});
   this.xCron=this.app.cronJobManager.addJob({name:'xCron',cronTime:'0 55 * * * *',onTick:()=>this.xSource.tick().catch(e=>this.app.logger.warn('NocoReach X tick failed',{message:e?.message}))});
   this.chatCron=this.app.cronJobManager.addJob({name:'chatCron',cronTime:'0 15 * * * *',onTick:()=>this.chat.tick().catch(e=>this.app.logger.warn('NocoReach chat tick failed',{message:e?.message}))});
   this.memoryCron=this.app.cronJobManager.addJob({name:'memoryCron',cronTime:'0 40 * * * *',onTick:()=>this.memoryUpdates.tick().catch(e=>this.app.logger.warn('NocoReach memory tick failed',{message:e?.message}))});

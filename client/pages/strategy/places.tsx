@@ -213,14 +213,27 @@ const pathOf = (u: string) => {
 export function OpportunityTasks({
   row,
   tasks,
+  extra = [],
 }: {
   row: Row;
   tasks: Map<string, OpportunityTask>;
+  /** Content workshop's tasks made from it (v4), after its own: one opportunity, many tasks. */
+  extra?: OpportunityTask[];
 }): ReactElement {
-  const list = row.tasks.map((t) => ({
-    ...t,
-    record: tasks.get(String(t.taskId)),
-  }));
+  const list = [
+    ...row.tasks.map((t) => ({
+      ...t,
+      record: tasks.get(String(t.taskId)),
+    })),
+    ...extra
+      .filter((t) => !row.tasks.some((x) => String(x.taskId) === String(t.id)))
+      .map((t) => ({
+        taskId: t.id,
+        taskNo: t.evidence?.no,
+        part: undefined,
+        record: t,
+      })),
+  ];
   return (
     <div className='flex flex-col gap-1.5' data-opportunity-tasks=''>
       <h3 className='text-xs font-medium text-muted-foreground'>

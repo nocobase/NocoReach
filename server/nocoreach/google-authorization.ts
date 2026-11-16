@@ -18,3 +18,16 @@ export function lastedTestingWeek(
     Number.isFinite(lasted) && lasted >= EARLIEST_MS && lasted <= LATEST_MS
   );
 }
+
+/** The last authorization attempt that failed, as google-oauth-callback.ts recorded it on the Google link. */
+export function failedAttempt(
+  link: { get(field: string): unknown } | null | undefined,
+): { at: string; reason: string } | null {
+  const at = link?.get('authAttemptFailedAt');
+  if (typeof at !== 'string' || !at) return null;
+  const reason = link?.get('authAttemptReason');
+  return {
+    at,
+    reason: typeof reason === 'string' && reason ? reason : 'callback_failed',
+  };
+}

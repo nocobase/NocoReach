@@ -18,7 +18,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'demo', // Simulated runtime run ID; the persisted row remains nr-task-run.
   'page', // An opportunity's place (`page:<host/path>`), kept on a task's `evidence.part` and its proposal.
   'task', // Proposal group of a task handed off without an opportunity (`task:<id>`), kept inside the strategy snapshot.
-  'cover', // An article cover's error detail and upload idempotency key (`cover:<language or *>`), never stored.
+  'workshop', // Task key of a Content workshop start (`workshop:<user>:<request>:<item>`), kept on nrTasks.
   'ai-answer',
   'ai-cited',
   'ai-dropped',
@@ -54,6 +54,16 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'trends-kw-move',
   'trends-kw-rising',
   'x-hot',
+  // Step 2b signals (topic-signals.ts, source-signals.ts) and a forum group of questions (`forum:<topic id>`).
+  'asked-often',
+  'new-topic',
+  'other-market',
+  'people-also-ask',
+  'site-search',
+  'topic-hot',
+  'topic-rise',
+  'youtube-hot',
+  'forum',
   'connect',
   'content',
   'created',

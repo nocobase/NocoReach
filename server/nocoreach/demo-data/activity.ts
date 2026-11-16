@@ -13,6 +13,12 @@ import {
 import type { Artifact, Release, Run, RunEvent } from '../execution/model.js';
 import { projectWork } from '../execution/model.js';
 import { snoozeInstant } from '../execution/snooze.js';
+import {
+  CMS_ARTICLES,
+  DEMO_CMS,
+  type CmsArticle,
+  type CmsArticleState,
+} from './cms-article.js';
 import { demoContent, type DemoPerson } from './content.js';
 import { ACME_STORIES, ACME_DISCUSSIONS } from './acme-content.js';
 import { CRM_STORIES } from './crm-content.js';
@@ -679,6 +685,383 @@ export async function writeChangeTasks(
   });
 }
 
+/**
+ * When each blog-post task's steps happened, in days ago, by what became of its draft in Acme CMS (cms-article.ts).
+ * The waiting one was approved this morning and has been checked every 30 minutes since; the published one went out
+ * four days ago, as the CMS's answers say (world/cms.ts); the deleted one is said to be gone, and why, in a comment.
+ */
+const ARTICLE_TIMES: Record<
+  CmsArticleState,
+  {
+    start: number;
+    run: number;
+    comment: number;
+    approved: number;
+    live?: number;
+    missing?: number;
+  }
+> = {
+  draft: { start: 2.2, run: 2.1, comment: 0.98, approved: 0.26 },
+  published: { start: 7.2, run: 7.1, comment: 6.2, approved: 5.9, live: 4 },
+  deleted: { start: 3.3, run: 3.2, comment: 0.55, approved: 1.3, missing: 0.6 },
+};
+
+/** The main demo project's blog-post tasks (2026-11-12), one per article the demo's CMS holds or held. */
+async function writeArticleTasks(
+  host: DemoHost,
+  context: DemoImportContext,
+  projectId: string,
+  domain: string,
+  people: Partial<Record<DemoPerson, string>>,
+) {
+  const admin = await host.db
+    .access!.database.repository('user')
+    .findOne({ filter: { id: context.actorId } });
+  const ownerName =
+    typeof admin?.name === 'string' && admin.name
+      ? admin.name
+      : typeof admin?.username === 'string'
+        ? admin.username
+        : 'Administrator';
+  for (const article of CMS_ARTICLES)
+    await writeArticleTask(
+      host,
+      context,
+      projectId,
+      domain,
+      people,
+      ownerName,
+      article,
+    );
+}
+
+/**
+ * A blog-post task whose new article went to Acme CMS as a draft: still waiting there for someone to set its cover
+ * and publish it, published there and live, or deleted in the CMS before it went out, so the task offers Push again.
+ */
+async function writeArticleTask(
+  host: DemoHost,
+  context: DemoImportContext,
+  projectId: string,
+  domain: string,
+  people: Partial<Record<DemoPerson, string>>,
+  ownerName: string,
+  article: CmsArticle,
+) {
+  const lang = context.language === 'en-US' ? 'en' : 'zh';
+  const content = demoContent(context.language);
+  const now = context.clock.now.getTime();
+  const at = (days: number, hours = 0) =>
+    new Date(now - days * DAY + hours * HOUR).toISOString();
+  const owner = String(context.actorId);
+  const playbook = SYSTEM_PLAYBOOKS.find((p) => p.id === 'blog-post')!;
+  const flowStages = stagesFor(playbook);
+  const { task, state } = article,
+    times = ARTICLE_TIMES[state],
+    brief = task.brief;
+  const locale = lang,
+    slug = article.slug,
+    page = `https://${domain}/blog/${slug}`,
+    articleId = String(article.id);
+  const runId = randomUUID(),
+    started = times.run,
+    approved = times.approved,
+    usage = {
+      inputTokens: Math.round(
+        14000 + context.clock.sample(`input:${task.key}`) * 9000,
+      ),
+      outputTokens: Math.round(
+        3200 + context.clock.sample(`output:${task.key}`) * 1500,
+      ),
+    };
+  const draft = {
+    slug,
+    status: 'draft' as const,
+    locales: {
+      [locale]: {
+        title: article.title[lang],
+        description: article.description[lang],
+        body: article.body[lang],
+      },
+    },
+    verifyText: article.verifyText[lang],
+    summary: article.summary[lang],
+  };
+  const notes = task.notes;
+  const transcript: RunEvent[] = [
+    { seq: 1, at: at(started), type: 'status', content: 'running' },
+    {
+      seq: 2,
+      at: at(started, 0.01),
+      type: 'thinking',
+      content: text(lang, task.thinking),
+    },
+    ...task.reads.flatMap((path, i): RunEvent[] => [
+      {
+        seq: 3 + i * 2,
+        at: at(started, 0.02 + i * 0.02),
+        type: 'toolUse',
+        tool: 'WebFetch',
+        input: { url: `https://${domain}${path}` },
+      },
+      {
+        seq: 4 + i * 2,
+        at: at(started, 0.03 + i * 0.02),
+        type: 'toolResult',
+        tool: 'WebFetch',
+        output: { status: 200 },
+      },
+    ]),
+    {
+      seq: 3 + task.reads.length * 2,
+      at: at(started, 0.08),
+      type: 'text',
+      content: text(lang, notes),
+    },
+    {
+      seq: 4 + task.reads.length * 2,
+      at: at(started, 0.09),
+      type: 'usage',
+      meta: usage,
+    },
+  ];
+  const run: Run = {
+    id: runId,
+    projectId,
+    taskId: '',
+    planVersion: 0,
+    stepId: flowStages[0].key,
+    baseArtifactId: null,
+    ownerId: owner,
+    actor: owner,
+    inputVersion: 1,
+    capabilitySnapshot: ['article.draft'],
+    status: 'succeeded',
+    createdAt: at(started, -0.05),
+    startedAt: at(started),
+    endedAt: at(started, 0.1),
+    input: JSON.stringify({
+      mode: 'article',
+      title: draft.locales[locale].title,
+    }),
+    model: { llmService: 'demo', model: 'demo-agent' },
+    flowStage: 0,
+    mode: 'article',
+    simulated: true,
+    demoAgentId: 'nocoreach.runner',
+    agentName: 'NocoReach Demo Agent',
+    transcript,
+    usage,
+  };
+  const changes = [
+    `${locale}.body`,
+    `${locale}.description`,
+    `${locale}.title`,
+    'slug',
+    'status',
+  ];
+  const artifact: Artifact = {
+    id: `article-${slug}`,
+    planVersion: 0,
+    stepId: flowStages[0].key,
+    version: 1,
+    createdAt: at(started, 0.1),
+    createdBy: 'agent',
+    runId,
+    content: text(lang, notes),
+    article: {
+      targetId: DEMO_CMS.id,
+      articleId: null,
+      baseKey: null,
+      baseVersion: null,
+      draft,
+      changes,
+    },
+    approvedAt: at(approved),
+    approvedBy: owner,
+  } as Artifact;
+  run.artifactId = artifact.id;
+  const pushed = at(approved, 0.02),
+    checked = at(0, -0.3),
+    liveAt = times.live === undefined ? null : at(times.live),
+    // Every 30 minutes while it waited in the CMS.
+    checks = Math.floor(((approved - (times.live ?? 0)) * 24 - 0.3) * 2);
+  const work = projectWork({});
+  Object.assign(work, {
+    stage: liveAt ? 'done' : 'flow',
+    note: content.taskNote,
+    humanOwnerId: owner,
+    humanOwnerName: ownerName,
+    playbookId: 'blog-post',
+    flow: {
+      id: 'blog-post',
+      name: playbook.name,
+      version: 3,
+      stages: flowStages.map((s) =>
+        s.kind === 'agent' ? { ...s, instruction: text(lang, brief) } : s,
+      ),
+    },
+    // Live, it is past the release into watching the results.
+    stageIndex: liveAt ? 3 : 2,
+    ...(liveAt
+      ? {
+          observeFrom: context.clock.dateAgo(times.live!),
+          receipt: {
+            note: draft.summary,
+            url: page,
+            recordedAt: liveAt,
+            recordedBy: 'system',
+          },
+        }
+      : {}),
+    delivery: {
+      kind: 'article',
+      targetId: DEMO_CMS.id,
+      articleId,
+      sourceKey: null,
+    },
+    latestRun: { id: runId, status: run.status },
+    results: [artifact],
+    release: {
+      state: liveAt ? 'live' : 'awaiting_cms',
+      ...(liveAt ? { liveAt } : {}),
+      note: draft.summary,
+      pages: [page],
+      verifyText: draft.verifyText,
+      article: {
+        artifactId: artifact.id,
+        targetId: DEMO_CMS.id,
+        articleId,
+        key: randomUUID(),
+        slug,
+        draft: true,
+        published: {
+          articleId,
+          slug,
+          version: pushed,
+          written: changes.filter((c) => c !== 'status'),
+          at: pushed,
+        },
+        ...(liveAt
+          ? {
+              state: 'published',
+              cms: { at: liveAt, status: 'published' },
+              cmsLive: { at: liveAt, by: 'system' },
+            }
+          : {
+              state: 'drafted',
+              cms: {
+                at: checked,
+                status: state === 'deleted' ? 'missing' : 'draft',
+                nextAt: at(0, 0.2),
+              },
+            }),
+      },
+      mergedAt: pushed,
+      checks,
+    } as Release,
+  });
+  const person = task.comment.person;
+  work.history = [
+    {
+      at: at(times.start),
+      actor: owner,
+      actorName: ownerName,
+      action: 'startTask',
+      note: playbook.name,
+    },
+    {
+      at: at(started, -0.05),
+      actor: owner,
+      action: 'runQueued',
+      runId,
+      note: flowStages[0].name,
+    },
+    { at: run.startedAt!, actor: 'system', action: 'runStarted', runId },
+    {
+      at: artifact.createdAt,
+      actor: 'system',
+      action: 'runSucceeded',
+      runId,
+      artifactId: artifact.id,
+      stageKey: flowStages[0].key,
+    },
+    {
+      at: at(times.comment),
+      actor: people[person] ?? `demo-${person}`,
+      actorName: content.people[person].name,
+      action: 'comment',
+      comment: text(lang, task.comment.text),
+    },
+    {
+      at: artifact.approvedAt!,
+      actor: owner,
+      action: 'approveStage',
+      stageKey: flowStages[1].key,
+      artifactId: artifact.id,
+    },
+    {
+      at: pushed,
+      actor: 'system',
+      action: 'articleDrafted',
+      note: DEMO_CMS.name,
+    },
+    ...(liveAt
+      ? [
+          {
+            at: liveAt,
+            actor: 'system',
+            action: 'articleCmsLive',
+            note: DEMO_CMS.name,
+          },
+        ]
+      : []),
+    ...(times.missing === undefined
+      ? []
+      : [
+          {
+            at: at(times.missing),
+            actor: 'system',
+            action: 'articleDraftMissing',
+            note: DEMO_CMS.name,
+          },
+        ]),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  await host.db.sequelize.transaction(async (transaction: unknown) => {
+    const row = await host.db.getRepository('nrTasks').create({
+      values: {
+        projectId,
+        taskKey: `nocoreach-demo:${projectId}:${task.key}`,
+        title: text(lang, task.title),
+        brief: `${content.notice}${text(lang, brief)}`,
+        status: liveAt ? '已完成' : '待确认',
+        evidence: { simulated: true, demoEdition: 'nocoreach-demo', work },
+        createdAt: at(times.start),
+        updatedAt: liveAt ?? checked,
+      },
+      transaction,
+    });
+    const taskId = String(row.id),
+      repo = host.db.getRepository('nrSnapshots');
+    await repo.create({
+      values: {
+        key: `nr-task-artifact:${projectId}:${taskId}:${artifact.id}`,
+        payload: artifact,
+      },
+      transaction,
+    });
+    await repo.create({
+      values: {
+        key: `nr-task-run:${projectId}:${taskId}:${run.id}`,
+        payload: { ...run, taskId },
+      },
+      transaction,
+    });
+  });
+}
+
+const text = (lang: 'zh' | 'en', value: L) => value[lang];
+
 interface Exchange {
   ask: L;
   answer: L;
@@ -1058,6 +1441,8 @@ export async function writeActivity(
   which: 'main' | 'second' = 'main',
 ): Promise<void> {
   await writeChangeTasks(host, context, projectId, domain, people);
+  if (which === 'main')
+    await writeArticleTasks(host, context, projectId, domain, people);
   // Earlier conversations ran on the demo's own simulated model, never the global default.
   const service = host.demoModels?.serviceName;
   const model = service ? { modelService: service, model: 'demo-chat' } : null;

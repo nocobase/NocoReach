@@ -16,13 +16,11 @@ export const EN_US: DemoContent = {
       name: 'Draft and human review',
       draft: 'Prepare the draft',
       review: 'Check facts and scope',
-      checklist: 'Check sources, permissions and open questions',
     },
     research: {
       name: 'Research and human review',
       draft: 'Collect the research',
       review: 'Check facts and scope',
-      checklist: 'Check sources, permissions and open questions',
     },
   },
   sourcePage: 'Demo project page',

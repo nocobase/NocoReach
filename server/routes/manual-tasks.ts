@@ -57,7 +57,10 @@ function creator(context: Pick<Context<AuthEnv>, 'get'>): TaskCreator {
 const mediaQuery = z.strictObject({
   projectId: z.string().regex(/^[1-9]\d{0,15}$/),
   requestId: z.uuid(),
-  /** A started task the image is for: a message's image or one pasted into Edit directly (images only). */
+  /**
+   * A started task the file is for: an image or a document sent with a message or change request, or an image placed
+   * in its article (no videos).
+   */
   taskId: z.string().regex(/^\d+$/).optional(),
 });
 const fileParam = z.strictObject({ fileId: z.uuid() });
@@ -236,9 +239,9 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
     },
     describeRoute({
       tags: ['NocoReach Tasks'],
-      summary: 'Upload an image or video for a task draft',
+      summary: 'Upload an image, video or document for a task draft',
       description:
-        'With taskId, an image for a started task: sent with a message or pasted into Edit directly, which links it.',
+        'With taskId, an image or document for a started task: sent with a message or change request, or an image placed in its article, which links it. A started task takes no videos.',
       operationId: 'uploadManualTaskMedia',
       responses: {
         201: dataResponse(TaskMediaView),
@@ -271,6 +274,49 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
             input.requestId,
             context.req.valid('form').file,
             input.taskId,
+          ),
+        },
+        201,
+      );
+    },
+  );
+  routes.post(
+    '/nocoreachTasks/media/import',
+    describeRoute({
+      tags: ['NocoReach Tasks'],
+      summary: 'Copy an image from its address into a started task',
+      description:
+        "For an image pasted into an article from another site: reads the public HTTPS (or http, read over HTTPS) address through the project's website egress, every redirect hop checked for a public address, and keeps a PNG, JPEG, WebP or GIF of at most 20 MiB as the caller's upload, linked like one when the edit is saved. 503 when the address cannot be read; 400 when it is not such an image.",
+      operationId: 'importManualTaskImage',
+      responses: {
+        201: dataResponse(TaskMediaView),
+        ...apiErrorResponses,
+        429: apiErrorResponse(429),
+        503: apiErrorResponse(503),
+      },
+      ...cliRoute(false),
+    }),
+    apiValidator(
+      'query',
+      mediaQuery.extend({ taskId: z.string().regex(/^\d+$/) }),
+    ),
+    apiValidator(
+      'json',
+      z.strictObject({
+        url: z.url({ protocol: /^https?$/ }).max(4096),
+      }),
+    ),
+    async (context) => {
+      const input = context.req.valid('query');
+      return context.json(
+        {
+          data: await service().importImage(
+            creator(context),
+            input.projectId,
+            input.requestId,
+            context.req.valid('json').url,
+            input.taskId,
+            context.req.raw.signal,
           ),
         },
         201,

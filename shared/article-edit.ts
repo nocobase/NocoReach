@@ -15,7 +15,6 @@ export const articleEditFormSchema = articleDraftSchema.pick({
   slug: true,
   status: true,
   locales: true,
-  cover: true,
 });
 export type ArticleEditForm = z.infer<typeof articleEditFormSchema>;
 
@@ -30,6 +29,13 @@ export type ArticleEditDraft = {
   savedBy: string;
   savedByName: string;
 };
+
+/**
+ * The unversioned changes without the form: who saved them last, when, and how many AI rewrites they hold. Activity
+ * names them for everyone who may read the task (2026-11-12 user report: a colleague's changes after version 4 showed
+ * nowhere in Activity and were taken for lost), including people who may not edit and so never open the article.
+ */
+export type UnversionedEdits = Omit<ArticleEditDraft, 'form'>;
 
 /** Who holds the article for editing, until when (ISO time). */
 export type ArticleEditLease = { userId: string; name: string; until: string };
@@ -54,15 +60,8 @@ export const articleEditInput = z
   .strict();
 export type ArticleEditInput = z.input<typeof articleEditInput>;
 
-/**
- * How many places of a version AI rewrote and the person changed by hand, and what happened to its cover (2026-11-05),
- * for its Activity line.
- */
-export type ArticleEdits = {
-  ai: number;
-  hand: number;
-  cover?: 'added' | 'replaced' | 'removed';
-};
+/** How many places of a version AI rewrote and the person changed by hand, for its Activity line. */
+export type ArticleEdits = { ai: number; hand: number };
 
 /** One rewrite of a selection in the article body, with the turns before it on the same selection. */
 export const articleRewriteInput = z
