@@ -94,7 +94,8 @@ export const agentsOverridesZhCN: TranslationOverrides = {
     },
     models: {
       title: '模型服务',
-      description: '每日分析和对话栏用这里的模型，按调用量付费给服务商。',
+      description:
+        '每日分析、编辑与建议和对话栏用这里的模型，按调用量付费给服务商。',
     },
     defaultModel: {
       description:
@@ -153,7 +154,7 @@ export const agentsOverridesEnUS: TranslationOverrides = {
     models: {
       title: 'Model services',
       description:
-        'Daily analysis and the chat panel use the models here; the provider bills each call.',
+        'Daily analysis, editing and suggestions, and the chat panel use the models here; the provider bills each call.',
     },
     defaultModel: {
       description:
