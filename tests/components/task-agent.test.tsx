@@ -577,7 +577,8 @@ test('images pasted into the message box are numbered in order and go with the c
         .map((e) => e.textContent),
     ).toEqual(['图 1', '图 2']);
     expect(within(images).getByText('c.png')).toBeVisible();
-    // Only PNG, JPG, WebP and GIF are taken.
+    // A message takes PNG, JPG, WebP and GIF images and a new task's documents (2026-11-15); an SVG is neither, and
+    // the refusal names what it accepts.
     fireEvent.paste(box, {
       clipboardData: {
         files: [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })],
@@ -585,7 +586,7 @@ test('images pasted into the message box are numbered in order and go with the c
       },
     });
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'logo.svg 不是 PNG、JPG、WebP 或 GIF 图片。',
+      '无法添加 logo.svg。可添加 PNG、JPG、WebP、GIF 图片，以及 Word（.docx）、Excel（.xlsx）、PDF、CSV、Markdown（.md）和纯文本（.txt）文件。',
     );
     await user.type(box, '图 1 圈出的这段删掉，图 2 换进去。');
     await user.click(screen.getByRole('button', { name: '发送意见' }));
