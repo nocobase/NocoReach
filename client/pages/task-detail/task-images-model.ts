@@ -69,6 +69,24 @@ async function media(path: string, init: RequestInit) {
   return response;
 }
 
+/** The image a media request stored, by the address a message and an article keep (without the app's base path). */
+async function storedImage(response: Response): Promise<MessageImage> {
+  const { data } = (await response.json()) as { data: TaskMediaView };
+  const stored = taskImageOf(data.contentUrl);
+  return {
+    id: data.id,
+    name: data.filename,
+    ref: taskImageRef(data.id, stored?.ext),
+  };
+}
+
+const mediaQuery = (scope: TaskImageScope, requestId: string) =>
+  new URLSearchParams({
+    projectId: String(scope.projectId),
+    requestId,
+    taskId: scope.taskId,
+  });
+
 /** Upload one image for the task; the server keeps it unlinked until a message or an edit uses it. */
 export function useImageUpload() {
   const scope = useContext(TaskImageContext);
@@ -76,21 +94,30 @@ export function useImageUpload() {
     if (!scope) throw new Error('Task images need the task page.');
     const body = new FormData();
     body.set('file', file);
-    const query = new URLSearchParams({
-      projectId: String(scope.projectId),
-      requestId,
-      taskId: scope.taskId,
-    });
-    const { data } = (await (
-      await media(`?${query}`, { method: 'POST', body })
-    ).json()) as { data: TaskMediaView };
-    // The stored file's address without the application's base path: what a message and an article keep.
-    const stored = taskImageOf(data.contentUrl);
-    return {
-      id: data.id,
-      name: data.filename,
-      ref: taskImageRef(data.id, stored?.ext),
-    };
+    return storedImage(
+      await media(`?${mediaQuery(scope, requestId)}`, { method: 'POST', body }),
+    );
+  };
+}
+
+/**
+ * Copy an image pasted from another site into the task (2026-11-12): the server reads its address and keeps it as an
+ * upload, like one picked from a file.
+ */
+export function useImageImport() {
+  const scope = useContext(TaskImageContext);
+  return async (url: string, requestId: string): Promise<MessageImage> => {
+    if (!scope) throw new Error('Task images need the task page.');
+    return storedImage(
+      await media(`/import?${mediaQuery(scope, requestId)}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      }),
+    );
   };
 }
 

@@ -305,3 +305,48 @@ test('restoring a version clears the changes kept on the one it replaces', async
   });
   expect(rows(f, 'article-edit')).toHaveLength(0);
 });
+
+// 2026-11-12 user report: an image pasted into the article showed broken after a refresh. An upload is readable only
+// in the uploader's session for a day until linked; a save links the person's own images, without a revision.
+test('a save links the images the form shows and its cover, without a revision; one that cannot be linked leaves the save', async () => {
+  const f = await articleFixture();
+  const { v1 } = await underReview(f);
+  const edit = editor(f, () => v1.id);
+  const mine = '11111111-1111-4111-8111-111111111111',
+    theirs = '22222222-2222-4222-8222-222222222222',
+    cover = '33333333-3333-4333-8333-333333333333';
+  const linked: string[][] = [];
+  f.s.p.taskAttachments = {
+    linkImages: async (_connection, actor, project, taskId, ids) => {
+      if (ids.includes(theirs))
+        throw Object.assign(new Error('unavailable'), {
+          reason: 'TASK_IMAGE_UNAVAILABLE',
+        });
+      linked.push([actor, project, taskId, ...ids]);
+      return ids.map((id) => ({
+        id,
+        name: 'board.png',
+        ref: `/uploads/task-media/${id}.png`,
+      }));
+    },
+  };
+  const revision = (await f.view()).work.revision;
+  const edited = {
+    ...form(
+      `# 你好\n\n![Board](/uploads/task-media/${mine}.png)\n\n![Other](/uploads/task-media/${theirs}.png)`,
+    ),
+    cover: { '*': `/uploads/task-media/${cover}.jpg` },
+  };
+  const saved = await edit('save', { form: edited });
+  expect(saved.draft.form.locales.zh.body).toContain(theirs);
+  expect(linked).toEqual([
+    ['1', '1', '1', mine],
+    ['1', '1', '1', cover],
+  ]);
+  const after = await f.view();
+  expect(after.work.revision).toBe(revision);
+  expect(after.work.images).toEqual([mine, cover]);
+  // Saved again: what is linked is not linked twice.
+  await edit('save', { form: edited });
+  expect(linked).toHaveLength(2);
+});
