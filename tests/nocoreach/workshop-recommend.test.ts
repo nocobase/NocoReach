@@ -233,4 +233,50 @@ describe('Trending now', () => {
       },
     ]);
   });
+
+  it('reads where a discussion is from its link when its row names no source', () => {
+    const g = growth('hot-discussion', [['googlePosition', 1]], {
+      evidence: {
+        columns: [{ key: 'discussion' }, { key: 'position' }, { key: 'date' }],
+        rows: [
+          {
+            discussion: 'Tried five tools, which one stayed?',
+            position: 1,
+            date: '2026-11-15',
+            url: 'https://www.reddit.com/r/projectmanagement/comments/abc/tried_five/',
+          },
+          {
+            discussion: 'Sprint reviews became status meetings',
+            position: 4,
+            url: 'https://www.reddit.com/r/agile/',
+          },
+          {
+            discussion: 'Somewhere else',
+            position: 5,
+            url: 'https://example.com/t/1',
+          },
+        ],
+        total: 3,
+        unit: 'discussions',
+        link: '/data/reddit?group=topics',
+      },
+    });
+    expect(hotDiscussions(g)).toEqual([
+      {
+        title: 'Tried five tools, which one stayed?',
+        url: 'https://www.reddit.com/r/projectmanagement/comments/abc/tried_five/',
+        logo: 'reddit',
+        place: 'r/projectmanagement',
+        subreddit: 'projectmanagement',
+        date: '2026-11-15',
+      },
+      {
+        title: 'Sprint reviews became status meetings',
+        url: 'https://www.reddit.com/r/agile/',
+        logo: 'reddit',
+        place: 'r/agile',
+        subreddit: 'agile',
+      },
+    ]);
+  });
 });

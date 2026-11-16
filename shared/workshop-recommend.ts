@@ -254,13 +254,38 @@ export type HotDiscussion = {
   heat?: GrowthText;
   date?: string;
 };
+/**
+ * Where a discussion is, from its link, for rows that name no source: a Reddit thread growth lists the week's threads
+ * by their Google position alone (topic-signals.ts hot-discussion), each linking to its subreddit or thread.
+ */
+function sourceOfLink(url: unknown): string {
+  let u: URL;
+  try {
+    u = new URL(String(url));
+  } catch {
+    return '';
+  }
+  const host = u.hostname.replace(/^(www|old|m)\./, '');
+  if (host === 'reddit.com') {
+    const sub = /^\/r\/(\w+)/.exec(u.pathname)?.[1];
+    return sub ? `Reddit · r/${sub}` : 'Reddit';
+  }
+  if (host === 'news.ycombinator.com') return 'Hacker News';
+  if (host === 'youtube.com' || host === 'youtu.be') return 'YouTube';
+  if (host === 'github.com') return 'GitHub';
+  return '';
+}
+
 export function hotDiscussions(growth: unknown): HotDiscussion[] {
   const g = growthOf(growth);
   const keys = new Set(g?.evidence?.columns.map((c) => c.key) || []);
-  if (!g?.evidence || !keys.has('discussion') || !keys.has('source')) return [];
+  if (!g?.evidence || !keys.has('discussion')) return [];
   return g.evidence.rows.flatMap((r): HotDiscussion[] => {
     const title = typeof r.discussion === 'string' ? r.discussion : '',
-      source = typeof r.source === 'string' ? r.source : '';
+      source =
+        typeof r.source === 'string' && r.source
+          ? r.source
+          : sourceOfLink(r.url);
     if (!title || !source) return [];
     const [name, where = ''] = source.split(' · '),
       logo = /^reddit$/i.test(name)

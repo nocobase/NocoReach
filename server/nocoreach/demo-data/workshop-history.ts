@@ -36,6 +36,12 @@ import {
 import type { L } from './world/script/types.js';
 
 const DAY = 86_400_000;
+/** The CRM project's Trending now opportunities, all skipped in its Content workshop (growth-briefs.ts keys). */
+export const CRM_SKIPPED = [
+  'crm-growth-ai-crm',
+  'crm-growth-automation-topic',
+  'crm-growth-pipeline-math',
+];
 const MINUTE = 60_000;
 
 const PLAYBOOK_NAMES: Record<string, string> = {
@@ -84,18 +90,19 @@ export async function writeWorkshop(
       payload: { revision: 1, community, updatedAt: at(9) },
     },
   });
-  // The CRM project's one Trending now opportunity ("ai crm", growth-briefs.ts crmGrowthBriefs) was skipped in the
-  // workshop two days ago, so its Content workshop opens on Library alone; Opportunities still lists it.
+  // The CRM project's Trending now opportunities (growth-briefs.ts crmGrowthBriefs: "ai crm", the "workflow automation"
+  // topic and the pipeline math story) were skipped in the workshop two days ago, so its Content workshop opens on
+  // Library alone; Opportunities still lists them.
   await snapshots.create({
     values: {
       key: `workshop-skips:${data.projects!.second}`,
       payload: {
-        skipped: {
-          'editorial-opportunity-crm-growth-ai-crm': {
-            at: at(2),
-            by: String(context.actorId),
-          },
-        },
+        skipped: Object.fromEntries(
+          CRM_SKIPPED.map((key) => [
+            `editorial-opportunity-${key}`,
+            { at: at(2), by: String(context.actorId) },
+          ]),
+        ),
       },
     },
   });
