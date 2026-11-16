@@ -71,7 +71,8 @@ it('is disabled once a message has all the files it takes', () => {
 
 describe('which files each input takes', () => {
   it('lets a message or change request take documents and say which types it accepts otherwise', () => {
-    for (const ok of [
+    // Names any accepted type that is refused.
+    const fine = [
       file('shot.png', 'image/png'),
       file('notes.md'),
       file('notes.markdown', 'text/markdown'),
@@ -80,8 +81,10 @@ describe('which files each input takes', () => {
       file('figures.xlsx'),
       file('report.pdf', 'application/pdf'),
       file('rows.csv', 'text/csv'),
-    ])
-      expect(messageFileProblem(ok, 0, 10), ok.name).toBe('');
+    ];
+    expect(
+      fine.filter((f) => messageFileProblem(f, 0, 10)).map((f) => f.name),
+    ).toEqual([]);
     const accepted =
       'A message accepts PNG, JPG, WebP and GIF images, and Word (.docx), Excel (.xlsx), PDF, CSV, Markdown (.md) and plain text (.txt) files.';
     expect(messageFileProblem(file('demo.mp4', 'video/mp4'), 0, 10)).toBe(
