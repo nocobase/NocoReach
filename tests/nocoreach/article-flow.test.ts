@@ -2385,19 +2385,44 @@ test('release note: notes copied from a summary before are written again once by
 function fakeTaskImages() {
   const files = new Map<
     string,
-    { name: string; bytes: Buffer; taskId: string | null }
+    { name: string; bytes: Buffer; taskId: string | null; type?: string }
   >();
+  const extOf = (name: string) => name.slice(name.lastIndexOf('.') + 1);
   return {
     files,
-    add(name: string) {
+    add(name: string, type?: string) {
       const id = randomUUID();
       files.set(id, {
         name,
         bytes: Buffer.from(`bytes of ${name}`),
         taskId: null,
+        ...(type ? { type } : {}),
       });
       return id;
     },
+    // Documents sent with a message or change request (2026-11-15): linked as images are, only documents.
+    linkDocuments: async (
+      _conn,
+      _actor,
+      _project,
+      taskId: string,
+      ids: string[],
+    ) =>
+      ids.map((id) => {
+        const file = files.get(id);
+        if (!file?.type || (file.taskId && file.taskId !== taskId))
+          throw Object.assign(new Error('unavailable'), {
+            reason: 'TASK_FILE_UNAVAILABLE',
+          });
+        file.taskId = taskId;
+        return {
+          id,
+          name: file.name,
+          ref: `/uploads/task-media/${id}.${extOf(file.name)}`,
+          type: file.type,
+          size: file.bytes.length,
+        };
+      }),
     linkImages: async (
       _conn,
       _actor,
@@ -2407,7 +2432,7 @@ function fakeTaskImages() {
     ) =>
       ids.map((id) => {
         const file = files.get(id);
-        if (!file || (file.taskId && file.taskId !== taskId))
+        if (!file || file.type || (file.taskId && file.taskId !== taskId))
           throw Object.assign(new Error('unavailable'), {
             reason: 'TASK_IMAGE_UNAVAILABLE',
           });
@@ -2422,9 +2447,9 @@ function fakeTaskImages() {
               {
                 id,
                 name: file.name,
-                type: 'image/png',
+                type: file.type ?? 'image/png',
                 size: file.bytes.length,
-                ext: 'png',
+                ext: extOf(file.name),
                 read: async () => file.bytes,
               },
             ]
@@ -2522,6 +2547,128 @@ test('message images reach the run numbered; publishing uploads only the images 
     content_cn: `# 你好\n\nNocoBase 3 的工作台如下图所示。\n\n![NocoBase 3 工作台](${address})`,
   });
   expect(d.work.imageUrls).toEqual({ cms: { [workspace]: address } });
+});
+
+test('a change request’s documents go back to the Agent with it, apart from its images, and reach the redo’s materials', async () => {
+  const f = await fixture();
+  const files = fakeTaskImages();
+  f.s.p.taskAttachments = files;
+  const shot = files.add('circled.png'),
+    terms = files.add('新建文本文档 (2).txt', 'text/plain'),
+    outline = files.add('outline.md', 'text/markdown');
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'First version.',
+    article: {
+      locales: { zh: { title: '你好，世界' } },
+      verifyText: '你好',
+    },
+  });
+  let d = await f.view();
+  const comment = '图 1 圈的段落删掉；术语按附件统一，结构按 outline.md。';
+  const request = {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    comment,
+  };
+  // At most ten files a message, images and documents together, each once, and each of its own kind.
+  for (const [values, status] of [
+    [
+      {
+        imageIds: [shot],
+        documentIds: Array.from({ length: 10 }, () => randomUUID()),
+      },
+      400,
+    ],
+    [{ imageIds: [shot], documentIds: [shot] }, 400],
+    [{ documentIds: ['not-an-id'] }, 400],
+    [{ documentIds: 'x' }, 400],
+    [{ documentIds: [shot] }, 409],
+    [{ imageIds: [terms] }, 409],
+  ] as const)
+    await expect(
+      f.command('requestStageChanges', { ...request, ...values }),
+    ).rejects.toMatchObject({ status });
+  d = await f.command('requestStageChanges', {
+    ...request,
+    imageIds: [shot],
+    documentIds: [terms, outline],
+  });
+  const ref = (id: string, ext: string) => `/uploads/task-media/${id}.${ext}`;
+  const sent = [
+    {
+      id: terms,
+      name: '新建文本文档 (2).txt',
+      ref: ref(terms, 'txt'),
+      type: 'text/plain',
+      size: Buffer.byteLength('bytes of 新建文本文档 (2).txt'),
+    },
+    {
+      id: outline,
+      name: 'outline.md',
+      ref: ref(outline, 'md'),
+      type: 'text/markdown',
+      size: Buffer.byteLength('bytes of outline.md'),
+    },
+  ];
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'requestStageChanges',
+    comment,
+    images: [{ id: shot, name: 'circled.png', ref: ref(shot, 'png') }],
+    documents: sent,
+  });
+  // Readable as the task is; never among the images an article may show.
+  expect(d.work.documents).toEqual([terms, outline]);
+  expect(d.work.images).toEqual([shot]);
+  ({ run } = await claim(f));
+  expect(run.input.feedback).toEqual([
+    {
+      text: comment,
+      images: [{ number: 1, name: 'circled.png', ref: ref(shot, 'png') }],
+      documents: [
+        {
+          name: '新建文本文档 (2).txt',
+          type: 'text/plain',
+          ref: ref(terms, 'txt'),
+        },
+        { name: 'outline.md', type: 'text/markdown', ref: ref(outline, 'md') },
+      ],
+    },
+  ]);
+  // The run's materials hold each document's original for the Agent to decode and read.
+  const materials = await (
+    f.s.runtime as unknown as {
+      materials(
+        conn: unknown,
+        runId: string,
+        content: boolean,
+      ): Promise<{
+        context: { materials: Record<string, string> };
+        bundle: { files: { path: string; content: string }[] };
+      }>;
+    }
+  ).materials({}, run.pluginRunId, true);
+  expect(materials.context.materials.documents).toBe(
+    '.nocoreach-materials/documents.json',
+  );
+  const index = JSON.parse(
+    materials.bundle.files.find((x) => x.path === 'documents.json')!.content,
+  );
+  expect(index.map((e: { name: string }) => e.name)).toEqual([
+    '新建文本文档 (2).txt',
+    'outline.md',
+  ]);
+  expect(
+    Buffer.from(
+      materials.bundle.files.find((x) => x.path === index[0].base64)!.content,
+      'base64',
+    ).toString(),
+  ).toBe('bytes of 新建文本文档 (2).txt');
 });
 
 test('an image the CMS key may not upload stops publishing before the article; a retry uploads it once', async () => {

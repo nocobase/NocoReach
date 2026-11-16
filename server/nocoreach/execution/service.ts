@@ -34,7 +34,7 @@ import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
 import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
-import { TASK_IMAGES_PER_MESSAGE, type MessageImage } from '../../../shared/task-images.js';
+import { TASK_FILES_PER_MESSAGE, TASK_IMAGES_PER_MESSAGE, type MessageDocument, type MessageImage } from '../../../shared/task-images.js';
 import { taskListRow, wantsPageView } from '../page-views.js';
 import { taskContext } from '../analysis-evidence.js';
 // What a page search and Related page read of Website content's snapshot.
@@ -370,6 +370,29 @@ export class TaskService {
     }
     w.images = [...new Set([...(w.images || []), ...images.map((i) => i.id)])];
     return images;
+  }
+  /**
+   * The files sent with a message or a change request: its images as above, and its documents (2026-11-15,
+   * `documentIds`), the person's own uploads of the types a new task takes, linked the same way and kept on
+   * `w.documents`. Together they are as many as a new task's attachments; the upload checked each file's type and size.
+   */
+  async linkMessageFiles(project: string, taskId: string, w: Work, v: any, actor: string, tx: any): Promise<{ images: MessageImage[]; documents: MessageDocument[] }> {
+    const ids = v.documentIds;
+    if (ids === undefined) return { images: await this.linkImages(project, taskId, w, v, actor, tx), documents: [] };
+    const images: unknown[] = Array.isArray(v.imageIds) ? v.imageIds : [];
+    if (!Array.isArray(ids) || ids.length + images.length > TASK_FILES_PER_MESSAGE || new Set([...ids, ...images]).size !== ids.length + images.length || ids.some((id: unknown) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id))) return fail(systemMessageText('taskExecution.filesInvalid'), 400);
+    const linked = await this.linkImages(project, taskId, w, v, actor, tx);
+    if (!ids.length) return { images: linked, documents: [] };
+    if (!this.p.taskAttachments) return fail(systemMessageText('taskExecution.fileUnavailable'), 409);
+    let documents: MessageDocument[];
+    try {
+      documents = await this.p.taskAttachments.linkDocuments(tx.connection, actor, project, taskId, ids);
+    } catch (error) {
+      if ((error as { reason?: string })?.reason === 'TASK_FILE_UNAVAILABLE') return fail(systemMessageText('taskExecution.fileUnavailable'), 409);
+      throw error;
+    }
+    w.documents = [...new Set([...(w.documents || []), ...documents.map((d) => d.id)])];
+    return { images: linked, documents };
   }
   /** The repository the task changes (shared/repo-routing.ts): the one kept at its start. */
   private async repoOf(project: string, task: any, w: Work, tx: any) {
@@ -868,8 +891,9 @@ export class TaskService {
         // A message for the executor; the next run reads the latest ones.
         if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
         event.comment = text(v.comment, 3000);
-        const images = await this.linkImages(project, taskId, w, v, actor, tx);
+        const { images, documents } = await this.linkMessageFiles(project, taskId, w, v, actor, tx);
         if (images.length) event.images = images;
+        if (documents.length) event.documents = documents;
       } else if (v.command === 'approveStage' || v.command === 'requestStageChanges' || v.command === 'changePrimary') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeReviewing'), 409);
@@ -937,12 +961,14 @@ export class TaskService {
         } else {
           const comment = feedback || text(v.comment, 3000);
           if (!feedback) event.comment = comment;
-          // Images sent with the request (2026-11-03) go to the Agent with it, numbered as the person numbered them.
-          const images = feedback ? [] : await this.linkImages(project, taskId, w, v, actor, tx);
+          // Images sent with the request (2026-11-03) go to the Agent with it, numbered as the person numbered them, and
+          // its documents (2026-11-15) with them.
+          const { images, documents } = feedback ? { images: [], documents: [] } : await this.linkMessageFiles(project, taskId, w, v, actor, tx);
           if (images.length) event.images = images;
+          if (documents.length) event.documents = documents;
           w.results[index - 1] = { ...output, rejectedAt: at };
           // Feedback is filed under the stage that redoes the work, so its next run reads it.
-          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, ...(images.length ? { images } : {}), reviewerId: actor, at, ...attemptField(w) }, tx);
+          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, ...(images.length ? { images } : {}), ...(documents.length ? { documents } : {}), reviewerId: actor, at, ...attemptField(w) }, tx);
           await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
         }
       } else if (v.command === 'editStageOutput') {
