@@ -1742,7 +1742,10 @@ it('asks which page to change when the task names none, searching site pages and
   await user.click(pricing);
   expect(onPage).toHaveBeenCalledWith('https://www.example.com/pricing');
   await user.click(post);
-  expect(onArticle).toHaveBeenCalledWith('cms', '9');
+  expect(onArticle).toHaveBeenCalledWith('cms', '9', {
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  });
   await user.click(
     screen.getByRole('button', { name: 'Choose where to make the change' }),
   );

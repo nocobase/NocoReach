@@ -1,10 +1,12 @@
+import { RESTART_ACTION } from './playbook-change.js';
+
 export type TaskState = 'todo' | 'doing' | 'review' | 'done';
 export type TaskWork = {
   boardState?: TaskState;
   stage?: string;
   flow?: { stages: { kind: string; key?: string }[] };
   stageIndex?: number;
-  latestRun?: { id?: string; status: string } | null;
+  latestRun?: { id?: string; status: string; stopped?: boolean } | null;
   history?: { action?: string; stageKey?: string; note?: string }[];
   release?: { state: string };
   receipt?: { note: string } | null;
@@ -63,9 +65,15 @@ export function awaitingRestart(
     (e.note !== 'stopped' && e.note !== 'withdrawn')
   )
     return;
+  // Started again, finished by hand, or started over with another playbook (shared/playbook-change.ts).
   return h
     .slice(i + 1)
-    .some((x) => x.action === 'runQueued' || x.action === 'recordManual')
+    .some(
+      (x) =>
+        x.action === 'runQueued' ||
+        x.action === 'recordManual' ||
+        x.action === RESTART_ACTION,
+    )
     ? undefined
     : e.note;
 }

@@ -105,6 +105,11 @@ export function DeliveryDialog({
   query?: string;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
+  /**
+   * Change playbook (2026-11-11): another article is not saved on the task when picked but goes with the choice, linked
+   * when the new start is confirmed, so Cancel leaves the task as it was.
+   */
+  deferLink?: boolean;
   onSave: (choice: DeliveryChoice) => void;
 }) {
   return (
@@ -141,6 +146,7 @@ function DeliveryForm({
   query = '',
   busy,
   link,
+  deferLink = false,
   onSave,
   onClose,
 }: {
@@ -153,6 +159,7 @@ function DeliveryForm({
   query?: string;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
+  deferLink?: boolean;
   onSave: (choice: DeliveryChoice) => void;
   onClose: () => void;
 }) {
@@ -274,6 +281,20 @@ function DeliveryForm({
         mode: 'existing',
         also,
         article: found,
+        ...locales,
+      });
+    if (deferLink)
+      return done({
+        target,
+        mode: 'existing',
+        also,
+        article: {
+          targetId: target,
+          articleId: article.id,
+          slug: article.slug,
+          title: article.title,
+          url: '',
+        },
         ...locales,
       });
     // Any other article is saved on the task now, as picking one always was.
@@ -986,9 +1007,8 @@ export function DeliverySummary({
       false,
     );
   const url =
-    choice.article?.targetId === choice.target
-      ? choice.article.url
-      : articlePageUrl(data, choice.target, picked.slug);
+    (choice.article?.targetId === choice.target ? choice.article.url : '') ||
+    articlePageUrl(data, choice.target, picked.slug);
   return field(
     pagesLabel,
     [{ url: url || picked.slug, title: picked.title }],
