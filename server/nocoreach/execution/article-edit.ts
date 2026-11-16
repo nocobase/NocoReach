@@ -9,7 +9,6 @@ import {
 } from '../../../shared/article-edit.js';
 import {
   taskImageIds,
-  taskImageOf,
   type MessageImage,
 } from '../../../shared/task-images.js';
 import { roleOf } from '../policy.js';
@@ -89,18 +88,14 @@ const refuse = (p: EditProblem): never =>
 /** At most this many images are linked by one save, as by one edit made a version (article-flow.ts). */
 const LINKED_PER_SAVE = 40;
 
-/** The task images a form shows in its fields or sets as covers, each once. */
+/** The task images a form shows in its fields, each once. */
 function formImageIds(form: ArticleEditForm): string[] {
   return [
-    ...new Set([
-      ...taskImageIds(
+    ...new Set(
+      taskImageIds(
         Object.values(form.locales).flatMap((fields) => Object.values(fields)),
       ),
-      ...Object.values(form.cover || {}).flatMap((v) => {
-        const image = taskImageOf(v);
-        return image ? [image.id] : [];
-      }),
-    ]),
+    ),
   ];
 }
 
@@ -152,8 +147,8 @@ export class ArticleEditing {
       await repo.destroy({ filter: { key }, transaction: tx });
   }
   /**
-   * The images the saved form shows that are the person's own uploads (pasted, dropped or added in the editor, or a
-   * cover), linked to the task now (2026-11-12): until then only the uploader's session reads them, for a day, so the
+   * The images the saved form shows that are the person's own uploads (pasted, dropped or added in the editor), linked
+   * to the task now (2026-11-12): until then only the uploader's session reads them, for a day, so the
    * article showed them broken after signing in again, on another computer, to anyone else, or the next day. Each is
    * linked on its own and one that cannot be (someone else's, expired, another task's) is left for making the version
    * to refuse, so a save is never refused for an image. The work gains them as readable images without a revision.
