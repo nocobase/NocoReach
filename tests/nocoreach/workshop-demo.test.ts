@@ -18,6 +18,7 @@ import {
 } from '../../server/nocoreach/demo-data/world/script/acme.js';
 import { crmGrowthBriefs } from '../../server/nocoreach/demo-data/growth-briefs.js';
 import { CRM_SKIPPED } from '../../server/nocoreach/demo-data/workshop-history.js';
+import CARD_IMAGES from '../../server/nocoreach/demo-data/xhs-card-images.json';
 import { categoryOf } from '../../shared/growth.js';
 
 // The Content workshop demo (2026-11-13): every draft reads as the workshop reads an Agent's result, and passes the
@@ -48,8 +49,24 @@ describe('Content workshop demo', () => {
         const failed = repurposeChecks(d.form, parsed!, {
           destination,
           brand: 'Acme',
+          ...(d.cards
+            ? {
+                cards: {
+                  images: [],
+                  sections: 4,
+                  colors: Object.values(WORKSHOP_BRAND.cards.colors),
+                  overflow: d.cards.overflow,
+                },
+              }
+            : {}),
         }).filter((c) => !c.ok);
-        expect(failed, `${lang} ${d.key}`).toEqual([]);
+        // The cards waiting for review show the one warning the demo is for: the sixth card runs over 110 characters.
+        expect(
+          failed.map((c) => [c.key, c.params?.[0]]),
+          `${lang} ${d.key}`,
+        ).toEqual(
+          d.key === 'requests-xhs' ? [['workshop.check.cardCharsOver', 6]] : [],
+        );
         if (d.form === 'community')
           expect(parsed!.rules.length, `${lang} ${d.key}`).toBeGreaterThan(0);
       }
@@ -71,9 +88,36 @@ describe('Content workshop demo', () => {
     // Two drafts wait for review; the rest are approved, after they were made.
     expect(
       WORKSHOP_DRAFTS.filter((d) => d.state === 'review').map((d) => d.key),
-    ).toEqual(['release-linkedin', 'requests-reddit']);
+    ).toEqual(['release-linkedin', 'requests-reddit', 'requests-xhs']);
     for (const d of WORKSHOP_DRAFTS)
       if (d.state === 'done') expect(d.approved).toBeLessThan(d.created);
+  });
+
+  // Content workshop PR 2: the Xiaohongshu tasks' images are rendered from their drafts (scripts/render-demo-cards.ts),
+  // one per card in each language, so a changed draft needs its images rendered again.
+  it('has one rendered image per Xiaohongshu card', () => {
+    const drafts = WORKSHOP_DRAFTS.filter((d) => d.form === 'xhs');
+    expect(drafts.map((d) => d.state).sort()).toEqual(['done', 'review']);
+    for (const d of drafts)
+      for (const lang of ['zh', 'en'] as const) {
+        const cards = parseRepurpose('xhs', d.draft[lang])!.pieces.filter(
+          (p) => p.kind === 'card',
+        );
+        const images = (
+          CARD_IMAGES as Record<string, Record<string, string[]>>
+        )[d.key][lang];
+        expect(images, `${lang} ${d.key}`).toHaveLength(cards.length);
+        for (const image of images)
+          expect(
+            Buffer.from(image, 'base64').subarray(8, 12).toString('latin1'),
+          ).toBe('WEBP');
+        // The closing page is the brand kit's, word for word.
+        expect(cards.at(-1)).toMatchObject({
+          layout: 'end',
+          heading: WORKSHOP_BRAND.cards.ending.heading[lang],
+          text: WORKSHOP_BRAND.cards.ending.text,
+        });
+      }
   });
 
   // Homepage v5: the CRM project's Content workshop opens with no Trending now, every trending opportunity of it having

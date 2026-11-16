@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { taskResultMaterials } from '../../../shared/task-result.js';
+import { XHS, parseRepurpose } from '../../../shared/repurpose.js';
 import { fail, type Run } from './model';
 
 const REPORT_AS_OF_MAX_LENGTH = 1000;
+/** The most card images a Xiaohongshu result may hold: past the 18 the checks allow, so a longer set is still shown. */
+export const CARD_IMAGES_MAX = 24;
 
 // This contract is shared by the Runner instructions and the result boundary. Business checks
 // (the registered repository, reviewed commit and allowed paths) still belong to TaskService.
@@ -67,6 +70,18 @@ const envelope = z.object({
   article: z.record(z.string(), z.unknown()).optional(),
   error: z.string().optional(),
   message: z.string().optional(),
+  // Xiaohongshu cards (2026-11-16): the images uploaded with `task file`, one per card in the cards' order, and the
+  // cards whose text overflowed when the Agent rendered them ([] when it checked and none did; omitted when it could
+  // not check). TaskService checks the images belong to this run.
+  cards: z
+    .object({
+      images: z.array(z.uuid()).min(1).max(CARD_IMAGES_MAX),
+      overflow: z
+        .array(z.number().int().min(1).max(CARD_IMAGES_MAX))
+        .max(CARD_IMAGES_MAX)
+        .optional(),
+    })
+    .optional(),
   report: z
     .object({
       kind: z.enum([
@@ -103,6 +118,11 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           )
             ? [
                 '内容加工：content 严格按步骤说明里的固定格式写，标记 ## Post、## Reply、## Title、## Body、## Rules 和 Sections: 保持英文原样；只写稿，不发帖、不评论、不修改仓库或文章。sources 列实际读过的文章和版规页面。',
+              ]
+            : []),
+          ...(resultKind === 'xhsCards'
+            ? [
+                `小红书图文：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；## Title、## Body 是笔记的标题和正文。卡片图片按 materials.cardTemplate 渲染成 ${XHS.width}×${XHS.height} 的 PNG，每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。渲染时检查文字有没有溢出：把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`,
               ]
             : []),
         ]
@@ -309,6 +329,22 @@ export function resultOf(
   }
   if (result.ok && mode === 'article' && !result.article)
     return invalid('field', { 0: 'article' });
+  // Xiaohongshu cards come with one uploaded image per card, in the cards' order.
+  if (result.ok && resultKind === 'xhsCards') {
+    const parsed = parseRepurpose('xhs', result.content || '');
+    const cards = parsed?.pieces.filter((p) => p.kind === 'card').length || 0;
+    if (
+      !parsed ||
+      !parsed.pieces.some((p) => p.kind === 'title') ||
+      !parsed.pieces.some((p) => p.kind === 'body')
+    )
+      return invalid('xhsFormat');
+    const images = result.cards?.images || [];
+    if (cards !== images.length || new Set(images).size !== images.length)
+      return invalid('xhsImages', { 0: cards, 1: images.length });
+    if (result.cards?.overflow?.some((n) => n > cards))
+      return invalid('field', { 0: 'cards.overflow' });
+  }
   if (
     result.ok &&
     mode === 'merge' &&

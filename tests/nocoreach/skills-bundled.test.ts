@@ -56,7 +56,8 @@ function harness(seed: Record<string, unknown> = {}) {
 const marketing = BUILT_IN_SKILLS.filter((b: any) => b.since === 2);
 const own = BUILT_IN_SKILLS.filter((b: any) => b.since === 1);
 // Content workshop's Skills (2026-11-13), one per form it makes.
-const workshop = BUILT_IN_SKILLS.filter((b: any) => b.since === 3);
+// Version 4 (2026-11-16) adds Xiaohongshu cards, with its render helper.
+const workshop = BUILT_IN_SKILLS.filter((b: any) => b.since >= 3);
 
 it('bundles the chosen marketing Skills at one pinned commit, within the library limits and with their license', () => {
   expect(bundled.commit).toMatch(/^[0-9a-f]{40}$/);

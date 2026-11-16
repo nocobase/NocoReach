@@ -140,7 +140,7 @@ for (const unavailable of ['missing', 'database-error']) {
 }
 
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
- assert.equal(SYSTEM_PLAYBOOKS.length,16);
+ assert.equal(SYSTEM_PLAYBOOKS.length,17);
  // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.
  {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### Reply/);assert.match(r.steps[0].instruction,/不发帖/);
   assert.equal(defaultPlaybookId({evidence:{insight:{signalIds:['community-unanswered']},context:{signals:{items:[{key:'community-unanswered',action:'reply'}]}}}}),'community-reply');}
@@ -149,9 +149,9 @@ test('built-in playbooks: every step is the Agent or you, grouped by work; custo
  assert.deepEqual(SYSTEM_PLAYBOOKS.filter(p=>p.category==='research').map(p=>p.id),['change-research','competitor-compare','keyword-research','community-summary']);
  // Content workshop (2026-11-13): one playbook per form, the Agent adapts and you approve, which completes the task;
  // nothing follows and nothing is saved to the knowledge base.
- for(const [id,form,skill] of [['x-posts','x','x-posts'],['linkedin-post','linkedin','linkedin-post'],['community-post','community','community-post']]){const p=SYSTEM_PLAYBOOKS.find(x=>x.id===id);
+ for(const [id,form,skill] of [['xhs-cards','xhs','xhs-cards'],['x-posts','x','x-posts'],['linkedin-post','linkedin','linkedin-post'],['community-post','community','community-post']]){const p=SYSTEM_PLAYBOOKS.find(x=>x.id===id);
   assert.equal(p.category,'repurpose');assert.equal(p.form,form);assert.equal(p.kind,'plan');assert.deepEqual(p.next,[]);assert.deepEqual(stagesFor(p).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(p.steps[0].skills,[skill]);
-  for(const marker of form==='x'?['## Post 1','## Reply','Sections:']:form==='linkedin'?['## Post','Sections:']:['## Title','## Body','## Rules','Sections:'])assert.ok(p.steps[0].instruction.includes(marker),`${id} names ${marker}`);}
+  for(const marker of form==='xhs'?['## Card 1','## Title','## Body','Layout: end','Sections:','task file','cards.images']:form==='x'?['## Post 1','## Reply','Sections:']:form==='linkedin'?['## Post','Sections:']:['## Title','## Body','## Rules','Sections:'])assert.ok(p.steps[0].instruction.includes(marker),`${id} names ${marker}`);}
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='competitor-compare')).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]],'research is an analysis by the Agent');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')).map(s=>s.key),['build','review','release','observe'],'page work goes straight to a change you look at');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='tech-fix')).map(s=>s.key),['plan','approve-plan','build','review','release','observe'],'technical fixes show a plan first');
@@ -322,10 +322,10 @@ test('a review whose stage snapshot still requires checklist items is accepted w
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
  const f=fixture();await connectAgent(f);
- let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,16);
+ let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,17);
  // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
- assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,16);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
+ assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,17);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
  await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
  r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建一个文档页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
@@ -1274,6 +1274,52 @@ test('repositories: a check asks GitHub for the repository and branch and says w
  doc=await f.s.agents.checkRepo('1',{id:doc.repos[1].id},'1');
  assert.deepEqual([doc.repos[1].check.repo,doc.repos[1].check.branch,doc.repos[1].check.detail],['unknown','unknown','GitHub is unreachable']);
  await assert.rejects(f.s.agents.checkRepo('1',{id:'gone'},'1'),e=>e.status===409);
+});
+
+// Content workshop PR 2 (2026-11-16): a Xiaohongshu cards run gets the source's numbered sections, the brand kit's
+// style and the template drawn in it; the Agent uploads each card with `task file` (manual-tasks.ts agentImage, faked
+// here), lists the images in its result, and NocoReach keeps them with the result and checks the set: sections used,
+// cover heading, number of cards, colors read from the images, overflow as the Agent reported it, length of each card.
+function fakeCardImages(){
+ const files=new Map();
+ return {files,
+  agentImage:async(run,file)=>{const id=randomUUID(),n=files.size+1;files.set(id,{run:run.id,taskId:null,name:file.name,colors:n===1?['#1e40af','#f8fafc']:['#f8fafc','#0f172a','#1e40af']});return {id,filename:file.name,size:file.size,width:1080,height:1440,colors:files.get(id).colors};},
+  runImages:async(run,ids)=>ids.every(id=>files.get(id)?.run===run.id&&[null,run.taskId].includes(files.get(id).taskId)),
+  linkImages:async(_conn,actor,_project,taskId,ids)=>ids.map(id=>{const file=files.get(id);if(!file||`run:${file.run}`!==actor||(file.taskId&&file.taskId!==taskId))throw Object.assign(Error('unavailable'),{reason:'TASK_IMAGE_UNAVAILABLE'});file.taskId=taskId;return {id,name:file.name,ref:`/uploads/task-media/${id}.png`};}),
+  forAgent:async()=>[]};
+}
+const xhsResult=(cards=7)=>['## Title','Tickets in an afternoon','## Body','Sections: 1–4','We moved support to two tables. #support',
+ ...Array.from({length:cards},(_,i)=>i===0?['## Card 1','Sections: 1–4','# Tickets in a day','From one inbox to two tables']:i===cards-1?[`## Card ${cards}`,'Layout: end','# Follow Acme','acme.example']:[`## Card ${i+1}`,`Sections: ${Math.min(i,4)}`,`# Step ${i}`,'One owner for every request.']).flat()].join('\n');
+test('Xiaohongshu cards: sections, style and template in the run; images uploaded with task file are kept with the result and checked',async()=>{
+ const repurpose={form:'xhs',source:{kind:'article',url:'https://example.com/blog/tickets',title:'Tickets in an afternoon'}},createdBy={id:'1',name:'Tester'};
+ const f=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose}});await connectAgent(f);
+ f.state.nrSnapshots.push({id:9001,key:f.s.key('source','1','1'),payload:{body:'## Why\nOne inbox.\n\n## How\nTwo tables.\n\n## What broke\nOwners.\n\n## Again\nThe form.',locale:'en-US',readAt:'2026-11-16T00:00:00Z'}});
+ f.s.p.workshop={brand:async()=>({revision:1,community:null,cards:{colors:{primary:'#1e40af'},font:'serif',ending:{heading:'Follow Acme',text:'acme.example'}}})};
+ const media=fakeCardImages();f.s.p.taskAttachments=media;
+ await f.command('startTask',{playbookId:'xhs-cards'});
+ const c=await claim(f),input=c.run.input;
+ assert.equal(input.resultKind,'xhsCards');
+ assert.deepEqual(input.repurpose.sections,[{no:1,heading:'Why'},{no:2,heading:'How'},{no:3,heading:'What broke'},{no:4,heading:'Again'}]);
+ assert.deepEqual([input.repurpose.style.primary,input.repurpose.style.font,input.repurpose.style.ending,input.repurpose.style.logo],['#1e40af','serif',{heading:'Follow Acme',text:'acme.example'},false]);
+ assert.match(input.cardTemplate,/^<!doctype html>/);assert.match(input.cardTemplate,/"primary":"#1e40af"/);
+ const identity={kind:'run',userId:'1',displayName:'Team Agent',agent:f.s.p.agents.agent,run:{run:{id:c.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${c.run.id}`}}};
+ const ids=[];for(let i=1;i<=7;i++)ids.push((await f.s.business.file(identity,new File([Buffer.from('png')],`card-${i}.png`,{type:'image/png'}))).id);
+ // The result has to name one uploaded image per card, its own run's.
+ const submit=v=>f.s.business.submit(identity,JSON.stringify({ok:true,report:{kind:'xhsCards',sources:[],asOf:'2026-11-16',uncertainties:[]},...v}));
+ await assert.rejects(submit({content:xhsResult(),cards:{images:ids.slice(1)}}),e=>e.status===422&&/\b7\b.*\b6\b/.test(e.message));
+ await assert.rejects(submit({content:xhsResult(),cards:{images:[...ids.slice(1),randomUUID()]}}),e=>e.status===422);
+ await assert.rejects(submit({content:'## Title\nOnly a title',cards:{images:ids}}),e=>e.status===422);
+ await assert.rejects(submit({content:xhsResult(),cards:{images:ids,overflow:[9]}}),e=>e.status===422);
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:xhsResult(),cards:{images:ids,overflow:[]}});
+ let d=await f.view();const out=output(d);
+ assert.deepEqual(out.cards.images.map(x=>x.id),ids);assert.equal(out.cards.sections,4);assert.deepEqual(out.cards.colors,['#1e40af','#f8fafc','#0f172a']);assert.deepEqual(out.cards.overflow,[]);
+ assert.deepEqual(d.work.images,ids);assert.ok([...media.files.values()].every(x=>x.taskId==='1'),'linked to the task');
+ assert.deepEqual(d.repurpose.checks[out.id].map(x=>[x.key,x.ok]),[['workshop.check.sectionsAll',true],['workshop.check.coverWithin',true],['workshop.check.cardsWithin',true],['workshop.check.colorsWithin',true],['workshop.check.noOverflow',true],['workshop.check.cardCharsWithin',true]]);
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:out.id});assert.equal(d.work.stage,'done');
+ // A run of another form cannot upload images.
+ const g=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose:{...repurpose,form:'x'}}});await connectAgent(g);g.s.p.taskAttachments=fakeCardImages();
+ await g.command('startTask',{playbookId:'x-posts'});const gc=await claim(g);
+ await assert.rejects(g.s.business.file({...identity,run:{run:{id:gc.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${gc.run.id}`}}},new File([Buffer.from('png')],'card.png',{type:'image/png'})),e=>e.status===409);
 });
 
 // Content workshop (2026-11-13): a task made from an article runs its form's playbook only, the Agent gets the source

@@ -51,3 +51,12 @@ export const TaskAgentResult = z.object({
   savedAt: z.string(),
   submitted: z.literal(true),
 });
+/** An image a run uploaded for its result (`task file`): its id for the result, and what NocoReach read of it. */
+export const TaskAgentFile = z.object({
+  id: z.uuid(),
+  filename: z.string(),
+  size: z.number().int(),
+  width: z.number().int(),
+  height: z.number().int(),
+  colors: z.array(z.string()).optional(),
+});

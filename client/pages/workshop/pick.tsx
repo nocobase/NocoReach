@@ -669,7 +669,10 @@ function Step2({
             form='xhs'
             name={names.xhs}
             spec={$t('workshop.specXhs')}
-            disabled
+            checked={isOn({ form: 'xhs' })}
+            onCheckedChange={(on) => toggle({ form: 'xhs' }, on)}
+            status={status({ form: 'xhs' })}
+            locked={locked({ form: 'xhs' })}
             preview={<CardsPreview />}
           />
           <FormCard

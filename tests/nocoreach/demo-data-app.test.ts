@@ -237,7 +237,7 @@ test('imports the demo through the API and clears all business data while preser
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [
-    [main, 'Acme', 'acme.example', 61],
+    [main, 'Acme', 'acme.example', 63],
     [second, 'Acme CRM', 'crm.acme.example', 39],
   ] as const) {
     const project = await runtime.plugin.projects.get(id);
@@ -251,6 +251,27 @@ test('imports the demo through the API and clears all business data while preser
         rows.map((row) => projectWork(row.toJSON()).boardState).filter(Boolean),
       ),
     ).toEqual(new Set(['todo', 'doing', 'review', 'done']));
+    // Xiaohongshu tasks (Content workshop PR 2) keep their card images as their run's uploads, linked to the task and
+    // readable through it.
+    if (id === main) {
+      const carded = rows
+        .map((row) => projectWork(row.toJSON()))
+        .filter((work) => work.repurpose?.form === 'xhs');
+      expect(
+        carded.map((work) => work.results[0]?.cards?.images.length),
+      ).toEqual([7, 8]);
+      for (const work of carded) {
+        const cards = work.results[0]!.cards!;
+        expect(work.images).toEqual(cards.images.map((image) => image.id));
+        expect(cards).toMatchObject({ sections: 4, colors: expect.any(Array) });
+      }
+      const image = carded[1].results[0]!.cards!.images[0];
+      const read = await admin.fetch(
+        `http://localhost${testApp.publicBasePath}${image.ref}`,
+      );
+      expect(read.status).toBe(200);
+      expect(read.headers.get('content-type')).toBe('image/webp');
+    }
     const adminUser = await connection
       .repository('user')
       .findOne({ filter: { username: DEFAULT_ADMIN_CREDENTIALS.username } });

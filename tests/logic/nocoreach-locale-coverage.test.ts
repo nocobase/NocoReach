@@ -452,7 +452,7 @@ describe('NocoReach semantic-key translations', () => {
         ...stagesFor(playbook).map((stage) => stage.name),
       ]),
     );
-    expect(SYSTEM_PLAYBOOKS).toHaveLength(16);
+    expect(SYSTEM_PLAYBOOKS).toHaveLength(17);
     expect(
       [...copy].filter(
         (text) =>

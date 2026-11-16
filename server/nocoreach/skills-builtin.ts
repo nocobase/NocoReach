@@ -6,7 +6,7 @@ import bundled from './skills-bundled.json' with { type: 'json' };
 // The Skills a new library starts with (SPEC §6.0). Once added they are ordinary Skills: edited or deleted like any
 // other, turned off in every project until someone turns them on (or a playbook step names them), and never restored.
 // `since` is the built-in version that introduced a Skill: an existing library gets the newer ones once (skills.ts).
-const BUILT_IN_VERSION=3;
+const BUILT_IN_VERSION=4;
 const OWN=[
  {id:'seo-title-description',name:'seo-title-description',description:systemMessageText('skillsBuiltin.useWhenWritingChangingWeb'),summary:'skillsBuiltin.useWhenWritingChangingWeb',
   body:`# 页面标题与描述
@@ -98,8 +98,117 @@ const camel=(name:string)=>name.replace(/-([a-z])/g,(_:string,c:string)=>c.toUpp
 const MARKETING=bundled.skills.map(s=>({id:s.name,name:s.name,description:s.description,summary:`skillSummaries.${camel(s.name)}`,originals:[s.description],body:s.body,
  files:[...s.files,{path:'LICENSE.md',text:`${bundled.license}\n\nSource: ${bundled.source} (commit ${bundled.commit})\n`}],
  source:`${bundled.source}/tree/${bundled.commit}/skills/${s.name}`,since:2}));
-// Version 3: the Content workshop's forms (2026-11-13), one Skill each, which its playbooks' adapt step names.
+// Version 3: the Content workshop's forms (2026-11-13), one Skill each, which its playbooks' adapt step names. Version 4
+// (2026-11-16): Xiaohongshu cards, with the helper that renders them from the template the run is given.
 const WORKSHOP=[
+ {id:'xhs-cards',name:'xhs-cards',description:systemMessageText('skillsBuiltin.useWhenMakingXhsCards'),summary:'skillsBuiltin.useWhenMakingXhsCards',
+  body:`# 小红书图文
+
+把一篇文章或一个话题做成一组小红书图文：6–18 张 1080×1440 的卡片图，加上笔记的标题和正文。图片在你的电脑上用任务给的 HTML 模板渲染。
+
+## 一组卡片
+- 第一张是封面：标题不超过 20 个字，说清读者能得到什么（一个结果、一个数字、一个做法），不用“震惊”“必看”这类说法；下面一行副标题补充对象或场景。
+- 中间每张讲一件事，按原文的顺序；每张不超过 110 个字（标题加正文，不算空格），宁可多分一张也不要挤。
+- 每张卡片标出出自原文的第几节（输入里的 repurpose.sections 是编号）；尽量每一节都用上，没有用上的在笔记正文里交代。
+- 品牌与模板设了结尾页时（repurpose.style.ending），最后一张用它，文字照抄，写 Layout: end。
+- 数字、功能名和结论都要能在原文或参考资料里找到；演示数据要说明是虚构的。
+
+## 版面
+- 只用模板（materials.cardTemplate）。颜色、字体、Logo 都来自品牌与模板，最多 3 种颜色；不要另加颜色、渐变、emoji 图片或花字。
+- 正文字号不小于 30px（模板是 48px），不要改小字号去塞内容。
+
+## 笔记标题和正文
+- 标题不超过 20 个字，和封面说法可以不同，但讲同一件事。
+- 正文不超过 1,000 字：先说为什么值得看，再按卡片顺序概括要点，结尾一句提问邀请评论；话题标签 3–5 个放最后一行。
+- 用原文的语言写；口吻按项目记忆里的“口吻与风格”。
+
+## 渲染和上传
+1. 把 xhs-card.html 复制到一个空目录，在旁边写 cards.js：\`window.CARDS = [{layout:"cover",heading:"…",text:"…"}, …];\`，layout 是 cover、text 或 end，顺序和结果里的 ## Card 一致。
+2. 运行本 Skill 的 render.mjs：\`node render.mjs 目录\`。有 Playwright 时用它，否则用电脑上的 Chrome、Edge 或 Chromium（CHROME_PATH 可指定）。会生成 card-01.png… 和 overflow.json。
+3. 也可以自己用无头浏览器：窗口 1080×1440、缩放 1，打开 \`xhs-card.html?n=序号\` 截图；页面标题是 overflow:none 表示没有溢出，overflow:3,7 是溢出的卡片。
+4. 有溢出就改短那张卡片的文字或拆成两张，重新渲染，直到没有溢出。实在检查不了溢出时，结果里不写 cards.overflow。
+5. 用 \`task file --file card-01.png\` 逐张上传，按卡片顺序把返回的 id 写进结果的 cards.images；overflow.json 的内容写进 cards.overflow。
+
+## 自查
+- 张数 6–18，封面标题不超过 20 个字，每张不超过 110 个字。
+- 每张图都是 1080×1440 的 PNG，文字没有被截掉。
+`,files:[{path:'render.mjs',text:`// Renders the cards in cards.js with xhs-card.html (both in the folder given) into card-01.png, card-02.png, ... at
+// 1080x1440, and writes overflow.json: the numbers of the cards whose text does not fit ([] when none).
+// Usage: node render.mjs <folder>
+// Uses Playwright when it can be imported, else Chrome, Edge or Chromium on this computer (CHROME_PATH to choose one).
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const dir = resolve(process.argv[2] || '.');
+const page = pathToFileURL(join(dir, 'xhs-card.html')).href;
+const source = readFileSync(join(dir, 'cards.js'), 'utf8');
+const count = (() => {
+  const window = {};
+  new Function('window', source)(window);
+  return Array.isArray(window.CARDS) ? window.CARDS.length : 0;
+})();
+if (!count) throw new Error('cards.js has no cards (window.CARDS = [...]).');
+const name = (n) => join(dir, \`card-\${String(n).padStart(2, '0')}.png\`);
+
+async function withPlaywright() {
+  let chromium;
+  for (const id of ['playwright', 'playwright-core', '@playwright/test'])
+    try {
+      ({ chromium } = await import(id));
+      break;
+    } catch {}
+  if (!chromium) return null;
+  const browser = await chromium.launch();
+  try {
+    const tab = await browser.newPage({ viewport: { width: 1080, height: 1440 }, deviceScaleFactor: 1 });
+    for (let n = 1; n <= count; n++) {
+      await tab.goto(\`\${page}?n=\${n}\`);
+      await tab.waitForFunction(() => !document.title.endsWith('pending'));
+      await tab.screenshot({ path: name(n) });
+    }
+    await tab.goto(page);
+    await tab.waitForFunction(() => !document.title.endsWith('pending'));
+    return await tab.evaluate(() => document.body.dataset.overflow || '');
+  } finally {
+    await browser.close();
+  }
+}
+
+function chromePath() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    'C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe',
+    'C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe',
+  ];
+  for (const c of candidates) if (c && existsSync(c)) return c;
+  for (const c of ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge'])
+    try {
+      return execFileSync('which', [c], { encoding: 'utf8' }).trim() || null;
+    } catch {}
+  return null;
+}
+
+function withChrome() {
+  const chrome = chromePath();
+  if (!chrome) throw new Error('No Playwright and no Chrome, Edge or Chromium found; set CHROME_PATH.');
+  const base = ['--headless', '--hide-scrollbars', '--disable-gpu', '--force-device-scale-factor=1', '--virtual-time-budget=5000'];
+  for (let n = 1; n <= count; n++)
+    execFileSync(chrome, [...base, '--window-size=1080,1440', \`--screenshot=\${name(n)}\`, \`\${page}?n=\${n}\`], { stdio: 'ignore' });
+  const dom = execFileSync(chrome, [...base, '--dump-dom', page], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return /data-overflow="([^"]*)"/.exec(dom)?.[1] ?? null;
+}
+
+const over = (await withPlaywright()) ?? withChrome();
+const overflow = over == null ? null : over.split(',').filter(Boolean).map(Number);
+if (overflow) writeFileSync(join(dir, 'overflow.json'), JSON.stringify(overflow));
+process.stdout.write(\`\${count} cards rendered; overflow: \${overflow == null ? 'not checked' : JSON.stringify(overflow)}\\n\`);
+`}],since:4},
+
  {id:'x-posts',name:'x-posts',description:systemMessageText('skillsBuiltin.useWhenWritingXPosts'),summary:'skillsBuiltin.useWhenWritingXPosts',
   body:`# X 帖子
 
@@ -160,6 +269,6 @@ const WORKSHOP=[
 - Hacker News：新版本、开源项目和能直接试用的东西用 “Show HN: 产品名 – 一句话说明”；其他用文章原标题，不改写、不加形容词。标题不超过 80 个字符，正文用纯文本。
 - 自有社区：按分区写。教程分区写成步骤，公告分区写变化和升级说明，讨论分区以一个问题结尾邀请回复。
 `,files:[]},
-].map(s=>({...s,since:3,originals:[systemMessageText(s.summary,{},'zh-CN'),systemMessageText(s.summary,{},'en-US')]}));
+].map(s=>({since:3,...s,originals:[systemMessageText(s.summary,{},'zh-CN'),systemMessageText(s.summary,{},'en-US')]}));
 const BUILT_IN_SKILLS=[...OWN,...MARKETING,...WORKSHOP];
 export { BUILT_IN_SKILLS, BUILT_IN_VERSION };

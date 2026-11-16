@@ -29,7 +29,9 @@ import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { RESTART_ACTION, attemptField, attemptOf, playbookChangeBlock, sameAttempt, type PlaybookChangeBlock, type ReplacedPlaybook } from '../../../shared/playbook-change.js';
-import { FORM_RESULT_KIND, articleTitle, isBlogIndex, parseRepurpose, repurposeChecks } from '../../../shared/repurpose.js';
+import { FORM_RESULT_KIND, articleTitle, isBlogIndex, parseRepurpose, repurposeChecks, sourceSections, type CardSet } from '../../../shared/repurpose.js';
+import { cardStyle, cardTemplate, styleBrief } from '../../../shared/xhs-card.js';
+import { setColors } from '../png-colors.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
@@ -238,7 +240,7 @@ export class TaskService {
     const r = data.work.repurpose, checks: Record<string, unknown[]> = {};
     for (const a of data.artifacts || []) {
       const parsed = a?.content ? parseRepurpose(r.form, a.content) : null;
-      if (parsed) checks[a.id] = repurposeChecks(r.form, parsed, { destination: r.destination, brand: project?.name });
+      if (parsed) checks[a.id] = repurposeChecks(r.form, parsed, { destination: r.destination, brand: project?.name, cards: a.cards });
     }
     return { checks };
   }
@@ -246,9 +248,18 @@ export class TaskService {
   // (WorkshopService), where a community post goes, the angle asked for, and the drafts of earlier adaptations of the
   // same article or opportunity (approved, or waiting for review), kept when the task was created, for the Agent to take
   // another angle.
+  // Xiaohongshu cards (2026-11-16) are also given the source's numbered sections the cards say they come from (a topic's
+  // key points), and the brand kit's card style; the template drawn in that style, logo included, goes as a material
+  // file (cardTemplate, task-materials.ts).
   private async repurposeInput(project: string, taskId: string, w: Work, tx: any) {
     const stored = await this.snapshot(this.key('source', project, taskId), tx);
-    return { ...w.repurpose, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}), ...(stored?.earlier?.length ? { earlier: stored.earlier } : {}) };
+    const r = w.repurpose!, base = { ...r, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}), ...(stored?.earlier?.length ? { earlier: stored.earlier } : {}) };
+    if (r.form !== 'xhs') return { repurpose: base };
+    const sections = sourceSections({ body: stored?.body, points: r.source.kind === 'topic' ? r.source.points : undefined });
+    const [kit, project_, icon] = await Promise.all([this.p.workshop?.brand(project, tx), this.p.project(project).catch(() => null), this.snapshot(`project-icon:${project}`, tx)]);
+    const domain = String(project_?.domains?.[0] || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const style = cardStyle(kit?.cards, { name: project_?.name, site: domain || undefined, icon: icon?.dataUrl || null });
+    return { repurpose: { ...base, ...(sections.length ? { sections: sections.map((heading, i) => ({ no: i + 1, heading })) } : {}), style: styleBrief(style) }, cardTemplate: cardTemplate(style) };
   }
   // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
@@ -419,7 +430,7 @@ export class TaskService {
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
     // A Content workshop playbook's result is read by the form it makes, a copy's too (shared/repurpose.ts).
     const form = w.playbook?.form, resultKind = mode === 'plan' ? (form ? FORM_RESULT_KIND[form] : w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
-    const repurpose = w.repurpose ? { repurpose: await this.repurposeInput(project, taskId, w, tx) } : {};
+    const repurpose = w.repurpose ? await this.repurposeInput(project, taskId, w, tx) : {};
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
     const unfinished = await this.unfinished(runs, w, stage.key, index, tx);
     const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...repurpose, ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });
@@ -1170,7 +1181,7 @@ export class TaskService {
       return fresh;
     });
   }
-  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string, failure: { failureReason?: string; partial?: { content: string; report?: unknown } } = {}) {
+  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any; cards?: { images: string[]; overflow?: number[] } }, error?: string, errorDetail?: string, restartedAt?: string, failure: { failureReason?: string; partial?: { content: string; report?: unknown } } = {}) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
@@ -1179,8 +1190,9 @@ export class TaskService {
       const stale = !canApplyRun(w, fresh);
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
+        const cards = result.cards ? await this.cardSet(run, w, result.cards, tx) : undefined;
         // Preserve a late result as a candidate even if a human edited or replanned meanwhile.
-        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => sameAttempt(a, run) && a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}), ...(result.article ? { article: result.article } : {}), ...attemptField(run) };
+        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => sameAttempt(a, run) && a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}), ...(result.article ? { article: result.article } : {}), ...(cards ? { cards } : {}), ...attemptField(run) };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
@@ -1201,6 +1213,27 @@ export class TaskService {
       }
       await this.save(task, w, tx);
     });
+  }
+  /**
+   * A Xiaohongshu version's images, linked to the task in the finishing transaction (and kept on `w.images`, which lets
+   * the task's readers open them), with what NocoReach knows besides the text: how many sections the source had, the
+   * colors it counted on the images when they were uploaded, and the cards the Agent found overflowing.
+   */
+  private async cardSet(run: Run, w: Work, cards: { images: string[]; overflow?: number[] }, tx: any): Promise<CardSet> {
+    const reader = this.p.taskAttachments;
+    if (!reader) return fail(systemMessageText('agentResult.xhsImagesUnknown'), 409);
+    let images: MessageImage[];
+    try {
+      images = await reader.linkImages(tx.connection, `run:${run.id}`, run.projectId, run.taskId, cards.images);
+    } catch (error) {
+      if ((error as { reason?: string })?.reason === 'TASK_IMAGE_UNAVAILABLE') return fail(systemMessageText('agentResult.xhsImagesUnknown'), 409);
+      throw error;
+    }
+    w.images = [...new Set([...(w.images || []), ...images.map((i) => i.id)])];
+    const input = JSON.parse(run.input || '{}'), sections = Array.isArray(input.repurpose?.sections) ? input.repurpose.sections.length : 0;
+    const files = (await this.snapshot(this.key('files', run.projectId, run.taskId, run.id), tx)) as Record<string, { colors?: string[] }> | null;
+    const colors = files && cards.images.every((id) => files[id]?.colors?.length) ? setColors(cards.images.map((id) => files[id].colors!)) : [];
+    return { images: images.map(({ id, name, ref }) => ({ id, name, ref })), ...(sections ? { sections } : {}), ...(colors.length ? { colors } : {}), ...(cards.overflow ? { overflow: [...new Set(cards.overflow)].sort((a, b) => a - b) } : {}) };
   }
   async tick() {
     if (this.busy || this.stopped) return; this.busy = true;
@@ -1273,6 +1306,12 @@ export class TaskService {
   async validateAgentResult(r: Run, v: AgentResult) {
     // `task result` checks an article against its target before saving, so the Agent can correct it.
     if (v.ok && r.mode === 'article') { await this.articleFlow.proposal(r.projectId, JSON.parse(r.input), v.article); return; }
+    // Xiaohongshu cards: every image is one this run uploaded and still has.
+    if (v.ok && v.cards) {
+      const reader = this.p.taskAttachments;
+      if (!reader || !(await reader.runImages(r, v.cards.images))) return fail(systemMessageText('agentResult.xhsImagesUnknown'), 422);
+      return;
+    }
     if (!v.ok || r.mode !== 'build') return;
     const repo = inputRepo(r), p = v.pr || {};
     if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
@@ -1302,7 +1341,8 @@ export class TaskService {
     }
     // An article step's draft is checked against its target and base here; a mismatch is an invalid result.
     const article = r.mode === 'article' ? await this.articleFlow.proposal(r.projectId, JSON.parse(r.input), v.article) : undefined;
-    await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}), ...(v.report ? { report: v.report } : {}), ...(article ? { article } : {}) });
+    if (v.cards) await this.validateAgentResult(r, v);
+    await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}), ...(v.report ? { report: v.report } : {}), ...(article ? { article } : {}), ...(v.cards ? { cards: v.cards } : {}) });
     return { accepted: true };
   }
   // The merge result: merged at the reviewed commit (then the live check starts) or why it could not be merged.

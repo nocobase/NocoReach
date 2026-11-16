@@ -224,9 +224,7 @@ function MadeIcons({ made }: { made: Made[] }) {
                 standingText(m.standing),
               ].join(' · '),
             )
-          : [
-              `${names[form]} · ${$t(form === 'xhs' ? 'workshop.comingSoon' : 'workshop.libraryNotMade')}`,
-            ];
+          : [`${names[form]} · ${$t('workshop.libraryNotMade')}`];
         return (
           <Tooltip key={form}>
             <TooltipTrigger

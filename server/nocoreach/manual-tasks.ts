@@ -14,7 +14,12 @@ import type { NocoReachRuntime } from '../providers/nocoreach.js';
 import type { LegacyRecord } from './legacy/database.js';
 import { projectWork } from './execution/model.js';
 import type { TaskService } from './execution/service.js';
-import type { MaterialAttachment } from './execution/task-materials.js';
+import type {
+  AgentImage,
+  MaterialAttachment,
+} from './execution/task-materials.js';
+import { pngInfo } from './png-colors.js';
+import { XHS } from '../../shared/repurpose.js';
 import { roleOf } from './policy.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import { download } from './public-sources.js';
@@ -82,6 +87,11 @@ const DRAFT_TIMEOUT = 90_000;
 const DRAFT_OUTPUT_TOKENS = 4000;
 const EXPIRY = 24 * 60 * 60 * 1000;
 const UNLINKED_LIMIT = 20;
+// An Agent's card images (Xiaohongshu cards, 2026-11-16) are counted per run, apart from the 10 a person attaches: a set
+// has up to 18 cards, and a card rendered again is uploaded again.
+const AGENT_FILES = 60;
+/** The owner an Agent's upload is kept under until its run's result links it: the run, never a person. */
+const runOwner = (runId: string) => `run:${runId}`;
 // A pasted image is asked for in the types a task takes (never AVIF or SVG), and read for at most this long.
 const IMAGE_ACCEPT =
   'image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5';
@@ -363,6 +373,131 @@ export class ManualTasks {
       if (!row) throw new Error('Uploaded task media record is missing.');
       return this.mediaView(row);
     });
+  }
+
+  /**
+   * A card image the Agent uploads during its run (`task file`): a PNG of exactly the card size, checked by its bytes,
+   * kept unlinked under the run as its owner, and read for its colors (png-colors.ts). The run's result links the ones
+   * it uses (TaskService.finish); the others expire like any unlinked upload.
+   */
+  async agentImage(
+    run: { id: string; projectId: string },
+    file: File,
+  ): Promise<AgentImage> {
+    const stored = await validateTaskMedia(file);
+    if (stored.type !== 'image/png')
+      denied(
+        'TASK_FILE_NOT_PNG',
+        'Upload each card as a PNG image.',
+        'INVALID_ARGUMENT',
+      );
+    const info = pngInfo(Buffer.from(await stored.arrayBuffer()));
+    if (!info || info.width !== XHS.width || info.height !== XHS.height)
+      denied(
+        'TASK_FILE_SIZE',
+        `Card images must be ${XHS.width}×${XHS.height} pixels; this one is ${info ? `${info.width}×${info.height}` : 'unreadable'}.`,
+        'INVALID_ARGUMENT',
+      );
+    return this.serial(`upload:${runOwner(run.id)}`, async () => {
+      if (
+        (await this.media.count({ filter: { ownerId: runOwner(run.id) } })) >=
+        AGENT_FILES
+      )
+        denied(
+          'TASK_MEDIA_QUOTA',
+          `A run can upload at most ${AGENT_FILES} images.`,
+          'RESOURCE_EXHAUSTED',
+        );
+      const repository = this.files.repository('nrTaskMedia', {
+        disk: 'local',
+        accessPath: ACCESS_PATH,
+        policy: {
+          read: true,
+          create: {
+            scope: true,
+            defaults: {
+              ownerId: runOwner(run.id),
+              sessionId: run.id,
+              projectId: run.projectId,
+              draftId: run.id,
+              taskId: null,
+              expiresAt: new Date(Date.now() + EXPIRY),
+              deleting: false,
+            },
+          },
+          update: false,
+          delete: false,
+        },
+      });
+      const uploaded = await repository.uploadOne({ file: stored });
+      return {
+        id: uploaded.record.id,
+        filename: stored.name,
+        size: stored.size,
+        width: info.width,
+        height: info.height,
+        ...(info.colors ? { colors: info.colors } : {}),
+      };
+    });
+  }
+
+  /** Whether every one of `ids` is an image the run uploaded that is still kept: unlinked and not expired, or linked to its task. */
+  async runImages(
+    run: { id: string; projectId: string; taskId: string },
+    ids: readonly string[],
+  ): Promise<boolean> {
+    for (const id of ids) {
+      const file = await this.media.findOne({ filter: { id } });
+      if (
+        !file ||
+        file.deleting ||
+        file.ownerId !== runOwner(run.id) ||
+        file.projectId !== run.projectId ||
+        (file.taskId
+          ? file.taskId !== run.taskId
+          : new Date(file.expiresAt).getTime() <= Date.now())
+      )
+        return false;
+    }
+    return true;
+  }
+
+  /**
+   * The demo's card images (demo-data/workshop-history.ts), kept as a finished run's are: linked to their task, owned
+   * by the run that made them.
+   */
+  async demoImages(
+    run: { id: string; projectId: string; taskId: string },
+    files: readonly File[],
+  ): Promise<{ id: string; name: string; ref: string }[]> {
+    const repository = this.files.repository('nrTaskMedia', {
+      disk: 'local',
+      accessPath: ACCESS_PATH,
+      policy: {
+        read: true,
+        create: {
+          scope: true,
+          defaults: {
+            ownerId: runOwner(run.id),
+            sessionId: run.id,
+            projectId: run.projectId,
+            draftId: run.id,
+            taskId: run.taskId,
+            expiresAt: new Date(),
+            deleting: false,
+          },
+        },
+        update: false,
+        delete: false,
+      },
+    });
+    const out: { id: string; name: string; ref: string }[] = [];
+    for (const file of files) {
+      const { record } = await repository.uploadOne({ file });
+      const row = await this.media.findOne({ filter: { id: record.id } });
+      if (row) out.push(this.messageImage(row));
+    }
+    return out;
   }
 
   /**
