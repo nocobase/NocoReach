@@ -74,6 +74,22 @@ export function formatDate(
   }).format(r.at);
 }
 
+/** A month: "2025-06" / "Jun 2025"; "—" when missing. */
+export function formatMonth(
+  value: DateInput,
+  { locale = getCurrentLocale() }: { locale?: string } = {},
+): string {
+  const r = read(value);
+  if (!r) return EMPTY;
+  const p = parts(r.at, r.utc);
+  if (locale.startsWith('zh')) return `${p.year}-${pad(p.month)}`;
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    year: 'numeric',
+    ...(r.utc ? { timeZone: 'UTC' } : {}),
+  }).format(r.at);
+}
+
 /** A time of day: "14:03" / "2:03 PM". */
 export function formatTime(
   value: DateInput,

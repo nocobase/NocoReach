@@ -47,7 +47,7 @@ export const ArticleImageNotesContext = createContext<ReadonlyMap<
   string
 > | null>(null);
 
-/** Why a picked file was not added to an image-only input (the article's body and cover): type, size or limit. */
+/** Why a picked file was not added to an image-only input (the article's body and Edit directly): type, size or limit. */
 export function imageProblem(file: File, count: number, max: number) {
   if (!isTaskImageType(file.type))
     return $t('taskImages.typeRejected', { 0: file.name });

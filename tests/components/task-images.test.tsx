@@ -106,8 +106,8 @@ describe('which files each input takes', () => {
     );
   });
 
-  it('keeps the article body, Edit directly and the cover to images, with their own message', () => {
-    // article-body-editor.tsx, markdown-editor.tsx (usePastedImages) and article-cover.tsx check with imageProblem.
+  it('keeps the article body and Edit directly to images, with their own message', () => {
+    // article-body-editor.tsx checks with imageProblem; it and markdown-editor.tsx (Edit directly) accept TASK_IMAGE_ACCEPT.
     expect(TASK_IMAGE_ACCEPT).toBe('image/png,image/jpeg,image/webp,image/gif');
     expect(imageProblem(file('notes.md'), 0, Infinity)).toBe(
       'notes.md is not a PNG, JPG, WebP or GIF image.',
