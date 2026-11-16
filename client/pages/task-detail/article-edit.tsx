@@ -334,7 +334,7 @@ export function ArticleEditFields({
           </p>
         )}
       </div>
-      {comparing ? (
+      {comparing && (
         <ArticleLanguage
           data={data}
           article={comparedArticle(a, base, form)}
@@ -342,93 +342,97 @@ export function ArticleEditFields({
           tab={tab}
           view='changes'
         />
-      ) : (
-        <div role='tabpanel' className='flex min-w-0 flex-col gap-4'>
-          {create && (
-            <Field data-invalid={Boolean(errors.slug)}>
-              <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
-                {$t('articleTask.field.slug')} *
-              </FieldLabel>
-              <Input
-                value={form.slug}
-                readOnly={readOnly}
-                onChange={(e) => session.set({ ...form, slug: e.target.value })}
-                {...aria('slug')}
-              />
-              {err('slug')}
-            </Field>
-          )}
-          {ARTICLE_FIELDS.map((f) => {
-            const key = `${tab}.${f}`,
-              required = create && tab === primary && f !== 'description';
-            const label = `${$t(`articleTask.field.${f}`)}${required ? ' *' : ''}`;
-            return (
-              <Field key={key} data-invalid={Boolean(errors[key])}>
-                <FieldLabel
-                  htmlFor={f === 'body' ? undefined : `${id}-${key}`}
-                  id={`${id}-${key}-label`}
-                  className={LABEL}
-                >
-                  {label}
-                </FieldLabel>
-                {f === 'title' ? (
-                  <Input
-                    value={form.locales[tab][f]}
-                    readOnly={readOnly}
-                    onChange={(e) => set(tab, f, e.target.value)}
-                    {...aria(key)}
-                  />
-                ) : f === 'description' ? (
-                  <Textarea
-                    value={form.locales[tab][f]}
-                    readOnly={readOnly}
-                    rows={2}
-                    className='field-sizing-content min-h-16'
-                    onChange={(e) => set(tab, f, e.target.value)}
-                    {...aria(key)}
-                  />
-                ) : (
-                  <ArticleImageNotesContext.Provider value={notes}>
-                    <ArticleBodyEditor
-                      // One editor per language, so each keeps its own undo history and source.
-                      key={tab}
-                      {...aria(key)}
-                      aria-label={label}
-                      value={form.locales[tab].body}
-                      readOnly={readOnly}
-                      takesImages={takesImages}
-                      pageUrl={pageUrl}
-                      onChange={(body) => set(tab, 'body', body)}
-                      rewrite={
-                        scope
-                          ? {
-                              stream: (request, signal) =>
-                                streamRewrite(
-                                  {
-                                    projectId: String(scope.projectId),
-                                    taskId: scope.taskId,
-                                    artifactId: session.artifactId,
-                                    locale: tab,
-                                    title: form.locales[tab].title,
-                                    description: form.locales[tab].description,
-                                    body: form.locales[tab].body,
-                                    ...request,
-                                  },
-                                  signal,
-                                ),
-                              onAccepted: session.accepted,
-                            }
-                          : undefined
-                      }
-                    />
-                  </ArticleImageNotesContext.Provider>
-                )}
-                {err(key)}
-              </Field>
-            );
-          })}
-        </div>
       )}
+      {/* Hidden rather than left out while comparing, so the editor keeps its undo history (2026-11-12). */}
+      <div
+        role='tabpanel'
+        hidden={comparing}
+        className='flex min-w-0 flex-col gap-4'
+      >
+        {create && (
+          <Field data-invalid={Boolean(errors.slug)}>
+            <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
+              {$t('articleTask.field.slug')} *
+            </FieldLabel>
+            <Input
+              value={form.slug}
+              readOnly={readOnly}
+              onChange={(e) => session.set({ ...form, slug: e.target.value })}
+              {...aria('slug')}
+            />
+            {err('slug')}
+          </Field>
+        )}
+        {ARTICLE_FIELDS.map((f) => {
+          const key = `${tab}.${f}`,
+            required = create && tab === primary && f !== 'description';
+          const label = `${$t(`articleTask.field.${f}`)}${required ? ' *' : ''}`;
+          return (
+            <Field key={key} data-invalid={Boolean(errors[key])}>
+              <FieldLabel
+                htmlFor={f === 'body' ? undefined : `${id}-${key}`}
+                id={`${id}-${key}-label`}
+                className={LABEL}
+              >
+                {label}
+              </FieldLabel>
+              {f === 'title' ? (
+                <Input
+                  value={form.locales[tab][f]}
+                  readOnly={readOnly}
+                  onChange={(e) => set(tab, f, e.target.value)}
+                  {...aria(key)}
+                />
+              ) : f === 'description' ? (
+                <Textarea
+                  value={form.locales[tab][f]}
+                  readOnly={readOnly}
+                  rows={2}
+                  className='field-sizing-content min-h-16'
+                  onChange={(e) => set(tab, f, e.target.value)}
+                  {...aria(key)}
+                />
+              ) : (
+                <ArticleImageNotesContext.Provider value={notes}>
+                  <ArticleBodyEditor
+                    // One editor per language, so each keeps its own undo history and source.
+                    key={tab}
+                    {...aria(key)}
+                    aria-label={label}
+                    value={form.locales[tab].body}
+                    readOnly={readOnly}
+                    takesImages={takesImages}
+                    pageUrl={pageUrl}
+                    onChange={(body) => set(tab, 'body', body)}
+                    rewrite={
+                      scope
+                        ? {
+                            stream: (request, signal) =>
+                              streamRewrite(
+                                {
+                                  projectId: String(scope.projectId),
+                                  taskId: scope.taskId,
+                                  artifactId: session.artifactId,
+                                  locale: tab,
+                                  title: form.locales[tab].title,
+                                  description: form.locales[tab].description,
+                                  body: form.locales[tab].body,
+                                  ...request,
+                                },
+                                signal,
+                              ),
+                            onAccepted: session.accepted,
+                          }
+                        : undefined
+                    }
+                  />
+                </ArticleImageNotesContext.Provider>
+              )}
+              {err(key)}
+            </Field>
+          );
+        })}
+      </div>
     </div>
   );
 }

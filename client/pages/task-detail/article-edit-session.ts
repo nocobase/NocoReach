@@ -12,6 +12,7 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import {
   ARTICLE_AUTOSAVE_MS,
   ARTICLE_LEASE_HEARTBEAT_MS,
+  type ArticleEditDraft,
   type ArticleEditState,
 } from '../../../shared/article-edit.js';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
@@ -50,6 +51,8 @@ export type ArticleEditSession = {
   othersEdits: boolean;
   /** The last automatic save of the form (ISO time). */
   savedAt?: string;
+  /** The changes the server keeps for this version and who saved them; undefined until it has answered. */
+  kept?: ArticleEditDraft | null;
   saving: boolean;
   saveFailed: boolean;
   set: (form: EditForm) => void;
@@ -130,13 +133,24 @@ export function useArticleEditSession({
       unwrap: 'data',
     });
 
-  /** What the server holds, shown unless the person has changes of their own it has not saved yet. */
+  /**
+   * What the server holds, shown when the page takes the article over: on opening it, or once someone else has let it
+   * go. While the page holds it, its own form is what the server has or is about to have, so an answer that left
+   * before the last save (a heartbeat) cannot put back older text (2026-11-12 user report).
+   */
   const receive = (at: string, state: ArticleEditState) => {
     if (liveRef.current.key !== at) return;
+    const { remote: was } = liveRef.current;
+    const held = was.key === at && Boolean(was.state?.mine);
     setRemote({ key: at, state, failed: false });
     const draft = state.draft?.artifactId === at ? state.draft : null;
+    // Saved by someone else meanwhile (the page slept past its lease): theirs is the article now.
+    const theirs = Boolean(
+      draft && state.lease && draft.savedBy !== state.lease.userId,
+    );
     setLocal((old) => {
-      if (old.key === at && old.unsaved && state.mine) return old;
+      if (old.key === at && state.mine && (old.unsaved || (held && !theirs)))
+        return old;
       const base = liveRef.current.initial;
       if (!base) return old;
       return {
@@ -249,6 +263,7 @@ export function useArticleEditSession({
     holder,
     othersEdits: Boolean(holder && ownForm && !sameForm(ownForm, initial)),
     savedAt: draft && !unsaved ? draft.savedAt : undefined,
+    kept: remote.key === key && remote.state ? draft : undefined,
     saving: saving || unsaved > 0,
     saveFailed: remote.key === key && remote.failed && unsaved > 0,
     set: (next) => {

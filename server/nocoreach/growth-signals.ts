@@ -1438,10 +1438,27 @@ function growthForModel(g) {
       [say(f.label), value(f), say(f.detail)].filter(Boolean).join(' '),
     ),
     ...(g.evidence ? { evidenceRows: g.evidence.total } : {}),
+    ...(g.topic ? { topic: g.topic } : {}),
   };
 }
 
+// The pieces growth points are made of, for the ones found elsewhere (topic-signals.ts, source-signals.ts).
+const kit = {
+  text,
+  figure,
+  col,
+  table,
+  growth,
+  signal,
+  n,
+  sum,
+  pathOf,
+  examples,
+  strengthOf,
+};
+
 export {
+  kit,
   CTR_BY_POSITION,
   growthForModel,
   expectedCtr,

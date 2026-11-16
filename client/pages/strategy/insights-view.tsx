@@ -22,6 +22,8 @@ import {daysBetween,type Verdict} from './watch';
 import {isZero,situationLines} from './situation-lines';
 import {TASK_TAG,type TaskStanding} from './task-standing';
 import {distinctPages} from '../../../shared/task-start.js';
+import {growthOf} from '../../../shared/growth.js';
+import {DiscussionWeeks} from './growth';
 // The playbooks that change the site's pages.
 const PAGE_PLAYBOOKS=new Set(['optimize-page','tech-fix']);
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
@@ -226,6 +228,7 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
    <div className="space-y-3 text-sm">
     <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
     <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.data')}</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
+    {(()=>{const weeks=growthOf(open.growth)?.weeks;return weeks?<DiscussionWeeks weeks={weeks}/>:null;})()}
     <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t('strategy.aiVerdict')}/>{$t('strategy.aiVerdict')}</h3><p>{st.reason?labelValue(st.label,st.reason):st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
     {st.earlier?<p className="text-xs text-muted-foreground">{$t('strategy.handedOffAgentBefore')}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t('common.tasks')}</button>{$tj('strategy.changeStillThere',{0:st.earlier.state==='done'?$t('strategy.done'):$t('strategy.closed')})}</p>:null}
     {watch&&st.verdict==='watch'&&!st.dismissed?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t('common.watch')}</h3>

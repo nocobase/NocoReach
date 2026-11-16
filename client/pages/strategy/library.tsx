@@ -30,7 +30,8 @@ import {placesOf,severalTag,standingOf,type HandOffDone} from './places-model';
 import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
-import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
+import {GrowthTags,GrowthRow,EvidenceTableView,DiscussionWeeks} from './growth';
+import {NewTopicNote} from './follow-topic';
 import {CATEGORY} from './growth-category';
 import {GROWTH_CATEGORIES,categoryOf,growthOf,isGrowthCategory,newPageOf,type GrowthCategory} from '../../../shared/growth.js';
 import {Segmented} from '#components/reach/segmented';
@@ -107,7 +108,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  function handed(row:Row,r:HandOffDone){setHanding(undefined);setState(r.state);setError('');refreshNavBadges();go({tab:'done',item:row.card.id});
   setNotice({ok:true,text:()=>$t('opportunityTasks.created',{0:r.taskIds.length})});if(project)void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else go({item:r.card.id});}
- const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
+ const detail=(r:Item)=><Detail key={r.card.id} row={r} project={project} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
@@ -260,7 +261,7 @@ const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.pr
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
-function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+function Detail({row,project,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;project?:Project;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
  const card=row.card,c=leadChip(row),growth=growthOf(card.growth),newPage=newPageOf(card.newPage),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
  const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
@@ -271,9 +272,10 @@ function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;task
    {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
    <div className="flex flex-wrap items-center gap-1">{growth?<GrowthTags growth={growth}/>:<>{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</>}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
-   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?several?$t('strategy.handedOffAgent'):`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
+   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?several?$t('strategy.handedOffAgent'):`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}{growth?.topic&&!growth.topic.followed&&project&&<> · <NewTopicNote projectId={project.id} topic={growth.topic} followed={project.memory?.topics??[]}/></>}</p>
   </div>
   {growth&&<GrowthRow growth={growth}/>}
+  {growth?.weeks&&<DiscussionWeeks weeks={growth.weeks}/>}
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
   {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}

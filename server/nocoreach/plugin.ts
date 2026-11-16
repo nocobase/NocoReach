@@ -67,6 +67,9 @@ import { TrendsSource } from './trends-source.js';
 import type { LegacyApp } from './legacy/app.js';
 import { YouTubeSource } from './youtube-source.js';
 import { XSource } from './x-source.js';
+import { TopicWeeks } from './topic-weeks.js';
+import { TopicDiscovery } from './topic-discovery.js';
+import { GrowthSources } from './growth-sources.js';
 import { TaskService } from './execution/service.js';
 import { projectId, secretKey, requireAccess, callbackUri, CALLBACK_PATH } from './policy.js';
 import { lastedTestingWeek } from './google-authorization.js';
@@ -188,6 +191,10 @@ export class Connections{
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   // Followed topics (2026-11-10): the sources' own topic lists move into Memory once; a failure is retried next start.
   this.followedTopics=new FollowedTopics(this);
+  // Opportunities' step 2b (2026-11-10): the followed topics' weekly counts, the AI's weekly reading of their discussions
+  // and the first batch of new data (other-language markets, site search, People also ask, link gap).
+  this.topicWeeks=new TopicWeeks(this);this.topicDiscovery=new TopicDiscovery(this);
+  this.growthSources=new GrowthSources(this);this.growthSources.register();
   // Rank checks saved while Google hid result links (late October 2026) become uncertain once; see rank-tracking.ts.
   await this.rankTracking.reviewHiddenLinks().then(marked=>{if(marked)this.app.logger.info('NocoReach marked rank checks with hidden result links uncertain',{checks:marked});},e=>this.app.logger.warn('NocoReach rank check review skipped',{message:e?.message}));
   await this.followedTopics.migrate().then(moved=>{if(moved)this.app.logger.info('NocoReach moved followed topics into Memory',{projects:moved});},e=>this.app.logger.warn('NocoReach followed topics move skipped',{message:e?.message}));
@@ -237,6 +244,10 @@ export class Connections{
   this.competitorCron=this.app.cronJobManager.addJob({name:'competitorCron',cronTime:'0 50 * * * *',onTick:()=>this.competitors.tick().catch(e=>this.app.logger.warn('NocoReach competitor tick failed',{message:e?.message}))});
   this.competitorResearchCron=this.app.cronJobManager.addJob({name:'competitorResearchCron',cronTime:'0 20 4 * * *',onTick:()=>this.competitorResearch.tick().catch(e=>this.app.logger.warn('NocoReach competitor research tick failed',{message:e?.message}))});
   this.aiQuestionsCron=this.app.cronJobManager.addJob({name:'aiQuestionsCron',cronTime:'0 40 4 * * *',onTick:()=>this.aiQuestions.tick().catch(e=>this.app.logger.warn('NocoReach AI questions tick failed',{message:e?.message}))});
+  // Step 2b: each project's discussions read by the AI once a week, the new data for Opportunities once an hour (each
+  // part only when due); both before the daily analysis reads them.
+  this.topicDiscoveryCron=this.app.cronJobManager.addJob({name:'topicDiscoveryCron',cronTime:'0 25 * * * *',onTick:()=>this.topicDiscovery.tick().catch(e=>this.app.logger.warn('NocoReach topic discovery tick failed',{message:e?.message}))});
+  this.growthSourcesCron=this.app.cronJobManager.addJob({name:'growthSourcesCron',cronTime:'0 45 * * * *',onTick:()=>this.growthSources.tick().catch(e=>this.app.logger.warn('NocoReach growth sources tick failed',{message:e?.message}))});
   this.xCron=this.app.cronJobManager.addJob({name:'xCron',cronTime:'0 55 * * * *',onTick:()=>this.xSource.tick().catch(e=>this.app.logger.warn('NocoReach X tick failed',{message:e?.message}))});
   this.chatCron=this.app.cronJobManager.addJob({name:'chatCron',cronTime:'0 15 * * * *',onTick:()=>this.chat.tick().catch(e=>this.app.logger.warn('NocoReach chat tick failed',{message:e?.message}))});
   this.memoryCron=this.app.cronJobManager.addJob({name:'memoryCron',cronTime:'0 40 * * * *',onTick:()=>this.memoryUpdates.tick().catch(e=>this.app.logger.warn('NocoReach memory tick failed',{message:e?.message}))});

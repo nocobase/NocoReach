@@ -92,6 +92,8 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'serp/youtube/organic/live/advanced',
       'serp/youtube/video_info/live/advanced',
       'keywords_data/google_ads/keywords_for_keywords/live',
+      'keywords_data/google_ads/search_volume/task_post',
+      'keywords_data/google_ads/search_volume/task_get/{id}',
       'keywords_data/google_trends/explore/live',
       'ai_optimization/llm_mentions/aggregated_metrics',
       'ai_optimization/llm_mentions/cross_aggregated_metrics',
@@ -857,12 +859,44 @@ const GA4_METRICS = [
   'bounceRate',
   'sessionKeyEventRate',
 ];
+// What visitors searched on the site (Opportunities › Site search with no results): searchTerm with its searches and
+// searchers, the only report that asks for it; the empty scenario has site search off and answers no rows.
+const SITE_SEARCH_TERMS: [term: string, searches: number, people: number][] = [
+  ['import from airtable', 64, 41],
+  ['audit log', 38, 26],
+  ['sso setup', 27, 19],
+  ['custom domain', 21, 15],
+  ['webhook retry', 9, 6],
+];
+function siteSearchReport(
+  dim: string[],
+  met: string[],
+  b: ObjectValue,
+  c: FixtureContext,
+): ObjectValue {
+  if (
+    dim.some((d) => d !== 'searchTerm') ||
+    met.some((m) => m !== 'eventCount' && m !== 'totalUsers')
+  )
+    throw new MockUnsupportedOperationError('GA4 site search report');
+  const rows: Fact[] = empty(c)
+    ? []
+    : SITE_SEARCH_TERMS.map(([term, searches, people]) => ({
+        dimensions: { searchTerm: term },
+        metrics: {
+          eventCount: searches + (added(c) ? 5 : 0),
+          totalUsers: people,
+        },
+      }));
+  return ga4Response(dim, met, rows, b, 'analyticsData#runReport');
+}
 // One GA4 report: every requested date range (named ones add the dateRange dimension, as GA4 does when there are
 // several), dimension filters, metric or dimension ordering, and offset/limit.
 function ga4Report(b: ObjectValue, c: FixtureContext): ObjectValue {
   const dim = names(b.dimensions),
     met = names(b.metrics),
     ranges = list(b.dateRanges).map(object);
+  if (dim.includes('searchTerm')) return siteSearchReport(dim, met, b, c);
   if (
     dim.some((d) => !GA4_DIMENSIONS.includes(d)) ||
     met.some((m) => !GA4_METRICS.includes(m))
@@ -1520,6 +1554,59 @@ function queuedSerp(
     ],
   });
 }
+// Google Ads search volume on the Standard queue (Opportunities › Other-language markets): the posted task's id
+// carries its keywords, and reading it gives each a year of monthly searches.
+const ADS_QUEUE =
+  /^keywords_data\/google_ads\/search_volume\/(?:task_post|task_get\/([A-Za-z0-9_-]+))$/;
+function queuedAdsVolume(
+  c: FixtureContext,
+  operation: string,
+  b: ObjectValue,
+  id: string,
+): Response {
+  if (id)
+    return seoEnvelope(
+      c,
+      operation,
+      keywordRows(
+        c,
+        JSON.parse(Buffer.from(id, 'base64url').toString('utf8')) as string[],
+      ).map((k) => {
+        const info = object(k.keyword_info);
+        return {
+          keyword: k.keyword,
+          search_volume: info.search_volume,
+          competition: 'LOW',
+          cpc: info.cpc,
+          monthly_searches: list(info.monthly_searches).reverse(),
+        };
+      }),
+    );
+  return json({
+    version: '0.1.20261012',
+    status_code: 20000,
+    status_message: 'Ok. (fictional mock data)',
+    time: '0 sec.',
+    cost: 0,
+    tasks_count: 1,
+    tasks_error: 0,
+    tasks: [
+      {
+        id: Buffer.from(JSON.stringify(names(b.keywords))).toString(
+          'base64url',
+        ),
+        status_code: 20100,
+        status_message: 'Task Created.',
+        time: '0 sec.',
+        cost: 0,
+        result_count: 0,
+        path: ['v3', ...operation.split('/')],
+        data: b,
+        result: null,
+      },
+    ],
+  });
+}
 function dataforseo(
   u: URL,
   init: RequestInit,
@@ -1530,6 +1617,8 @@ function dataforseo(
     b = taskInput(init);
   const queued = operation.match(SERP_QUEUE);
   if (queued) return queuedSerp(c, operation, b, queued[1] ?? '');
+  const ads = operation.match(ADS_QUEUE);
+  if (ads) return queuedAdsVolume(c, operation, b, ads[1] ?? '');
   const wrap = (result: unknown[]): Response =>
     seoEnvelope(c, operation, result);
   const result = (rows: ObjectValue[], extra: ObjectValue = {}): Response =>

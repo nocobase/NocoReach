@@ -33,6 +33,8 @@ function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.au
 // also says what it waits for and the day to decide by (2026-10-08, see watch.js).
 function reviewsOf(list,signals,cards){const keys=new Map(signals.map(s=>[s.key,s])),cited=new Set(cards.flatMap(c=>c.signalIds||[])),out={};
  for(const r of Array.isArray(list)?list:[]){const s=keys.get(r?.key);if(!s||!['do','watch','skip'].includes(r.verdict))continue;const verdict=r.verdict==='do'&&!s.actionable?'watch':r.verdict;out[s.key]={verdict,reason:typeof r.reason==='string'?r.reason.trim().slice(0,200):'',...(verdict==='watch'&&typeof r.waitingFor==='string'&&r.waitingFor.trim()?{waitingFor:r.waitingFor.trim().slice(0,120)}:{}),...(verdict==='watch'&&typeof r.decideBy==='string'?{decideBy:r.decideBy.slice(0,10)}:{})};}
+ // A rise on one source alone (topic-signals.ts, watchOnly) is watched until another source follows, unless skipped.
+ for(const s of signals)if(s.watchOnly&&!cited.has(s.key)&&out[s.key]?.verdict!=='skip')out[s.key]={verdict:'watch',reason:out[s.key]?.reason||'',...(s.waitingFor?{waitingFor:String(s.waitingFor).slice(0,120)}:{}),...(out[s.key]?.decideBy?{decideBy:out[s.key].decideBy}:{})};
  for(const k of cited)if(keys.has(k))out[k]={verdict:'do',reason:out[k]?.verdict==='do'?out[k].reason:''};
  return out;}
 // The page a hand-off is about (an http(s) address), kept on the task so its article can be found before it starts.

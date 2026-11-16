@@ -634,10 +634,36 @@ function ga4Report(world: World, b: Json): Json {
   return response;
 }
 
+// Site search terms (growth-sources.ts), only as that report asks for them: the script's terms of the last 28 days
+// scaled to the range, for view_search_results. A site without terms answers no rows, as GA4 does with site search off.
+function siteSearchTable(world: World, dim: string[], met: string[], b: Json) {
+  if (
+    dim.some((d) => d !== 'searchTerm') ||
+    met.some((m) => m !== 'eventCount' && m !== 'totalUsers') ||
+    list(b.dateRanges).length > 1
+  )
+    throw new WorldUnsupported('this GA4 site search report');
+  const range = object(list(b.dateRanges)[0]);
+  const start = ga4Day(world, range.startDate ?? '28daysAgo'),
+    end = ga4Day(world, range.endDate ?? 'yesterday');
+  const share = daysBetween(start, end).length / 28;
+  const rows = world.siteSearch
+    .map(([term, searches, people]) => ({
+      dimensions: { searchTerm: world.text(term) },
+      metrics: {
+        eventCount: Math.round(searches * share),
+        totalUsers: Math.round(people * Math.min(1, share)),
+      },
+    }))
+    .filter((r) => r.metrics.eventCount > 0);
+  return ga4Table(dim, met, rows, b);
+}
+
 function computeGa4Table(world: World, b: Json): Ga4Table {
   const dim = names(b.dimensions);
   const met = names(b.metrics);
   const ranges = list(b.dateRanges).map(object);
+  if (dim.includes('searchTerm')) return siteSearchTable(world, dim, met, b);
   if (
     dim.some((d) => !GA4_DIMENSIONS.has(d)) ||
     met.some((m) => !GA4_METRICS.has(m))
