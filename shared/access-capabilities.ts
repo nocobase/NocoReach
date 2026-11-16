@@ -95,6 +95,7 @@ export const TASK_COMMANDS = [
   'editArticleDraft',
   'restoreArticleVersion',
   'retryPublish',
+  'repushDraft',
   'rebaseArticle',
 ] as const;
 
@@ -371,8 +372,6 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'setDefaultTarget',
       'savePlaybookTargets',
       'testTarget',
-      'detectCover',
-      'saveCover',
     ]),
   ],
   'app.projects': ['nrProjects.create'],

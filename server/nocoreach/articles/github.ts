@@ -9,9 +9,7 @@ import {
 const API = 'https://api.github.com';
 export type GitFile = { path: string; sha: string; text: string };
 export type GitCommit = { sha: string; name: string; email: string };
-/** A file to commit: text, or bytes for a binary file such as a cover image. */
-export type GitWrite =
-  { path: string; content: string } | { path: string; bytes: Buffer };
+export type GitWrite = { path: string; content: string };
 
 /** The few GitHub REST calls article publishing needs. The token stays on the server. */
 export class GitHubFiles {
@@ -72,16 +70,6 @@ export class GitHubFiles {
     return ref.object.sha;
   }
   async file(path: string, ref: string): Promise<GitFile | null> {
-    const read = await this.raw(path, ref);
-    return read
-      ? { path, sha: read.sha, text: read.bytes.toString('utf8') }
-      : null;
-  }
-  /** A file's bytes and blob SHA at `ref`, or null when there is none. */
-  async raw(
-    path: string,
-    ref: string,
-  ): Promise<{ sha: string; bytes: Buffer } | null> {
     const body = (await this.call(
       `/contents/${this.enc(path)}?ref=${encodeURIComponent(ref)}`,
       {},
@@ -101,7 +89,11 @@ export class GitHubFiles {
       content =
         ((await this.call(`/git/blobs/${body.sha}`)) as { content?: string })
           ?.content || '';
-    return { sha: body.sha, bytes: Buffer.from(content, 'base64') };
+    return {
+      path,
+      sha: body.sha,
+      text: Buffer.from(content, 'base64').toString('utf8'),
+    };
   }
   async list(dir: string, ref: string): Promise<string[]> {
     const body = await this.call(
@@ -145,33 +137,17 @@ export class GitHubFiles {
     const base = (await this.call(`/git/commits/${parent}`)) as {
       tree?: { sha?: string };
     };
-    // Binary files go in as blobs first; the tree names text files by their content.
-    const entries = [];
-    for (const f of files)
-      if ('bytes' in f) {
-        const blob = (await this.call('/git/blobs', {
-          method: 'POST',
-          body: JSON.stringify({
-            content: f.bytes.toString('base64'),
-            encoding: 'base64',
-          }),
-        })) as { sha: string };
-        entries.push({
-          path: f.path,
-          mode: '100644',
-          type: 'blob',
-          sha: blob.sha,
-        });
-      } else
-        entries.push({
+    const tree = (await this.call('/git/trees', {
+      method: 'POST',
+      body: JSON.stringify({
+        base_tree: base?.tree?.sha,
+        tree: files.map((f) => ({
           path: f.path,
           mode: '100644',
           type: 'blob',
           content: f.content,
-        });
-    const tree = (await this.call('/git/trees', {
-      method: 'POST',
-      body: JSON.stringify({ base_tree: base?.tree?.sha, tree: entries }),
+        })),
+      }),
     })) as { sha: string };
     const commit = (await this.call('/git/commits', {
       method: 'POST',
