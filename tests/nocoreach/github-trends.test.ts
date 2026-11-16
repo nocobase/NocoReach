@@ -108,6 +108,8 @@ test('the rate limit stops the run without marking the day done; saved topics ar
   await t.refresh('1');
   assert.equal(rows[KEY('1')].lastRun.limited, true);
   assert.equal(rows[KEY('1')].lastRun.day, null);
+  // The topic cut short is marked failed (no week of it counts as 0); the one not reached was not read at all.
+  assert.deepEqual(Object.keys(rows[KEY('1')].topicFailed), ['mcp']);
   assert.deepEqual(rows[KEY('1')].topics, ['mcp', 'workflow']);
   assert.ok(rows[KEY('1')].heat.mcp);
   // Changed in Memory: read again in the background; what was read under another spelling stays with the topic.

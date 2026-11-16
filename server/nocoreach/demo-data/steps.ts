@@ -735,6 +735,17 @@ async function connectSources(
         await p.aiQuestions.refresh(id);
       },
     ],
+    [
+      // Opportunities' new data (2026-11-10 step 2b): the week's reading of the topics' discussions, then site
+      // search, People also ask, the link gap and other-language markets as their reads leave them. The second read
+      // collects the Standard queue's search volumes.
+      'growth-sources',
+      async () => {
+        await p.topicDiscovery.run(id);
+        await p.growthSources.update(id);
+        await p.growthSources.update(id);
+      },
+    ],
   );
   await p.network.runProject(id, async () => {
     for (const [index, [name, run]] of phases.entries()) {

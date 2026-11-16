@@ -862,6 +862,108 @@ function queuedTask(world: World, operation: string, b: Json, id: string) {
   });
 }
 
+// Google Ads search volume on the Standard queue (Other-language markets, growth-sources.ts): the posted task's id
+// carries the request; reading it gives each keyword a share of a market's demand for the product and a year that
+// grows toward now.
+const ADS_QUEUE =
+  /^keywords_data\/google_ads\/search_volume\/(?:task_post|task_get\/([A-Za-z0-9_-]+))$/;
+const MARKET_SHARE: Record<number, number> = {
+  2392: 1,
+  2276: 0.8,
+  2410: 0.45,
+  2250: 0.55,
+  2076: 0.5,
+  2724: 0.4,
+  2484: 0.3,
+  2158: 0.25,
+  2380: 0.3,
+  2528: 0.2,
+  2360: 0.25,
+  2704: 0.15,
+};
+function adsVolumeTask(world: World, b: Json, id: string): Response {
+  if (!id) {
+    const task = Buffer.from(
+      JSON.stringify([names(b.keywords), b.location_code, b.language_code]),
+    ).toString('base64url');
+    return json({
+      version: '0.1.20261014',
+      status_code: 20000,
+      status_message: 'Ok.',
+      time: '0.0520 sec.',
+      cost: 0.06,
+      tasks_count: 1,
+      tasks_error: 0,
+      tasks: [
+        {
+          id: task,
+          status_code: 20100,
+          status_message: 'Task Created.',
+          time: '0.0040 sec.',
+          cost: 0.06,
+          result_count: 0,
+          path: [
+            'v3',
+            'keywords_data',
+            'google_ads',
+            'search_volume',
+            'task_post',
+          ],
+          data: b,
+          result: null,
+        },
+      ],
+    });
+  }
+  const [keywords, location, language] = JSON.parse(
+    Buffer.from(id, 'base64url').toString('utf8'),
+  ) as [string[], number, string];
+  const share = MARKET_SHARE[location] ?? 0.2;
+  const now = new Date(world.now);
+  const result = keywords.map((keyword, i) => {
+    const key = `ads:${location}:${keyword}`;
+    // The first keywords are the product's main ones, so they are searched most.
+    const base = Math.round(
+      ((60 + world.seeded.int(key, 900)) * share * 12) / (1 + i * 0.35),
+    );
+    const volume = Math.max(0, Math.round(base / 10) * 10);
+    const monthly = Array.from({ length: 12 }, (_, m) => {
+      const at = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12 + m, 1),
+      );
+      return {
+        year: at.getUTCFullYear(),
+        month: at.getUTCMonth() + 1,
+        search_volume: Math.round(
+          volume *
+            (0.7 + (0.45 * m) / 11) *
+            world.seeded.jitter(`${key}:${m}`, 0.08),
+        ),
+      };
+    }).reverse();
+    return {
+      keyword,
+      spell: null,
+      location_code: location,
+      language_code: language,
+      search_partners: false,
+      competition: 'MEDIUM',
+      competition_index: 40 + world.seeded.int(`${key}:c`, 40),
+      search_volume: volume,
+      low_top_of_page_bid: 0.6,
+      high_top_of_page_bid: 2.4,
+      cpc: 1.4,
+      monthly_searches: volume ? monthly : [],
+    };
+  });
+  return envelope(
+    world,
+    'keywords_data/google_ads/search_volume/task_get',
+    result,
+    0,
+  );
+}
+
 export function dataforseo(
   world: World,
   u: URL,
@@ -878,6 +980,8 @@ export function dataforseo(
   }
   const queued = operation.match(QUEUE);
   if (queued) return queuedTask(world, operation, b, queued[1] ?? '');
+  const ads = operation.match(ADS_QUEUE);
+  if (ads) return adsVolumeTask(world, b, ads[1] ?? '');
   const wrap = (result: unknown[], cost?: number) =>
     envelope(world, operation, result, cost);
   const page = (rows: unknown[], extra: Json = {}) =>

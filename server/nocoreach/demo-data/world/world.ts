@@ -10,6 +10,7 @@ import {
 } from './script/market.js';
 import { BILIBILI, XIAOHONGSHU, YOUTUBE } from './script/media.js';
 import { ACME_TOPICS, CRM_TOPICS } from './script/topics.js';
+import { ACME_SITE_SEARCH, CRM_SITE_SEARCH } from './script/site-search.js';
 import {
   CRM_REPOSITORY,
   CRM_FORUM,
@@ -249,6 +250,10 @@ export class World {
   /** What the market discusses on the project's followed topics, apart from the product. */
   get topicDiscussions() {
     return this.main ? ACME_TOPICS : CRM_TOPICS;
+  }
+  /** What visitors search on the site (GA4 site search), empty where it is off. */
+  get siteSearch() {
+    return this.main ? ACME_SITE_SEARCH : CRM_SITE_SEARCH;
   }
   /** The followed topic a search phrase names (any case or spacing), if any. */
   followedTopic(phrase: string): string | null {

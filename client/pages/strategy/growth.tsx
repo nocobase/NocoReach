@@ -2,6 +2,19 @@ import { $t } from '#i18n';
 import { Fragment, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from 'lucide-react';
+import {
+  BarChart,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
+  ChartBar,
+  ChartLegend,
+  TrendChart,
+} from '#components/reach/chart-legend';
 import { Tag } from '#components/reach/tag';
 import { CATEGORY } from './growth-category';
 import { InfoTip } from '#components/reach/info-tip';
@@ -15,6 +28,8 @@ import {
 } from '#lib/format';
 import { cn } from '#lib/utils';
 import {
+  TOPIC_SOURCES,
+  type DiscussionWeek,
   type EvidenceCell,
   type EvidenceColumn,
   type EvidenceTable,
@@ -23,6 +38,7 @@ import {
   type GrowthFigure,
   type GrowthKind,
   type GrowthText,
+  type TopicSource,
 } from '../../../shared/growth.js';
 
 // A growth opportunity's parts on Opportunities (2026-11-10, ui-references/growth-opportunities-2026-11-10): its category
@@ -48,6 +64,15 @@ const KIND: Record<GrowthKind, string> = {
   'thin-page': 'growth.kind.thinPage',
   'ai-dropped': 'growth.kind.aiDropped',
   'page-issue': 'growth.kind.pageIssue',
+  'topic-rise': 'growth.kind.topicRise',
+  'new-topic': 'growth.kind.newTopic',
+  'hot-discussion': 'growth.kind.hotDiscussion',
+  'hot-video': 'growth.kind.hotVideo',
+  'asked-often': 'growth.kind.askedOften',
+  'other-market': 'growth.kind.otherMarket',
+  'site-search': 'growth.kind.siteSearch',
+  'people-also-ask': 'growth.kind.peopleAlsoAsk',
+  'link-gap': 'growth.kind.linkGap',
 };
 const say = (text?: GrowthText) => (text ? $t(text.key, text.params) : '');
 
@@ -90,6 +115,22 @@ const figureValue = (f: GrowthFigure): string =>
           ? formatCount(f.value, 1)
           : formatCount(f.value);
 
+/** A subreddit or a path ("r/projectmanagement", "/docs/import") wraps after a slash rather than inside a word. */
+const slashBreaks = (s: string): ReactNode =>
+  s.includes('/')
+    ? s.split('/').map((part, j) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- the parts of one fixed string
+        <Fragment key={j}>
+          {j > 0 ? (
+            <>
+              /<wbr />
+            </>
+          ) : null}
+          {part}
+        </Fragment>
+      ))
+    : s;
+
 /** Growth potential: up to four figures side by side, each a label over a number and its unit. */
 export function GrowthRow({ growth }: { growth: Growth }): ReactElement {
   const estimated = growth.figures.some((f) => f.estimate);
@@ -129,7 +170,9 @@ export function GrowthRow({ growth }: { growth: Growth }): ReactElement {
                     : 'max-w-full py-1 text-sm leading-5 font-medium break-words',
                 )}
               >
-                {figureValue(f)}
+                {typeof f.value === 'number'
+                  ? figureValue(f)
+                  : slashBreaks(figureValue(f))}
               </span>
               {f.detail ? (
                 <span className='max-w-full text-xs text-muted-foreground break-words'>
@@ -181,6 +224,8 @@ function cellText(value: EvidenceCell, column: EvidenceColumn): ReactNode {
           </Fragment>
         ))
       : '—';
+  // A cell the server wrote as words (a heat, a rank) reads in the reader's language.
+  if (typeof value === 'object') return say(value);
   if (typeof value === 'number')
     return column.format === 'percent' ? (
       formatPercent(value)
@@ -294,6 +339,95 @@ export function EvidenceTableView({
           <ArrowRightIcon className='size-3.5' />
         </Link>
       ) : null}
+    </section>
+  );
+}
+
+const WEEK_SERIES: Record<TopicSource, [string, () => string]> = {
+  reddit: ['var(--chart-1)', () => 'Reddit'],
+  hackernews: ['var(--chart-2)', () => 'Hacker News'],
+  youtube: ['var(--chart-3)', () => 'YouTube'],
+  github: ['var(--chart-4)', () => $t('growth.chart.githubRepos')],
+};
+
+/**
+ * Discussions a week (2026-11-10 step 2b): a trending topic's last weeks, each a bar stacked by source with the week's
+ * total above it. Only the sources counted for the topic are drawn.
+ */
+export function DiscussionWeeks({
+  weeks,
+}: {
+  weeks: DiscussionWeek[];
+}): ReactElement | null {
+  // A source with no discussions in any week draws no bar, so it gets no legend entry either.
+  const shown = TOPIC_SOURCES.filter((s) =>
+    weeks.some((w) => (w.counts[s] ?? 0) > 0),
+  );
+  if (weeks.length < 2 || !shown.length) return null;
+  // The week's total goes above the highest source with discussions that week (`total_<source>`): a source with none
+  // draws no bar, so it cannot carry the label.
+  const data = weeks.map((w) => {
+    const total = shown.reduce((a, s) => a + (w.counts[s] ?? 0), 0),
+      top = [...shown].reverse().find((s) => (w.counts[s] ?? 0) > 0);
+    return {
+      week: w.week,
+      ...w.counts,
+      ...(top ? { [`total_${top}`]: total } : {}),
+    };
+  });
+  return (
+    <section
+      className='flex flex-col gap-1.5'
+      aria-label={$t('growth.chart.title')}
+      data-discussion-weeks=''
+    >
+      <h3 className='text-xs font-medium text-muted-foreground'>
+        {$t('growth.chart.title')}
+      </h3>
+      <div className='nr-chart-box rounded-lg border px-2 pt-3'>
+        <ResponsiveContainer width='100%' height={180}>
+          <TrendChart
+            as={BarChart}
+            data={data}
+            margin={{ top: 16, right: 8, left: 8, bottom: 0 }}
+          >
+            <XAxis
+              dataKey='week'
+              tickFormatter={(d: string) => formatDate(d, { withYear: false })}
+              interval={0}
+              fontSize={11}
+              tickLine={false}
+            />
+            <YAxis hide allowDecimals={false} />
+            <Tooltip
+              cursor={{ fill: 'var(--muted)' }}
+              labelFormatter={(d) =>
+                typeof d === 'string'
+                  ? $t('growth.chart.weekOf', { 0: formatDate(d) })
+                  : ''
+              }
+            />
+            <ChartLegend order={shown} />
+            {shown.map((s) => (
+              <ChartBar
+                key={s}
+                isAnimationActive={false}
+                stackId='week'
+                dataKey={s}
+                name={WEEK_SERIES[s][1]()}
+                fill={WEEK_SERIES[s][0]}
+              >
+                <LabelList
+                  dataKey={`total_${s}`}
+                  position='top'
+                  fontSize={11}
+                  fill='var(--foreground)'
+                />
+              </ChartBar>
+            ))}
+          </TrendChart>
+        </ResponsiveContainer>
+      </div>
     </section>
   );
 }

@@ -35,7 +35,7 @@ const ADMIN_ONLY={
  nrArticles:['saveTarget','removeTarget','setDefaultTarget','savePlaybookTargets','testTarget','detectCover','saveCover'],
  nrPlaybooks:['save','copy','remove','restore','draft'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],
- nrKnowledge:['add','edit','remove','saveMemory'],nrKnowledgeAdd:['suggest','confirm'],nrMemory:['sources','draft','check','accept','dismiss'],
+ nrKnowledge:['add','edit','remove','saveMemory','followTopic'],nrGrowthSources:['setMarkets'],nrKnowledgeAdd:['suggest','confirm'],nrMemory:['sources','draft','check','accept','dismiss'],
  nrProjects:['create','edit'],nrAnalysisRules:['save','propose','apply','create','rename','activate','draft','addRule','updateRule'],nrMembers:['setRole'],
 };
 const adminOnly=(resource,action)=>Boolean(ADMIN_ONLY[resource]?.includes(action));

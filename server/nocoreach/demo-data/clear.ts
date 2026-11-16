@@ -49,6 +49,10 @@ export const PROJECT_SNAPSHOTS = new Set([
   'gsc-reports',
   'gsc-sitemaps',
   'google-local-reports',
+  // Opportunities' step 2b data (2026-11-10): growth-sources.ts, topic-discovery.ts and topic-weeks.ts.
+  'growth-sources',
+  'topic-discovery',
+  'topic-weeks',
   'hackernews',
   'keyword-suggest',
   'keyword-tags',

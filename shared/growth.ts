@@ -29,8 +29,17 @@ export const GROWTH_KINDS = {
   'new-query': 'trending',
   'topic-heat': 'trending',
   'new-repo': 'trending',
+  'topic-rise': 'trending',
+  'new-topic': 'trending',
+  'hot-discussion': 'trending',
+  'hot-video': 'trending',
   'demand-gap': 'new-content',
+  'asked-often': 'new-content',
+  'other-market': 'new-content',
+  'site-search': 'new-content',
+  'people-also-ask': 'new-content',
   'competitor-gap': 'competitor-gaps',
+  'link-gap': 'competitor-gaps',
   'not-mentioned': 'competitor-gaps',
   'cited-sources': 'competitor-gaps',
   'competitor-launch': 'competitor-gaps',
@@ -79,8 +88,8 @@ export function roundEstimate(value: number): number {
 
 /**
  * How a column's values read: counts, ratios as percentages, positions, keyword difficulty, a change (a ratio, +1.8
- * reads "+180%"), a difference of counts ("+12", "-340"), a day, an AI platform (chat_gpt, google), lists, and
- * message keys (`label`).
+ * reads "+180%"), a difference of counts ("+12", "-340"), a day, an AI platform (chat_gpt, google), lists, message
+ * keys (`label`) and messages with their values (`message`, a GrowthText such as "312 points · 141 comments").
  */
 export type EvidenceFormat =
   | 'text'
@@ -93,7 +102,8 @@ export type EvidenceFormat =
   | 'delta'
   | 'date'
   | 'platform'
-  | 'list';
+  | 'list'
+  | 'message';
 export type EvidenceColumn = {
   key: string;
   label: string;
@@ -101,9 +111,16 @@ export type EvidenceColumn = {
   /** A position's former value: the row key shown after it in grey ("11 ← 4"), as Search performance shows a move. */
   from?: string;
 };
-/** A cell: a number or a text, a list (joined), or an item with its rank ("Nimbus #4"); null reads as "—". */
+/**
+ * A cell: a number or a text, a list (joined), an item with its rank ("Nimbus #4") or a message in the reader's
+ * language; null reads as "—".
+ */
 export type EvidenceCell =
-  number | string | null | (string | { name: string; rank: number })[];
+  | number
+  | string
+  | null
+  | GrowthText
+  | (string | { name: string; rank: number })[];
 export type EvidenceRow = Record<string, EvidenceCell> & {
   url?: string | null;
 };
@@ -120,11 +137,39 @@ export type EvidenceTable = {
 };
 export const EVIDENCE_ROWS = 10;
 
+/**
+ * The sources a followed topic's discussions are counted on each week (2026-11-10 step 2b): new Reddit threads, Hacker
+ * News stories and YouTube videos, and new GitHub repositories, in the order the chart stacks them.
+ */
+export const TOPIC_SOURCES = [
+  'reddit',
+  'hackernews',
+  'youtube',
+  'github',
+] as const;
+export type TopicSource = (typeof TOPIC_SOURCES)[number];
+/**
+ * Discussions a week (Monday to Sunday, `week` its Monday), by source: the "Discussions a week" chart of a trending
+ * topic. A source with no count for a week was not read for the topic yet then.
+ */
+export type DiscussionWeek = {
+  week: string;
+  counts: Partial<Record<TopicSource, number>>;
+};
+
+/**
+ * A topic a trending opportunity is about. `from` is the followed topic whose discussions a new topic was found in;
+ * `followed` says whether it is in Memory's followed topics (when the growth was computed).
+ */
+export type GrowthTopic = { name: string; from?: string; followed: boolean };
+
 export type Growth = {
   kind: GrowthKind;
   category: GrowthCategory;
   figures: GrowthFigure[];
   evidence?: EvidenceTable;
+  weeks?: DiscussionWeek[];
+  topic?: GrowthTopic;
 };
 
 /**
@@ -136,10 +181,34 @@ export function growthOf(value: unknown): Growth | undefined {
   const g = value as Partial<Growth> & { area?: unknown };
   if (!isGrowthKind(g.kind) || !Array.isArray(g.figures) || !g.figures.length)
     return undefined;
-  const { area: _area, ...rest } = g;
+  const { area: _area, weeks, topic, ...rest } = g;
+  const topicName =
+    topic && typeof topic === 'object' && typeof topic.name === 'string'
+      ? topic.name
+      : '';
   return {
     ...(rest as Growth),
     category: isGrowthCategory(g.category) ? g.category : GROWTH_KINDS[g.kind],
+    ...(Array.isArray(weeks)
+      ? {
+          weeks: weeks.filter(
+            (w): w is DiscussionWeek =>
+              Boolean(w) &&
+              typeof w.week === 'string' &&
+              Boolean(w.counts) &&
+              typeof w.counts === 'object',
+          ),
+        }
+      : {}),
+    ...(topicName
+      ? {
+          topic: {
+            name: topicName,
+            ...(typeof topic?.from === 'string' ? { from: topic.from } : {}),
+            followed: topic?.followed === true,
+          },
+        }
+      : {}),
   };
 }
 /** The category of an opportunity or a change, when it carries a growth. */

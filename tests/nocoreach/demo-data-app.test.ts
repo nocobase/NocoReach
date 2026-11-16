@@ -367,13 +367,14 @@ test('imports the demo through the API and clears all business data while preser
       );
     expect((await read('knowledge')).items).toHaveLength(8);
     const strategy = await read('strategy');
-    expect(strategy.insights.items).toHaveLength(id === main ? 22 : 14);
+    expect(strategy.insights.items).toHaveLength(id === main ? 28 : 18);
     expect(strategy.proposals).toHaveLength(14);
     const timeline = strategy as StrategyState;
     const watches = Object.values(timeline.watch!).filter(
       (watch) => !watch.ended,
     );
-    expect(watches).toHaveLength(6);
+    // ACME also watches a followed topic rising on Reddit alone (step 2b).
+    expect(watches).toHaveLength(id === main ? 7 : 6);
     expect(
       new Set(watches.map((watch) => watch.decideBy)).size,
     ).toBeGreaterThanOrEqual(5);

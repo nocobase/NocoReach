@@ -29,6 +29,12 @@ import { analysisRequest, type AnalysisStatus } from './strategy/service';
 import { dailyScheduleTime } from '#lib/schedule-time';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { SchemeManager, AddRule } from './analysis-rules/schemes';
+import {
+  MarketsLine,
+  RuleCost,
+  SiteSearchLine,
+} from './analysis-rules/growth-sources';
+import { useGrowthSources } from './analysis-rules/growth-sources-data';
 import type { Rule, Settings, View } from './analysis-rules/types';
 import { PageAiEntry } from '../online-agent/page-entry';
 import { usePageChange } from '../online-agent/page-changes';
@@ -62,7 +68,10 @@ const COVERAGE_AREAS = [
   ['search', ['gsc', 'keywords', 'rank', 'trends', 'ai-search']],
   ['traffic', ['ga4', 'github-traffic']],
   ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
-  ['community', ['discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x']],
+  [
+    'community',
+    ['topics', 'discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x'],
+  ],
   ['product', ['github', 'packages']],
   ['competitors', ['competitors']],
 ] as const;
@@ -77,6 +86,7 @@ const SOURCE_ORDER = [
   'site',
   'github',
   'github-traffic',
+  'topics',
   'discourse',
   'packages',
   'hackernews',
@@ -116,6 +126,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     projectId,
   );
   const [view, setView] = useState<View>();
+  const [growthSources, setGrowthSources] = useGrowthSources(projectId);
   const [error, setError] = useMessageState('');
   const [loadStatus, setLoadStatus] = useState<number>();
   const [saveError, setSaveError] = useMessageState('');
@@ -555,6 +566,16 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                               </span>
                             ))}
                           </div>
+                          {r.id === 'other-market' && growthSources ? (
+                            <MarketsLine
+                              projectId={projectId}
+                              view={growthSources}
+                              onSaved={setGrowthSources}
+                            />
+                          ) : null}
+                          {r.id === 'site-search' && growthSources ? (
+                            <SiteSearchLine view={growthSources} />
+                          ) : null}
                           <div className='flex flex-wrap items-center justify-between gap-2'>
                             <p
                               className='text-xs text-muted-foreground'
@@ -570,6 +591,12 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                   : r.found !== null
                                     ? $tj('analysisRules.time', { 0: r.found })
                                     : $t('analysisRules.notRunYet')}
+                              {r.costUsd ? (
+                                <>
+                                  {' · '}
+                                  <RuleCost rule={r} />
+                                </>
+                              ) : null}
                             </p>
                             {canUpdateRule && r.custom ? (
                               <AddRule

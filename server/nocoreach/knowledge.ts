@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { documentText } from './document-text.js';
 import { projectId, requireAccess } from './policy.js';
 import { MEMORY_SECTIONS, memoryInput, memoryOf, topicsInput, topicsOf } from './execution/memory.js';
+import { TOPICS_MAX, cleanTopic, topicKey } from '../../shared/followed-topics.js';
 // 项目知识 (SPEC §6.0): the project's 记忆 (saved on the project) and its 知识库 — material the Agent looks up when it needs
 // to. Each item's text is stored on its own; the list keeps titles, categories and sizes. Files are read into text with
 // an isolated document parser; the original file is not kept. Nothing here calls a model.
@@ -71,12 +72,19 @@ class Knowledge{
   await this.repo().update({filterByTk:row.id,values:{payload:{...project,name,...(next?{memory:next}:{})}}});
   if(v.topics!==undefined&&JSON.stringify(topics)!==JSON.stringify(saved))this.p.followedTopics?.changed(String(id));
   return {name,memory:memory||memoryOf(project),topics:topics||[]};}
+ // Opportunities › a new topic › Add to followed topics (2026-11-10 step 2b): one topic appended to Memory's list, which
+ // keeps its limit of TOPICS_MAX; a topic already followed changes nothing.
+ async followTopic(id,v){const topic=cleanTopic(v.topic);if(!topic)fail(systemMessageText('memory.invalidTopic',{0:String(v.topic??'').slice(0,60)}));
+  const project=(await this.p.projects.row(id))?.get('payload'),saved=topicsOf(project)||[];
+  if(saved.some(t=>topicKey(t)===topicKey(topic)))return {topics:saved,added:false};
+  if(saved.length>=TOPICS_MAX)fail(systemMessageText('memory.tooManyTopics',{0:TOPICS_MAX}),409);
+  const r=await this.saveMemory(id,{topics:[...saved,topic]});return {topics:r.topics,added:true};}
  // What the Agent gets with a task: every item's text, newest first, within a size budget (the rest is listed by title).
  async forAgent(id){const {items}=await this.list(id);const out=[];let used=0;
   for(const item of items){const text=(await this.snapshot(this.itemKey(id,item.id)))?.text||'';if(!text)continue;const fits=used+text.length<=AGENT_BUDGET;used+=fits?text.length:0;out.push({id:item.id,title:item.title,category:item.category,...(fits?{text}:{omitted:true})});}
   return out;}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('knowledge.knowledgeBaseRequestNotComplete'));}};
-  this.p.app.resourceManager.define({name:'nrKnowledge',actions:{list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),add:wrap((id,v,c)=>this.add(id,v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(id,v)),remove:wrap((id,v)=>this.remove(id,v)),saveMemory:wrap((id,v)=>this.saveMemory(id,v))}});
-  this.p.app.acl.allow('nrKnowledge',['list','get','add','edit','remove','saveMemory'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrKnowledge',actions:{list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),add:wrap((id,v,c)=>this.add(id,v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(id,v)),remove:wrap((id,v)=>this.remove(id,v)),saveMemory:wrap((id,v)=>this.saveMemory(id,v)),followTopic:wrap((id,v)=>this.followTopic(id,v))}});
+  this.p.app.acl.allow('nrKnowledge',['list','get','add','edit','remove','saveMemory','followTopic'],'loggedIn');}
 }
 export { Knowledge, readFile, CATEGORIES, FILE_TYPES, MAX_FILE, MAX_TEXT, AGENT_BUDGET };
