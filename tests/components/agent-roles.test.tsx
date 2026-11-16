@@ -191,6 +191,10 @@ test('says which work cloud models and local agents do, with what each uses and 
     'text-xs',
   );
   expect(within(row('对话栏')).getByText('deepseek-v4.1-flash')).toBeVisible();
+  // The chat panel without a model of its own says so too.
+  expect(within(row('对话栏')).getByText('和每日分析相同')).toHaveClass(
+    'text-xs',
+  );
   expect(
     within(row('执行任务')).getByText('Codex · GPT-6 Astra'),
   ).toBeVisible();
@@ -585,6 +589,19 @@ test('an own editing model that is no longer available needs attention', async (
   ).toBeVisible();
   // The daily analysis keeps running on its own model.
   expect(within(row('每日分析')).getByText('正常')).toBeVisible();
+});
+
+test('a chat agent with a model of its own names it without the same-as line', async () => {
+  state.online[0].model = {
+    modelService: 'gemini',
+    model: 'gemini-3-pro',
+  };
+  mount();
+  await waitFor(() =>
+    expect(within(row('对话栏')).getByText('gemini-3-pro')).toBeVisible(),
+  );
+  expect(within(row('对话栏')).queryByText('和每日分析相同')).toBeNull();
+  expect(within(row('编辑与建议')).getByText('和每日分析相同')).toBeVisible();
 });
 
 test('Tasks › Settings picks the project default and says which agents can work', async () => {

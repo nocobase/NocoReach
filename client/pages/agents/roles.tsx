@@ -383,17 +383,21 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           to: `/agents/chat/${encodeURIComponent(chatAgent.id)}${search}`,
         }
       : undefined;
+  // The chat panel answers with its own model, else the default chat model (not the analysis's, which a project on
+  // simulated data replaces).
+  const chatUses = noModels
+    ? undefined
+    : chatAgent?.model?.model ||
+      models.data?.defaultModel?.model ||
+      analysisModel;
+  // Without a model of its own it says so, as Editing and suggestions does and as its dialog's first option reads.
+  const chatSameAsAnalysis =
+    !chatAgent?.model?.model && Boolean(chatUses) && chatUses === analysisModel;
   const chatRow: Row = {
     key: 'chat',
     work: $t('agentRoles.chat'),
     does: $t('agentRoles.chatWork'),
-    // The chat panel answers with its own model, else the default chat model (not the analysis's, which a project on
-    // simulated data replaces).
-    uses: noModels
-      ? undefined
-      : chatAgent?.model?.model ||
-        models.data?.defaultModel?.model ||
-        analysisModel,
+    uses: chatUses,
     ...(modelsLoading || (online.data === undefined && !online.error)
       ? { state: 'loading' }
       : noModels
@@ -432,7 +436,13 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
                   }),
                   action: chatSettings,
                 }
-              : { state: 'ready', action: chatSettings }),
+              : {
+                  state: 'ready',
+                  ...(chatSameAsAnalysis
+                    ? { where: $t('agentRoles.sameAsAnalysis') }
+                    : {}),
+                  action: chatSettings,
+                }),
   };
 
   const options = status?.options || [];
