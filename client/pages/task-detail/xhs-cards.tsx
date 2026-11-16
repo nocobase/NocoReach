@@ -11,9 +11,11 @@ import { FilePreviewDialog } from '#extensions/nocobase-file-component-ui/index'
 import {
   XHS,
   cardChars,
+  parseRepurpose,
   type CardSet,
   type Piece,
 } from '../../../shared/repurpose.js';
+import type { Artifact } from '../task-execution-types.js';
 import { taskImageOf } from '../../../shared/task-images.js';
 import { previewFile } from './media-model.js';
 import { taskImageSrc } from './task-images-model.js';
@@ -129,7 +131,7 @@ const copy = (value: string) =>
   );
 
 /** The done card's tools: every image in one ZIP, and the note's title and body to paste. */
-export function CardTools({
+function CardTools({
   set,
   title,
   body,
@@ -165,23 +167,38 @@ export function CardTools({
     }
   };
   return (
-    <div className='flex flex-wrap gap-2'>
-      <Button size='sm' disabled={busy} onClick={() => void download()}>
+    <>
+      <Button variant='outline' disabled={busy} onClick={() => void download()}>
         <Download />
         {$t('workshop.downloadCards', { 0: set.images.length })}
       </Button>
       {title ? (
-        <Button size='sm' variant='outline' onClick={() => copy(title)}>
+        <Button variant='outline' onClick={() => copy(title)}>
           <Copy />
           {$t('workshop.copyTitle')}
         </Button>
       ) : null}
       {body ? (
-        <Button size='sm' variant='outline' onClick={() => copy(body)}>
+        <Button variant='outline' onClick={() => copy(body)}>
           <Copy />
           {$t('workshop.copyBody')}
         </Button>
       ) : null}
-    </div>
+    </>
+  );
+}
+
+/** The done card's tools for an approved set of cards, or nothing for a result without images. */
+export function XhsDoneTools({ out, name }: { out: Artifact; name: string }) {
+  const set = out.cards?.images.length ? out.cards : null;
+  if (!set) return null;
+  const pieces = parseRepurpose('xhs', out.content)?.pieces || [];
+  return (
+    <CardTools
+      set={set}
+      title={pieces.find((p) => p.kind === 'title')?.text}
+      body={pieces.find((p) => p.kind === 'body')?.text}
+      name={name}
+    />
   );
 }

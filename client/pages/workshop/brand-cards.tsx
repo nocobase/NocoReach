@@ -80,7 +80,9 @@ export function CardStyleFields({
   };
   return (
     <div className='grid gap-x-4 gap-y-4 sm:grid-cols-[7rem_minmax(0,1fr)]'>
-      <span className='pt-1.5 text-sm font-medium'>{$t('workshop.logo')}</span>
+      <span className='self-start pt-1.5 text-sm font-medium'>
+        {$t('workshop.logo')}
+      </span>
       <div className='space-y-1.5'>
         <div className='flex flex-wrap items-center gap-3'>
           {logo ? (
@@ -143,7 +145,7 @@ export function CardStyleFields({
         </p>
       </div>
 
-      <span className='pt-1.5 text-sm font-medium'>
+      <span className='self-start pt-1.5 text-sm font-medium'>
         {$t('workshop.colors')}
       </span>
       <div className='space-y-1.5'>
@@ -175,7 +177,7 @@ export function CardStyleFields({
         </p>
       </div>
 
-      <Label htmlFor='brand-card-font' className='pt-1.5'>
+      <Label htmlFor='brand-card-font' className='self-start pt-1.5'>
         {$t('workshop.font')}
       </Label>
       <div>
@@ -199,7 +201,7 @@ export function CardStyleFields({
         </Select>
       </div>
 
-      <Label htmlFor='brand-ending-heading' className='pt-1.5'>
+      <Label htmlFor='brand-ending-heading' className='self-start pt-1.5'>
         {$t('workshop.ending')}
       </Label>
       <div className='space-y-2'>
@@ -225,7 +227,9 @@ export function CardStyleFields({
         </p>
       </div>
 
-      <span className='text-sm font-medium'>{$t('workshop.cardPreview')}</span>
+      <span className='self-start text-sm font-medium'>
+        {$t('workshop.cardPreview')}
+      </span>
       <CardPreview fields={fields} siteIcon={siteIcon} project={project} />
     </div>
   );

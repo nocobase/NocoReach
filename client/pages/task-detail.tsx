@@ -32,6 +32,7 @@ import { againstPrevious, canRebase, cmsLink, conflictHeading, defaultDelivery, 
 import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { RepurposeResult } from './task-detail/repurpose-result.js';
+import { XhsDoneTools } from './task-detail/xhs-cards.js';
 import { repurposeReviewTitle } from './workshop/model.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -298,12 +299,13 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
 // what it is (Needs you, Current progress, Done, Status) for assistive technology; the header already shows the status.
 // `error` marks something that did not work (2026-10-23 user request: a failure read like any other text): a red mark
 // before the title and a red edge on the card.
-function StageCard({id,title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false}:{id?:string;title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean}){
+// `open` actions are for every reader of the task (a finished set's download and copy), not only whoever may act on it.
+function StageCard({id,title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false,open=false}:{id?:string;title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean;open?:boolean}){
  const access=useContext(TaskAccess),time=at?when(at):'';
  return <Card id={id} sticky className={cn('nr-td-now scroll-mt-4',error&&'border-destructive/40')} aria-label={label} data-error={error||undefined}
   title={<>{spinning&&<Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"/>}{error&&<CircleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive"/>}{title}</>}
   sub={sub||time?<>{sub}{sub&&time?' · ':''}{time&&<time dateTime={at}>{time}</time>}</>:undefined}
-  actions={actions&&(access.allowed?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=""><Lock aria-hidden="true" className="size-3.5 shrink-0"/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
+  actions={actions&&(access.allowed||open?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=""><Lock aria-hidden="true" className="size-3.5 shrink-0"/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
   {children}
  </Card>;
 }
@@ -712,7 +714,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
  // A Content workshop result (2026-11-13 user decision): approving completes it; the pieces stay to copy, and Reopen
  // in the ··· menu takes it back to review.
- if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})}><RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
+ if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})} actions={w.repurpose.form==='xhs'?<XhsDoneTools out={accepted} name={`T-${(data.task.evidence as {no?:number}|undefined)?.no??data.task.id}`}/>:undefined} open><RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}>{handed}<ReplyDrafts items={replies}/></StageCard>;
  return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>

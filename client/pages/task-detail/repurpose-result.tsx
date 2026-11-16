@@ -17,7 +17,7 @@ import {
 } from '../../../shared/repurpose.js';
 import type { Artifact, TaskData } from '../task-execution-types.js';
 import { text } from './styles.js';
-import { CardGallery, CardTools } from './xhs-cards.js';
+import { CardGallery } from './xhs-cards.js';
 
 // Content workshop results on the task page (mockup v3 frame 4): the pieces of an X, LinkedIn or community post, each
 // copied on its own, with its length against the platform's limit and the source sections it comes from. The review
@@ -41,8 +41,14 @@ const pieceLabel = (form: RepurposeForm, p: Piece) =>
       : p.kind === 'card'
         ? $t('workshop.pieceCard', { 0: p.index || 1 })
         : p.kind === 'title'
-          ? $t(form === 'xhs' ? 'workshop.pieceNoteTitle' : 'workshop.pieceTitle')
-          : $t(form === 'xhs' ? 'workshop.pieceNoteBody' : 'workshop.pieceBody');
+          ? $t(
+              form === 'xhs'
+                ? 'workshop.pieceNoteTitle'
+                : 'workshop.pieceTitle',
+            )
+          : $t(
+              form === 'xhs' ? 'workshop.pieceNoteBody' : 'workshop.pieceBody',
+            );
 
 /** A check's sentence: "All 3 posts within 280 characters", "Post 2 is over 280 characters". */
 function checkText(c: RepurposeCheck): string {
@@ -126,7 +132,6 @@ export function RepurposeResult({
         out={out}
         checks={checks}
         review={review}
-        name={`T-${String(data.task.evidence?.no ?? data.task.id)}`}
       />
     );
   const pieces = (
@@ -156,7 +161,9 @@ export function RepurposeResult({
                 target='_blank'
                 rel='noreferrer'
               >
-                {$t('workshop.openPlace', { 0: destinationName(r.destination) })}
+                {$t('workshop.openPlace', {
+                  0: destinationName(r.destination),
+                })}
               </a>
             </Side>
             <Side title={$t('workshop.placeRules')}>
@@ -181,33 +188,26 @@ export function RepurposeResult({
 
 /**
  * Xiaohongshu cards: on review the checks, the gallery and the note's title and body, each copied on its own; once
- * approved, the ZIP of the images and the title and body to copy above the gallery. A version without images (none
- * should be) lists its cards' text.
+ * approved, the gallery and the note, which the done card's own buttons download and copy (XhsDoneTools). A version
+ * without images (none should be) lists its cards' text.
  */
 function XhsResult({
   pieces,
   out,
   checks,
   review,
-  name,
 }: {
   pieces: Piece[];
   out: Artifact;
   checks: RepurposeCheck[];
   review: boolean;
-  name: string;
 }) {
   const cards = pieces.filter((p) => p.kind === 'card'),
     note = pieces.filter((p) => p.kind !== 'card');
-  const title = note.find((p) => p.kind === 'title')?.text,
-    body = note.find((p) => p.kind === 'body')?.text;
   const set = out.cards?.images.length ? out.cards : null;
   return (
     <div className='flex flex-col gap-4' data-repurpose='xhs'>
       <RepurposeChecks checks={checks} />
-      {!review && set ? (
-        <CardTools set={set} title={title} body={body} name={name} />
-      ) : null}
       {set ? (
         <CardGallery cards={cards} set={set} />
       ) : (
