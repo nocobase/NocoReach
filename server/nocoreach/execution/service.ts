@@ -849,9 +849,8 @@ export class TaskService {
           feedback = optional(v.comment, 3000) || systemMessageText('taskExecution.primaryChangedComment', { 0: locale });
         }
         if (v.command === 'approveStage') {
-          const checked: string[] = Array.isArray(v.checked) ? v.checked.filter((k: unknown) => typeof k === 'string') : [];
-          const missing = (stage.checklist || []).filter(c => c.required && !checked.includes(c.key));
-          if (missing.length) return fail(systemMessageText('messages.confirmFirst', { 0: missing.map(c => c.label).join('、') }), 409);
+          // Review steps no longer have items to tick (2026-11-15): a stage snapshot that still lists them, and the
+          // `checked` an older client sends, are ignored.
           // Changes outside the registered directories need an explicit yes before they can move on (SPEC §10).
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
           // Files a publishing target exports would be rewritten by its exporter: they are published as articles instead.
@@ -861,7 +860,7 @@ export class TaskService {
           if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
             // The note says whether the other languages are translated or updated in place (2026-10-28).
             event.note = await this.articleFlow.approvePrimary(w, output, actor, at, tx);
-            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at, ...attemptField(w) }, tx);
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', reviewerId: actor, at, ...attemptField(w) }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
             if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = await this.articleFlow.release(project, task, w, output, optional(v.release?.note, 2000), tx);
@@ -871,7 +870,7 @@ export class TaskService {
               w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
             }
             w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
-            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at, ...attemptField(w) }, tx);
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', reviewerId: actor, at, ...attemptField(w) }, tx);
             await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
             // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
             // daily analysis and later tasks know it; saved once the approval is committed.

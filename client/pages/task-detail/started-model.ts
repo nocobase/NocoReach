@@ -111,12 +111,7 @@ export function startedPlaybook(
     .filter((s) => s.kind === 'agent' || s.kind === 'review')
     .map((s) =>
       s.kind === 'review'
-        ? {
-            key: s.key,
-            name: s.name,
-            kind: 'review',
-            checklist: s.checklist || [],
-          }
+        ? { key: s.key, name: s.name, kind: 'review' }
         : {
             key: s.key,
             name: s.name,

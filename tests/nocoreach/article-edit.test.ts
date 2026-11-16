@@ -211,7 +211,6 @@ test('only the owner or an administrator edits, only the version under review, a
   await f.command('approveStage', {
     stageKey,
     artifactId: current,
-    checked: [],
   });
   await expect(
     edit('save', { form: form('# 你好\n\n批准后。') }),

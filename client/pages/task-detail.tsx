@@ -65,7 +65,6 @@ import {cn} from '#lib/utils';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
 import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
-import {Checklist} from './task-detail/review-parts.js';
 import type {TaskPageContext} from './task-detail/reader-context.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
@@ -464,11 +463,10 @@ function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string
 // version. In several languages the card says which round it is (reviewRound): the primary to approve, the other
 // languages translated or updated in place, or a version that changed none of them, which offers Update again first
 // (T-53).
-function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,setChecked}:{data:Data;stage:Stage;out:Artifact;article:NonNullable<Artifact['article']>;session:ArticleEditSession;act:(command:string,body:object)=>Promise<Data|undefined>;busy:boolean;checked:string[];setChecked:(c:string[])=>void}){
+function ArticleReviewCard({data,stage,out,article:a,session,act,busy}:{data:Data;stage:Stage;out:Artifact;article:NonNullable<Artifact['article']>;session:ArticleEditSession;act:(command:string,body:object)=>Promise<Data|undefined>;busy:boolean}){
  const w=data.work,{allowed}=useContext(TaskAccess),{showVersions}=useContext(TaskActions),{me}=useMe();
  const [tab,setTab]=useState(''),[asking,setAsking]=useState(false);
  const submit=useArticleSubmit({data,article:a,session,onTab:setTab});
- const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
  // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
  const targetGone=!(data.articleTargets||[]).some(t=>t.id===a.targetId);
  const simulated=mockSettingsAvailable()||Boolean(data.task.evidence?.simulated),round=reviewRound(data,a,simulated);
@@ -483,7 +481,7 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,se
  return <StageCard id={ARTICLE_REVIEW_ID} title={round.title} sub={session.changed?editedLine(session,out.version,me?.id):versionLine(out)} at={session.changed?undefined:out.createdAt}
   actions={allowed?<ArticleEditActions session={session} version={out.version} busy={busy} request={()=>setAsking(true)} fullScreenTo={fullScreen(tab||(w.delivery?.locales||[])[0]||'')} onVersions={showVersions}
    lead={round.nothing?<Button disabled={busy||session.readOnly} onClick={()=>void versioned('requestStageChanges',{comment:round.againComment})}><RotateCcw/>{round.again}</Button>:undefined}
-   approve={targetGone?undefined:{label:round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish'),primary:!round.nothing,disabled:missingChecks||session.readOnly,run:()=>void versioned('approveStage',{checked})}}
+   approve={targetGone?undefined:{label:round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish'),primary:!round.nothing,disabled:session.readOnly,run:()=>void versioned('approveStage',{})}}
    info={round.toCms?<InfoTip label={$t('taskDetail.aboutPublishing')}>{$t('articleTask.pushDraftHint')}</InfoTip>:undefined}/>:undefined}>
   {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
   {round.nothing&&<p className={text.muted}>{round.hint}</p>}
@@ -492,7 +490,6 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy,checked,se
   {/* Whoever may not review reads it as before, its preview and its changes. */}
   <ArticleReview key={out.id} data={data} article={a} {...agentNotes(out)} tab={tab} onTab={setTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}
    body={allowed?<ArticleEditFields data={data} article={a} session={session} tab={tab} onTab={setTab} id={submit.id} errors={submit.errors} fullScreenTo={fullScreen}/>:undefined}/>
-  <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
   {asking&&<RequestChangesBox session={session} nextVersion={nextVersion(versions,out)} busy={busy} onCancel={()=>setAsking(false)}
    onSend={async(comment,imageIds)=>{const d=await versioned('requestStageChanges',{comment,...(imageIds.length?{imageIds}:{})});if(d)setAsking(false);return Boolean(d);}}/>}
  </StageCard>;
@@ -503,7 +500,7 @@ function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;bu
  // Complete this step manually, asked from the task menu: opens the form here once per request, not again on remount.
  const handledAsk=useRef(manualAsk);
  useEffect(()=>{if(manualAsk!==handledAsk.current){handledAsk.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
- const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
+ const [editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  // What can follow the accepted document: the playbook's next steps as they are now, as the server checks them
  // (2026-10-28), or the start's copy when the playbook is gone; the first is preselected until another is chosen.
@@ -530,15 +527,14 @@ function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;bu
   const by=versionLine(out);
   // An article to publish to a target, reviewed by editing it (task-detail/article-edit.tsx). It has no release note to
   // write: no target receives one, and the task's record keeps the Agent's summary (2026-10-24).
-  if(out.article&&articleEdit)return <ArticleReviewCard data={data} stage={stage} out={out} article={out.article} session={articleEdit} act={act} busy={busy} checked={checked} setChecked={setChecked}/>;
+  if(out.article&&articleEdit)return <ArticleReviewCard data={data} stage={stage} out={out} article={out.article} session={articleEdit} act={act} busy={busy}/>;
   if(out.article)return <StageCard title={displayStageName(stage)} sub={by} at={out.createdAt}><ArticleReview key={out.id} data={data} article={out.article} {...agentNotes(out)} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/></StageCard>;
-  const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
+  const missing=Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard title={(pr||data.task.evidence?.simulated)?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} sub={by} at={out.createdAt}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{(mockSettingsAvailable() || data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{(mockSettingsAvailable() || data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
    <LastFeedback w={w} stage={stage} out={out}/>
    <PageChange pr={pr} content={out.content}/>
    <ScopeConfirm pr={pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
-   <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
    <ReleaseNote value={relNote} onChange={setRelNote} busy={busy} open={relNote!==(pr?.release||'')}/>
   </StageCard>;
  }
@@ -574,19 +570,18 @@ function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;bu
   return <StageCard title={title} sub={sub} actions={<>{live}{!r.reason&&<Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button>}</>}><TargetRows data={data} r={r}/><PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
  }
  if(stage.kind==='review'){
-  const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
+  const missing=Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
   const label=nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
   const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    <LastFeedback w={w} stage={stage} out={out}/>
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
     {out.pr?<PageChange pr={out.pr} content={out.content}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
     <ScopeConfirm pr={out.pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
     {out.report&&<ReportNotes report={out.report}/>}
-    <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
     {nextOptions.length>0&&<Field label={$t('taskDetail.continue')} id={`${stage.key}-next`}><Select value={next||NONE} disabled={busy} onValueChange={v=>{if(v!=null)setNext(v===NONE?'':String(v));}}>
      <SelectTrigger className="w-full" aria-labelledby={`${stage.key}-next`}><SelectValue>{(v:string)=>v===NONE?$t('taskDetail.notContinue'):name(v)}</SelectValue></SelectTrigger>
      <SelectContent className="min-w-(--anchor-width)">{nextOptions.map(id=><SelectItem key={id} value={id}>{name(id)}</SelectItem>)}<SelectItem value={NONE}>{$t('taskDetail.notContinue')}</SelectItem></SelectContent>

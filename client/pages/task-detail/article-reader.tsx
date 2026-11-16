@@ -37,7 +37,6 @@ import { useStickyHead } from './sticky-head.js';
 import { nextVersion } from '../../../shared/article-versions.js';
 import { TaskDraftScope } from './drafts.js';
 import type { TaskPageContext } from './reader-context.js';
-import { Checklist } from './review-parts.js';
 import { text } from './styles.js';
 
 // The article on a page of its own (2026-10-24 user request, as Ghost's full-screen preview and Notion's "open as
@@ -85,7 +84,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
     : [...w.results].reverse().find((r) => r?.article);
   // Under review, whoever may review edits it here as in the card, with the same edits (2026-11-04 user request).
   const editing = Boolean(reviewing && allowed && session);
-  const [checked, setChecked] = useState<string[]>([]);
   const [asking, setAsking] = useState(false);
   const { clear } = useTaskDraftStatus();
   const barRef = useStickyHead<HTMLDivElement>();
@@ -171,9 +169,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
         })
       : undefined;
   };
-  const missingChecks = (stage.checklist || []).some(
-    (c) => c.required && !checked.includes(c.key),
-  );
   const targetGone = !(data.articleTargets || []).some(
     (t) => t.id === article.targetId,
   );
@@ -240,13 +235,11 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                             : 'taskDetail.approveAndPublish',
                         ),
                       primary: !nothing,
-                      disabled: missingChecks || session.readOnly,
+                      disabled: session.readOnly,
                       run: () =>
-                        void versioned('approveStage', { checked }).then(
-                          (d) => {
-                            if (d) setLeave(true);
-                          },
-                        ),
+                        void versioned('approveStage', {}).then((d) => {
+                          if (d) setLeave(true);
+                        }),
                     }
               }
               info={
@@ -307,12 +300,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
               onTab={(l) => show(l)}
               id={submit.id}
               errors={submit.errors}
-            />
-            <Checklist
-              stage={stage}
-              checked={checked}
-              setChecked={setChecked}
-              busy={busy}
             />
           </>
         ) : (

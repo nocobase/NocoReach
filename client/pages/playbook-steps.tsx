@@ -5,7 +5,7 @@ import {
   SettingsIcon,
   UserCheckIcon,
 } from 'lucide-react';
-import { $t, $tj, getCurrentLocale } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { getStepKinds, type Step, type StepKind } from './playbook-model';
@@ -110,15 +110,7 @@ export function PlaybookSteps({
                 </Tag>
               )}
             </p>
-            {s.kind === 'review' ? (
-              s.checklist?.length ? (
-                <p className='mt-0.5 text-xs text-muted-foreground'>
-                  {$tj('playbooks.confirm', {
-                    0: s.checklist.map((c) => c.label).join(' · '),
-                  })}
-                </p>
-              ) : null
-            ) : (
+            {s.kind !== 'review' && (
               <>
                 <p className='mt-0.5 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground'>
                   {s.instruction}

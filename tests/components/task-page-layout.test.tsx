@@ -813,12 +813,7 @@ const OPTIMIZE = {
       kind: 'change',
       instruction: '读取当前页面，改标题和描述。',
     },
-    {
-      key: 'review',
-      name: '看效果并发布',
-      kind: 'review',
-      checklist: [{ key: 'goal', label: '改动符合目标', required: true }],
-    },
+    { key: 'review', name: '看效果并发布', kind: 'review' },
   ],
 };
 
@@ -835,7 +830,6 @@ test('View steps opens the playbook over the task page, with a way to the Playbo
   const steps = within(drawer).getByRole('list', { name: '步骤' });
   expect(steps).toHaveTextContent('Agent 修改');
   expect(steps).toHaveTextContent('读取当前页面，改标题和描述。');
-  expect(steps).toHaveTextContent('确认：改动符合目标');
   expect(
     within(drawer).getByRole('link', { name: '在做法页查看或编辑' }),
   ).toHaveAttribute('href', '/playbooks?id=optimize-page');

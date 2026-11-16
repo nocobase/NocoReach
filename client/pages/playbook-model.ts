@@ -9,8 +9,7 @@ import {localeName} from './article-targets-api';
 import {namedPlaybook,recordedPlaybookName,type PlaybookOrigin} from './playbook-snapshot';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
-export type ChecklistItem={key:string;label:string;required:boolean};
-export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
+export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;skills?:string[]};
 export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;edited?:boolean;stages:Stage[]};
 // Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no change to the site) or changes the
 // site, its repository by PR or an article in a publishing target; you review. Publish and Track impact follow by
@@ -18,7 +17,7 @@ export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;e
 export type PlaybookKind='plan'|'build';
 export type StepKind='analyze'|'change'|'review';
 // skills: ids of the Skills an Agent step always uses (see skill-model.ts), at most 5.
-export type Step={key:string;name:string;kind:StepKind;instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
+export type Step={key:string;name:string;kind:StepKind;instruction?:string;skills?:string[]};
 export type Category='research'|'create'|'optimize'|'technical';
 export const getCategories = (): [Category,string][] => ([['research',$t('common.researchAnalysis')],['create',$t('playbook.contentCreation')],['optimize',$t('playbook.contentOptimization')],['technical',$t('playbook.websiteTechnical')]]);
 export const categoryName=(c?:Category)=>getCategories().find(([k])=>k===c)?.[1]||$t('common.other');
@@ -34,7 +33,7 @@ export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mo
 export const withoutRepo=(s:Stage|undefined,stages:Stage[])=>s?.kind==='agent'&&s.mode==='analyze'&&!stages.some(x=>x.kind==='agent'&&!readsOnly(x));
 // Built-in playbooks come from the server in Chinese; an unedited one is shown in the UI language (2026-10-07). Edited
 // and custom playbooks keep their own words.
-export const localizePlaybook=(p:Playbook):Playbook=>p.system&&!p.edited?{...p,name:$legacyText(p.name),description:$legacyText(p.description),steps:p.steps.map(s=>({...s,name:$legacyText(s.name),...(s.instruction?{instruction:$legacyText(s.instruction)}:{}),...(s.checklist?{checklist:s.checklist.map(c=>({...c,label:$legacyText(c.label)}))}:{})}))}:p;
+export const localizePlaybook=(p:Playbook):Playbook=>p.system&&!p.edited?{...p,name:$legacyText(p.name),description:$legacyText(p.description),steps:p.steps.map(s=>({...s,name:$legacyText(s.name),...(s.instruction?{instruction:$legacyText(s.instruction)}:{})}))}:p;
 // Keep stored responses in their original language. Translate only the display copy; an open editor keeps its own draft.
 // A playbook named by its id: from the project's list, else the built-in's own name while the list loads, never the
 // id itself (2026-10-28: Studio showed "Accept and start optimize-page" before the list arrived). Empty when unknown.
@@ -47,7 +46,7 @@ export async function playbookRequest<T>(action:'list'|'save'|'copy'|'remove'|'r
 
 // Same stage list as the server's stagesFor, for previews before a task starts.
 export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
- const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review',checklist:s.checklist||[]}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||'',...(s.skills?.length?{skills:s.skills}:{})});
+ const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review'}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||'',...(s.skills?.length?{skills:s.skills}:{})});
  return p.steps.some(s=>s.kind==='change')?[...stages,{key:'release',name:$t('common.live'),kind:'release'},{key:'observe',name:$t('common.watch'),kind:'observe'}]:stages;
 }
 // How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “发布上线”. The release step is named by the interface,

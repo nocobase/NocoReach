@@ -1391,9 +1391,6 @@ test('conversation runners discover business commands, query tasks and execute a
       requestId: randomUUID(),
       stageKey: reviewStage.key,
       artifactId: review.work.results[review.work.stageIndex - 1].id,
-      checked: (reviewStage.checklist || []).map(
-        (item: { key: string }) => item.key,
-      ),
       state: 'done',
       confirm: true,
       confirmOutOfScope: true,
@@ -1422,9 +1419,6 @@ test('conversation runners discover business commands, query tasks and execute a
       requestId: randomUUID(),
       stageKey: reviewStage.key,
       artifactId: review.work.results[review.work.stageIndex - 1].id,
-      checked: (reviewStage.checklist || []).map(
-        (item: { key: string }) => item.key,
-      ),
     }),
   });
   expect(humanApproval.status).toBe(200);

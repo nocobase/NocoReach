@@ -155,9 +155,12 @@ test('built-in playbooks: every step is the Agent or you, grouped by work; custo
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'robot'}]},ids),/类型无效/);
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'analyze',instruction:''}]},ids),/完整内容/);
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a],next:['missing']},ids),/不存在/);
- assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))}]},ids),/最多 10 项/);
+ // Review steps have no items to tick (2026-11-15): a checklist an older client sends is dropped, however long.
+ const older=validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))}]},ids);
+ assert.deepEqual(older.steps[1],{key:'step-2',name:'审核',kind:'review'});
+ for(const p of SYSTEM_PLAYBOOKS){assert.ok(p.steps.every(s=>!('checklist' in s)),p.id);assert.ok(stagesFor(p).every(s=>!('checklist' in s)),p.id);}
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'review'},a]},ids),/第一步要由 Agent/);assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review'},{kind:'review'}]},ids),/要放在 Agent 的步骤之后/);
- const mixed=validatePlaybook({name:'竞品对比后补内容',category:'optimize',steps:[a,{kind:'review',checklist:[{label:'确认要补哪些'}]},c],next:['new-doc']},ids);
+ const mixed=validatePlaybook({name:'竞品对比后补内容',category:'optimize',steps:[a,{kind:'review'},c],next:['new-doc']},ids);
  assert.deepEqual(mixed.steps.map(s=>[s.kind,s.name]),[['analyze','分析'],['review','审核'],['change','修改'],['review','审核']],'a review is added after the last change');
  assert.equal(mixed.kind,'build');assert.deepEqual(mixed.next,[],'a playbook that changes the repository is not handed on');
  assert.deepEqual(stagesFor(mixed).map(s=>s.kind),['agent','review','agent','review','release','observe']);
@@ -196,9 +199,8 @@ test('document task: the Agent analyzes without changing the repository, a chang
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});d=await f.view();assert.equal((await f.stage()).key,'accept');assert.equal(d.task.status,'待确认');
  d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});
  c=await claim(f);assert.deepEqual(c.run.input.feedback,['add examples']);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 2'});d=await f.view();assert.equal(output(d).content,'outline 2');
- await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'tech-fix'}),e=>e.status===409);
- await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/引用的数据/.test(e.message));
- d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'tech-fix'}),e=>e.status===409);
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'});
  assert.equal(d.work.stage,'done');assert.equal(d.task.status,'已完成');assert.ok(d.work.nextTaskId);assert.deepEqual(d.related.map(r=>r.relation),['next']);assert.equal(invoked,0,'no online AI call');
  const child=f.state.nrTasks.find(t=>String(t.id)===d.work.nextTaskId);
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
@@ -217,7 +219,7 @@ test('document task: the Agent analyzes without changing the repository, a chang
 const outlineAccepted=async(f,agentId)=>{
  if(agentId)await f.command('setAgent',{agentId});
  await f.command('startTask',{});const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});
- const d=await f.view();return f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ const d=await f.view();return f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'});
 };
 const outlineEvidence={insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}};
 test('Accept and start: with several Agents and no project default the new task waits for one to be chosen; the approval stands',async()=>{
@@ -239,7 +241,7 @@ test('Accept and start: a change with no repository connected waits; an unexpect
  const g=fixture(undefined,outlineEvidence);await connectAgent(g);const warned=[];g.s.p.app={logger:{warn:(m,v)=>warned.push([m,v])}};
  await g.command('startTask',{});const c=await claim(g);await finish(g,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});d=await g.view();
  g.s.p.agents.runs.enqueue=async()=>{throw Error('agents unavailable');};
- d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'});
  assert.equal(d.work.stage,'done');assert.ok(d.work.nextTaskId);
  ch=await g.view(d.work.nextTaskId);assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined,'the failed start was rolled back');
  assert.equal(warned.length,1);assert.equal(warned[0][1].taskId,d.work.nextTaskId);assert.match(warned[0][1].message,/agents unavailable/);
@@ -249,7 +251,7 @@ test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an ac
  const asked=[],saved=[];f.s.p.taskData={forRun:async(project,v)=>{asked.push([project,v.url??null,v.taskId]);return '搜索（近 28 天）：点击 40';}};f.s.p.knowledge={forAgent:async()=>[],saveDelivery:async(project,v)=>{saved.push([project,v.taskId,v.title,v.text]);}};
  await f.command('startTask',{});let c=await claim(f);assert.equal(c.run.input.data,'搜索（近 28 天）：点击 40');assert.deepEqual(asked,[['1',null,'1']]);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});let d=await f.view();assert.deepEqual(saved,[],'not before it is accepted');
- d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});assert.equal(d.work.stage,'done');
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id});assert.equal(d.work.stage,'done');
  assert.deepEqual(saved,[['1','1','Synthetic task','outline 1']]);
 });
 test('without a repository: a document task still goes to the Agent; a playbook that changes the repository waits for one',async()=>{
@@ -265,10 +267,10 @@ test('build task: Agent plan first, manual records until the Agent is connected,
  let d=await f.command('startTask',{playbookId:'tech-fix'});
  assert.equal((await f.stage()).key,'plan');assert.equal(d.runs.length,0,'a local Agent stage never starts by itself');assert.equal(d.task.status,'进行中');
  d=await f.command('recordManual',{stageKey:'plan',content:'Change docs/en/a.md intro'});assert.equal((await f.stage()).key,'approve-plan');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal((await f.stage()).key,'build');
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id});assert.equal((await f.stage()).key,'build');
  d=await f.command('recordManual',{stageKey:'build',content:'PR https://github.com/o/r/pull/1'});
- await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[],next:'new-doc'}),e=>e.status===409);
- d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[],release:{note:'Fixed the broken links'}});assert.equal((await f.stage()).kind,'release');
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,next:'new-doc'}),e=>e.status===409);
+ d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,release:{note:'Fixed the broken links'}});assert.equal((await f.stage()).kind,'release');
  assert.equal(d.work.release.state,'not_seen');assert.equal(d.work.release.reason,'manual');assert.equal(d.runs.filter(r=>r.status==='queued').length,0,'nothing to merge');
  await assert.rejects(f.command('waitLonger',{stageKey:'release'}),e=>e.status===409);
  d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');assert.ok(d.work.observeFrom);assert.equal(d.work.receipt.note,'Fixed the broken links');
@@ -286,8 +288,31 @@ test('messages reach the next run; the playbook is fixed once started; removed c
  await assert.rejects(f.command('startFlow'),e=>e.status===400);
  await assert.rejects(f.command('startSimple',{scope:'x',kind:'content'}),e=>e.status===409);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
- d=await f.view();d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id});
  await assert.rejects(f.command('comment',{comment:'late'}),e=>e.status===409);
+});
+
+// Review steps listed items to tick until 2026-11-15 (T-79 waited at Accept with "Cited data and facts are accurate"
+// required): a task started before is accepted without ticking anything, and the review no longer records them.
+test('a review whose stage snapshot still requires checklist items is accepted without them',async()=>{
+ const f=fixture();await connectAgent(f);
+ await f.command('startTask',{playbookId:'keyword-research'});
+ const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
+ const stored=f.state.nrTasks[0].evidence.work;assert.equal(stored.flow.stages[stored.stageIndex].key,'accept');
+ stored.flow.stages[stored.stageIndex].checklist=[{key:'facts',label:'引用的数据与事实准确',required:true}];
+ let d=await f.view();assert.equal(d.work.flow.stages[1].checklist.length,1,'the old snapshot is left as stored');
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'blog-post'});
+ assert.equal(d.work.stage,'done');assert.ok(d.work.nextTaskId);
+ const review=d.reviews.find(r=>r.kind==='stage'&&r.decision==='approve');assert.ok(review);assert.equal('checklist' in review,false);
+ // An older client still sending what it ticked is accepted the same way.
+ const g=fixture();await connectAgent(g);await g.command('startTask',{playbookId:'keyword-research'});
+ const c2=await claim(g);await finish(g,{taskId:'1',runId:c2.run.id,ok:true,content:'report'});
+ g.state.nrTasks[0].evidence.work.flow.stages[1].checklist=[{key:'facts',label:'引用的数据与事实准确',required:true}];
+ d=await g.view();d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
+ assert.equal(d.work.stage,'done');assert.equal('checklist' in d.reviews.find(r=>r.decision==='approve'),false);
+ // A review recorded before keeps the items ticked then, and still reads.
+ g.state.nrSnapshots.push({id:9999,key:'nr-task-review:1:1:old',payload:{kind:'stage',stageKey:'accept',stageIndex:1,decision:'approve',checklist:['facts'],reviewerId:'1',at:'2026-11-01T00:00:00.000Z'}});
+ assert.deepEqual((await g.view()).reviews.find(r=>r.at==='2026-11-01T00:00:00.000Z').checklist,['facts']);
 });
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
@@ -313,11 +338,31 @@ test('playbooks: built-in ones are edited in place and restored; copies and new 
  f.state.nrSnapshots.find(r=>r.key==='nr-playbooks:1').payload.playbooks.push({id:'custom-old',name:'旧做法',kind:'build',instructions:'edit',planFirst:false,checklist:[],next:[],version:1});
  assert.deepEqual((await f.s.playbooks.get('1','custom-old')).steps.map(s=>s.kind),['change','review']);
 });
+
+// Review steps lost their items to tick on 2026-11-15: custom playbooks and edited built-ins saved with them read without
+// them, a save from an older client that still sends them drops them, and any save cleans them out of storage.
+test('playbooks saved with review checklists load and save without them',async()=>{
+ const f=fixture();await connectAgent(f);
+ const doc=()=>f.state.nrSnapshots.find(r=>r.key==='nr-playbooks:1');
+ let r=await f.s.playbooks.save('1',{revision:0,name:'检查内容',category:'research',steps:[{kind:'analyze',instruction:'check'},{kind:'review',name:'审核',checklist:[{label:'数据准确'}]}]});
+ const id=r.playbook.id;assert.equal('checklist' in r.playbook.steps[1],false);assert.equal('checklist' in doc().payload.playbooks[0].steps[1],false);
+ const facts={key:'facts',label:'引用的数据与事实准确',required:true};
+ doc().payload.playbooks[0].steps[1].checklist=[facts];
+ doc().payload.playbooks.push({...structuredClone(SYSTEM_PLAYBOOKS.find(p=>p.id==='keyword-research')),steps:SYSTEM_PLAYBOOKS.find(p=>p.id==='keyword-research').steps.map(s=>s.kind==='review'?{...s,checklist:[facts]}:s),edited:true,version:4});
+ const list=await f.s.playbooks.list('1');
+ for(const p of [list.playbooks.find(p=>p.id===id),list.playbooks.find(p=>p.id==='keyword-research')])assert.ok(p.steps.every(s=>!('checklist' in s)),p.id);
+ assert.equal((await f.s.playbooks.get('1','keyword-research')).edited,true);
+ const d=await f.command('startTask',{playbookId:id});assert.ok(d.work.flow.stages.every(s=>!('checklist' in s)),'a task started from it has none either');
+ r=await f.s.playbooks.save('1',{playbookId:id,revision:list.revision,name:'检查内容',category:'research',steps:[{kind:'analyze',instruction:'check'},{kind:'review',name:'审核',checklist:[facts]}]});
+ assert.equal(r.playbook.version,2);
+ for(const p of doc().payload.playbooks)assert.ok(p.steps.every(s=>!('checklist' in s)),'stored copies, the edited built-in too, lose them on any save');
+});
 test('AI drafts a playbook from one sentence; the draft is checked and not saved; an unusable answer says so',async()=>{
  const {draftPlaybook}=__playbook;const list={playbooks:SYSTEM_PLAYBOOKS};let asked;
  const answer='```json\n'+JSON.stringify({name:'同步更新日志',category:'create',description:'新版本发布后同步中英文更新日志',steps:[{kind:'analyze',name:'整理',instruction:'读 Release 说明，按新增、改进、修复整理'},{kind:'review',checklist:[{label:'版本号正确'}]},{kind:'change',instruction:'写入中英文更新日志页面'}]})+'\n```';
  const r=await draftPlaybook({request:'每个新版本发布后同步更新日志'},list,{name:'Synthetic'},async(system,user)=>{asked={system,user};return answer;});
  assert.equal(r.draft.name,'同步更新日志');assert.deepEqual(r.draft.steps.map(s=>s.kind),['analyze','review','change','review']);assert.equal(r.draft.steps[3].name,'审核');
+ assert.ok(r.draft.steps.every(s=>!('checklist' in s)),'a checklist in the answer is dropped');assert.doesNotMatch(asked.system,/checklist/,'nor asked for');
  assert.match(asked.system,/Agent/);assert.ok(JSON.parse(asked.user).existing.includes('优化现有页面'));
  await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'抱歉'),e=>e.status===422);
  await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'{"name":"x","category":"nope","steps":[]}'),e=>e.status===422&&/手动填写/.test(e.message));
@@ -347,7 +392,7 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  assert.deepEqual(await claim(f),{run:null});
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Change content/articles/a/index.md intro'});
  d=await f.view();assert.equal((await f.stage()).key,'approve-plan');assert.equal(output(d).content,'Change content/articles/a/index.md intro');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal(d.runs.filter(r=>r.status==='queued').length,1);
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id});assert.equal(d.runs.filter(r=>r.status==='queued').length,1);
  c=await claim(f);assert.equal(c.run.mode,'build');assert.equal(c.run.input.previousStages[0].output,'Change content/articles/a/index.md intro');
  const pr=(url,extra={})=>({taskId:'1',runId:c.run.id,ok:true,content:'Opened PR',pr:{url,number:3,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:'content/articles/a/index.md',additions:12,deletions:2},{path:'src/pages/x.astro',additions:1,deletions:0}],checks:{ok:true,summary:'内容检查通过'},...extra}});
  await assert.rejects(finish(f,pr('https://github.com/nocobase/website/pull/3')),e=>e.status===400,'never accept a PR on the upstream repository');
@@ -356,7 +401,7 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  await assert.rejects(finish(f,pr('https://github.com/estheryo/website/pull/3',{headSha:undefined})),e=>e.status===400);
  await finish(f,pr('https://github.com/estheryo/website/pull/3'));
  d=await f.view();assert.equal((await f.stage()).key,'review');assert.equal(output(d).pr.number,3);assert.deepEqual(output(d).pr.outOfScope,['src/pages/x.astro']);
- await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/超出允许范围/.test(e.message));
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id}),e=>e.status===409&&/超出允许范围/.test(e.message));
  d=await f.command('requestStageChanges',{stageKey:'review',artifactId:output(d).id,comment:'keep the original title'});
  c=await claim(f);assert.equal(c.run.branch,'nocoreach/task-1');assert.deepEqual(c.run.input.feedback,['keep the original title']);assert.equal(c.run.input.rejectedDraft,'Opened PR');
 });
@@ -366,7 +411,7 @@ test('stopping, manual takeover and interrupted Agent runs',async()=>{
  await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'tech-fix'});const queued=d.runs[0];
  d=await f.command('recordManual',{stageKey:'plan',content:'I will do it myself'});assert.equal(d.runs.find(r=>r.id===queued.id).error,'replaced_by_manual');assert.equal((await f.stage()).key,'approve-plan');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});const build=d.runs.find(r=>r.status==='queued');
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id});const build=d.runs.find(r=>r.status==='queued');
  const c=await claim(f);assert.equal(c.run.id,build.id);
  await assert.rejects(f.command('recordManual',{stageKey:'build',content:'x'}),e=>e.status===409);
  await f.command('cancelRun',{runId:build.id});await finish(f,{taskId:'1',runId:build.id,ok:false,error:'cancelled'});d=await f.view();assert.equal(d.runs.find(r=>r.id===build.id).error,'cancelled');assert.equal((await f.stage()).key,'build');
@@ -415,7 +460,7 @@ test('a restart never starts again a run you stopped, nor publishing',async()=>{
  await f.s.tick();d=await f.view();assert.equal(d.runs.filter(r=>r.status==='queued').length,0,'the run you asked to stop stays stopped');
  await f.command('retryStage',{stageKey:'build'});const c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Wrote it',pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2,branch:'nocoreach/task-1',headSha:'abc1234',files:[],verifyText:'新文章',pages:['https://www.example.com/blog/new']}});
- d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id});
  const merge=d.runs.find(r=>r.status==='queued');assert.equal(merge.mode,'merge');await claim(f);
  f.s.startedAt=minutes(30);lose(f,merge,'leaseExpired',20,31);
  await f.s.tick();d=await f.view();
@@ -551,7 +596,7 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
  d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
  // preview links reported by the Agent program for PRs waiting for review
- d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
+ d=await f.command('approveStage',{stageKey:'review',artifactId:out.id});
  assert.equal((await f.stage()).kind,'release');assert.equal(d.work.release.state,'merging');assert.deepEqual(d.work.release.pages,['https://www.example.com/cn/commercial']);assert.equal(d.work.release.note,'在商业服务页新增体验入口');
  c=await claim(f);assert.equal(c.run.mode,'merge');assert.deepEqual(c.run.input.pr,{number:1,url:'https://github.com/estheryo/website-test/pull/1',headSha:'abc1234'});
  await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'head_changed',message:'PR 在你看过之后又有新的提交'});
@@ -582,7 +627,7 @@ test('publish: not seen within a day asks you; you can wait longer, confirm it i
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'blog-post'});let c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Wrote it',pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2,branch:'nocoreach/task-1',headSha:'abc1234',files:[],verifyText:'新文章',pages:['https://www.example.com/blog/new']}});
- d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id});
  c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'merge_failed',message:'GitHub 没有完成合并：checks pending'});
  d=await f.command('markMerged',{stageKey:'release'});assert.equal(d.work.release.state,'verifying');assert.equal(d.task.status,'进行中');
  const w=f.state.nrTasks[0].evidence.work.release;w.deadline=new Date(Date.now()-1).toISOString();w.nextCheckAt=w.deadline;
@@ -624,7 +669,7 @@ test('effect observation runs for finished tasks once the data covers the day, a
  f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
  let d=await f.command('linkPage',{url:'https://www.example.com/docs/install'});
  d=await f.command('startTask',{playbookId:'optimize-page'});d=await f.command('recordManual',{stageKey:'build',content:'Rewrote the intro'});
- d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
+ d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
  f.state.nrTasks[0].evidence.work.observeFrom='2026-09-10T08:00:00Z';
  f.state.nrTasks.push({id:2,projectId:'1',title:'Another change',brief:'',status:'已完成',evidence:{work:{...structuredClone(f.state.nrTasks[0].evidence.work),observeFrom:'2026-09-14T08:00:00Z',observation:{results:[{day:7},{day:28}]}}}});
  let id=1;const add=(source,grain,resource,date,payload)=>f.state.nrSyncPartitions.push({id:id++,projectId:'1',source,grain,resource,date,payload});
@@ -689,7 +734,7 @@ test('cancel and archive: a cancelled task stops, its PR is closed by the Agent,
  await assert.rejects(f.command('archiveTask'),e=>e.status===409&&/先停止/.test(e.message));
  d=await f.command('cancelTask',{reason:'不做了'});assert.ok(d.work.cancelledAt);assert.equal(d.task.status,'已取消');assert.equal(d.work.prClose.state,'closing');
  const close=d.runs.find(r=>r.status==='queued');assert.equal(close.mode,'close');
- await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/已取消/.test(e.message));
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id}),e=>e.status===409&&/已取消/.test(e.message));
  c=await claim(f);assert.equal(c.run.mode,'close');assert.deepEqual(c.run.input.pr,{number:4,url:'https://github.com/estheryo/website-test/pull/4'});
  await finish(f,{taskId:'1',runId:c.run.id,ok:true});d=await f.view();assert.equal(d.work.prClose.state,'closed');
  d=await f.command('archiveTask');assert.ok(d.work.archivedAt);
@@ -826,7 +871,7 @@ test('demo runs the configured Agent and completes review without merging, publi
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
  let d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
 
- d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
+ d=await f.command('approveStage',{stageKey:'review',artifactId:out.id});
  assert.equal(d.work.stage,'done');
  assert.equal(d.work.release.state,'simulated');
  assert.equal(d.work.release.pr.number,1);
@@ -1057,7 +1102,7 @@ test('a research task hands on to its playbook\'s current next steps, or to the 
   };
   const f = await run('keyword-research', ['optimize-page', 'new-doc']);
   let d = await f.view();
-  d = await f.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' });
+  d = await f.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, next: 'blog-post' });
   assert.equal(d.work.stage, 'done');
   assert.equal(f.state.nrTasks.find(t => String(t.id) === d.work.nextTaskId).evidence.work.playbookId, 'blog-post');
   // A copy removed after the start: its own list at the start decides.
@@ -1070,8 +1115,8 @@ test('a research task hands on to its playbook\'s current next steps, or to the 
   await finish(g, { taskId: '1', runId: c.run.id, ok: true, content: 'keyword map' });
   await g.s.playbooks.remove('1', { playbookId: copy.id, revision: 1 });
   d = await g.view();
-  await assert.rejects(g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' }), e => e.status === 409);
-  d = await g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'new-doc' });
+  await assert.rejects(g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, next: 'blog-post' }), e => e.status === 409);
+  d = await g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, next: 'new-doc' });
   assert.ok(d.work.nextTaskId);
 });
 
