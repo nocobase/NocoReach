@@ -19,6 +19,7 @@ import { roleOf } from './policy.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import { download } from './public-sources.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { isRepurposePlaybook } from '../../shared/playbook-catalog.js';
 import { draftTask, relevantPages, type DraftPage } from './task-draft.js';
 import {
   ManualTaskDraftInput,
@@ -457,13 +458,24 @@ export class ManualTasks {
       try {
         return await this.runtime.legacy.db.sequelize.transaction(
           async (tx) => {
-            if (input.playbookId)
-              await (
-                this.runtime.plugin as unknown as { taskExecution: TaskService }
-              ).taskExecution.playbooks.get(
-                input.projectId,
-                input.playbookId,
-                tx,
+            if (
+              input.playbookId &&
+              isRepurposePlaybook(
+                await (
+                  this.runtime.plugin as unknown as {
+                    taskExecution: TaskService;
+                  }
+                ).taskExecution.playbooks.get(
+                  input.projectId,
+                  input.playbookId,
+                  tx,
+                ),
+              )
+            )
+              denied(
+                'TASK_PLAYBOOK_DENIED',
+                'This playbook starts from Content workshop.',
+                'INVALID_ARGUMENT',
               );
             const evidence = {
               origin: 'manual',
@@ -555,12 +567,14 @@ export class ManualTasks {
       const host = this.runtime.plugin as unknown as DraftHost;
       // The project's network and simulation scope, as the generic dispatcher gives every action.
       return await host.network.runProject(input.projectId, async () => {
-        const [project, { playbooks }, pages, documents] = await Promise.all([
+        const [project, { playbooks: all }, pages, documents] = await Promise.all([
           host.project(input.projectId),
           host.taskExecution.playbooks.list(input.projectId),
           this.draftPages(host, input.projectId, input.idea),
           this.draftDocuments(actor, input),
         ]);
+        // Content workshop playbooks start from the workshop, with a source and a destination (2026-11-13).
+        const playbooks = all.filter((p) => !isRepurposePlaybook(p));
         const draft = await draftTask(
           { idea: input.idea, project, playbooks, pages, documents },
           (system, prompt) =>

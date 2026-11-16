@@ -17,7 +17,7 @@ import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '#compon
 import {cn} from '#lib/utils';
 import {useProject} from './reach-data';
 import {skillRequest,skillFor,type Skill,type SkillList} from './skill-model';
-import {playbookRequest,localizePlaybookList,getCategories,categoryName,getStepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
+import {playbookRequest,localizePlaybookList,getCategories,startableCategories,categoryName,getStepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
 import {confirmAction} from '#components/reach/confirm';
 import {InfoTip,WithInfo} from '#components/reach/info-tip';
 import {PlaybookSteps,StepIcon} from './playbook-steps';
@@ -95,7 +95,7 @@ function Editor({draft,list,skills,busy,error,onChange,onSave,onCancel}:{draft:D
   <div className="flex items-center gap-2"><h2 className="flex-1 text-sm font-semibold">{draft.id?$t('playbooks.editPlaybook'):$t('playbooks.newPlaybookNotSavedYet')}</h2><Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>{$t('common.cancel')}</Button><Button size="sm" disabled={busy} onClick={trySave}>{busy?$t('common.saving'):$t('common.save')}</Button></div>
   {(shown||error)&&<p role='alert' className='nr-error'>{shown?$t('common.fillHighlightedFields'):error}</p>}
   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]"><label className="nr-field">{$t('common.name')}<input value={draft.name} maxLength={40} aria-invalid={shown&&missing.name} className='aria-invalid:border-destructive!' onChange={e=>set({name:e.target.value})}/>{shown&&missing.name&&<FieldError>{$t('playbooks.nameRequired')}</FieldError>}</label>
-   <label className="nr-field">{$t('common.category')}<Select value={draft.category} onValueChange={v=>set({category:v as Category})}><SelectTrigger className="w-full" aria-label={$t('common.category')}><SelectValue>{(v:string)=>categoryName(v as Category)}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getCategories().map(([k,v])=><SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></label></div>
+   <label className="nr-field">{$t('common.category')}<Select value={draft.category} onValueChange={v=>set({category:v as Category})}><SelectTrigger className="w-full" aria-label={$t('common.category')}><SelectValue>{(v:string)=>categoryName(v as Category)}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{(draft.category==='repurpose'?getCategories().filter(([k])=>k==='repurpose'):startableCategories()).map(([k,v])=><SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></label></div>
   <label className="nr-field">{$t('playbooks.oneLineDescription')}<input value={draft.description} maxLength={200} onChange={e=>set({description:e.target.value})}/></label>
   <div className="flex flex-col gap-2"><h3 className="text-xs font-medium text-muted-foreground"><WithInfo help={changes?$t('playbooks.agentChangeSystemAppendsGo'):$t('playbooks.ifLastStepNotReview')}>{$t('common.steps')}</WithInfo></h3>
    <ol className="flex flex-col gap-2" aria-label={$t('playbooks.editSteps')}>{draft.steps.map((s,i)=><li key={i} className="flex gap-2 rounded-lg border p-3">

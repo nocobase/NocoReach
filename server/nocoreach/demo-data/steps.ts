@@ -15,6 +15,7 @@ import { projectWork, type Artifact } from '../execution/model.js';
 import { compare, type Partition } from '../execution/effect.js';
 import { opportunityHistory } from './opportunities.js';
 import { taskHistory } from './task-history.js';
+import { writeWorkshop } from './workshop-history.js';
 import { BUSINESS_MEMBER } from '../../access/service.js';
 import type { RoleAccess } from '../../../shared/access-capabilities.js';
 import {
@@ -28,6 +29,7 @@ import {
   type DemoPerson,
 } from './content.js';
 import { writeActivity } from './activity.js';
+import { DEMO_CMS, demoCmsTarget } from './cms-article.js';
 import { backdateYouTube } from './youtube-history.js';
 import { backdateGitHubStars } from './github-history.js';
 import { ACME_TOPICS, CRM_TOPICS } from './world/script/topics.js';
@@ -165,6 +167,10 @@ export function demoSteps(host: DemoHost, language: string): DemoStep[] {
       key: 'tasks',
       weight: 2,
       run: (context) => writeTasks(host, content, context),
+    },
+    {
+      key: 'workshop',
+      run: (context) => writeWorkshop(host, content, context),
     },
     {
       key: 'opportunities',
@@ -412,6 +418,19 @@ async function connectSources(
       },
     ],
   ];
+  if (which === 'main')
+    phases.push([
+      // The blog CMS the demo's article task pushed its draft to (cms-article.ts), checked once as on connecting it.
+      'article-target',
+      async () => {
+        await p.articleTargets.save(id, {
+          revision: p.articleTargets.list(id).revision,
+          secret: 'demo-only-cms-api-key',
+          target: demoCmsTarget(spec.domain, en ? 'en' : 'zh'),
+        });
+        await p.articleTargets.test(id, DEMO_CMS.id);
+      },
+    ]);
   phases.push(
     // Followed topics in Memory before the sources that search them: Reddit, Hacker News, YouTube, Trends, GitHub
     // hot topics and AI questions read them on their next run.

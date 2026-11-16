@@ -27,6 +27,7 @@ import {
   formatPercent,
 } from '#lib/format';
 import { cn } from '#lib/utils';
+import { figureValue, say } from './growth-text';
 import {
   TOPIC_SOURCES,
   type DiscussionWeek,
@@ -35,9 +36,7 @@ import {
   type EvidenceTable,
   type Growth,
   type GrowthCategory,
-  type GrowthFigure,
   type GrowthKind,
-  type GrowthText,
   type TopicSource,
 } from '../../../shared/growth.js';
 
@@ -74,7 +73,7 @@ const KIND: Record<GrowthKind, string> = {
   'people-also-ask': 'growth.kind.peopleAlsoAsk',
   'link-gap': 'growth.kind.linkGap',
 };
-const say = (text?: GrowthText) => (text ? $t(text.key, text.params) : '');
+
 
 /** The category tag, as the list, the detail and Insights' decisions show it. */
 export function CategoryTag({
@@ -91,7 +90,11 @@ export function CategoryTag({
 }
 
 /** Its category, then its kind: "Trending now" "Rising searches". */
-export function GrowthTags({ growth }: { growth: Growth }): ReactElement {
+export function GrowthTags({
+  growth,
+}: {
+  growth: Pick<Growth, 'kind' | 'category'>;
+}): ReactElement {
   return (
     <>
       <CategoryTag category={growth.category} />
@@ -101,19 +104,6 @@ export function GrowthTags({ growth }: { growth: Growth }): ReactElement {
     </>
   );
 }
-
-const figureValue = (f: GrowthFigure): string =>
-  typeof f.value !== 'number'
-    ? f.format === 'date'
-      ? formatDate(f.value)
-      : f.value
-    : f.format === 'percent'
-      ? formatPercent(f.value)
-      : f.format === 'change'
-        ? formatChange(f.value)
-        : f.format === 'position'
-          ? formatCount(f.value, 1)
-          : formatCount(f.value);
 
 /** A subreddit or a path ("r/projectmanagement", "/docs/import") wraps after a slash rather than inside a word. */
 const slashBreaks = (s: string): ReactNode =>

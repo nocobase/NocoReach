@@ -666,6 +666,166 @@ describe('Git files target', () => {
   });
 });
 
+// 2026-11-12: covers, layout and the final publish are the CMS's. NocoReach writes no cover, so an existing article keeps
+// the one it has, and a new article goes to a target that keeps a status as a draft, whatever an older version chose.
+describe("covers and status stay the CMS's", () => {
+  const legacy = { cover: { url: 'https://cdn.example.com/new-cover.png' } };
+  test('NocoBase API: an update writes no cover field and leaves the cover and status as they are', async () => {
+    const cms = fakeNocoBase([
+      { ...row(), cover: 'https://cdn.example.com/cover.png' },
+    ]);
+    const { delivery, vars, targets } = await setup(
+      cmsTarget(),
+      { site: cms.fetcher },
+      { secret: 'cms-key' },
+    );
+    // A target saved with the cover setting of #381 is read without it.
+    const [key, raw] = [...vars.values].find(([k]) =>
+      k.startsWith('NOREACH_ARTICLE_TARGETS_'),
+    )!;
+    const stored = JSON.parse(raw);
+    stored.targets[0].cover = { field: 'cover', required: true };
+    vars.values.set(key, JSON.stringify(stored));
+    expect(targets.list('1').targets[0]).not.toHaveProperty('cover');
+    const base = await delivery.read('1', 'cms', '7');
+    // A version approved before carries the cover chosen then and a status: neither is written to an existing article.
+    const p = delivery.proposal('1', {
+      targetId: 'cms',
+      articleId: '7',
+      base,
+      baseKey: 'k',
+      draft: draft({ en: { body: 'New body' } }, legacy),
+    });
+    expect(p.draft).not.toHaveProperty('cover');
+    expect(p.draft).not.toHaveProperty('status');
+    const out = await delivery.publish(
+      '1',
+      { ...p, draft: { ...p.draft, status: 'draft', ...legacy } },
+      base,
+      'k1',
+    );
+    expect(out.kind).toBe('published');
+    const write = cms.state.requests.find((r) => r.action === 'update')!;
+    expect(write.body).toEqual({ content: 'New body' });
+    expect(cms.state.rows[0]).toMatchObject({
+      cover: 'https://cdn.example.com/cover.png',
+      status: 'published',
+      content: 'New body',
+    });
+  });
+  test('NocoBase API: a new article is a draft even when an older version chose published', async () => {
+    const cms = fakeNocoBase([]);
+    const { delivery } = await setup(
+      cmsTarget(),
+      { site: cms.fetcher },
+      { secret: 'cms-key' },
+    );
+    const p = delivery.proposal('1', {
+      targetId: 'cms',
+      articleId: null,
+      base: null,
+      baseKey: null,
+      draft: draft(
+        { en: { title: 'T', body: 'B' } },
+        { slug: 'chosen-published', status: 'published', ...legacy },
+      ),
+    });
+    expect(p.draft.status).toBe('draft');
+    expect(p.draft).not.toHaveProperty('cover');
+    await delivery.publish(
+      '1',
+      { ...p, draft: { ...p.draft, status: 'published' } },
+      null,
+      'k',
+    );
+    expect(cms.state.rows[0]).toMatchObject({
+      slug: 'chosen-published',
+      status: 'drafted',
+    });
+    expect(cms.state.rows[0]).not.toHaveProperty('cover');
+  });
+  test('article API: an update sends no cover and no status, and the article keeps its cover', async () => {
+    const server = fakeArticleApi();
+    server.state.articles.push({
+      id: 'a1',
+      slug: 'hello',
+      status: 'published',
+      version: 'v0',
+      locales: { en: { title: 'Hello', description: '', body: 'Body' } },
+      cover: 'https://cdn.example.com/cover.png',
+    } as never);
+    const { delivery } = await setup(
+      {
+        ...ARTICLE_TARGET_PRESETS.http,
+        id: 'api',
+        name: 'API',
+        baseUrl: 'https://site.example.com/api',
+        locales: ['en'],
+      } as ArticleTarget,
+      { site: server.fetcher },
+      { secret: 'api-key' },
+    );
+    const base = await delivery.read('1', 'api', 'a1');
+    const p = delivery.proposal('1', {
+      targetId: 'api',
+      articleId: 'a1',
+      base,
+      baseKey: 'k',
+      draft: draft({ en: { body: 'New body' } }, legacy),
+    });
+    await delivery.publish(
+      '1',
+      { ...p, draft: { ...p.draft, status: 'draft', ...legacy } },
+      base,
+      'k1',
+    );
+    const patch = server.state.requests.find((r) => r.method === 'PATCH')!;
+    expect(patch.body).toEqual({
+      baseVersion: 'v0',
+      locales: { en: { body: 'New body' } },
+    });
+    expect(server.state.articles[0]).toMatchObject({
+      status: 'published',
+      cover: 'https://cdn.example.com/cover.png',
+    });
+  });
+  test('Git files: an update keeps the cover in the front matter', async () => {
+    const git = fakeGitHub('org/blog', {
+      'content/blog/hello/index.md':
+        '---\ntitle: "Hello"\ndescription: "Old"\nimage: /covers/hello.png\n---\n\nBody',
+    });
+    const { delivery } = await setup(
+      {
+        ...ARTICLE_TARGET_PRESETS['git-files'],
+        id: 'git',
+        name: 'Repo',
+        repo: 'org/blog',
+        locales: ['en'],
+      } as ArticleTarget,
+      { github: git.fetcher },
+      { secret: 'gh-token' },
+    );
+    const base = await delivery.read('1', 'git', 'hello');
+    const p = delivery.proposal('1', {
+      targetId: 'git',
+      articleId: 'hello',
+      base,
+      baseKey: 'k',
+      draft: draft({ en: { description: 'New summary' } }, legacy),
+    });
+    expect(await delivery.publish('1', p, base, 'k')).toMatchObject({
+      kind: 'published',
+    });
+    expect(
+      readFrontmatter(git.read('content/blog/hello/index.md')!).keys,
+    ).toEqual({
+      title: 'Hello',
+      description: 'New summary',
+      image: '/covers/hello.png',
+    });
+  });
+});
+
 // T-34 on Studio (2026-10-22) failed with only `unavailable` recorded: a failure now says where it stopped and why.
 describe('a failed publish keeps its step and detail', () => {
   async function ready(fetchers: { site?: Fetch; github?: Fetch }) {
