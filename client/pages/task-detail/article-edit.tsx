@@ -26,7 +26,7 @@ import {
   ARTICLE_FIELDS,
   type ArticleField,
 } from '../../../shared/article-publishing.js';
-import { TASK_IMAGES_PER_MESSAGE } from '../../../shared/task-images.js';
+import { TASK_FILES_PER_MESSAGE } from '../../../shared/task-images.js';
 import { localeName } from '../article-targets-api';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
 import { articleLanguages, joinNames, valueAt } from './article-model';
@@ -44,13 +44,18 @@ import {
   MissingLanguages,
 } from './article-review.js';
 import { useStayWithDrafts, useTaskDraft } from './draft-store.js';
-import { AddImageButton, ComposerImages, ImageProblem } from './task-images.js';
+import {
+  AttachButton,
+  ComposerDocuments,
+  ComposerImages,
+  ImageProblem,
+} from './task-images.js';
 import {
   TaskImageContext,
   imageNote,
   imageSources,
-  readImages,
-  useComposerImages,
+  readMessageFiles,
+  useComposerFiles,
   ArticleImageNotesContext,
 } from './task-images-model.js';
 import { localePageUrl } from './article-page.js';
@@ -439,7 +444,8 @@ export function ArticleEditFields({
 
 /**
  * Request changes for the whole article (ui-references/inline-ai-edit-2026-11-04 frame 5): what to change, with images
- * if need be. The edits are made a version first, and the Agent works from it, changing only what is asked.
+ * and documents if need be (2026-11-15). The edits are made a version first, and the Agent works from it, changing
+ * only what is asked.
  */
 export function RequestChangesBox({
   session,
@@ -452,7 +458,11 @@ export function RequestChangesBox({
   /** The version the edits become when there are any. */
   nextVersion: number;
   busy: boolean;
-  onSend: (comment: string, imageIds: string[]) => Promise<boolean>;
+  /** The files go as `imageIds` and `documentIds`, each only when there are any. */
+  onSend: (
+    comment: string,
+    files: { imageIds?: string[]; documentIds?: string[] },
+  ) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const id = useId();
@@ -461,16 +471,16 @@ export function RequestChangesBox({
     'changeRequestImages',
     '',
   );
-  const images = useComposerImages({
-    stored: readImages(stored),
+  const images = useComposerFiles({
+    stored: readMessageFiles(stored),
     store: (list) => {
       if (list.length) setStored(JSON.stringify(list));
       else clearStored();
     },
-    max: TASK_IMAGES_PER_MESSAGE,
+    max: TASK_FILES_PER_MESSAGE,
   });
   const send = async () => {
-    if (await onSend(message, images.ids)) {
+    if (await onSend(message, images.payload())) {
       clearMessage();
       images.sent();
     }
@@ -503,11 +513,18 @@ export function RequestChangesBox({
           onChange={(e) => setMessage(e.target.value)}
           onPaste={images.onPaste}
         />
-        {images.entries.length > 0 && (
-          <InputGroupAddon align='block-end' className='font-normal'>
+        {images.count > 0 && (
+          <InputGroupAddon
+            align='block-end'
+            className='flex-col items-stretch gap-2 font-normal'
+          >
             <ComposerImages
-              images={images.entries}
+              images={images.images}
               disabled={busy}
+              onRemove={images.remove}
+            />
+            <ComposerDocuments
+              documents={images.documents}
               onRemove={images.remove}
             />
           </InputGroupAddon>
@@ -516,8 +533,8 @@ export function RequestChangesBox({
           align='block-end'
           className='flex-wrap gap-x-3 gap-y-1 font-normal'
         >
-          <AddImageButton
-            disabled={busy || images.entries.length >= TASK_IMAGES_PER_MESSAGE}
+          <AttachButton
+            disabled={busy || images.count >= TASK_FILES_PER_MESSAGE}
             onFiles={images.add}
           />
           {session.changed && (

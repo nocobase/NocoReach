@@ -277,10 +277,10 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
             nextVersion={nextVersion(versionsList, out)}
             busy={busy}
             onCancel={() => setAsking(false)}
-            onSend={async (comment, imageIds) => {
+            onSend={async (comment, files) => {
               const d = await versioned('requestStageChanges', {
                 comment,
-                ...(imageIds.length ? { imageIds } : {}),
+                ...files,
               });
               if (d) setLeave(true);
               return Boolean(d);

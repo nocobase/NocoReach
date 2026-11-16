@@ -15,7 +15,7 @@ import {
   type Piece,
 } from '../../../shared/repurpose.js';
 import { taskImageOf } from '../../../shared/task-images.js';
-import { previewRecord } from './task-images.js';
+import { previewFile } from './media-model.js';
 import { taskImageSrc } from './task-images-model.js';
 
 // Xiaohongshu cards on the task page (Content workshop PR 2, mockup v2 frame 3 and v3 frame 4): the card images in a
@@ -104,7 +104,18 @@ export function CardGallery({ cards, set }: { cards: Piece[]; set: CardSet }) {
           if (!value) setOpen(null);
         }}
         labels={{ download: $t('manualTask.download') }}
-        files={images.map(previewRecord)}
+        files={images.map((image) =>
+          previewFile({
+            id: image.id,
+            filename: image.name,
+            size: 0,
+            mimeType:
+              taskImageOf(image.ref)?.ext === 'webp'
+                ? 'image/webp'
+                : 'image/png',
+            contentUrl: taskImageSrc(image.ref),
+          }),
+        )}
       />
     </>
   );

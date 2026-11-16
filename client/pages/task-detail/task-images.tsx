@@ -1,19 +1,30 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { PaperclipIcon, X } from 'lucide-react';
-import { $t } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 import { cn } from '#lib/utils';
 import { Spinner } from '#components/ui/spinner';
 import { Button } from '#components/ui/button';
+import {
+  AttachmentList,
+  PendingAttachments,
+} from '#components/attachment-list';
 import { FilePreviewDialog } from '#extensions/nocobase-file-component-ui/index';
 import {
-  TASK_IMAGE_ACCEPT,
+  MESSAGE_FILE_ACCEPT,
   taskImageOf,
+  type MessageDocument,
   type MessageImage,
 } from '../../../shared/task-images.js';
-import { taskImageSrc, type ComposerImage } from './task-images-model.js';
+import {
+  taskImageSrc,
+  type ComposerDocument,
+  type ComposerImage,
+} from './task-images-model.js';
+import { documentLabels, previewFile } from './media-model.js';
 
 // How a started task's images show (2026-11-03 user request): in Activity's message box while they are added, under a
-// sent message, and the hint and problems beside the box and the editor. What they do is in task-images-model.ts.
+// sent message, and the hint and problems beside the box and the editor. Documents with a message (2026-11-15) show as
+// the chips a new task's documents are on the task. What they do is in task-images-model.ts.
 
 const MIME: Record<string, string> = {
   png: 'image/png',
@@ -112,11 +123,41 @@ export function ComposerImages({
 }
 
 /**
- * Add image under the message box: the right-side chat composer's attach button, as it is there (2026-11-04 user
- * request: a chat box takes pasted images without a line of hints beside it). The limits show only when a file breaks
- * them (ImageProblem).
+ * The documents being added to a message (2026-11-15): a chip each with its name and size, a spinner while it uploads
+ * and a button to take it back, the right-side chat composer's chips.
  */
-export function AddImageButton({
+export function ComposerDocuments({
+  documents,
+  onRemove,
+}: {
+  documents: ComposerDocument[];
+  onRemove: (key: string) => void;
+}) {
+  return (
+    <PendingAttachments
+      locale={getCurrentLocale()}
+      labels={{
+        ...documentLabels(),
+        remove: $t('taskFiles.remove', { 0: '{name}' }),
+        uploading: $t('taskImages.uploading', { 0: '{name}' }),
+      }}
+      files={documents.map((entry) => ({
+        key: entry.key,
+        name: entry.name,
+        size: entry.size,
+        done: Boolean(entry.document),
+      }))}
+      onRemove={onRemove}
+    />
+  );
+}
+
+/**
+ * Add attachment under the message box: the right-side chat composer's attach button, as it is there (2026-11-04 user
+ * request: a chat box takes pasted images without a line of hints beside it). It picks images and documents
+ * (2026-11-15); the limits show only when a file breaks them (ImageProblem).
+ */
+export function AttachButton({
   disabled,
   onFiles,
 }: {
@@ -124,7 +165,7 @@ export function AddImageButton({
   onFiles: (files: File[]) => void;
 }) {
   const pickerRef = useRef<HTMLInputElement>(null);
-  const label = $t('taskImages.add');
+  const label = $t('taskFiles.add');
   return (
     <>
       {/* Hidden rather than visually hidden, so the box's frame does not focus it on a click beside the button. */}
@@ -132,7 +173,7 @@ export function AddImageButton({
         ref={pickerRef}
         type='file'
         multiple
-        accept={TASK_IMAGE_ACCEPT}
+        accept={MESSAGE_FILE_ACCEPT}
         hidden
         onChange={(event) => {
           onFiles(Array.from(event.target.files ?? []));
@@ -192,6 +233,53 @@ export function MessageImages({ images }: { images: MessageImage[] }) {
         }}
         labels={{ download: $t('manualTask.download') }}
         files={images.map(previewRecord)}
+      />
+    </>
+  );
+}
+
+/**
+ * A sent message's documents under its text (2026-11-15): the chips a new task's documents are on the task, each
+ * opening in the preview (Word, Excel, PDF and text render in the page) or downloading.
+ */
+export function MessageDocuments({
+  documents,
+}: {
+  documents: MessageDocument[];
+}) {
+  const [open, setOpen] = useState<number | null>(null);
+  if (!documents.length) return null;
+  const files = documents.map((d) => ({
+    id: d.id,
+    filename: d.name,
+    mimeType: d.type,
+    size: d.size,
+    contentUrl: taskImageSrc(d.ref),
+  }));
+  return (
+    <>
+      <AttachmentList
+        className='pt-1'
+        locale={getCurrentLocale()}
+        labels={documentLabels()}
+        files={files.map((f) => ({
+          id: f.id,
+          name: f.filename,
+          size: f.size,
+          url: f.contentUrl,
+          downloadUrl: f.contentUrl,
+          image: false,
+        }))}
+        onPreview={(_, index) => setOpen(index)}
+      />
+      <FilePreviewDialog
+        open={open !== null}
+        initialIndex={open ?? 0}
+        onOpenChange={(value) => {
+          if (!value) setOpen(null);
+        }}
+        labels={{ download: $t('manualTask.download') }}
+        files={files.map(previewFile)}
       />
     </>
   );

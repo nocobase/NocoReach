@@ -1,4 +1,9 @@
-import { TASK_MEDIA_COUNT } from './manual-task.js';
+import {
+  TASK_DOCUMENT_TYPES,
+  TASK_MEDIA_COUNT,
+  isTaskDocument,
+  taskFileType,
+} from './manual-task.js';
 
 // Images a person adds to a started task (2026-11-03): with a message to the Agent or a change request in Activity,
 // or pasted into Edit directly. They are task media files (`nrTaskMedia`), linked to the task when the message is sent
@@ -21,6 +26,48 @@ export const isTaskImageType = (type: string) =>
 
 /** An image as a message keeps it: the file, its name when added and the path an article uses for it. */
 export type MessageImage = { id: string; name: string; ref: string };
+
+// Documents with a message or change request (2026-11-15 user request: a .txt with the feedback was refused): a
+// message takes the files a new task takes, images and documents, at the same size and count limits. Videos stay
+// with New task, since a run never receives them. Images still go where the text puts them; documents only inform.
+
+/** The files one message takes, images and documents together, as many as a new task's attachments. */
+export const TASK_FILES_PER_MESSAGE = TASK_MEDIA_COUNT;
+/** What a message's file picker offers: the image types and the document extensions. */
+export const MESSAGE_FILE_ACCEPT = [
+  ...TASK_IMAGE_TYPES,
+  ...Object.keys(TASK_DOCUMENT_TYPES),
+].join(',');
+/**
+ * A document as a message keeps it: the file, its name when added, the path it is read from, its stored type and size.
+ * The path has the form an image's has; it is never placed in an article.
+ */
+export type MessageDocument = {
+  id: string;
+  name: string;
+  ref: string;
+  type: string;
+  size: number;
+};
+/**
+ * What a message makes of a picked file: an image, a document with the type it is stored as, `legacy` for an Office
+ * format to save again as .docx or .xlsx, or null when a message does not take it.
+ */
+export function messageFileKind(
+  name: string,
+  type: string,
+):
+  | { kind: 'image' }
+  | { kind: 'document'; type: string }
+  | { kind: 'legacy' }
+  | null {
+  if (isTaskImageType(type)) return { kind: 'image' };
+  const stored = taskFileType(name, type);
+  if (stored === 'legacy') return { kind: 'legacy' };
+  return stored && isTaskDocument(stored)
+    ? { kind: 'document', type: stored }
+    : null;
+}
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 // The path, after the application's base path or origin if any, up to the query or fragment.

@@ -16,7 +16,8 @@ import { TaskMediaView } from '../../shared/manual-task.js';
 import { docx } from './office-fixtures.js';
 
 // Images on a started task (2026-11-03): uploaded for the task by whoever may read it, linked to the task by the
-// message that carries them, then readable as the task is and handed to its runs.
+// message that carries them, then readable as the task is and handed to its runs. Documents too (2026-11-15): the
+// ones a new task takes, checked the same way, linked by the message or change request they are sent with.
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 const test = createAppTest({
   createServer: createStandaloneServer,
@@ -44,7 +45,7 @@ function upload(
   );
 }
 
-test('message images upload for the task, link once with the message, follow the task’s read grants and reach its runs', async ({
+test('message images and documents upload for the task, link once with the message, follow the task’s read grants and reach its runs', async ({
   testApp,
   connection,
 }) => {
@@ -97,22 +98,66 @@ test('message images upload for the task, link once with the message, follow the
     });
   };
 
-  // A started task takes images only, for a task that exists.
+  // A started task takes images and the documents a new task takes, checked the same way, for a task that exists.
   const first = await upload(admin, taskId);
   expect(first.status).toBe(201);
   const image = TaskMediaView.parse((await first.json()).data);
   expect(image.contentUrl).toMatch(
     new RegExp(`/uploads/task-media/${image.id}\\.png$`),
   );
-  const document = await upload(
-    admin,
-    taskId,
-    new File([docx(['Notes'])], 'notes.docx'),
-  );
-  expect(document.status).toBe(400);
-  expect(await document.json()).toMatchObject({
-    error: { reason: 'TASK_MEDIA_INVALID' },
-  });
+  const stored = async (file: File) => {
+    const response = await upload(admin, taskId, file);
+    expect(response.status, file.name).toBe(201);
+    return TaskMediaView.parse((await response.json()).data);
+  };
+  const notes = await stored(
+      new File(['# Terms\n\nSay NocoBase 3.'], 'notes.md'),
+    ),
+    feedback = await stored(
+      new File(['Shorter title, please.'], '新建文本文档 (2).txt', {
+        type: 'text/plain',
+      }),
+    ),
+    brief = await stored(new File([docx(['Notes'])], 'brief.docx'));
+  expect([notes.mimeType, feedback.mimeType, brief.mimeType]).toEqual([
+    'text/markdown',
+    'text/plain',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ]);
+  for (const [file, reason] of [
+    // No videos: a run never receives them.
+    [
+      new File(
+        [
+          Buffer.concat([
+            Buffer.from([0, 0, 0, 24]),
+            Buffer.from('ftypisom'),
+            Buffer.alloc(16),
+          ]),
+        ],
+        'demo.mp4',
+        { type: 'video/mp4' },
+      ),
+      'TASK_MEDIA_INVALID',
+    ],
+    [
+      new File(['PK'], 'site.zip', { type: 'application/zip' }),
+      'TASK_MEDIA_INVALID',
+    ],
+    // Text in another encoding (GBK) is named as such, as on New task.
+    [
+      new File([Buffer.from([0xc4, 0xe3, 0xba, 0xc3])], 'gbk.txt', {
+        type: 'text/plain',
+      }),
+      'TASK_MEDIA_TEXT_ENCODING',
+    ],
+    [new File(['x'], 'old.doc'), 'TASK_MEDIA_LEGACY_FORMAT'],
+    [new File(['not a pdf'], 'fake.pdf'), 'TASK_MEDIA_SIGNATURE'],
+  ] as const) {
+    const refused = await upload(admin, taskId, file);
+    expect(refused.status, file.name).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: { reason } });
+  }
   const missing = await upload(admin, '999999');
   expect(missing.status).toBe(404);
   expect(await missing.json()).toMatchObject({
@@ -150,6 +195,63 @@ test('message images upload for the task, link once with the message, follow the
       .status,
   ).toBe(409);
 
+  // Documents go with a message as images do, of their own kind, ten files a message at most.
+  for (const [body, status] of [
+    [{ imageIds: [notes.id] }, 409],
+    [{ documentIds: [image.id] }, 409],
+    [{ documentIds: [notes.id, notes.id] }, 400],
+    [
+      {
+        imageIds: [image.id],
+        documentIds: Array.from({ length: 10 }, () => randomUUID()),
+      },
+      400,
+    ],
+    [{ documentIds: [randomUUID()] }, 409],
+  ] as const)
+    expect(
+      (await advance(taskId, { comment: 'Files', ...body })).status,
+      JSON.stringify(body),
+    ).toBe(status);
+  const withDocuments = await advance(taskId, {
+    comment: 'Use the terms in notes.md and the title in the text file.',
+    imageIds: [image.id],
+    documentIds: [notes.id, feedback.id],
+  });
+  expect(withDocuments.status).toBe(200);
+  const documentWork = (await withDocuments.json()).data.work;
+  expect(documentWork.history.at(-1)).toMatchObject({
+    action: 'comment',
+    images: [{ id: image.id }],
+    documents: [
+      {
+        id: notes.id,
+        name: 'notes.md',
+        ref: `/uploads/task-media/${notes.id}.md`,
+        type: 'text/markdown',
+        size: notes.size,
+      },
+      {
+        id: feedback.id,
+        name: '新建文本文档 (2).txt',
+        ref: `/uploads/task-media/${feedback.id}.txt`,
+        type: 'text/plain',
+        size: feedback.size,
+      },
+    ],
+  });
+  expect(documentWork.documents).toEqual([notes.id, feedback.id]);
+  expect(documentWork.images).toEqual([image.id]);
+  // Another task cannot take them.
+  expect(
+    (
+      await advance(otherTaskId, {
+        comment: 'Elsewhere',
+        documentIds: [notes.id],
+      })
+    ).status,
+  ).toBe(409);
+
   // Whoever may read the task may see the image and add images to it; nobody else.
   const credentials = {
     email: 'image-reader@example.test',
@@ -181,6 +283,24 @@ test('message images upload for the task, link once with the message, follow the
   const read = await content(reader);
   expect(read.status).toBe(200);
   expect(Buffer.from(await read.arrayBuffer())).toEqual(png);
+  // A document downloads, as a new task's do; one never sent stays its uploader's.
+  const download = await testApp.fetch(
+    new Request(`http://localhost${feedback.contentUrl}`, {
+      headers: { cookie: reader.cookie },
+    }),
+  );
+  expect(download.status).toBe(200);
+  expect(download.headers.get('content-disposition')).toMatch(/^attachment;/);
+  expect(await download.text()).toBe('Shorter title, please.');
+  expect(
+    (
+      await testApp.fetch(
+        new Request(`http://localhost${brief.contentUrl}`, {
+          headers: { cookie: reader.cookie },
+        }),
+      )
+    ).status,
+  ).toBe(403);
 
   // The task's runs receive it with the extension its path ends with.
   const files = await manual.forAgent(connection, '1', taskId, [image.id]);
@@ -191,4 +311,16 @@ test('message images upload for the task, link once with the message, follow the
   expect(
     await manual.forAgent(connection, '1', otherTaskId, [image.id]),
   ).toEqual([]);
+  // And the documents, with their names and types, for the runs that read the message.
+  const documents = await manual.forAgent(connection, '1', taskId, [
+    notes.id,
+    feedback.id,
+  ]);
+  expect(documents.map(({ name, type, ext }) => [name, type, ext])).toEqual([
+    ['notes.md', 'text/markdown', 'md'],
+    ['新建文本文档 (2).txt', 'text/plain', 'txt'],
+  ]);
+  expect((await documents[1].read!()).toString()).toBe(
+    'Shorter title, please.',
+  );
 });

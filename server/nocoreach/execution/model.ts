@@ -53,6 +53,8 @@ export type Work = {
   // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit
   // directly. `imageUrls` is where each was uploaded when an article that uses it was published, per target.
   images?: string[];
+  // Documents sent with messages and change requests (2026-11-15), kept apart from images: never placed in an article.
+  documents?: string[];
   imageUrls?: Record<string, Record<string, string>>;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
   article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string; locales?: string[] };

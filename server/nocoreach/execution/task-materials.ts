@@ -44,6 +44,14 @@ export interface TaskAttachmentReader {
     taskId: string,
     ids: readonly string[],
   ): Promise<import('../../../shared/task-images.js').MessageImage[]>;
+  /** Link the actor's documents to a started task with a message or change request (manual-tasks.ts linkDocuments). */
+  linkDocuments(
+    connection: import('@nocobase/db').DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<import('../../../shared/task-images.js').MessageDocument[]>;
   /**
    * Keep an image an Agent uploaded during its run (`task file`, Xiaohongshu cards): a PNG of the card size, unlinked
    * until the run's result links it. Answers what NocoReach read of it (manual-tasks.ts agentImage).
@@ -86,12 +94,20 @@ export function attachmentIdsOf(input: TaskInput): string[] {
  * first appear.
  */
 export function messageImageIdsOf(input: TaskInput): string[] {
+  return messageFileIdsOf(input, 'images');
+}
+/** The documents the messages in a run's input carry (2026-11-15), each once, in the order they first appear. */
+export function messageDocumentIdsOf(input: TaskInput): string[] {
+  return messageFileIdsOf(input, 'documents');
+}
+function messageFileIdsOf(input: TaskInput, field: 'images' | 'documents') {
   const ids = new Set<string>();
   for (const list of [input.notes, input.feedback])
     for (const message of Array.isArray(list) ? list : []) {
-      const images = (message as { images?: unknown } | null)?.images;
-      for (const image of Array.isArray(images) ? images : []) {
-        const found = taskImageOf(String((image as { ref?: unknown })?.ref));
+      const files = (message as Record<string, unknown> | null)?.[field];
+      for (const file of Array.isArray(files) ? files : []) {
+        // A document's path has the form an image's has (/uploads/task-media/<id>.<ext>).
+        const found = taskImageOf(String((file as { ref?: unknown })?.ref));
         if (found) ids.add(found.id);
       }
     }
@@ -101,6 +117,8 @@ export function messageImageIdsOf(input: TaskInput): string[] {
 export const ATTACHMENT_BUDGET = 25 * 1024 * 1024;
 /** Raw bytes of the message images a run receives, apart from the attachments. */
 export const IMAGE_BUDGET = 25 * 1024 * 1024;
+/** Raw bytes of the message documents a run receives, apart from the attachments and images. */
+export const DOCUMENT_BUDGET = 25 * 1024 * 1024;
 const safeName = (name: string) =>
   name
     .replace(/[^\p{L}\p{N}._-]+/gu, '_')
@@ -129,8 +147,22 @@ export function attachmentPlan(attachments: readonly MaterialAttachment[]) {
 
 /** Which message images a run receives and where: each under its own id, within the image budget. */
 export function imagePlan(images: readonly MaterialAttachment[]) {
-  let budget = IMAGE_BUDGET;
-  return images.map((file) => {
+  return messageFilePlan(images, 'images', IMAGE_BUDGET);
+}
+/**
+ * Which message documents a run receives and where (2026-11-15): as images are, each under its own id within a budget
+ * of its own, the original's bytes for the Agent to decode and read as a new task's attachments are.
+ */
+export function documentPlan(documents: readonly MaterialAttachment[]) {
+  return messageFilePlan(documents, 'documents', DOCUMENT_BUDGET);
+}
+function messageFilePlan(
+  files: readonly MaterialAttachment[],
+  folder: 'images' | 'documents',
+  limit: number,
+) {
+  let budget = limit;
+  return files.map((file) => {
     const included = file.size <= budget;
     if (included) budget -= file.size;
     const ext = /\.([a-z0-9]{1,32})$/.exec(file.name.toLowerCase())?.[1];
@@ -142,7 +174,7 @@ export function imagePlan(images: readonly MaterialAttachment[]) {
         type: file.type,
         size: file.size,
         ...(included
-          ? { base64: `images/${file.id}.base64` }
+          ? { base64: `${folder}/${file.id}.base64` }
           : { omitted: 'size' as const }),
       },
     };
@@ -178,6 +210,7 @@ export function taskMaterials(
   attachments: readonly MaterialAttachment[] = [],
   contents?: ReadonlyMap<string, string>,
   images: readonly MaterialAttachment[] = [],
+  documents: readonly MaterialAttachment[] = [],
 ) {
   const {
     knowledge = [],
@@ -225,24 +258,32 @@ export function taskMaterials(
       path: 'images.json',
       content: JSON.stringify(shown.map(({ entry }) => entry)),
     });
-  // Linked attachments and images never change, so their ids and sizes stand in for their bytes in the hash. Without
-  // either the hash is the one runners already cached.
+  const read = documentPlan(documents);
+  if (read.length)
+    files.push({
+      path: 'documents.json',
+      content: JSON.stringify(read.map(({ entry }) => entry)),
+    });
+  // Linked attachments, images and documents never change, so their ids and sizes stand in for their bytes in the
+  // hash. Without any the hash is the one runners already cached.
+  const sized = (
+    list: readonly { file: MaterialAttachment; entry: unknown }[],
+  ) => list.map(({ file, entry }) => [file.id, file.size, entry]);
   const hash = createHash('sha256')
     .update(
       JSON.stringify(
-        plan.length || shown.length
+        plan.length || shown.length || read.length
           ? [
               files,
-              plan.map(({ file, entry }) => [file.id, file.size, entry]),
-              ...(shown.length
-                ? [shown.map(({ file, entry }) => [file.id, file.size, entry])]
-                : []),
+              sized(plan),
+              ...(shown.length || read.length ? [sized(shown)] : []),
+              ...(read.length ? [sized(read)] : []),
             ]
           : files,
       ),
     )
     .digest('hex');
-  for (const { file, entry } of [...plan, ...shown])
+  for (const { file, entry } of [...plan, ...shown, ...read])
     if ('base64' in entry && entry.base64)
       files.push({ path: entry.base64, content: contents?.get(file.id) ?? '' });
   return {
@@ -274,12 +315,13 @@ export function taskMaterials(
           : {}),
         ...(plan.length ? { attachments: `${TARGET}/attachments.json` } : {}),
         ...(shown.length ? { images: `${TARGET}/images.json` } : {}),
+        ...(read.length ? { documents: `${TARGET}/documents.json` } : {}),
       },
     },
     offer: {
       hash,
       target: TARGET,
-      note: `读取 knowledge.json、skills.json 和 sources.json（文章任务另有 article.json 源稿）的任务资料快照；omitted 表示未提供正文，不得猜测。${typeof cardTemplate === 'string' ? '小红书卡片模板是 xhs-card.html：复制到工作目录，在旁边写 cards.js（window.CARDS = [{layout, heading, text}]），用无头浏览器按 1080×1440 打开 xhs-card.html?n=序号 逐张截图；页面标题 overflow:none 表示没有溢出，overflow:3,7 列出溢出的卡片。' : ''}${plan.length ? '任务附件列在 attachments.json：base64 字段指向原件的 base64 文本，先解码再打开（如 base64 -d 文件.base64 > 原文件名）；带 omitted 的附件（video 或 size）未提供，需要时请任务负责人在任务页下载。' : ''}${shown.length ? '留言和审核意见里的图片列在 images.json：ref 与 notes、feedback 中图片的 ref 相同，base64 字段指向原图的 base64 文本，先解码再查看；带 omitted 的图片未提供。' : ''}资料不应提交到仓库。`,
+      note: `读取 knowledge.json、skills.json 和 sources.json（文章任务另有 article.json 源稿）的任务资料快照；omitted 表示未提供正文，不得猜测。${typeof cardTemplate === 'string' ? '小红书卡片模板是 xhs-card.html：复制到工作目录，在旁边写 cards.js（window.CARDS = [{layout, heading, text}]），用无头浏览器按 1080×1440 打开 xhs-card.html?n=序号 逐张截图；页面标题 overflow:none 表示没有溢出，overflow:3,7 列出溢出的卡片。' : ''}${plan.length ? '任务附件列在 attachments.json：base64 字段指向原件的 base64 文本，先解码再打开（如 base64 -d 文件.base64 > 原文件名）；带 omitted 的附件（video 或 size）未提供，需要时请任务负责人在任务页下载。' : ''}${shown.length ? '留言和审核意见里的图片列在 images.json：ref 与 notes、feedback 中图片的 ref 相同，base64 字段指向原图的 base64 文本，先解码再查看；带 omitted 的图片未提供。' : ''}${read.length ? '留言和审核意见里的文档列在 documents.json：ref 与 notes、feedback 中文档的 ref 相同，base64 字段指向原件的 base64 文本，先按 name 的文件名解码再打开；带 omitted 的文档未提供，需要时请任务负责人在任务页下载。' : ''}资料不应提交到仓库。`,
     },
     bundle: { name: TASK_MATERIALS_MOUNT, hash, files },
   };
