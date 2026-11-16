@@ -3,6 +3,7 @@ import { joinList } from '#lib/format';
 import type { ResultSource } from '../results/types.js';
 import type { TaskData } from '../task-execution-types.js';
 import { taskSignals } from '../../../shared/opportunity-parts.js';
+import { namedPlaybook, type PlaybookOrigin } from '../playbook-snapshot';
 
 export type Signal = {
   key: string;
@@ -16,7 +17,11 @@ type Evidence = {
   insight?: { signalIds?: string[] };
   part?: { signalIds?: string[] } | null;
   context?: { signals?: { items?: Signal[] } };
-  handoff?: { playbook?: string; content?: string };
+  handoff?: {
+    playbook?: string;
+    playbookOrigin?: PlaybookOrigin;
+    content?: string;
+  };
   resultSource?: ResultSource;
   attachmentIds?: unknown[];
 };
@@ -51,7 +56,9 @@ export function taskEvidence(data: TaskData) {
   );
   const brief = ev.handoff?.content || data.task.brief || '';
   const briefTitle = ev.handoff?.content
-    ? $t('taskDetail.documentDelivered', { 0: ev.handoff.playbook })
+    ? $t('taskDetail.documentDelivered', {
+        0: namedPlaybook(ev.handoff.playbook, ev.handoff.playbookOrigin),
+      })
     : $t('taskDetail.taskBrief');
   return {
     signals,
