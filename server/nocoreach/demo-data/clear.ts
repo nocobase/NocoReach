@@ -92,6 +92,8 @@ export const PROJECT_SNAPSHOTS = new Set([
   'nr-task-review',
   'nr-task-result',
   'nr-task-run',
+  // The colors read from an Agent's uploaded card images, per run (`nr-task-files:<project>:<task>:<run>`).
+  'nr-task-files',
   // What a Content workshop task adapts, kept when the task is created.
   'nr-task-source',
   'nr-task-sources',
