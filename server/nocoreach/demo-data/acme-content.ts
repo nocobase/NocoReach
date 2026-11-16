@@ -1,6 +1,7 @@
 import type { DemoContent } from './content.js';
 import type { EditorialStory } from './editorial.js';
 import { t, type L, type Page } from './world/script/types.js';
+import { WORKSHOP_PAGES } from './workshop-content.js';
 
 export const ACME_STORIES: readonly EditorialStory[] = [
   {
@@ -2083,6 +2084,7 @@ export const ACME_PAGES: readonly Page[] = [
     updated: 18,
     links: ['/docs/getting-started', '/pricing', '/templates'],
   },
+  ...WORKSHOP_PAGES,
 ];
 
 const DOCUMENTS: readonly [string, string, L, L][] = [

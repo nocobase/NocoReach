@@ -38,6 +38,7 @@ export const ACTIVITY_EVENTS: ReadonlySet<string> = new Set([
   'cancelTask',
   'archiveTask',
   'unarchiveTask',
+  'reopenReview',
   'prClosed',
   'merged',
   'revertRelease',

@@ -46,6 +46,8 @@ export type Work = {
   // How many times the playbook was changed after the start (2026-11-11, shared/playbook-change.ts): runs, reviews and
   // versions keep the attempt they belong to. None before the first change.
   attempt?: number;
+  // Content workshop (2026-11-13): what the task adapts, into which form and for where (shared/repurpose.ts).
+  repurpose?: import('../../../shared/repurpose.js').Repurpose;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit
