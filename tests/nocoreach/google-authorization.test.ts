@@ -10,6 +10,10 @@ import { createStandaloneServer } from '../../server/standalone';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import { secretKey } from '../../server/nocoreach/policy';
 import {
+  GOOGLE_ENDPOINTS,
+  GOOGLE_SCOPES,
+} from '../../server/nocoreach/google-client';
+import {
   TESTING_AUTHORIZATION_MS,
   lastedTestingWeek,
 } from '../../server/nocoreach/google-authorization';
@@ -132,10 +136,20 @@ async function setup(testApp: TestApp, authorizedAt: string) {
       authorized: boolean;
       authFailedAt: string | null;
       testingWeek: boolean;
+      failedAttempt: { at: string; reason: string } | null;
     };
   };
   const failedAt = async () => (await p.link(id))?.get('authFailedAt') ?? null;
-  return { p, id, db: runtime.legacy.db, google, refused, status, failedAt };
+  return {
+    p,
+    id,
+    db: runtime.legacy.db,
+    admin,
+    google,
+    refused,
+    status,
+    failedAt,
+  };
 }
 
 test('a refusal of the saved authorization is recorded once and reported by status', async ({
@@ -301,4 +315,175 @@ test('retryRefused queues the jobs Google refused for the selected resources onl
   expect(await state(earlier)).toEqual(['failed', 'invalid_grant', 1]);
   expect((await state(done))[0]).toBe('succeeded');
   expect(await f.p.sync.retryRefused(f.id)).toBe(0);
+});
+
+// Authorizing again through the real routes: authorize, then the callback Google's consent page redirects to, with the
+// state and the browser's nonce cookie, and Google's answers in place of the network.
+async function authorizeAgain(
+  f: Awaited<ReturnType<typeof setup>>,
+  token: () => Response | Promise<Response>,
+) {
+  const start = await f.admin.fetch('/nocoreach/nrGoogle/authorize', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+    body: JSON.stringify({ projectId: f.id }),
+  });
+  expect(start.status).toBe(200);
+  const state = new URL(
+    (await start.json()).data.authorizationUrl,
+  ).searchParams.get('state');
+  const nonce = start.headers
+    .getSetCookie()
+    .find((cookie) => cookie.startsWith('nr_google_oauth='))!
+    .split(';')[0];
+  const sent: string[] = [];
+  vi.spyOn(f.p, 'googleFetch').mockReturnValue(async (url: string | URL) => {
+    sent.push(String(url));
+    return String(url) === GOOGLE_ENDPOINTS.token
+      ? token()
+      : Response.json({ email: 'fixture@example.test' });
+  });
+  const callback = await f.admin.fetch(
+    `/nocoreach/nrGoogle/callback?${new URLSearchParams({ state: String(state), code: 'fixture-code' })}`,
+    { headers: { cookie: nonce }, redirect: 'manual' },
+  );
+  expect(callback.status).toBe(302);
+  return {
+    reason: new URL(
+      String(callback.headers.get('location')),
+      'http://localhost',
+    ).searchParams.get('reason'),
+    exchanges: sent.filter((url) => url === GOOGLE_ENDPOINTS.token).length,
+  };
+}
+
+test('a failed authorization attempt stays on the link, in status and Data health, until one succeeds', async ({
+  testApp,
+}) => {
+  const f = await setup(testApp, new Date(Date.now() - 8 * DAY).toISOString());
+  // Google refused the saved authorization; both syncs failed with it.
+  for (const [source, resource] of [
+    ['ga4', '123'],
+    ['gsc', 'sc-domain:example.test'],
+  ])
+    await f.db.getRepository('nrSyncJobs').create({
+      values: {
+        projectId: f.id,
+        status: 'failed',
+        source,
+        resource,
+        startDate: '2026-10-25',
+        endDate: '2026-10-31',
+        cursor: '2026-10-25',
+        attempts: 1,
+        recordCount: 0,
+        trigger: 'scheduled',
+        errorCode: 'invalid_grant',
+      },
+    });
+  const health = async () => {
+    const response = await f.admin.fetch('/nocoreach/nrHealth/list', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ projectId: Number(f.id) }),
+    });
+    expect(response.status).toBe(200);
+    const items = (await response.json()).data.items as {
+      id: string;
+      state: string;
+      attemptText?: { key: string; params: Record<string, unknown> };
+    }[];
+    return items.filter((item) => item.id === 'ga4' || item.id === 'gsc');
+  };
+  expect((await f.status()).failedAttempt).toBeNull();
+  expect((await health()).map((row) => row.attemptText)).toEqual([
+    undefined,
+    undefined,
+  ]);
+
+  // Google's consent page was left with the Search Console box unticked.
+  const partial = await authorizeAgain(f, () =>
+    Response.json({
+      refresh_token: 'partial-refresh',
+      access_token: 'partial-access',
+      scope: 'openid email https://www.googleapis.com/auth/analytics.readonly',
+    }),
+  );
+  expect(partial).toEqual({ reason: 'missing_permissions', exchanges: 1 });
+  const first = (await f.status()).failedAttempt;
+  expect(first).toEqual({
+    at: expect.any(String),
+    reason: 'missing_permissions',
+  });
+  const rows = await health();
+  expect(rows.map((row) => row.state)).toEqual(['failing', 'failing']);
+  for (const row of rows)
+    expect(row.attemptText).toEqual({
+      key: 'google.authorizationAttemptFailedAt',
+      params: {
+        0: { dateTime: first!.at },
+        1: { key: 'google.authorizationLacksReadAccessAnalytics' },
+      },
+    });
+  // The authorization Google refused is still the saved one.
+  expect(f.p.env(secretKey(f.id))).toBe('synthetic-refresh');
+
+  // The server's way out to Google dropped: no answer, then none again after one retry.
+  const timedOut = await authorizeAgain(f, () => {
+    throw new DOMException(
+      'The operation was aborted due to timeout',
+      'TimeoutError',
+    );
+  });
+  expect(timedOut).toEqual({ reason: 'network_timeout', exchanges: 2 });
+  const second = (await f.status()).failedAttempt;
+  expect(second?.reason).toBe('network_timeout');
+  expect(Date.parse(second!.at)).toBeGreaterThanOrEqual(Date.parse(first!.at));
+
+  // It drops once more, and the retry gets through: the attempt is cleared and the refused syncs queued again.
+  let dropped = false;
+  const recovered = await authorizeAgain(f, () => {
+    if (!dropped) {
+      dropped = true;
+      throw Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('read ECONNRESET'), {
+          code: 'ECONNRESET',
+        }),
+      });
+    }
+    return Response.json({
+      refresh_token: 'new-refresh',
+      access_token: 'new-access',
+      scope: GOOGLE_SCOPES.join(' '),
+    });
+  });
+  expect(recovered).toEqual({ reason: null, exchanges: 2 });
+  expect(await f.status()).toMatchObject({
+    authorized: true,
+    authFailedAt: null,
+    failedAttempt: null,
+  });
+  expect(f.p.env(secretKey(f.id))).toBe('new-refresh');
+  expect((await health()).map((row) => [row.state, row.attemptText])).toEqual([
+    ['healthy', undefined],
+    ['healthy', undefined],
+  ]);
+});
+
+test('a disconnect clears a failed attempt, which a later failure records again', async ({
+  testApp,
+}) => {
+  const f = await setup(testApp, new Date(Date.now() - DAY).toISOString());
+  await f.p.authAttemptFailed(f.id, 'network_unreachable');
+  expect((await f.status()).failedAttempt?.reason).toBe('network_unreachable');
+  await f.p.sync.disconnect(f.id);
+  expect(await f.status()).toMatchObject({
+    authorized: false,
+    failedAttempt: null,
+  });
+  await f.p.authAttemptFailed(f.id, 'authorization_denied');
+  expect((await f.status()).failedAttempt?.reason).toBe('authorization_denied');
 });
