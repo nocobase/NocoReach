@@ -5,6 +5,7 @@ export const REACH_PAGES = [
   'action-center',
   'task-create',
   'task-work',
+  'content-workshop',
   'result-list',
   'result-detail',
   'opportunity-explore',

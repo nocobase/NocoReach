@@ -19,6 +19,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'page', // An opportunity's place (`page:<host/path>`), kept on a task's `evidence.part` and its proposal.
   'task', // Proposal group of a task handed off without an opportunity (`task:<id>`), kept inside the strategy snapshot.
   'cover', // An article cover's error detail and upload idempotency key (`cover:<language or *>`), never stored.
+  'workshop', // Task key of a Content workshop start (`workshop:<user>:<request>:<item>`), kept on nrTasks.
   'ai-answer',
   'ai-cited',
   'ai-dropped',

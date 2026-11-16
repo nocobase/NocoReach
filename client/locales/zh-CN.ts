@@ -59,6 +59,7 @@ const zhCN: AppResource = {
   'nocoreach.nav.opportunities': '机会',
   'nocoreach.nav.tasks': '任务',
   'nocoreach.nav.results': '成果',
+  'nocoreach.nav.workshop': '内容加工坊',
   'nocoreach.nav.site': '网站与产品',
   'nocoreach.nav.pages': '页面',
   'nocoreach.nav.traffic': '访问',

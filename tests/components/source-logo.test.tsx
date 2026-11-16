@@ -52,3 +52,26 @@ it('draws black marks in the text colour and keeps brand colours otherwise', () 
   expect(github).toHaveClass('text-foreground');
   expect(youtube.getAttribute('style')).toContain('#FF0000');
 });
+
+// Content workshop v5 review: a wordmark, bare, sits on a square of its colour so it reads beside the other marks;
+// an icon mark takes the colour it is given, so a row of marks can show one as active.
+it('puts a bare wordmark on a square of its colour and lets an icon mark take the given colour', () => {
+  const { container } = render(
+    <>
+      <SourceLogo source='xiaohongshu' size='xs' />
+      <SourceLogo source='xiaohongshu' size='sm' />
+      <SourceLogo source='community' size='xs' />
+      <SourceLogo source='community' size='xs' className='text-foreground' />
+    </>,
+  );
+  const [bare, tiled, muted, active] = container.querySelectorAll(
+    '[data-slot="source-logo"]',
+  );
+  expect(bare).toHaveClass('rounded-[3px]');
+  expect(bare.getAttribute('style')).toContain('#FF2442');
+  expect(bare.querySelector('svg')).toHaveClass('text-white');
+  expect(tiled).not.toHaveClass('rounded-[3px]');
+  expect(muted).toHaveClass('text-muted-foreground');
+  expect(active).toHaveClass('text-foreground');
+  expect(active).not.toHaveClass('text-muted-foreground');
+});
