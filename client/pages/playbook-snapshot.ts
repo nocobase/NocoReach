@@ -45,14 +45,21 @@ const stepText = (value: string) => {
 const names = knownText(SYSTEM_PLAYBOOKS.map((p) => p.name));
 const canonicalStages = SYSTEM_PLAYBOOKS.flatMap((p) => stagesFor(p));
 const stageNames = knownText(canonicalStages.map((s) => s.name));
-// A built-in step's instruction and its review items are stored as Chinese system text too (View steps on a started
-// task showed them in Chinese in every language until 2026-11-04).
+// A built-in step's instruction is stored as Chinese system text too (View steps on a started task showed it in
+// Chinese in every language until 2026-11-04).
 const instructions = knownText(
   canonicalStages.flatMap((s) => (s.instruction ? [s.instruction] : [])),
 );
-const checklistLabels = knownText(
-  canonicalStages.flatMap((s) => (s.checklist || []).map((c) => c.label)),
-);
+// Review steps listed items to tick until 2026-11-15; a snapshot taken before still has them, which no longer count.
+const withoutChecklist = (flow: FlowSnapshot) => ({
+  ...flow,
+  stages: flow.stages.map((stage) => {
+    const { checklist: _checklist, ...rest } = stage as typeof stage & {
+      checklist?: unknown;
+    };
+    return rest;
+  }),
+});
 
 // Compare the complete JSON shape, including unknown fields, without depending on
 // property order. A version or an ID by itself is not evidence of canonical text.
@@ -100,7 +107,7 @@ function isCanonicalLegacy(
       kind: p.kind,
       version: p.version,
     }) &&
-    sameSnapshot(flow, {
+    sameSnapshot(withoutChecklist(flow), {
       id: p.id,
       name: p.name,
       version: p.version,
@@ -131,15 +138,6 @@ function localizeFlowSnapshot(
       name: stageNames.has(stage.name) ? stepText(stage.name) : stage.name,
       ...(stage.instruction && instructions.has(stage.instruction)
         ? { instruction: stepText(stage.instruction) }
-        : {}),
-      ...(stage.checklist
-        ? {
-            checklist: stage.checklist.map((item) =>
-              checklistLabels.has(item.label)
-                ? { ...item, label: stepText(item.label) }
-                : item,
-            ),
-          }
         : {}),
     })),
   };

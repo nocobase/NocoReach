@@ -448,7 +448,6 @@ describe('NocoReach semantic-key translations', () => {
         ...playbook.steps.flatMap((step) => [
           step.name,
           step.instruction,
-          ...(step.checklist ?? []).map((item) => item.label),
         ]),
         ...stagesFor(playbook).map((stage) => stage.name),
       ]),

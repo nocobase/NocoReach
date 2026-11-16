@@ -45,14 +45,14 @@ const IMPROVE = {
       kind: 'analyze',
       instruction: 'Read the page and write what to change.',
     },
-    { key: 'review-plan', name: 'Review plan', kind: 'review', checklist: [] },
+    { key: 'review-plan', name: 'Review plan', kind: 'review' },
     {
       key: 'build',
       name: 'Change',
       kind: 'change',
       instruction: 'Rewrite the title and description.',
     },
-    { key: 'review', name: 'Review', kind: 'review', checklist: [] },
+    { key: 'review', name: 'Review', kind: 'review' },
   ],
 };
 const CMS = {

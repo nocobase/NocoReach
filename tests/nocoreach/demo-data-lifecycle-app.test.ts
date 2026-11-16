@@ -302,7 +302,6 @@ describe('read-only demo lifecycle', () => {
       command: 'approveStage',
       stageKey: review.key,
       artifactId: detail.work.results[detail.work.stageIndex - 1].id,
-      checked: review.checklist.map((item: { key: string }) => item.key),
       revision: detail.work.revision,
       requestId: randomUUID(),
     });

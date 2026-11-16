@@ -586,14 +586,7 @@ async function seedTasks(p: DemoHost, id: string, clock: string) {
               mode: 'analyze',
               instruction: '根据项目中已保存的模拟资料整理观察和建议。',
             },
-            {
-              key: 'review',
-              name: '人工复核',
-              kind: 'review',
-              checklist: [
-                { key: 'sources', label: '核对引用来源与结论', required: true },
-              ],
-            },
+            { key: 'review', name: '人工复核', kind: 'review' },
           ],
         };
         work.stageIndex = state === 'doing' ? 0 : 1;

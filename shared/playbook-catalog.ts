@@ -2,14 +2,12 @@ import { systemMessageText } from './i18n/messages.js';
 // Pure canonical types and definitions shared by the server and snapshot display.
 export type StageKind = 'agent' | 'review' | 'publish' | 'release' | 'observe';
 export type AgentMode = 'analyze' | 'change';
-export type ChecklistItem = { key: string; label: string; required: boolean };
 export type Stage = {
   key: string;
   name: string;
   kind: StageKind;
   mode?: AgentMode;
   instruction?: string;
-  checklist?: ChecklistItem[];
   skills?: string[];
 };
 export type PlaybookKind = 'plan' | 'build';
@@ -19,7 +17,6 @@ export type Step = {
   name: string;
   kind: StepKind;
   instruction?: string;
-  checklist?: ChecklistItem[];
   skills?: string[];
 };
 export type Category = 'research' | 'create' | 'optimize' | 'technical';
@@ -38,11 +35,6 @@ export type Playbook = {
   copiedFrom?: string;
 };
 
-const facts: ChecklistItem = {
-  key: 'facts',
-  label: systemMessageText('playbooks.citedDataFactsAccurate'),
-  required: true,
-};
 const analyze = (
   instruction: string,
   name = systemMessageText('common.analyze'),
@@ -58,11 +50,11 @@ const change = (
   kind: 'change',
   instruction,
 });
-const review = (
-  name: string,
-  checklist: ChecklistItem[] = [],
-  key = 'review',
-): Step => ({ key, name, kind: 'review', checklist });
+const review = (name: string, key = 'review'): Step => ({
+  key,
+  name,
+  kind: 'review',
+});
 // The Skills a built-in step always gives the Agent (skills-builtin.ts ids; at most five).
 const withSkills = (step: Step, skills: string[]): Step =>
   skills.length ? { ...step, skills } : step;
@@ -89,7 +81,7 @@ const doc = (
     description,
     steps: [
       withSkills(analyze(instructions, step), skills),
-      review(systemMessageText('common.review'), [facts], 'accept'),
+      review(systemMessageText('common.review'), 'accept'),
     ],
     next,
     system: true,
@@ -121,11 +113,7 @@ const work = (
               ),
               skills,
             ),
-            review(
-              systemMessageText('playbook.reviewPlan'),
-              [],
-              'approve-plan',
-            ),
+            review(systemMessageText('playbook.reviewPlan'), 'approve-plan'),
           ]
         : []),
       withSkills(change(instructions, step), skills),
@@ -284,12 +272,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
 export function stagesFor(p: Pick<Playbook, 'steps'>): Stage[] {
   const stages: Stage[] = p.steps.map((s) =>
     s.kind === 'review'
-      ? {
-          key: s.key,
-          name: s.name,
-          kind: 'review',
-          checklist: s.checklist || [],
-        }
+      ? { key: s.key, name: s.name, kind: 'review' }
       : {
           key: s.key,
           name: s.name,
