@@ -548,7 +548,9 @@ async function cardImages(
     });
     const row = await tasks.findOne({ filterByTk: taskId });
     if (!row) continue;
-    const evidence = row.get('evidence');
+    const evidence = row.get('evidence') as Record<string, unknown> & {
+      work?: Record<string, unknown>;
+    };
     await tasks.update({
       filterByTk: taskId,
       values: {
