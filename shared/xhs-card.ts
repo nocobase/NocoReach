@@ -141,6 +141,18 @@ const add = (parent, ...kids) => {
 const paras = (t) => String(t || '').split('\n').map((s) => s.trim()).filter(Boolean);
 // A line in brackets is a note ("(A fictional comparison.)"), set smaller.
 const isNote = (s) => /^[（(][\s\S]*[)）]$/.test(s);
+// A card's text as its points: a line ending at a comma goes on in the next line, so a sentence broken across lines
+// stays one point rather than becoming two items of a list.
+const points = (t) => paras(t).reduce((out, p) => {
+  const last = out[out.length - 1];
+  if (last && !isNote(last) && !isNote(p) && /[，,、]$/.test(last)) out[out.length - 1] = last + (last.endsWith(',') ? ' ' : '') + p;
+  else out.push(p);
+  return out;
+}, []);
+// The styles that mark points draw their own markers, so they drop the ones the text brings ("- ", "1. ", "①"), and mark
+// points only when there are two or more: a single point is a paragraph.
+const unmarked = (p) => p.replace(/^(?:[-•·*]\s+|\d{1,2}[.)]\s+|\d{1,2}、\s*|[①-⑳]\s*)/, '');
+const listed = (pts) => pts.filter((p) => !isNote(p)).length > 1;
 // A heading's two parts at its first colon or comma, for the styles that set the second in the brand color.
 const halves = (h) => {
   const t = String(h || '').trim(), m = /^(.{2,}?)\s*[：:，,]\s*(.{2,})$/.exec(t);
@@ -186,12 +198,29 @@ const mark = (size, fg, bg) => {
 };
 
 // Text sizing: each job tries its sizes, largest first, and keeps the first that fits. Jobs run in order once fonts
-// have loaded, the heading's before the body's that fills what the heading leaves.
+// have loaded, the heading's before the body's that fills what the heading leaves. Text wraps with text-wrap: pretty;
+// where a line of one or two characters is still left alone at the end (an orphan), a heading keeps its size and wraps
+// up to three characters earlier, and a body takes one or two sizes smaller, when that fits without one.
 const jobs = [];
 const fitBox = (box) => () => box.scrollHeight <= box.clientHeight + 1;
 const fitLines = (node, lines, lh) => () => node.offsetHeight <= lines * lh * parseFloat(node.style.fontSize) + 2;
 // A body's size stays below its heading's (cap), so the heading still leads however short the body.
-const sized = (node, sizes, ok, cap) => jobs.push({ sizes, apply: (s) => (node.style.fontSize = s + 'px'), ok, cap });
+const sized = (node, sizes, ok, cap, tidy) => jobs.push({ node, sizes, apply: (s) => (node.style.fontSize = s + 'px'), ok, cap, tidy });
+const headed = (node, sizes, lh) => sized(node, sizes, fitLines(node, 3, lh), null, 'narrow');
+const filled = (node, cap) => sized(node, BODY, fitBox(node), cap, 'smaller');
+// Whether a text in the box ends on a line of one or two characters (an orphan, as "期，" alone under a long line):
+// the last line of a text that wraps, narrower than about two and a half of its characters.
+const orphaned = (box) => [...box.querySelectorAll('*')].some((e) => {
+  const text = [...e.childNodes].find((x) => x.nodeType === 3 && x.data.trim());
+  if (!text) return false;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+  const last = Math.max(...rects.map((r) => Math.round(r.top)));
+  if (new Set(rects.map((r) => Math.round(r.top))).size < 2) return false;
+  const width = rects.filter((r) => Math.round(r.top) === last).reduce((sum, r) => sum + r.width, 0);
+  return width < 2.6 * parseFloat(getComputedStyle(e).fontSize);
+});
 const under = (node, ratio) => () => parseFloat(node.style.fontSize) * ratio;
 const BODY = [96, 92, 88, 84, 80, 76, 72, 68, 64, 60, 56, 52, 48, 44, 40, 36];
 const HEAD = [124, 116, 108, 100, 92, 84, 76, 68];
@@ -239,7 +268,7 @@ const LOOKS = {
         list.appendChild(row);
       });
       add(box, list);
-      sized(h, [140, 128, 116, 104, 96, 88], fitLines(h, 3, 1.22));
+      headed(h, [140, 128, 116, 104, 96, 88], 1.22);
       sized(sub, [52, 48, 44, 40], fitBox(top));
       shrinking(box, list, [52, 48, 44, 40]);
       return add(root, head, top, box, foot);
@@ -249,7 +278,7 @@ const LOOKS = {
       const h = el('div', 'font-family:' + SERIF + ';font-weight:800;line-height:1.3;white-space:pre-wrap', c.heading || '');
       const t = el('div', 'font-family:' + SANS + ';color:' + accent + ';line-height:1.5;white-space:pre-wrap', c.text);
       add(body, mark(132, bg, accent), h, t);
-      sized(h, [96, 88, 80, 72, 64], fitBox(body));
+      sized(h, [96, 88, 80, 72, 64], fitBox(body), null, 'narrow');
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, head, body, foot);
     }
@@ -258,14 +287,14 @@ const LOOKS = {
     const rule = el('div', 'flex:none;width:120px;height:8px;background:' + accent + ';margin-top:48px');
     const body = area('padding:52px 0 40px;font-family:' + SANS);
     const inner = el('div', 'margin:auto 0');
-    for (const p of paras(c.text)) add(inner, el('div', isNote(p) ? 'font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.55) + ';margin-top:.5em' : 'line-height:1.66;margin-bottom:.6em', p));
+    for (const p of points(c.text)) add(inner, el('div', isNote(p) ? 'font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.55) + ';margin-top:.5em' : 'line-height:1.66;margin-bottom:.6em', p));
     add(body, inner);
-    if (c.heading) sized(h, HEAD, fitLines(h, 3, 1.25));
-    sized(body, BODY, fitBox(body), c.heading ? under(h, 0.76) : null);
+    if (c.heading) headed(h, HEAD, 1.25);
+    filled(body, c.heading ? under(h, 0.76) : null);
     return add(root, head, no, c.heading ? h : null, rule, body, foot);
   },
 
-  // Notes: an iOS Notes page in the brand color, a highlighted heading and a check before every line.
+  // Notes: an iOS Notes page in the brand color, a highlighted heading and a check before every point.
   memo(c, n, total, all) {
     const ink = '#1c1c1e', bg = '#ffffff', accent = DEEP, tint = mix(accent, bg, 0.72);
     const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:0 84px;display:flex;flex-direction:column;font-family:' + SANS);
@@ -293,7 +322,7 @@ const LOOKS = {
       const list = el('div', 'font-weight:600');
       for (const t of contents(all)) list.appendChild(line(t, 'margin-bottom:.7em;line-height:1.5'));
       add(box, list);
-      sized(h, [132, 120, 108, 96, 88], fitLines(h, 3, 1.24));
+      headed(h, [132, 120, 108, 96, 88], 1.24);
       sized(sub, [54, 50, 46, 42], fitBox(top));
       shrinking(box, list, [56, 52, 48, 44, 40]);
       return add(root, bar, date, top, box, tool);
@@ -303,21 +332,24 @@ const LOOKS = {
       const h = el('div', 'font-weight:800;line-height:1.32;white-space:pre-wrap', c.heading || '');
       const t = el('div', 'color:' + accent + ';line-height:1.5;white-space:pre-wrap', c.text);
       add(body, mark(132, bg, accent), h, t);
-      sized(h, [88, 80, 72, 64], fitBox(body));
+      sized(h, [88, 80, 72, 64], fitBox(body), null, 'narrow');
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, bar, body, tool);
     }
     const h = heading(c.heading, 'flex:none;font-weight:800;line-height:1.3;white-space:pre-wrap', marker);
     const body = area('padding:56px 0 32px');
     const inner = el('div', 'margin:auto 0');
-    for (const p of paras(c.text)) add(inner, isNote(p) ? el('div', 'font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.5) + ';margin-top:.2em;padding-left:1.6em', p) : line(p, 'line-height:1.62;margin-bottom:.6em'));
+    const pts = points(c.text), list = listed(pts);
+    for (const p of pts)
+      add(inner, isNote(p) ? el('div', 'font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.5) + ';margin-top:.2em' + (list ? ';padding-left:1.6em' : ''), p)
+        : list ? line(unmarked(p), 'line-height:1.62;margin-bottom:.6em') : el('div', 'line-height:1.62;margin-bottom:.6em', unmarked(p)));
     add(body, inner);
-    if (c.heading) sized(h, HEAD, fitLines(h, 3, 1.3));
-    sized(body, BODY, fitBox(body), c.heading ? under(h, 0.76) : null);
+    if (c.heading) headed(h, HEAD, 1.3);
+    filled(body, c.heading ? under(h, 0.76) : null);
     return add(root, bar, date, c.heading ? h : null, body, tool);
   },
 
-  // Dark tech: a near-black page in the brand's hue, a lighter brand color for keywords, a panel for every line.
+  // Dark tech: a near-black page in the brand's hue, a lighter brand color for keywords, a panel for every point.
   dark(c, n, total, all) {
     const bg = hex(H0, Math.min(S0, 0.42), 0.085), fg = '#ffffff', accent = hex(H0, Math.max(S0, 0.7) * (S0 > 0.08 ? 1 : 0), 0.74);
     const root = el('div', 'background:' + bg + ';color:' + fg + ';padding:96px 84px 0;display:flex;flex-direction:column;font-family:' + SANS);
@@ -336,7 +368,7 @@ const LOOKS = {
       const list = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:24px;align-content:start');
       contents(all).forEach((t, i) => list.appendChild(add(el('div', panel + ';padding:.8em .85em;line-height:1.45'), el('div', 'color:' + accent + ';font-weight:800;font-size:.8em;margin-bottom:.3em', two(i + 2)), el('div', 'font-weight:600', t))));
       add(box, list);
-      sized(h, [136, 124, 112, 100, 92], fitLines(h, 3, 1.18));
+      headed(h, [136, 124, 112, 100, 92], 1.18);
       sized(sub, [54, 50, 46, 42], fitBox(top));
       shrinking(box, list, [48, 44, 40]);
       return add(root, pill(S.brand), top, box, foot);
@@ -346,25 +378,27 @@ const LOOKS = {
       const h = el('div', 'font-weight:800;line-height:1.3;white-space:pre-wrap', c.heading || '');
       const t = el('div', 'color:' + accent + ';line-height:1.5;white-space:pre-wrap', c.text);
       add(body, mark(140, bg, accent), h, t);
-      sized(h, [88, 80, 72, 64], fitBox(body));
+      sized(h, [88, 80, 72, 64], fitBox(body), null, 'narrow');
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, body, foot);
     }
     const h = heading(c.heading, 'flex:none;margin-top:60px;font-weight:800;line-height:1.24;white-space:pre-wrap', second);
     const body = area('padding:56px 0 36px');
-    // The panels share the height the heading leaves, their text in their middle.
-    const inner = el('div', 'flex:1 0 auto;display:flex;flex-direction:column;gap:.4em');
+    // The panels share the height the heading leaves, their text in their middle; a single point is a paragraph.
+    const pts = points(c.text), list = listed(pts);
+    const inner = el('div', list ? 'flex:1 0 auto;display:flex;flex-direction:column;gap:.4em' : 'margin:auto 0');
     let k = 0;
-    for (const p of paras(c.text))
+    for (const p of pts)
       add(inner, isNote(p) ? el('div', 'flex:none;font-size:.62em;line-height:1.6;color:' + alpha(fg, 0.5), p)
-        : add(el('div', panel + ';flex:1 0 auto;display:flex;flex-direction:column;justify-content:center;padding:.6em .8em;line-height:1.56;color:' + alpha(fg, 0.92)), add(el('div', 'display:flex;gap:.6em'), el('span', 'flex:none;color:' + accent + ';font-weight:800', two(++k)), el('span', 'min-width:0', p))));
+        : list ? add(el('div', panel + ';flex:1 0 auto;display:flex;flex-direction:column;justify-content:center;padding:.6em .8em;line-height:1.56;color:' + alpha(fg, 0.92)), add(el('div', 'display:flex;gap:.6em'), el('span', 'flex:none;color:' + accent + ';font-weight:800', two(++k)), el('span', 'min-width:0', unmarked(p))))
+        : el('div', 'line-height:1.6;margin-bottom:.6em;color:' + alpha(fg, 0.92), unmarked(p)));
     add(body, inner);
-    if (c.heading) sized(h, HEAD, fitLines(h, 3, 1.24));
-    sized(body, BODY, fitBox(body), c.heading ? under(h, 0.72) : null);
+    if (c.heading) headed(h, HEAD, 1.24);
+    filled(body, c.heading ? under(h, 0.72) : null);
     return add(root, pill(pageOf(n, total) + ' · ' + S.brand), c.heading ? h : null, body, foot);
   },
 
-  // Checklist: a white page, a heading whose second part is marked in the brand color, a numbered row for every line.
+  // Checklist: a white page, a heading whose second part is marked in the brand color, a numbered row for every point.
   checklist(c, n, total, all) {
     const ink = '#111827', bg = '#ffffff', accent = DEEP, tint = mix(accent, bg, 0.86);
     const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:92px 80px 0;display:flex;flex-direction:column;font-family:' + SANS);
@@ -385,7 +419,7 @@ const LOOKS = {
       const list = el('div', 'font-weight:700;border-top:3px solid ' + ink);
       contents(all).forEach((t, i) => list.appendChild(row(String(i + 1), t, 'padding:.55em 0;line-height:1.45')));
       add(box, list);
-      sized(h, [132, 120, 108, 96, 88], fitLines(h, 3, 1.26));
+      headed(h, [132, 120, 108, 96, 88], 1.26);
       sized(sub, [52, 48, 44, 40], fitBox(top));
       shrinking(box, list, [56, 52, 48, 44, 40]);
       return add(root, head, top, box, foot);
@@ -395,26 +429,29 @@ const LOOKS = {
       const h = el('div', 'font-weight:900;line-height:1.32;white-space:pre-wrap', c.heading || '');
       const t = el('div', 'color:' + accent + ';line-height:1.5;white-space:pre-wrap', c.text);
       add(body, mark(132, bg, accent), h, t);
-      sized(h, [88, 80, 72, 64], fitBox(body));
+      sized(h, [88, 80, 72, 64], fitBox(body), null, 'narrow');
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, head, body, foot);
     }
     const h = heading(c.heading, 'flex:none;margin-top:72px;font-weight:900;line-height:1.3;white-space:pre-wrap', marked);
     const body = area('padding:48px 0 32px');
-    // The rows share the height the heading leaves, each a line of the table.
-    const inner = el('div', 'flex:1 0 auto;display:flex;flex-direction:column;border-top:4px solid ' + ink);
+    // The rows share the height the heading leaves, each a line of the table; a single point is a paragraph.
+    const pts = points(c.text), list = listed(pts);
+    const inner = el('div', list ? 'flex:1 0 auto;display:flex;flex-direction:column;border-top:4px solid ' + ink : 'margin:auto 0');
     let k = 0;
-    for (const p of paras(c.text)) add(inner, isNote(p) ? el('div', 'flex:none;font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.5) + ';margin-top:.6em', p) : row(String(++k), p, 'flex:1 0 auto;padding:.5em 0;line-height:1.56'));
+    for (const p of pts)
+      add(inner, isNote(p) ? el('div', 'flex:none;font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.5) + ';margin-top:.6em', p)
+        : list ? row(String(++k), unmarked(p), 'flex:1 0 auto;padding:.5em 0;line-height:1.56') : el('div', 'line-height:1.6;margin-bottom:.6em', unmarked(p)));
     add(body, inner);
-    if (c.heading) sized(h, HEAD, fitLines(h, 3, 1.3));
-    sized(body, BODY, fitBox(body), c.heading ? under(h, 0.76) : null);
+    if (c.heading) headed(h, HEAD, 1.3);
+    filled(body, c.heading ? under(h, 0.76) : null);
     return add(root, head, c.heading ? h : null, body, foot);
   },
 };
 
 function card(c, n, total, all) {
   const root = (LOOKS[S.template] || LOOKS.editorial)(c, n, total, all);
-  root.style.cssText = 'width:' + XHS.width + 'px;height:' + XHS.height + 'px;position:relative;overflow:hidden;box-sizing:border-box;line-height:1.5;font-size:40px;' + root.style.cssText;
+  root.style.cssText = 'width:' + XHS.width + 'px;height:' + XHS.height + 'px;position:relative;overflow:hidden;box-sizing:border-box;line-height:1.5;font-size:40px;text-wrap:pretty;' + root.style.cssText;
   root.dataset.card = String(n);
   return root;
 }
@@ -436,6 +473,7 @@ const fit = (measured) => {
   if (measured) for (const job of jobs) {
     const most = job.cap ? job.cap() : Infinity, sizes = job.sizes.filter((s) => s <= most);
     if (!sizes.length) sizes.push(job.sizes[job.sizes.length - 1]);
+    let fit = -1;
     for (let i = 0; i < sizes.length; i++) {
       job.apply(sizes[i]);
       if (job.drop) {
@@ -443,8 +481,27 @@ const fit = (measured) => {
         const keep = i === sizes.length - 1 ? 1 : Math.min(4, job.items.length);
         while (job.drop.children.length > keep && !job.ok()) job.drop.lastChild.remove();
       }
-      if (job.ok()) break;
+      if (job.ok()) {
+        fit = i;
+        break;
+      }
     }
+    if (fit < 0 || !job.tidy || !orphaned(job.node)) continue;
+    let tidied = false;
+    if (job.tidy === 'narrow') {
+      const width = job.node.clientWidth, size = parseFloat(job.node.style.fontSize);
+      for (let k = 1; k <= 3 && !tidied; k++) {
+        job.node.style.maxWidth = width - k * size + 'px';
+        tidied = job.ok() && !orphaned(job.node);
+      }
+      if (!tidied) job.node.style.maxWidth = '';
+      continue;
+    }
+    for (let i = fit + 1; i <= Math.min(sizes.length - 1, fit + 2) && !tidied; i++) {
+      job.apply(sizes[i]);
+      tidied = job.ok() && !orphaned(job.node);
+    }
+    if (!tidied) job.apply(sizes[fit]);
   }
   const over = [...document.querySelectorAll('[data-card]')]
     .filter((c) => !measured || [...c.querySelectorAll('[data-fit]')].some((f) => f.scrollHeight > f.clientHeight + 1))

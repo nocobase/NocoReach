@@ -66,13 +66,11 @@ describe('Content workshop demo', () => {
               }
             : {}),
         }).filter((c) => !c.ok);
-        // The cards waiting for review show the one warning the demo is for: the sixth card runs over 110 characters.
+        // Every demo draft follows its own rules, the cards waiting for review included (2026-11-17).
         expect(
           failed.map((c) => [c.key, c.params?.[0]]),
           `${lang} ${d.key}`,
-        ).toEqual(
-          d.key === 'requests-xhs' ? [['workshop.check.cardCharsOver', 6]] : [],
-        );
+        ).toEqual([]);
         if (d.form === 'community')
           expect(parsed!.rules.length, `${lang} ${d.key}`).toBeGreaterThan(0);
       }

@@ -1124,7 +1124,7 @@ Sections: 3
 ## Card 6
 Sections: 3
 # 第一周踩的坑②
-有张卡在“等客户”停了九天，没人发现，客户还以为我们把这件事忘了。复盘时才看出问题：卡片放进“等客户”之后就没人再看，负责人也默认该等客户先回复。后来加了一条规则：卡片在“等客户”停留超过三天，自动提醒负责人主动去问一次进度。
+有张卡在“等客户”停了九天，没人发现，客户还以为我们忘了。复盘才看出：卡片进了“等客户”就没人再看，负责人默认等客户先回复。后来加了一条规则：停留超过三天，自动提醒负责人去问一次进度。
 ## Card 7
 Sections: 4
 # 一个月后
@@ -1172,7 +1172,7 @@ Rule: one request, one card. First to triage owns it.
 ## Card 6
 Sections: 3
 # Week one: nine days
-A card sat in Waiting on client for nine days and nobody noticed; the client thought we had forgotten. Now a card waiting over three days reminds its owner.
+A card sat in Waiting on client for nine days, unnoticed. Now a card waiting over three days reminds its owner.
 ## Card 7
 Sections: 4
 # A month later

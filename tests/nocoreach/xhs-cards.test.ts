@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { crc32, deflateSync } from 'node:zlib';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -323,6 +324,62 @@ describe('Xiaohongshu card template', () => {
     // Text is set as text, never as markup.
     expect(page).toContain('e.textContent = text');
     expect(page).not.toContain('innerHTML');
+  });
+
+  // 2026-11-17 review: a sentence broken at a comma became two list items, and a single paragraph a list of one.
+  it('marks points only when a card has two or more, a line ending at a comma going on in the next', () => {
+    // The text card's body as the page builds it; sizing needs a browser, so the fonts never load here.
+    const body = (template: (typeof CARD_TEMPLATES)[number], text: string) => {
+      const { window } = new JSDOM(
+        cardTemplate(
+          { ...style, template },
+          { cards: [{ layout: 'text', heading: 'H', text }], n: 1 },
+        ),
+        {
+          runScripts: 'dangerously',
+          beforeParse: (w) =>
+            Object.defineProperty(w.document, 'fonts', {
+              value: { ready: new Promise(() => {}) },
+            }),
+        },
+      );
+      const fit = [...window.document.querySelectorAll('[data-fit]')].pop()!;
+      return {
+        text: fit.textContent,
+        checks: fit.querySelectorAll('i').length,
+      };
+    };
+    const sentence = '五人以内、任务不多、很少跨团队排期，\n电子表格完全够用。';
+    for (const template of CARD_TEMPLATES)
+      expect(body(template, sentence), `${template}`).toEqual({
+        text: '五人以内、任务不多、很少跨团队排期，电子表格完全够用。',
+        checks: 0,
+      });
+    expect(body('dark', 'A sheet works,\nfor now.').text).toBe(
+      'A sheet works, for now.',
+    );
+    // A single point drops the marker it brings; two or more are marked by the style, without their own.
+    expect(body('checklist', '- Keep the row numbers.').text).toBe(
+      'Keep the row numbers.',
+    );
+    expect(body('checklist', '- Keep the rows.\n- Try 20 rows.').text).toBe(
+      '1Keep the rows.2Try 20 rows.',
+    );
+    expect(body('dark', '1. Keep the rows.\n2. Try 20 rows.').text).toBe(
+      '01Keep the rows.02Try 20 rows.',
+    );
+    expect(body('memo', 'Keep the rows.\nTry 20 rows.')).toEqual({
+      text: 'Keep the rows.Try 20 rows.',
+      checks: 2,
+    });
+    // A note stays a note, and Editorial keeps what the text says.
+    expect(body('memo', 'One point.\n(A note.)')).toEqual({
+      text: 'One point.(A note.)',
+      checks: 0,
+    });
+    expect(body('editorial', '- Keep the rows.\n- Try 20 rows.').text).toBe(
+      '- Keep the rows.- Try 20 rows.',
+    );
   });
 
   it('goes to the run as a material file, outside the prompt', () => {
