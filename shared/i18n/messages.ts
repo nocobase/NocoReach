@@ -74,6 +74,12 @@ const currentSystemText = new Map<string, MessageKey>(
     'playbooks.communityPost',
     'playbooks.communityPostDescription',
     'playbooks.communityPostInstruction',
+    // Xiaohongshu cards (2026-11-16): the card-image playbook and the brand style's refusals, new server-owned copy.
+    'playbooks.xhsCards',
+    'playbooks.xhsCardsDescription',
+    'playbooks.xhsCardsInstruction',
+    'workshop.colorInvalid',
+    'workshop.endingHeadingRequired',
     'workshop.reopenUnavailable',
     'workshop.communityIncomplete',
     'workshop.pickSource',

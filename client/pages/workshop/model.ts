@@ -22,6 +22,15 @@ import {
   type RepurposeForm,
   type RepurposeSource,
 } from '../../../shared/repurpose.js';
+import {
+  CARD_COLOR,
+  DEFAULT_TEMPLATE,
+  isCardTemplate,
+  isHexColor,
+  type BrandCards,
+  type CardTemplateId,
+  type TemplateCard,
+} from '../../../shared/xhs-card.js';
 
 // Content workshop (2026-11-13 user decision; homepage v5): what `nrWorkshop.view` returns and the words the page, its
 // dialogs and the task page share. Only Trending now is recommended, from Opportunities, never an AI's judgement;
@@ -111,9 +120,15 @@ export type WorkshopRecord = {
   standing: Standing;
   failed?: boolean;
   restart?: boolean;
+  /** A Xiaohongshu set's number of cards. */
+  cards?: number;
 };
 export type Community = { name: string; url: string; sections: string[] };
-export type Brand = { revision: number; community: Community | null };
+export type Brand = {
+  revision: number;
+  community: Community | null;
+  cards: BrandCards | null;
+};
 export type WorkshopView = {
   hot: HotItem[];
   /** Every blog article, newest first (shared/workshop-recommend.ts libraryOrder). */
@@ -121,6 +136,10 @@ export type WorkshopView = {
   records: WorkshopRecord[];
   recordCount: number;
   brand: Brand;
+  /** The website's icon, which signs the cards when the brand kit has no logo. */
+  siteIcon: string | null;
+  /** The latest Xiaohongshu set's cards, which the card styles are previewed with, and what it was made from. */
+  cardSample: { subject: string; cards: TemplateCard[] } | null;
   voice: string;
   destinations: {
     reddit: {
@@ -205,9 +224,17 @@ export const getFormNames = (): Record<RepurposeForm, string> => ({
   community: $t('workshop.formCommunity'),
 });
 
-/** What a task makes: "LinkedIn post", "Community post · Hacker News". */
-export const outputLabel = (form: RepurposeForm, destination?: Destination) =>
-  [getFormNames()[form], destination ? destinationLabel(destination) : '']
+/** What a task makes: "LinkedIn post", "Community post · Hacker News", "Xiaohongshu note · 8 cards". */
+export const outputLabel = (
+  form: RepurposeForm,
+  destination?: Destination,
+  cards?: number,
+) =>
+  [
+    getFormNames()[form],
+    destination ? destinationLabel(destination) : '',
+    cards ? $t('workshop.cardCount', { 0: cards }) : '',
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -279,3 +306,36 @@ export const resultName = (form: RepurposeForm, destination?: Destination) =>
 /** The review card's title: "X posts are written; approving completes the task". */
 export const repurposeReviewTitle = (r: Repurpose) =>
   $t('workshop.reviewTitle', { 0: resultName(r.form, r.destination) });
+
+// Brand and templates' card settings (brand-cards.tsx): the card style, and the brand basics every style draws with.
+export type CardFields = {
+  template: CardTemplateId;
+  /** An uploaded logo; null uses the website's icon. */
+  logo: string | null;
+  color: string;
+  endingHeading: string;
+  endingText: string;
+};
+
+export const cardFieldsOf = (c: BrandCards | null | undefined): CardFields => ({
+  template: isCardTemplate(c?.template) ? c.template : DEFAULT_TEMPLATE,
+  logo: c?.logo || null,
+  color: isHexColor(c?.color) ? c.color : CARD_COLOR,
+  endingHeading: c?.ending?.heading || '',
+  endingText: c?.ending?.text || '',
+});
+
+export const brandCardsOf = (f: CardFields): BrandCards => ({
+  template: f.template,
+  logo: f.logo,
+  color: f.color,
+  ending: f.endingHeading.trim()
+    ? { heading: f.endingHeading.trim(), text: f.endingText.trim() }
+    : null,
+});
+
+/** What keeps the card settings from being saved, or ''. */
+export const cardFieldsProblem = (f: CardFields) =>
+  !f.endingHeading.trim() && f.endingText.trim()
+    ? $t('workshop.endingHeadingRequired')
+    : '';

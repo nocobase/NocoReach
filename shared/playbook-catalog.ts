@@ -303,6 +303,14 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     true,
   ),
   adapt(
+    'xhs-cards',
+    'xhs',
+    systemMessageText('playbooks.xhsCards'),
+    systemMessageText('playbooks.xhsCardsDescription'),
+    systemMessageText('playbooks.xhsCardsInstruction'),
+    ['xhs-cards'],
+  ),
+  adapt(
     'x-posts',
     'x',
     systemMessageText('playbooks.xPosts'),

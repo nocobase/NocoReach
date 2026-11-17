@@ -1,6 +1,6 @@
 import { $t, $legacyText, getCurrentLocale } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
-import {EMPTY,formatDate,formatDateTime,labelValue,parenthetical} from '#lib/format';
+import {EMPTY,formatDate,formatDateTime,joinList,labelValue,parenthetical} from '#lib/format';
 import {effectSummary,type EffectResult} from './effect-model';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
@@ -68,7 +68,7 @@ export const stageLabel=(s:Stage,w?:StepWork,draft?:boolean)=>s.kind==='review'?
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
 // What a task timeline says for each recorded event. Which events Activity shows is ACTIVITY_EVENTS in
 // shared/task-activity.ts, which also gives a task its latest activity time; each of them has words here.
-export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string;from?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;to?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;playbook?:PlaybookOrigin|null},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
+export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string;cards?:number[];from?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;to?:{id?:string;name?:string;system?:boolean;edited?:boolean}|null;playbook?:PlaybookOrigin|null},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
  const s=stageName(e.stageKey);
  const snoozeTime=()=>snooze&&snooze.at===e.at?formatDateTime(snooze.until):formatDate(e.note);
  // The playbook an event names by its stored name: a built-in one in the reader's language (playbook-snapshot.ts).
@@ -99,7 +99,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
   // Another primary language before it was approved (2026-10-30): the step wrote a new version in it.
   case 'changePrimary':return {who:$t('common.you'),text:$t('playbook.primaryChanged',{0:localeName(e.note||'',getCurrentLocale())})};
-  case 'editStageOutput':return {who:$t('common.you'),text:$t('playbook.editedContentDirectly')};
+  // Xiaohongshu cards edited on review (2026-11-17) name the cards whose text changed.
+  case 'editStageOutput':return {who:$t('common.you'),text:e.cards?.length?$t('playbook.editedCardsDirectly',{0:joinList(e.cards.map(n=>$t('workshop.pieceCard',{0:n})))}):$t('playbook.editedContentDirectly')};
   case 'recordManual':return {who:$t('common.you'),text:$t('playbook.finishedThemselvesRecorded',{0:s})};
   // The system starts a step again once after NocoReach restarted under it (retryAfterRestart on the server).
   case 'retryStage':return e.note==='serverRestart'?{who:$t('common.system'),text:$t('playbook.retriedAfterRestart',{0:s})}:{who:$t('common.you'),text:$t('playbook.retried',{0:s})};

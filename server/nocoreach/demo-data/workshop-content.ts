@@ -6,6 +6,7 @@ import type {
   Query,
 } from './world/script/types.js';
 import { t } from './world/script/types.js';
+import { cardStyle } from '../../../shared/xhs-card.js';
 
 // Content workshop demo (2026-11-13): Acme's blog, so that both recommendation columns have articles with their own
 // figures (new or rising in the last 30 days; steady search clicks over the past year), and the posts the team adapted
@@ -481,11 +482,37 @@ export const WORKSHOP_BRAND = {
       en: ['Tutorials', 'Announcements', 'Q&A'],
     },
   },
+  // Xiaohongshu cards: the Editorial style in Acme's blue, and a closing page.
+  cards: {
+    template: 'editorial' as const,
+    color: '#1e40af',
+    ending: {
+      heading: t(
+        '关注 Acme，看更多交付团队的做法',
+        'Follow Acme for more team setups',
+      ),
+      text: 'acme.example',
+    },
+  },
   voice: t(
     '像同事之间说话：直接、具体，用真实的协作场景举例。不写“颠覆”“一键解决”这类说法；数字只写有出处的，演示数据要说明是虚构的。面向社区时先说明自己是 Acme 团队的人。',
     'Talk like a colleague: direct and specific, with real collaboration scenes as examples. No "revolutionary" or "one click solves it"; only give figures with a source, and say when demo data is fictional. In communities, say first that you work on Acme.',
   ),
 };
+
+/** The style the demo's card images are drawn in: Acme's brand kit, without a logo (scripts/render-demo-cards.ts). */
+export const demoCardStyle = (lang: 'zh' | 'en') =>
+  cardStyle(
+    {
+      template: WORKSHOP_BRAND.cards.template,
+      color: WORKSHOP_BRAND.cards.color,
+      ending: {
+        heading: WORKSHOP_BRAND.cards.ending.heading[lang],
+        text: WORKSHOP_BRAND.cards.ending.text,
+      },
+    },
+    { name: 'Acme', site: 'acme.example' },
+  );
 
 /** The topic the team adapted without an article: an online session two weeks from now. */
 export const WORKSHOP_TOPIC = {
@@ -511,7 +538,7 @@ export type WorkshopDraftPlace =
 /** One adaptation the demo team made: the form, where it came from, where it goes and the Agent's draft. */
 export interface WorkshopDraft {
   key: string;
-  form: 'x' | 'linkedin' | 'community';
+  form: 'xhs' | 'x' | 'linkedin' | 'community';
   source: WorkshopDraftSource;
   destination?: WorkshopDraftPlace;
   state: 'review' | 'done';
@@ -522,6 +549,11 @@ export interface WorkshopDraft {
   approved?: number;
   /** `{date}` is the session's date, `{name}` the owner's name. */
   draft: L;
+  /**
+   * Xiaohongshu cards: the cards whose text the Agent found overflowing when it rendered them. Their images are
+   * rendered from the draft by scripts/render-demo-cards.ts into xhs-card-images.json.
+   */
+  cards?: { overflow: number[] };
 }
 
 const english = (text: string): L => ({ zh: text, en: text });
@@ -680,6 +712,110 @@ If your team has already moved from spreadsheets to another tool, tell us below 
 ## Rules
 - Tutorial posts must make sense on their own, not just a link
 - Only state differences from competitors that can be checked`,
+    ),
+  },
+  // Made into Xiaohongshu cards a week ago, after the LinkedIn and forum posts of the same article.
+  {
+    key: 'choose-tool-xhs',
+    form: 'xhs',
+    source: { kind: 'article', path: '/blog/choose-pm-tool' },
+    state: 'done',
+    owner: 'content',
+    created: 7.6,
+    approved: 7.2,
+    cards: { overflow: [] },
+    draft: t(
+      `## Title
+小团队选项目管理工具，先看这几点
+## Body
+Sections: 1–4
+“我们该不该换掉电子表格？”是小团队问得最多的问题之一。
+
+我们的看法：先别比功能，先看团队怎么协作。五个人以内、任务不多、很少跨团队排期，电子表格完全够用；同一个任务改出好几个版本、前置任务延期后下游最后才知道，才值得换工具。
+
+图里整理了电子表格、Acme 和 Nimbus 各适合什么团队，以及迁移前要准备的三件事。
+
+#项目管理 #团队协作 #效率工具 #小团队
+## Card 1
+Sections: 1–4
+# 项目管理工具怎么选
+电子表格、Acme、Nimbus 各适合什么团队
+## Card 2
+Sections: 1
+# 先别比功能
+人数、要不要跨团队排期、客户要不要看进度，
+比功能清单更能决定该用什么。
+## Card 3
+Sections: 2
+# 电子表格够用的时候
+五人以内、任务不多、很少跨团队排期，
+电子表格完全够用。
+## Card 4
+Sections: 2
+# 该换工具的信号
+同一个任务改出好几个版本；
+前置任务延期，下游最后才知道。
+出现这两种情况，再考虑换。
+## Card 5
+Sections: 3
+# Acme 和 Nimbus 差在哪
+两者都有看板和时间线。
+Acme 侧重客户协作：客户访客、交付验收、项目周报；Nimbus 侧重内部研发流程。
+（对比为虚构样例）
+## Card 6
+Sections: 4
+# 迁移前先做三件事
+保留原表行号；
+先试导 20 行；
+核对负责人、状态和日期。
+同名任务不要直接当成重复。
+## Card 7
+Layout: end
+# 关注 Acme，看更多交付团队的做法
+acme.example`,
+      `## Title
+Picking a PM tool
+## Body
+Sections: 1–4
+"Should we move off spreadsheets?" is one of the questions small teams ask us most.
+
+Our answer: don't start with features, start with how your team works. For five people or fewer and little cross-team scheduling, a spreadsheet is fine. When a task forks into versions and slips reach people downstream last, a dedicated tool earns its keep.
+
+The cards compare spreadsheets, Acme and Nimbus, and list three things to prepare before you move.
+
+#projectmanagement #smallteams #productivity
+## Card 1
+Sections: 1–4
+# Picking a PM tool
+Spreadsheet, Acme or Nimbus: which team each one suits
+## Card 2
+Sections: 1
+# Skip the feature list
+Headcount, cross-team schedules and whether clients see progress decide more than features.
+## Card 3
+Sections: 2
+# A sheet is enough when
+Five people or fewer, a modest task list, little cross-team scheduling.
+## Card 4
+Sections: 2
+# Time to switch
+A task forks into versions.
+A slip reaches people downstream last.
+## Card 5
+Sections: 3
+# Acme vs Nimbus
+Both have boards and timelines. Acme leans to client work, Nimbus to engineering.
+(A fictional comparison.)
+## Card 6
+Sections: 4
+# Before you move
+Keep source row numbers.
+Rehearse with 20 rows.
+Check owners, status and dates.
+## Card 7
+Layout: end
+# Follow Acme for more team setups
+acme.example`,
     ),
   },
   {
@@ -939,5 +1075,114 @@ How do you handle requests that are waiting on the client? Do you time-box them,
 - Use a descriptive title, no clickbait
 - Questions about specific tools go in the weekly tools thread
 - Be civil`),
+  },
+  // Made into Xiaohongshu cards this morning and waiting for review; the sixth card runs over the character limit.
+  {
+    key: 'requests-xhs',
+    form: 'xhs',
+    source: { kind: 'article', path: '/blog/client-requests-board' },
+    state: 'review',
+    owner: 'content',
+    created: 0.3,
+    cards: { overflow: [] },
+    draft: t(
+      `## Title
+客户需求别再堆在收件箱了
+## Body
+Sections: 1–4
+我们 4 个人的交付团队，客户需求以前全在一个共享收件箱里：人人都看得到，却没有一封有负责人。
+
+后来花一个下午搭了一张看板，分五列，每张卡写清客户、交付日期和负责人。第一周踩的两个坑，也一起整理在图里了。
+
+一个月后，第一次回复客户从一天半缩短到半天（数字来自演示数据）。你们团队的客户需求是怎么接的？
+
+#项目管理 #团队协作 #看板 #效率工具
+## Card 1
+Sections: 1–4
+# 客户需求别再堆在收件箱
+4 人团队，一个下午搭好看板
+## Card 2
+Sections: 1
+# 收件箱的问题：没人负责
+每个人都能看到所有邮件，却没有一封邮件有负责人。
+客户一追问，要翻三天的往来才知道谁在跟进。
+## Card 3
+Sections: 2
+# 分五列，一列一个阶段
+新需求 → 确认范围 → 进行中 → 等客户 → 已交付。
+每列只放这一阶段的需求，一眼看出卡在哪一步。
+## Card 4
+Sections: 2
+# 每张卡写清三件事
+客户是谁、哪天交付、谁负责。
+移到“等客户”时，再写一句：在等客户的什么。
+## Card 5
+Sections: 3
+# 第一周踩的坑①
+一封邮件被三个人各建了一张卡，各做各的。
+规则：一个需求只建一张卡，谁先接手谁负责。
+## Card 6
+Sections: 3
+# 第一周踩的坑②
+有张卡在“等客户”停了九天，没人发现，客户还以为我们忘了。复盘才看出：卡片进了“等客户”就没人再看，负责人默认等客户先回复。后来加了一条规则：停留超过三天，自动提醒负责人去问一次进度。
+## Card 7
+Sections: 4
+# 一个月后
+第一次回复客户：1.5 天 → 0.5 天。
+同样 4 个人，没有加人手。
+（数字来自虚构团队的演示数据）
+## Card 8
+Layout: end
+# 关注 Acme，看更多交付团队的做法
+acme.example`,
+      `## Title
+Inbox to one board
+## Body
+Sections: 1–4
+Our delivery team is four people. Client requests used to live in one shared inbox: everyone could see them, and none of them had an owner.
+
+One afternoon we set up a board with five columns. Every card names the client, the due date and one owner. The two things that broke in week one are in the cards too.
+
+A month later, our first reply to clients went from a day and a half to half a day (demo figures). How does your team take in client requests?
+
+#projectmanagement #teamwork #kanban
+## Card 1
+Sections: 1–4
+# Inbox to one board
+Four people, one afternoon
+## Card 2
+Sections: 1
+# No one owned an email
+Everyone saw every email. No email had an owner.
+A follow-up meant searching three days of replies.
+## Card 3
+Sections: 2
+# Five columns
+New → Scoping → In progress → Waiting on client → Delivered.
+## Card 4
+Sections: 2
+# Three things per card
+The client, the due date, the owner.
+Waiting on client? Say what for.
+## Card 5
+Sections: 3
+# Week one: three cards
+One email, three people, three cards.
+Rule: one request, one card. First to triage owns it.
+## Card 6
+Sections: 3
+# Week one: nine days
+A card sat in Waiting on client for nine days, unnoticed. Now a card waiting over three days reminds its owner.
+## Card 7
+Sections: 4
+# A month later
+First reply to a client: 1.5 days → 0.5 days.
+Same four people.
+(Demo figures from a fictional team.)
+## Card 8
+Layout: end
+# Follow Acme for more team setups
+acme.example`,
+    ),
   },
 ];

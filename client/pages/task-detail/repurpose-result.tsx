@@ -17,6 +17,7 @@ import {
 } from '../../../shared/repurpose.js';
 import type { Artifact, TaskData } from '../task-execution-types.js';
 import { text } from './styles.js';
+import { CardGallery } from './xhs-cards.js';
 
 // Content workshop results on the task page (mockup v3 frame 4): the pieces of an X, LinkedIn or community post, each
 // copied on its own, with its length against the platform's limit and the source sections it comes from. The review
@@ -37,9 +38,17 @@ const pieceLabel = (form: RepurposeForm, p: Piece) =>
       : $t('workshop.piecePost')
     : p.kind === 'reply'
       ? $t('workshop.pieceReply')
-      : p.kind === 'title'
-        ? $t('workshop.pieceTitle')
-        : $t('workshop.pieceBody');
+      : p.kind === 'card'
+        ? $t('workshop.pieceCard', { 0: p.index || 1 })
+        : p.kind === 'title'
+          ? $t(
+              form === 'xhs'
+                ? 'workshop.pieceNoteTitle'
+                : 'workshop.pieceTitle',
+            )
+          : $t(
+              form === 'xhs' ? 'workshop.pieceNoteBody' : 'workshop.pieceBody',
+            );
 
 /** A check's sentence: "All 3 posts within 280 characters", "Post 2 is over 280 characters". */
 function checkText(c: RepurposeCheck): string {
@@ -54,6 +63,11 @@ function checkText(c: RepurposeCheck): string {
             : $t('workshop.pieceXPost', { 0: n }),
         ),
     );
+  if (
+    c.key === 'workshop.check.sectionsMissing' ||
+    c.key === 'workshop.check.overflow'
+  )
+    params[0] = joinList(String(params[0] || '').split(', '));
   if (typeof params[0] === 'number') params[0] = formatCount(params[0]);
   // A failed check that names what should be there reads as what is missing.
   return $t(!c.ok && MISSING.has(c.key) ? `${c.key}Missing` : c.key, params);
@@ -71,9 +85,9 @@ export function RepurposeChecks({ checks }: { checks: RepurposeCheck[] }) {
       className='flex flex-wrap gap-x-4 gap-y-1 text-sm'
       aria-label={$t('workshop.checks')}
     >
-      {checks.map((c) => (
+      {checks.map((c, i) => (
         <li
-          key={c.key}
+          key={`${c.key}-${i}`}
           className={cn(
             'inline-flex items-center gap-1',
             c.ok ? 'text-nr-ink-green' : 'text-nr-ink-amber',
@@ -100,17 +114,30 @@ export function RepurposeResult({
   out,
   review = false,
   fallback,
+  onEditCard,
 }: {
   data: TaskData;
   out: Artifact;
   review?: boolean;
   /** Shown instead when the text does not follow the format. */
   fallback: ReactNode;
+  /** On review, edits the text of a Xiaohongshu card, from 1. */
+  onEditCard?: (n: number) => void;
 }): ReactNode {
   const r = data.work.repurpose;
   const parsed = r ? parseRepurpose(r.form, out.content) : null;
   if (!r || !parsed) return fallback;
   const checks = review ? data.repurpose?.checks[out.id] || [] : [];
+  if (r.form === 'xhs')
+    return (
+      <XhsResult
+        pieces={parsed.pieces}
+        out={out}
+        checks={checks}
+        review={review}
+        onEditCard={onEditCard}
+      />
+    );
   const pieces = (
     <div className='flex min-w-0 flex-col gap-4'>
       {parsed.pieces.map((p, i) => (
@@ -138,7 +165,9 @@ export function RepurposeResult({
                 target='_blank'
                 rel='noreferrer'
               >
-                {$t('workshop.openPlace', { 0: destinationName(r.destination) })}
+                {$t('workshop.openPlace', {
+                  0: destinationName(r.destination),
+                })}
               </a>
             </Side>
             <Side title={$t('workshop.placeRules')}>
@@ -157,6 +186,48 @@ export function RepurposeResult({
       ) : (
         pieces
       )}
+    </div>
+  );
+}
+
+/**
+ * Xiaohongshu cards: on review the checks, the gallery and the note's title and body, each copied on its own; once
+ * approved, the gallery and the note, which the done card's own buttons download and copy (XhsDoneTools). A version
+ * without images (none should be) lists its cards' text.
+ */
+function XhsResult({
+  pieces,
+  out,
+  checks,
+  review,
+  onEditCard,
+}: {
+  pieces: Piece[];
+  out: Artifact;
+  checks: RepurposeCheck[];
+  review: boolean;
+  onEditCard?: (n: number) => void;
+}) {
+  const cards = pieces.filter((p) => p.kind === 'card'),
+    note = pieces.filter((p) => p.kind !== 'card');
+  const set = out.cards?.images.length ? out.cards : null;
+  return (
+    <div className='flex flex-col gap-4' data-repurpose='xhs'>
+      <RepurposeChecks checks={checks} />
+      {set ? (
+        <CardGallery cards={cards} set={set} onEdit={onEditCard} />
+      ) : (
+        <div className='flex min-w-0 flex-col gap-4'>
+          {cards.map((p) => (
+            <PieceBlock key={`card-${p.index}`} form='xhs' piece={p} />
+          ))}
+        </div>
+      )}
+      <div className='flex min-w-0 flex-col gap-4'>
+        {note.map((p) => (
+          <PieceBlock key={p.kind} form='xhs' piece={p} copyable={review} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -191,10 +262,12 @@ function PieceBlock({
   form,
   piece,
   destination,
+  copyable = true,
 }: {
   form: RepurposeForm;
   piece: Piece;
   destination?: Destination;
+  copyable?: boolean;
 }) {
   const limit = pieceLimit(form, piece, destination);
   const over = limit ? limit.length > limit.max : false;
@@ -217,15 +290,25 @@ function PieceBlock({
               })}
             </span>
           ) : null}
-          <Button
-            size='xs'
-            variant='ghost'
-            onClick={() => copy(piece.text)}
-            aria-label={$t('workshop.copyPiece', { 0: pieceLabel(form, piece) })}
-          >
-            <Copy />
-            {$t('workshop.copy')}
-          </Button>
+          {copyable ? (
+            <Button
+              size='xs'
+              variant='ghost'
+              onClick={() =>
+                copy(
+                  piece.heading
+                    ? `${piece.heading}\n${piece.text}`
+                    : piece.text,
+                )
+              }
+              aria-label={$t('workshop.copyPiece', {
+                0: pieceLabel(form, piece),
+              })}
+            >
+              <Copy />
+              {$t('workshop.copy')}
+            </Button>
+          ) : null}
         </span>
       </div>
       <div
@@ -234,6 +317,9 @@ function PieceBlock({
           piece.kind === 'reply' && 'text-muted-foreground',
         )}
       >
+        {piece.heading ? (
+          <span className='block font-medium'>{piece.heading}</span>
+        ) : null}
         {piece.text}
       </div>
     </div>

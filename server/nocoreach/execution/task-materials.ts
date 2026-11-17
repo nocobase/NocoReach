@@ -52,6 +52,48 @@ export interface TaskAttachmentReader {
     taskId: string,
     ids: readonly string[],
   ): Promise<import('../../../shared/task-images.js').MessageDocument[]>;
+  /**
+   * Keep an image an Agent uploaded during its run (`task file`, Xiaohongshu cards): a PNG of the card size, unlinked
+   * until the run's result links it. Answers what NocoReach read of it (manual-tasks.ts agentImage).
+   */
+  agentImage(
+    run: { id: string; projectId: string },
+    file: File,
+  ): Promise<AgentImage>;
+  /**
+   * Link the card images a person drew with Edit directly to the task in the caller's transaction, each with the colors
+   * read from it (manual-tasks.ts cardImages).
+   */
+  cardImages(
+    connection: import('@nocobase/db').DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<
+    (import('../../../shared/task-images.js').MessageImage & {
+      colors?: string[];
+    })[]
+  >;
+  /** Whether each of `ids` is an image this run uploaded and still has (unlinked, or linked to its task). */
+  runImages(
+    run: { id: string; projectId: string; taskId: string },
+    ids: readonly string[],
+  ): Promise<boolean>;
+  /** The demo data's card images, kept as its run's uploads linked to its task (demo-data/workshop-history.ts). */
+  demoImages(
+    run: { id: string; projectId: string; taskId: string },
+    files: readonly File[],
+  ): Promise<{ id: string; name: string; ref: string }[]>;
+}
+/** An image an Agent uploaded: its id and what NocoReach read of it (png-colors.ts). */
+export interface AgentImage {
+  id: string;
+  filename: string;
+  size: number;
+  width: number;
+  height: number;
+  colors?: string[];
 }
 /** The attachment ids a run's input carries: a manual task's evidence. */
 export function attachmentIdsOf(input: TaskInput): string[] {
@@ -156,17 +198,21 @@ function messageFilePlan(
 
 /** Keep the immutable materials in the business snapshot, outside the prompt's budget. */
 export function serializeTaskInput(input: TaskInput): string {
-  const { knowledge, skills, article, ...context } = input;
+  const { knowledge, skills, article, cardTemplate, ...context } = input;
   if (JSON.stringify(context).length > 200000)
     return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
   // An article step's source holds complete bodies; it goes to the Runner as a material file, not in the prompt.
   if (article !== undefined && JSON.stringify(article).length > 1500000)
+    return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
+  // The Xiaohongshu card template carries the brand kit's logo; it too is a material file (xhs-card.html).
+  if (typeof cardTemplate === 'string' && cardTemplate.length > 600000)
     return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
   return JSON.stringify({
     ...context,
     knowledge,
     skills,
     ...(article !== undefined ? { article } : {}),
+    ...(typeof cardTemplate === 'string' ? { cardTemplate } : {}),
   });
 }
 
@@ -186,6 +232,7 @@ export function taskMaterials(
     skills = [],
     sources = null,
     article,
+    cardTemplate,
     ...context
   } = input as TaskInput & {
     article?: {
@@ -209,6 +256,9 @@ export function taskMaterials(
     // The version the change request is about holds complete bodies too.
     ...(previous
       ? [{ path: 'previous.json', content: JSON.stringify(previous.article) }]
+      : []),
+    ...(typeof cardTemplate === 'string'
+      ? [{ path: 'xhs-card.html', content: cardTemplate }]
       : []),
   ];
   const plan = attachmentPlan(attachments);
@@ -275,6 +325,9 @@ export function taskMaterials(
         skills: `${TARGET}/skills.json`,
         sources: `${TARGET}/sources.json`,
         ...(article ? { article: `${TARGET}/article.json` } : {}),
+        ...(typeof cardTemplate === 'string'
+          ? { cardTemplate: `${TARGET}/xhs-card.html` }
+          : {}),
         ...(plan.length ? { attachments: `${TARGET}/attachments.json` } : {}),
         ...(shown.length ? { images: `${TARGET}/images.json` } : {}),
         ...(read.length ? { documents: `${TARGET}/documents.json` } : {}),
@@ -283,7 +336,7 @@ export function taskMaterials(
     offer: {
       hash,
       target: TARGET,
-      note: `读取 knowledge.json、skills.json 和 sources.json（文章任务另有 article.json 源稿）的任务资料快照；omitted 表示未提供正文，不得猜测。${plan.length ? '任务附件列在 attachments.json：base64 字段指向原件的 base64 文本，先解码再打开（如 base64 -d 文件.base64 > 原文件名）；带 omitted 的附件（video 或 size）未提供，需要时请任务负责人在任务页下载。' : ''}${shown.length ? '留言和审核意见里的图片列在 images.json：ref 与 notes、feedback 中图片的 ref 相同，base64 字段指向原图的 base64 文本，先解码再查看；带 omitted 的图片未提供。' : ''}${read.length ? '留言和审核意见里的文档列在 documents.json：ref 与 notes、feedback 中文档的 ref 相同，base64 字段指向原件的 base64 文本，先按 name 的文件名解码再打开；带 omitted 的文档未提供，需要时请任务负责人在任务页下载。' : ''}资料不应提交到仓库。`,
+      note: `读取 knowledge.json、skills.json 和 sources.json（文章任务另有 article.json 源稿）的任务资料快照；omitted 表示未提供正文，不得猜测。${typeof cardTemplate === 'string' ? '小红书卡片模板是 xhs-card.html：复制到工作目录，在旁边写 cards.js（window.CARDS = [{layout, heading, text}]），用无头浏览器按 1080×1440 打开 xhs-card.html?n=序号 逐张截图；页面标题 overflow:none 表示没有溢出，overflow:3,7 列出溢出的卡片。' : ''}${plan.length ? '任务附件列在 attachments.json：base64 字段指向原件的 base64 文本，先解码再打开（如 base64 -d 文件.base64 > 原文件名）；带 omitted 的附件（video 或 size）未提供，需要时请任务负责人在任务页下载。' : ''}${shown.length ? '留言和审核意见里的图片列在 images.json：ref 与 notes、feedback 中图片的 ref 相同，base64 字段指向原图的 base64 文本，先解码再查看；带 omitted 的图片未提供。' : ''}${read.length ? '留言和审核意见里的文档列在 documents.json：ref 与 notes、feedback 中文档的 ref 相同，base64 字段指向原件的 base64 文本，先按 name 的文件名解码再打开；带 omitted 的文档未提供，需要时请任务负责人在任务页下载。' : ''}资料不应提交到仓库。`,
     },
     bundle: { name: TASK_MATERIALS_MOUNT, hash, files },
   };

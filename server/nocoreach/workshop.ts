@@ -27,10 +27,19 @@ import {
   destinationKey,
   isBlogArticle,
   isRepurposeForm,
+  parseRepurpose,
   repurposeBrief,
   sourceSubject,
   subredditName,
 } from '../../shared/repurpose.js';
+import {
+  ENDING_HEADING_MAX,
+  ENDING_TEXT_MAX,
+  LOGO_BYTES,
+  LOGO_TYPES,
+  isCardTemplate,
+  isHexColor,
+} from '../../shared/xhs-card.js';
 import { projectId, requireAccess } from './policy.js';
 import { sumPageDays } from './page-days.js';
 import { pagesById } from './execution/task-scan.js';
@@ -44,8 +53,8 @@ import { memoryOf } from './execution/memory.js';
 // with the forms already made from it. It lists the workshop's tasks, and creates one task per chosen form and
 // destination, each started with the chosen Agent. A task made from an opportunity keeps it on its source, which is how
 // Opportunities lists it among the opportunity's tasks; the opportunity itself stays as it was, and so does Skip. The
-// brand kit holds what the adaptations need about the brand beyond Memory: for now, the project's own community and its
-// sections.
+// brand kit holds what the adaptations need about the brand beyond Memory: the project's own community and its sections,
+// and what Xiaohongshu cards are drawn with (card style, logo, brand color, closing page).
 
 const DAY = 86400000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -73,6 +82,44 @@ function cleanCommunity(c: any) {
   if (!name || !url || !sections.length) return fail(systemMessageText('workshop.communityIncomplete'));
   if (sections.length > COMMUNITY_SECTIONS_MAX) return fail(systemMessageText('workshop.sectionsMax', { 0: COMMUNITY_SECTIONS_MAX }));
   return { name, url, sections };
+}
+
+// The brand kit's Xiaohongshu card settings (2026-11-16; card styles 2026-11-17): the card style, an uploaded logo (a PNG,
+// JPEG or WebP data URL whose bytes are that image), the brand color and the closing page. A missing value is its default
+// (shared/xhs-card.ts); the style draws its own type, text and background colors.
+function cleanCards(c: any) {
+  if (c == null) return null;
+  let logo = null;
+  if (c.logo != null && c.logo !== '') {
+    const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(c.logo));
+    const bytes = m ? Buffer.from(m[2], 'base64') : null;
+    const is = (b: Buffer, offset: number, value: string) => b.subarray(offset, offset + value.length).toString('latin1') === value;
+    const valid = bytes && LOGO_TYPES.includes(m![1] as any) && bytes.length <= LOGO_BYTES && (
+      m![1] === 'image/png' ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        : m![1] === 'image/jpeg' ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+          : is(bytes, 0, 'RIFF') && is(bytes, 8, 'WEBP'));
+    if (!valid) return fail(systemMessageText('workshop.logoInvalid', { 0: Math.round(LOGO_BYTES / 1024) }));
+    logo = String(c.logo);
+  }
+  if (c.color != null && c.color !== '' && !isHexColor(c.color)) return fail(systemMessageText('workshop.colorInvalid'));
+  const template = isCardTemplate(c.template) ? c.template : undefined, color = isHexColor(c.color) ? c.color.toLowerCase() : undefined;
+  let ending = null;
+  if (c.ending != null) {
+    const heading = clean(c.ending.heading, ENDING_HEADING_MAX + 1), text = clean(c.ending.text, ENDING_TEXT_MAX + 1);
+    if (heading.length > ENDING_HEADING_MAX || text.length > ENDING_TEXT_MAX) return fail(systemMessageText('workshop.endingTooLong', { 0: ENDING_HEADING_MAX, 1: ENDING_TEXT_MAX }));
+    if (heading) ending = { heading, text };
+    else if (text) return fail(systemMessageText('workshop.endingHeadingRequired'));
+  }
+  return { ...(template ? { template } : {}), logo, ...(color ? { color } : {}), ending };
+}
+
+function cardSample(records: any[]) {
+  for (const r of records) {
+    if (r.form !== 'xhs' || !r.internal?.draft?.text) continue;
+    const cards = (parseRepurpose('xhs', r.internal.draft.text)?.pieces || []).filter(p => p.kind === 'card').slice(0, 18).map(({ layout, heading, text }) => ({ layout, ...(heading ? { heading } : {}), text }));
+    if (cards.length >= 2) return { subject: sourceSubject(r.source), cards };
+  }
+  return null;
 }
 
 function cleanSource(s: any) {
@@ -221,16 +268,17 @@ class WorkshopService {
   brandKey(id: string) { return `brand-kit:${id}`; }
   async brand(id: string, tx?: any) {
     const row = await this.repo().findOne({ filter: { key: this.brandKey(id) }, transaction: tx });
-    return row?.get('payload') || { revision: 0, community: null };
+    return row?.get('payload') || { revision: 0, community: null, cards: null };
   }
   // The brand kit is saved whole under a revision, as analysis rules and targets are: a second window's save is refused.
   async saveBrand(id: string, v: any) {
-    const community = cleanCommunity(v.community);
+    const community = cleanCommunity(v.community), cards = v.cards === undefined ? undefined : cleanCards(v.cards);
     return this.p.db.sequelize.transaction(async (tx: any) => {
       await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: this.brandKey(id) }, transaction: tx });
       const row = await this.repo().findOne({ filter: { key: this.brandKey(id) }, transaction: tx }), cur = row?.get('payload') || { revision: 0, community: null };
       if (v.revision !== cur.revision) return fail(systemMessageText('workshop.brandChanged'), 409);
-      const next = { revision: cur.revision + 1, community, updatedAt: new Date().toISOString() };
+      // A request without `cards` (written before the card settings) leaves them as they are.
+      const next = { revision: cur.revision + 1, community, cards: cards === undefined ? cur.cards ?? null : cards, updatedAt: new Date().toISOString() };
       if (row) await this.repo().update({ filterByTk: row.get('id'), values: { payload: next }, transaction: tx });
       else await this.repo().create({ values: { key: this.brandKey(id), payload: next }, transaction: tx });
       return next;
@@ -295,6 +343,8 @@ class WorkshopService {
         records.push({
           taskId: String(t.id), no: t.evidence?.no ?? null, title: t.title, createdAt: t.createdAt, updatedAt: t.updatedAt,
           form: w.repurpose.form, ...(w.repurpose.destination ? { destination: w.repurpose.destination } : {}), source: w.repurpose.source,
+          // A Xiaohongshu set's number of cards, which the record names ("Xiaohongshu note · 8 cards").
+          ...(draft?.cards?.images?.length ? { cards: draft.cards.images.length } : {}),
           standing, ...(agentStep && w.latestRun?.status === 'failed' ? { failed: true } : {}), ...(agentStep && awaitingRestart(w) ? { restart: true } : {}),
           // For the server only: the page is sent the records without them (shown()).
           internal: { draft: draft ? { text: String(draft.content), ...(draft.approvedAt ? { approvedAt: draft.approvedAt } : {}) } : null },
@@ -373,7 +423,11 @@ class WorkshopService {
       hot: hot.map(h => h.item),
       articles: this.library(input).articles,
       records: records.slice(0, RECORDS_MAX).map(shown), recordCount: records.length,
-      brand: { revision: brand.revision, community: brand.community || null },
+      brand: { revision: brand.revision, community: brand.community || null, cards: brand.cards || null },
+      // The card text Brand and templates previews card styles with: the latest Xiaohongshu set's, and what it was made from.
+      cardSample: cardSample(records),
+      // What the cards are signed with when the brand kit has no logo: the website's icon (project-icon.ts), if read.
+      siteIcon: (await this.repo().findOne({ filter: { key: `project-icon:${id}` } }))?.get('payload')?.dataUrl || null,
       // The voice adaptations follow (Memory › Voice and style), shown in the brand kit with a link to change it.
       voice: project ? memoryOf(project).voice : '',
       destinations: { reddit },

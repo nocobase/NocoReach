@@ -10,8 +10,11 @@ import {
 import {
   FORM_PLAYBOOK,
   FORM_RESULT_KIND,
+  parseRepurpose,
   repurposeBrief,
+  sectionNumbers,
   sourceSubject,
+  type CardSet,
   type Destination,
   type RepurposeSource,
 } from '../../../shared/repurpose.js';
@@ -23,6 +26,7 @@ import {
   type RunEvent,
 } from '../execution/model.js';
 import { playbookTitle } from '../execution/task-title.js';
+import { styleBrief } from '../../../shared/xhs-card.js';
 import { ACME_PAGES } from './acme-content.js';
 import type { DemoContent, DemoPerson } from './content.js';
 import type { DemoHost } from './host.js';
@@ -30,6 +34,7 @@ import type { DemoData } from './steps.js';
 import {
   WORKSHOP_BRAND,
   WORKSHOP_DRAFTS,
+  demoCardStyle,
   WORKSHOP_TOPIC,
   type WorkshopDraft,
 } from './workshop-content.js';
@@ -48,6 +53,7 @@ const PLAYBOOK_NAMES: Record<string, string> = {
   'x-posts': 'playbooks.xPosts',
   'linkedin-post': 'playbooks.linkedinPost',
   'community-post': 'playbooks.communityPost',
+  'xhs-cards': 'playbooks.xhsCards',
 };
 
 // How a destination reads in a task title, as the workshop names it (server/nocoreach/workshop.ts).
@@ -87,7 +93,20 @@ export async function writeWorkshop(
   await snapshots.create({
     values: {
       key: `brand-kit:${id}`,
-      payload: { revision: 1, community, updatedAt: at(9) },
+      payload: {
+        revision: 1,
+        community,
+        cards: {
+          template: WORKSHOP_BRAND.cards.template,
+          logo: null,
+          color: WORKSHOP_BRAND.cards.color,
+          ending: {
+            heading: WORKSHOP_BRAND.cards.ending.heading[lang],
+            text: WORKSHOP_BRAND.cards.ending.text,
+          },
+        },
+        updatedAt: at(9),
+      },
     },
   });
   // The CRM project's Trending now opportunities (growth-briefs.ts crmGrowthBriefs: "ai crm", the "workflow automation"
@@ -168,6 +187,14 @@ export async function writeWorkshop(
   const personName = (person: DemoPerson) => content.people[person].name;
   const words = (zh: string, en: string) => (lang === 'en' ? en : zh);
 
+  // Xiaohongshu tasks whose card images are stored once their rows exist, outside the transaction (cardImages).
+  const carded: {
+    d: WorkshopDraft;
+    taskId: string;
+    runId: string;
+    artifact: Artifact;
+    sections: number;
+  }[] = [];
   await host.db.sequelize.transaction(async (transaction: unknown) => {
     for (const d of WORKSHOP_DRAFTS) {
       const p = SYSTEM_PLAYBOOKS.find((x) => x.id === FORM_PLAYBOOK[d.form])!;
@@ -412,6 +439,22 @@ export async function writeWorkshop(
         transaction,
       });
       const taskId = String(row.id);
+      if (d.cards) {
+        const cards =
+          parseRepurpose('xhs', draft)?.pieces.filter(
+            (piece) => piece.kind === 'card',
+          ) ?? [];
+        carded.push({
+          d,
+          taskId,
+          runId,
+          artifact,
+          sections: Math.max(
+            0,
+            ...cards.flatMap((card) => sectionNumbers(card.sections)),
+          ),
+        });
+      }
       await snapshots.create({
         values: {
           key: `nr-task-artifact:${id}:${taskId}:${artifact.id}`,
@@ -444,4 +487,82 @@ export async function writeWorkshop(
         });
     }
   });
+  if (carded.length) await cardImages(host, id, lang, carded);
+}
+
+/**
+ * The card images of the demo's Xiaohongshu tasks, rendered from their drafts with the card template
+ * (scripts/render-demo-cards.ts), stored as the run's uploads linked to its task and added to the result as the Agent's
+ * own would be (TaskService.cardSet): with the colors read from the renders and the style they were drawn in.
+ */
+async function cardImages(
+  host: DemoHost,
+  projectId: string,
+  lang: 'zh' | 'en',
+  carded: {
+    d: WorkshopDraft;
+    taskId: string;
+    runId: string;
+    artifact: Artifact;
+    sections: number;
+  }[],
+) {
+  const media = host.taskAttachments;
+  if (!media) return;
+  const { default: renders } = (await import('./xhs-card-images.json', {
+    with: { type: 'json' },
+  })) as {
+    default: Record<
+      string,
+      Record<'zh' | 'en', { images: string[]; colors: string[] }>
+    >;
+  };
+  const tasks = host.db.getRepository('nrTasks');
+  const snapshots = host.db.getRepository('nrSnapshots');
+  for (const { d, taskId, runId, artifact, sections } of carded) {
+    const render = renders[d.key]?.[lang];
+    const files = (render?.images ?? []).map(
+      (data, i) =>
+        new File(
+          [Buffer.from(data, 'base64')],
+          `card-${String(i + 1).padStart(2, '0')}.webp`,
+          { type: 'image/webp' },
+        ),
+    );
+    if (!files.length) continue;
+    const images = await media.demoImages(
+      { id: runId, projectId, taskId },
+      files,
+    );
+    const cards: CardSet = {
+      images,
+      ...(sections ? { sections } : {}),
+      ...(render?.colors.length ? { colors: render.colors } : {}),
+      overflow: d.cards!.overflow,
+      style: styleBrief(demoCardStyle(lang)),
+    };
+    const result = { ...artifact, cards };
+    await snapshots.update({
+      filter: { key: `nr-task-artifact:${projectId}:${taskId}:${artifact.id}` },
+      values: { payload: result },
+    });
+    const row = await tasks.findOne({ filterByTk: taskId });
+    if (!row) continue;
+    const evidence = row.get('evidence') as Record<string, unknown> & {
+      work?: Record<string, unknown>;
+    };
+    await tasks.update({
+      filterByTk: taskId,
+      values: {
+        evidence: {
+          ...evidence,
+          work: {
+            ...evidence.work,
+            results: [result],
+            images: images.map((image) => image.id),
+          },
+        },
+      },
+    });
+  }
 }

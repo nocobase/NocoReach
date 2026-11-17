@@ -204,7 +204,7 @@ function Records({ view }: { view: WorkshopView }) {
                       </TableCell>
                       <TableCell className='max-w-0'>
                         <div className='truncate'>
-                          {outputLabel(r.form, r.destination)}
+                          {outputLabel(r.form, r.destination, r.cards)}
                         </div>
                         <div className='truncate text-xs text-muted-foreground'>
                           {[fromLine(r.source), taskNo(r.no)]

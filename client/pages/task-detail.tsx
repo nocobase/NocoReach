@@ -32,6 +32,8 @@ import { againstPrevious, canRebase, cmsLink, conflictHeading, defaultDelivery, 
 import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { RepurposeResult } from './task-detail/repurpose-result.js';
+import { XhsCardEditor, XhsDoneTools, type CardSelection } from './task-detail/xhs-cards.js';
+import { cardToEdit } from '../../shared/repurpose.js';
 import { repurposeReviewTitle } from './workshop/model.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -298,12 +300,13 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
 // what it is (Needs you, Current progress, Done, Status) for assistive technology; the header already shows the status.
 // `error` marks something that did not work (2026-10-23 user request: a failure read like any other text): a red mark
 // before the title and a red edge on the card.
-function StageCard({id,title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false}:{id?:string;title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean}){
+// `open` actions are for every reader of the task (a finished set's download and copy), not only whoever may act on it.
+function StageCard({id,title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false,open=false}:{id?:string;title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean;open?:boolean}){
  const access=useContext(TaskAccess),time=at?when(at):'';
  return <Card id={id} sticky className={cn('nr-td-now scroll-mt-4',error&&'border-destructive/40')} aria-label={label} data-error={error||undefined}
   title={<>{spinning&&<Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"/>}{error&&<CircleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive"/>}{title}</>}
   sub={sub||time?<>{sub}{sub&&time?' · ':''}{time&&<time dateTime={at}>{time}</time>}</>:undefined}
-  actions={actions&&(access.allowed?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=""><Lock aria-hidden="true" className="size-3.5 shrink-0"/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
+  actions={actions&&(access.allowed||open?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=""><Lock aria-hidden="true" className="size-3.5 shrink-0"/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
   {children}
  </Card>;
 }
@@ -502,7 +505,7 @@ function ArticleReviewCard({data,stage,out,article:a,session,act,busy}:{data:Dat
 }
 function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;busy:boolean;list?:PlaybookList;members:Member[]}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
- const navigate=useNavigate(),tech=useTechnicalDetails(),{me}=useMe(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent,handedOver,changePlaybook}=useContext(TaskActions),articleEdit=useArticleEdit();const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
+ const navigate=useNavigate(),tech=useTechnicalDetails(),{me}=useMe(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent,handedOver,changePlaybook}=useContext(TaskActions),articleEdit=useArticleEdit();const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false),[cardEdit,setCardEdit]=useState<CardSelection|null>(null);
  // Complete this step manually, asked from the task menu: opens the form here once per request, not again on remount.
  const handledAsk=useRef(manualAsk);
  useEffect(()=>{if(manualAsk!==handledAsk.current){handledAsk.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
@@ -580,12 +583,16 @@ function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;bu
   const label=w.repurpose?$t('workshop.approve'):nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
   const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
+  // Xiaohongshu cards are edited card by card and drawn again in this browser (XhsCardEditor), with the brand kit's style
+  // for the logo and for a set that does not record its own; a version without images is edited by asking the Agent.
+  const cardStyle=w.repurpose?.form==='xhs'&&out.cards?.images.length?data.repurpose?.cardStyle:undefined;
   return <StageCard title={w.repurpose?repurposeReviewTitle(w.repurpose):$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}{(w.repurpose?.form!=='xhs'||cardStyle)&&<Button variant="ghost" disabled={busy} onClick={()=>{if(cardStyle)setCardEdit(cardToEdit(out.content,out.cards?.overflow));else{setDraft(out.content);setEditing(true);}}}><Pencil/>{$t('taskDetail.editDirectly')}</Button>}</>}>
    <LastFeedback w={w} stage={stage} out={out}/>
+   {cardEdit!==null&&cardStyle&&<XhsCardEditor out={out} current={cardStyle} initial={cardEdit} onClose={()=>setCardEdit(null)} onSave={edit=>act('editStageOutput',{artifactId:out.id,...edit}).then(Boolean)}/>}
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
-    {out.pr?<PageChange pr={out.pr} content={out.content}/>:w.repurpose?<RepurposeResult data={data} out={out} review fallback={<Reading><Markdown content={out.content}/></Reading>}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
+    {out.pr?<PageChange pr={out.pr} content={out.content}/>:w.repurpose?<RepurposeResult data={data} out={out} review onEditCard={cardStyle&&!busy?setCardEdit:undefined} fallback={<Reading><Markdown content={out.content}/></Reading>}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
     <ScopeConfirm pr={out.pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
     {out.report&&<ReportNotes report={out.report}/>}
     {nextOptions.length>0&&<Field label={$t('taskDetail.continue')} id={`${stage.key}-next`}><Select value={next||NONE} disabled={busy} onValueChange={v=>{if(v!=null)setNext(v===NONE?'':String(v));}}>
@@ -712,7 +719,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
  // A Content workshop result (2026-11-13 user decision): approving completes it; the pieces stay to copy, and Reopen
  // in the ··· menu takes it back to review.
- if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})}><RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
+ if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})} actions={w.repurpose.form==='xhs'?<XhsDoneTools out={accepted} name={`T-${(data.task.evidence as {no?:number}|undefined)?.no??data.task.id}`}/>:undefined} open><RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}>{handed}<ReplyDrafts items={replies}/></StageCard>;
  return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>

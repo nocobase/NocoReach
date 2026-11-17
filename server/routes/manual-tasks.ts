@@ -281,6 +281,64 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
     },
   );
   routes.post(
+    '/nocoreachTasks/media/card',
+    apiValidator(
+      'query',
+      mediaQuery.extend({ taskId: z.string().regex(/^\d+$/) }),
+    ),
+    async (context, next) => {
+      const query = context.req.valid('query');
+      await service().authorizeUpload(
+        creator(context),
+        query.projectId,
+        query.taskId,
+      );
+      await next();
+    },
+    describeRoute({
+      tags: ['NocoReach Tasks'],
+      summary: 'Upload a Xiaohongshu card image drawn with Edit directly',
+      description:
+        "A 1080×1440 PNG of one card, drawn in the reviewer's browser from the set's template when its text is edited. It stays unlinked until the edit is saved with it, and expires after a day otherwise.",
+      operationId: 'uploadTaskCardImage',
+      responses: {
+        201: dataResponse(TaskMediaView),
+        ...apiErrorResponses,
+        413: apiErrorResponse(413),
+        429: apiErrorResponse(429),
+      },
+      ...cliRoute(false),
+    }),
+    bodyLimit({
+      maxSize: TASK_MEDIA_LIMIT + 65536,
+      onError: () => {
+        throw new ApiError({
+          status: 'INVALID_ARGUMENT',
+          httpStatus: 413,
+          domain: 'nocoreach',
+          reason: 'TASK_MEDIA_TOO_LARGE',
+          message: 'Files must be at most 20 MiB.',
+        });
+      },
+    }),
+    apiValidator('form', z.strictObject({ file: z.instanceof(File) })),
+    async (context) => {
+      const input = context.req.valid('query');
+      return context.json(
+        {
+          data: await service().cardImage(
+            creator(context),
+            input.projectId,
+            input.requestId,
+            input.taskId,
+            context.req.valid('form').file,
+          ),
+        },
+        201,
+      );
+    },
+  );
+  routes.post(
     '/nocoreachTasks/media/import',
     describeRoute({
       tags: ['NocoReach Tasks'],

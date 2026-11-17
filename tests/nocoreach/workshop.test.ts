@@ -232,9 +232,12 @@ describe('Content workshop view', () => {
     expect(v.records.some((r) => 'internal' in r)).toBe(false);
     expect(v.recordCount).toBe(6);
     expect(v.hot).toEqual([]);
-    expect(Object.keys(v).sort()).toEqual(['articles', 'brand', 'destinations', 'hot', 'recordCount', 'records', 'voice']);
+    expect(Object.keys(v).sort()).toEqual(['articles', 'brand', 'cardSample', 'destinations', 'hot', 'recordCount', 'records', 'siteIcon', 'voice']);
+    // No Xiaohongshu set yet: the card styles are previewed with sample text.
+    expect(v.cardSample).toBeNull();
     expect(v.voice).toBe('Plain and direct.');
-    expect(v.brand).toEqual({ revision: 0, community: null });
+    expect(v.brand).toEqual({ revision: 0, community: null, cards: null });
+    expect(v.siteIcon).toBeNull();
     expect(v.destinations.reddit).toEqual({
       subreddits: [
         { subreddit: 'projectmanagement', discussions: 2 },
@@ -637,6 +640,38 @@ describe('Content workshop brand kit', () => {
     await expect(f.s.saveBrand('1', { revision: 0, community: null })).rejects.toMatchObject({ status: 409 });
     await expect(f.s.saveBrand('1', { revision: 1, community: { name: 'A', url: 'https://a.example/', sections: [] } })).rejects.toThrow();
     expect(await f.s.saveBrand('1', { revision: 1, community: null })).toMatchObject({ revision: 2, community: null });
-    expect((await f.s.view('1')).brand).toEqual({ revision: 2, community: null });
+    expect((await f.s.view('1')).brand).toEqual({ revision: 2, community: null, cards: null });
+  });
+
+  // Content workshop PR 2: the brand style Xiaohongshu cards are rendered with.
+  it('saves the card settings: a built-in style, a small PNG, JPEG or WebP logo, a hex brand color and a closing page with a heading', async () => {
+    const f = fixture();
+    const png = `data:image/png;base64,${Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]).toString('base64')}`;
+    const saved = await f.s.saveBrand('1', {
+      revision: 0,
+      community: null,
+      cards: { template: 'checklist', logo: png, color: '#1E40AF', ending: { heading: ' Follow Acme ', text: 'acme.example' } },
+    });
+    expect(saved.cards).toEqual({
+      template: 'checklist',
+      logo: png,
+      color: '#1e40af',
+      ending: { heading: 'Follow Acme', text: 'acme.example' },
+    });
+    // A save from before the card settings, without them, keeps them.
+    expect((await f.s.saveBrand('1', { revision: 1, community: null })).cards).toEqual(saved.cards);
+    // An unknown style and a missing color are the defaults; an empty closing page is none.
+    expect((await f.s.saveBrand('1', { revision: 2, community: null, cards: { template: 'poster', ending: { heading: '', text: '' } } })).cards).toEqual({
+      logo: null, ending: null,
+    });
+    const refused = (cards: unknown) => expect(f.s.saveBrand('1', { revision: 3, community: null, cards })).rejects.toMatchObject({ status: 400 });
+    // Not an image by its bytes, an SVG, and one over 200 KB.
+    await refused({ logo: `data:image/png;base64,${Buffer.from('<svg/>').toString('base64')}` });
+    await refused({ logo: `data:image/svg+xml;base64,${Buffer.from('<svg/>').toString('base64')}` });
+    await refused({ logo: `data:image/jpeg;base64,${Buffer.concat([Buffer.from([255, 216, 255]), Buffer.alloc(200 * 1024)]).toString('base64')}` });
+    await refused({ color: 'blue' });
+    await refused({ ending: { heading: 'x'.repeat(41), text: '' } });
+    await refused({ ending: { heading: '', text: 'acme.example' } });
+    expect((await f.s.view('1')).brand.revision).toBe(3);
   });
 });

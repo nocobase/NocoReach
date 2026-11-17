@@ -12,8 +12,12 @@ import { useBusinessAccess } from '#hooks/use-business-access';
 import { toast } from '#lib/toast';
 import { COMMUNITY_SECTIONS_MAX } from '../../../shared/repurpose.js';
 import { useProject } from '../reach-data.js';
+import { CardBrandFields, CardStyleSection } from './brand-cards.js';
 import type { WorkshopOutlet } from './index.js';
 import {
+  brandCardsOf,
+  cardFieldsOf,
+  cardFieldsProblem,
   errorText,
   workshopRequest,
   type Brand,
@@ -23,8 +27,9 @@ import {
 type Fields = { name: string; url: string; sections: string };
 
 /**
- * Brand and templates (PR 1 of Content workshop): the project's own community, its sections the destinations a
- * community post can go to, and the voice adaptations are written in, which lives in Memory and is changed there.
+ * Brand and templates (Content workshop): the card style Xiaohongshu cards are drawn in and the brand basics every style
+ * uses (PR 2), the voice adaptations are written in, which lives in Memory and is changed there, and the project's own
+ * community, its sections the destinations a community post can go to (PR 1).
  */
 export default function WorkshopBrand() {
   useNocoReachLocale();
@@ -41,6 +46,12 @@ export default function WorkshopBrand() {
         <BrandForm
           key={view.brand.revision}
           projectId={String(project.id)}
+          project={{
+            name: project.name,
+            site: String(project.domains?.[0] || '')
+              .replace(/^https?:\/\//, '')
+              .replace(/\/.*$/, ''),
+          }}
           view={view}
           onSaved={reload}
         />
@@ -62,10 +73,12 @@ const sectionsOf = (text: string) => [
 
 function BrandForm({
   projectId,
+  project,
   view,
   onSaved,
 }: {
   projectId: string;
+  project: { name?: string; site?: string };
   view: WorkshopView;
   onSaved: () => void;
 }) {
@@ -77,17 +90,20 @@ function BrandForm({
     url: c?.url || '',
     sections: (c?.sections || []).join('\n'),
   });
+  const [cards, setCards] = useState(() => cardFieldsOf(view.brand.cards));
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const sections = sectionsOf(fields.sections);
   const empty = !fields.name.trim() && !fields.url.trim() && !sections.length;
-  const problem = empty
-    ? ''
-    : !fields.name.trim() || !fields.url.trim() || !sections.length
-      ? $t('workshop.communityIncomplete')
-      : sections.length > COMMUNITY_SECTIONS_MAX
-        ? $t('workshop.sectionsMax', { 0: COMMUNITY_SECTIONS_MAX })
-        : '';
+  const problem =
+    cardFieldsProblem(cards) ||
+    (empty
+      ? ''
+      : !fields.name.trim() || !fields.url.trim() || !sections.length
+        ? $t('workshop.communityIncomplete')
+        : sections.length > COMMUNITY_SECTIONS_MAX
+          ? $t('workshop.sectionsMax', { 0: COMMUNITY_SECTIONS_MAX })
+          : '');
   const save = async () => {
     setBusy(true);
     setFailure('');
@@ -97,6 +113,7 @@ function BrandForm({
         community: empty
           ? null
           : { name: fields.name.trim(), url: fields.url.trim(), sections },
+        cards: brandCardsOf(cards),
       });
       toast.success(() => $t('workshop.brandSaved'));
       onSaved();
@@ -115,8 +132,42 @@ function BrandForm({
         void save();
       }}
     >
+      <CardStyleSection
+        fields={cards}
+        onChange={setCards}
+        sample={view.cardSample}
+        siteIcon={view.siteIcon}
+        project={project}
+        disabled={!can || busy}
+      />
       <fieldset className='space-y-3' disabled={!can || busy}>
-        <legend className='text-sm font-semibold'>
+        <legend className='w-full border-t pt-4 text-sm font-semibold'>
+          {$t('workshop.brandBasics')}
+        </legend>
+        <p className='text-sm text-muted-foreground'>
+          {$t('workshop.brandBasicsHint')}
+        </p>
+        <CardBrandFields
+          fields={cards}
+          onChange={setCards}
+          onError={setFailure}
+          siteIcon={view.siteIcon}
+          project={project}
+        />
+      </fieldset>
+      <div className='space-y-1.5 border-t pt-4'>
+        <div className='flex items-center justify-between gap-3'>
+          <h3 className='text-sm font-semibold'>{$t('workshop.voice')}</h3>
+          <Link className='nr-link text-sm' to='/project/memory'>
+            {$t('workshop.voiceEdit')}
+          </Link>
+        </div>
+        <p className='line-clamp-3 text-sm whitespace-pre-line text-muted-foreground'>
+          {view.voice.trim() || $t('workshop.voiceEmpty')}
+        </p>
+      </div>
+      <fieldset className='space-y-3' disabled={!can || busy}>
+        <legend className='w-full border-t pt-4 text-sm font-semibold'>
           {$t('workshop.ownCommunity')}
         </legend>
         <p className='text-sm text-muted-foreground'>
@@ -164,17 +215,6 @@ function BrandForm({
           />
         </div>
       </fieldset>
-      <div className='space-y-1.5 border-t pt-4'>
-        <div className='flex items-center justify-between gap-3'>
-          <h3 className='text-sm font-semibold'>{$t('workshop.voice')}</h3>
-          <Link className='nr-link text-sm' to='/project/memory'>
-            {$t('workshop.voiceEdit')}
-          </Link>
-        </div>
-        <p className='line-clamp-3 text-sm whitespace-pre-line text-muted-foreground'>
-          {view.voice.trim() || $t('workshop.voiceEmpty')}
-        </p>
-      </div>
       {problem || failure ? (
         <p className='text-sm text-destructive' role='alert'>
           {failure || problem}
