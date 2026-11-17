@@ -1,7 +1,8 @@
 /**
  * Renders the demo's Xiaohongshu card images (server/nocoreach/demo-data/xhs-card-images.json) from the demo drafts,
  * with the card template the Agent is given (shared/xhs-card.ts) and Acme's brand kit, as the Agent would: one
- * 1080×1440 screenshot per card, kept as WebP. Run it after changing a Xiaohongshu demo draft or the template:
+ * 1080×1440 screenshot per card, kept as WebP, with the colors read from the screenshots as NocoReach reads an Agent's
+ * (png-colors.ts). Run it after changing a Xiaohongshu demo draft or the template:
  *
  *   pnpm exec tsx scripts/render-demo-cards.ts
  *
@@ -13,11 +14,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import {
-  WORKSHOP_BRAND,
   WORKSHOP_DRAFTS,
+  demoCardStyle,
 } from '../server/nocoreach/demo-data/workshop-content.js';
+import { pngInfo, setColors } from '../server/nocoreach/png-colors.js';
 import { XHS, parseRepurpose } from '../shared/repurpose.js';
-import { cardStyle, cardTemplate } from '../shared/xhs-card.js';
+import { cardTemplate } from '../shared/xhs-card.js';
 
 const OUT = 'server/nocoreach/demo-data/xhs-card-images.json';
 
@@ -30,7 +32,10 @@ const page = await browser.newPage({
   viewport: { width: XHS.width, height: XHS.height },
   deviceScaleFactor: 1,
 });
-const images: Record<string, Record<string, string[]>> = {};
+const images: Record<
+  string,
+  Record<string, { images: string[]; colors: string[] }>
+> = {};
 for (const d of WORKSHOP_DRAFTS) {
   if (d.form !== 'xhs') continue;
   for (const lang of ['zh', 'en'] as const) {
@@ -40,34 +45,30 @@ for (const d of WORKSHOP_DRAFTS) {
       .filter((p) => p.kind === 'card')
       .map((p) => ({ layout: p.layout, heading: p.heading, text: p.text }));
     const dir = mkdtempSync(join(tmpdir(), 'xhs-demo-'));
-    const k = WORKSHOP_BRAND.cards;
-    const style = cardStyle(
-      {
-        colors: k.colors,
-        font: k.font,
-        ending: { heading: k.ending.heading[lang], text: k.ending.text },
-      },
-      { name: 'Acme', site: 'acme.example' },
+    writeFileSync(
+      join(dir, 'xhs-card.html'),
+      cardTemplate(demoCardStyle(lang)),
     );
-    writeFileSync(join(dir, 'xhs-card.html'), cardTemplate(style));
     writeFileSync(
       join(dir, 'cards.js'),
       `window.CARDS = ${JSON.stringify(cards)};\n`,
     );
-    const list: string[] = [];
+    const list: string[] = [],
+      colors: string[][] = [];
     for (let n = 1; n <= cards.length; n++) {
       await page.goto(`file://${join(dir, 'xhs-card.html')}?n=${n}`);
       await page.waitForFunction(() => !document.title.endsWith('pending'));
       const png = join(dir, `${n}.png`),
         webp = join(dir, `${n}.webp`);
       await page.screenshot({ path: png });
+      colors.push(pngInfo(readFileSync(png))?.colors ?? []);
       execFileSync('cwebp', ['-quiet', '-q', '75', '-m', '6', png, '-o', webp]);
       list.push(readFileSync(webp).toString('base64'));
       process.stdout.write(
         `${d.key} ${lang} ${n}: ${await page.title()}, ${readFileSync(webp).length} bytes\n`,
       );
     }
-    (images[d.key] ||= {})[lang] = list;
+    (images[d.key] ||= {})[lang] = { images: list, colors: setColors(colors) };
   }
 }
 await browser.close();

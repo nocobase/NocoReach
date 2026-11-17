@@ -21,10 +21,13 @@ import {
   type RepurposeSource,
 } from '../../../shared/repurpose.js';
 import {
-  CARD_COLORS,
+  CARD_COLOR,
+  DEFAULT_TEMPLATE,
+  isCardTemplate,
+  isHexColor,
   type BrandCards,
-  type CardColors,
-  type CardFont,
+  type CardTemplateId,
+  type TemplateCard,
 } from '../../../shared/xhs-card.js';
 
 // Content workshop (2026-11-13 user decision; homepage v5): what `nrWorkshop.view` returns and the words the page, its
@@ -119,6 +122,8 @@ export type WorkshopView = {
   brand: Brand;
   /** The website's icon, which signs the cards when the brand kit has no logo. */
   siteIcon: string | null;
+  /** The latest Xiaohongshu set's cards, which the card styles are previewed with, and what it was made from. */
+  cardSample: { subject: string; cards: TemplateCard[] } | null;
   voice: string;
   destinations: {
     reddit: {
@@ -243,28 +248,28 @@ export const resultName = (form: RepurposeForm, destination?: Destination) =>
 export const repurposeReviewTitle = (r: Repurpose) =>
   $t('workshop.reviewTitle', { 0: resultName(r.form, r.destination) });
 
-// Brand and templates › Brand style's fields (brand-cards.tsx): the brand kit's card settings as the form edits them.
+// Brand and templates' card settings (brand-cards.tsx): the card style, and the brand basics every style draws with.
 export type CardFields = {
+  template: CardTemplateId;
   /** An uploaded logo; null uses the website's icon. */
   logo: string | null;
-  colors: CardColors;
-  font: CardFont;
+  color: string;
   endingHeading: string;
   endingText: string;
 };
 
 export const cardFieldsOf = (c: BrandCards | null | undefined): CardFields => ({
+  template: isCardTemplate(c?.template) ? c.template : DEFAULT_TEMPLATE,
   logo: c?.logo || null,
-  colors: { ...CARD_COLORS, ...(c?.colors || {}) },
-  font: c?.font || 'sans',
+  color: isHexColor(c?.color) ? c.color : CARD_COLOR,
   endingHeading: c?.ending?.heading || '',
   endingText: c?.ending?.text || '',
 });
 
 export const brandCardsOf = (f: CardFields): BrandCards => ({
+  template: f.template,
   logo: f.logo,
-  colors: f.colors,
-  font: f.font,
+  color: f.color,
   ending: f.endingHeading.trim()
     ? { heading: f.endingHeading.trim(), text: f.endingText.trim() }
     : null,

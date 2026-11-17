@@ -1,46 +1,292 @@
-import { useDeferredValue, useRef } from 'react';
+import { useDeferredValue, useRef, useState } from 'react';
 import { $t } from '#i18n';
+import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '#components/ui/dialog';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
+import { cn } from '#lib/utils';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#components/ui/select';
-import {
-  CARD_FONTS,
+  CARD_TEMPLATES,
   ENDING_HEADING_MAX,
   ENDING_TEXT_MAX,
   LOGO_BYTES,
   LOGO_TYPES,
   cardStyle,
-  cardTemplate,
-  type CardColors,
-  type CardFont,
+  type CardTemplateId,
   type TemplateCard,
 } from '../../../shared/xhs-card.js';
-import { XHS } from '../../../shared/repurpose.js';
-import { brandCardsOf, type CardFields } from './model.js';
+import { CardFrame } from './card-frame.js';
+import { brandCardsOf, type CardFields, type WorkshopView } from './model.js';
 
-// Brand and templates › Brand style (Content workshop PR 2): the logo, three colors, font and closing page Xiaohongshu
-// cards are rendered with, and a preview drawn by the same template the Agent renders with (shared/xhs-card.ts).
+// Brand and templates' card settings (Content workshop PR 2; card styles 2026-11-17, mockup xhs-card-styles.html
+// frames 1 and 2): the card style Xiaohongshu cards are drawn in, chosen from the built-in styles, each previewed with
+// the latest set's own cards; and the brand basics every style draws with: the logo, the brand color and the closing
+// page. The previews are drawn by the template the Agent renders with (shared/xhs-card.ts).
 
-const COLOR_KEYS: readonly (keyof CardColors)[] = [
-  'primary',
-  'text',
-  'background',
-];
-const colorLabel = (k: keyof CardColors) =>
-  k === 'primary'
-    ? $t('workshop.colorPrimary')
-    : k === 'text'
-      ? $t('workshop.colorText')
-      : $t('workshop.colorBackground');
-const fontLabel = (f: CardFont) =>
-  f === 'serif' ? $t('workshop.fontSerif') : $t('workshop.fontSans');
+const styleName = (id: CardTemplateId) =>
+  ({
+    editorial: $t('workshop.styleEditorial'),
+    memo: $t('workshop.styleMemo'),
+    dark: $t('workshop.styleDark'),
+    checklist: $t('workshop.styleChecklist'),
+  })[id];
+const styleFit = (id: CardTemplateId) =>
+  ({
+    editorial: $t('workshop.styleEditorialFit'),
+    memo: $t('workshop.styleMemoFit'),
+    dark: $t('workshop.styleDarkFit'),
+    checklist: $t('workshop.styleChecklistFit'),
+  })[id];
+
+type Sample = WorkshopView['cardSample'];
+type Project = { name?: string; site?: string };
+
+/**
+ * The cards a style is previewed with: the latest Xiaohongshu set's, else sample text; the closing page is the one the
+ * brand kit now has, or none.
+ */
+function previewCards(sample: Sample, fields: CardFields): TemplateCard[] {
+  const body: TemplateCard[] = sample?.cards.length
+    ? sample.cards.filter((c) => c.layout !== 'end')
+    : [
+        {
+          layout: 'cover',
+          heading: $t('workshop.sampleCoverHeading'),
+          text: $t('workshop.sampleCoverText'),
+        },
+        ...[
+          $t('workshop.sampleCardHeading'),
+          $t('workshop.sampleCard2Heading'),
+          $t('workshop.sampleCard3Heading'),
+        ].map((heading) => ({
+          layout: 'text' as const,
+          heading,
+          text: $t('workshop.sampleCardText'),
+        })),
+      ];
+  const heading = fields.endingHeading.trim();
+  return heading
+    ? [...body, { layout: 'end', heading, text: fields.endingText.trim() }]
+    : body;
+}
+
+/** A style's cover, first card of text and closing page, side by side. */
+function StyleTrio({
+  fields,
+  template,
+  cards,
+  siteIcon,
+  project,
+  width,
+}: {
+  fields: CardFields;
+  template: CardTemplateId;
+  cards: TemplateCard[];
+  siteIcon: string | null;
+  project: Project;
+  width: number;
+}) {
+  const style = cardStyle(
+    { ...brandCardsOf(fields), template },
+    { ...project, icon: siteIcon },
+  );
+  const shown = [
+    1,
+    cards.findIndex((c) => c.layout === 'text') + 1,
+    cards.findIndex((c) => c.layout === 'end') + 1,
+  ].filter((n, i, all) => n > 0 && all.indexOf(n) === i);
+  return (
+    <ul className='flex gap-2' aria-label={styleName(template)}>
+      {shown.map((n) => (
+        <li key={n}>
+          <CardFrame
+            style={style}
+            cards={cards}
+            n={n}
+            width={width}
+            title={cards[n - 1].heading || cards[n - 1].text}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Card style: the style in use, previewed, and the picker that changes it. */
+export function CardStyleSection({
+  fields,
+  onChange,
+  sample,
+  siteIcon,
+  project,
+  disabled,
+}: {
+  fields: CardFields;
+  onChange: (fields: CardFields) => void;
+  sample: Sample;
+  siteIcon: string | null;
+  project: Project;
+  disabled?: boolean;
+}) {
+  const [picking, setPicking] = useState(false);
+  const shown = useDeferredValue(fields);
+  const cards = previewCards(sample, shown);
+  return (
+    <section className='space-y-3' aria-labelledby='brand-card-style'>
+      <div className='flex items-center justify-between gap-3'>
+        <h3 id='brand-card-style' className='text-sm font-semibold'>
+          {$t('workshop.cardStyle')}
+        </h3>
+        <Button
+          type='button'
+          size='sm'
+          variant='outline'
+          disabled={disabled}
+          onClick={() => setPicking(true)}
+        >
+          {$t('workshop.changeStyle')}
+        </Button>
+      </div>
+      <p className='text-sm text-muted-foreground'>
+        {$t('workshop.cardStyleHint')}
+      </p>
+      <div className='flex flex-wrap items-start gap-4 rounded-lg border p-3'>
+        <StyleTrio
+          fields={shown}
+          template={shown.template}
+          cards={cards}
+          siteIcon={siteIcon}
+          project={project}
+          width={96}
+        />
+        <div className='min-w-48 flex-1 space-y-1'>
+          <p className='flex items-center gap-2 text-sm font-medium'>
+            {styleName(fields.template)}
+            <Tag tone='grey'>{$t('workshop.builtIn')}</Tag>
+          </p>
+          <p className='text-sm text-muted-foreground'>
+            {styleFit(fields.template)}
+          </p>
+        </div>
+      </div>
+      {picking ? (
+        <StylePicker
+          fields={shown}
+          cards={cards}
+          sample={sample}
+          siteIcon={siteIcon}
+          project={project}
+          onClose={() => setPicking(false)}
+          onPick={(template) => {
+            onChange({ ...fields, template });
+            setPicking(false);
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/** Change style: the built-in styles, each previewed with the same cards, the one in use marked. */
+function StylePicker({
+  fields,
+  cards,
+  sample,
+  siteIcon,
+  project,
+  onClose,
+  onPick,
+}: {
+  fields: CardFields;
+  cards: TemplateCard[];
+  sample: Sample;
+  siteIcon: string | null;
+  project: Project;
+  onClose: () => void;
+  onPick: (template: CardTemplateId) => void;
+}) {
+  const [chosen, setChosen] = useState(fields.template);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className='sm:max-w-[1040px]'>
+        <DialogHeader>
+          <DialogTitle>{$t('workshop.cardStyle')}</DialogTitle>
+          <DialogDescription>
+            {sample
+              ? $t('workshop.stylePreviewSample', { 0: sample.subject })
+              : $t('workshop.stylePreviewText')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className='space-y-2'>
+          <h4 className='text-sm font-semibold'>
+            {$t('workshop.builtInStyles')}
+          </h4>
+          <div
+            role='radiogroup'
+            aria-label={$t('workshop.builtInStyles')}
+            className='grid gap-3 sm:grid-cols-2'
+          >
+            {CARD_TEMPLATES.map((id) => (
+              <button
+                key={id}
+                type='button'
+                role='radio'
+                aria-checked={chosen === id}
+                onClick={() => setChosen(id)}
+                className={cn(
+                  'flex flex-col gap-2.5 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  chosen === id && 'border-primary ring-1 ring-primary',
+                )}
+              >
+                <StyleTrio
+                  fields={fields}
+                  template={id}
+                  cards={cards}
+                  siteIcon={siteIcon}
+                  project={project}
+                  width={112}
+                />
+                <span className='flex items-center gap-2 text-sm font-medium'>
+                  {styleName(id)}
+                  {fields.template === id ? (
+                    <Tag tone='blue'>{$t('workshop.styleInUse')}</Tag>
+                  ) : null}
+                </span>
+                <span className='text-sm text-muted-foreground'>
+                  {styleFit(id)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className='text-xs text-muted-foreground'>
+          {$t('workshop.styleNewTasksOnly')}
+        </p>
+        <DialogFooter>
+          <Button type='button' variant='ghost' onClick={onClose}>
+            {$t('common.cancel')}
+          </Button>
+          <Button type='button' onClick={() => onPick(chosen)}>
+            {$t('workshop.useStyle', { 0: styleName(chosen) })}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const readDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -51,7 +297,8 @@ const readDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-export function CardStyleFields({
+/** Brand basics: the logo, the brand color and the closing page, which every card style draws with. */
+export function CardBrandFields({
   fields,
   onChange,
   onError,
@@ -62,7 +309,7 @@ export function CardStyleFields({
   onChange: (fields: CardFields) => void;
   onError: (message: string) => void;
   siteIcon: string | null;
-  project: { name?: string; site?: string };
+  project: Project;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const logo = fields.logo || siteIcon;
@@ -93,11 +340,8 @@ export function CardStyleFields({
             />
           ) : (
             <span
-              className='grid size-10 shrink-0 place-items-center rounded-lg text-sm font-semibold'
-              style={{
-                background: fields.colors.primary,
-                color: fields.colors.background,
-              }}
+              className='grid size-10 shrink-0 place-items-center rounded-lg text-sm font-semibold text-white'
+              style={{ background: fields.color }}
             >
               {(project.name || '·').trim().charAt(0).toUpperCase()}
             </span>
@@ -145,60 +389,25 @@ export function CardStyleFields({
         </p>
       </div>
 
-      <span className='self-start pt-1.5 text-sm font-medium'>
-        {$t('workshop.colors')}
-      </span>
+      <Label htmlFor='brand-card-color' className='self-start pt-1.5'>
+        {$t('workshop.colorPrimary')}
+      </Label>
       <div className='space-y-1.5'>
-        <div className='flex flex-wrap gap-x-5 gap-y-2'>
-          {COLOR_KEYS.map((k) => (
-            <label key={k} className='flex items-center gap-2 text-sm'>
-              <input
-                type='color'
-                value={fields.colors[k]}
-                onChange={(e) =>
-                  onChange({
-                    ...fields,
-                    colors: { ...fields.colors, [k]: e.target.value },
-                  })
-                }
-                className='size-8 shrink-0 cursor-pointer rounded-md border bg-transparent p-0.5'
-              />
-              <span className='flex flex-col leading-tight'>
-                <span>{colorLabel(k)}</span>
-                <span className='font-mono text-xs text-muted-foreground uppercase'>
-                  {fields.colors[k]}
-                </span>
-              </span>
-            </label>
-          ))}
+        <div className='flex items-center gap-2 text-sm'>
+          <input
+            id='brand-card-color'
+            type='color'
+            value={fields.color}
+            onChange={(e) => onChange({ ...fields, color: e.target.value })}
+            className='size-8 shrink-0 cursor-pointer rounded-md border bg-transparent p-0.5'
+          />
+          <span className='font-mono text-xs text-muted-foreground uppercase'>
+            {fields.color}
+          </span>
         </div>
         <p className='text-xs text-muted-foreground'>
-          {$t('workshop.colorsHint', { 0: XHS.colors })}
+          {$t('workshop.colorPrimaryHint')}
         </p>
-      </div>
-
-      <Label htmlFor='brand-card-font' className='self-start pt-1.5'>
-        {$t('workshop.font')}
-      </Label>
-      <div>
-        <Select
-          value={fields.font}
-          onValueChange={(v) => {
-            if (CARD_FONTS.includes(v as CardFont))
-              onChange({ ...fields, font: v as CardFont });
-          }}
-        >
-          <SelectTrigger id='brand-card-font' className='w-48'>
-            <SelectValue>{(v: CardFont) => fontLabel(v)}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {CARD_FONTS.map((f) => (
-              <SelectItem key={f} value={f}>
-                {fontLabel(f)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <Label htmlFor='brand-ending-heading' className='self-start pt-1.5'>
@@ -226,75 +435,6 @@ export function CardStyleFields({
           {$t('workshop.endingHint')}
         </p>
       </div>
-
-      <span className='self-start text-sm font-medium'>
-        {$t('workshop.cardPreview')}
-      </span>
-      <CardPreview fields={fields} siteIcon={siteIcon} project={project} />
     </div>
-  );
-}
-
-const SCALE = 0.1;
-
-/** The cover, a content card and the closing page as the template draws them, at a tenth of their size. */
-function CardPreview({
-  fields,
-  siteIcon,
-  project,
-}: {
-  fields: CardFields;
-  siteIcon: string | null;
-  project: { name?: string; site?: string };
-}) {
-  const shown = useDeferredValue(fields);
-  const style = cardStyle(brandCardsOf(shown), { ...project, icon: siteIcon });
-  const cards: TemplateCard[] = [
-    {
-      layout: 'cover',
-      heading: $t('workshop.sampleCoverHeading'),
-      text: $t('workshop.sampleCoverText'),
-    },
-    {
-      layout: 'text',
-      heading: $t('workshop.sampleCardHeading'),
-      text: $t('workshop.sampleCardText'),
-    },
-    ...(style.ending
-      ? [
-          {
-            layout: 'end' as const,
-            heading: style.ending.heading,
-            text: style.ending.text,
-          },
-        ]
-      : []),
-  ];
-  return (
-    <ul
-      className='flex flex-wrap gap-3'
-      aria-label={$t('workshop.cardPreview')}
-    >
-      {cards.map((card, i) => (
-        <li
-          key={card.layout}
-          className='overflow-hidden rounded-md border'
-          style={{ width: XHS.width * SCALE, height: XHS.height * SCALE }}
-        >
-          <iframe
-            title={card.heading}
-            tabIndex={-1}
-            sandbox='allow-scripts'
-            srcDoc={cardTemplate(style, { cards, n: i + 1 })}
-            className='pointer-events-none origin-top-left border-0'
-            style={{
-              width: XHS.width,
-              height: XHS.height,
-              transform: `scale(${SCALE})`,
-            }}
-          />
-        </li>
-      ))}
-    </ul>
   );
 }

@@ -8,6 +8,8 @@ import { systemMessageText } from './i18n/messages.js';
  */
 
 /** Every form, in the order the workshop shows them. */
+import type { CardStyleBrief } from './xhs-card.js';
+
 export const REPURPOSE_FORMS = ['xhs', 'x', 'linkedin', 'community'] as const;
 export type RepurposeForm = (typeof REPURPOSE_FORMS)[number];
 /** The forms that can be chosen now: all of them since Xiaohongshu cards (2026-11-16, PR 2). */
@@ -159,7 +161,7 @@ export const charLength = (text: string) => [...text].length;
 
 /**
  * Xiaohongshu image cards (2026-11-16, Content workshop PR 2): 6 to 18 cards of 1080×1440, at most 110 characters on
- * a card, a cover title of at most 20, at most 3 colors and body text of at least 30px; the note's own title and body
+ * a card, a cover title of at most 20, at most 3 colors and body text of at least 36px; the note's own title and body
  * stop where Xiaohongshu stops them (20 and 1,000 characters).
  */
 export const XHS = {
@@ -170,7 +172,7 @@ export const XHS = {
   colors: 3,
   width: 1080,
   height: 1440,
-  bodyPx: 30,
+  bodyPx: 36,
   noteTitle: 20,
   noteBody: 1000,
 } as const;
@@ -235,6 +237,10 @@ export type CardSet = {
   sections?: number;
   colors?: string[];
   overflow?: number[];
+  /** The style the images were drawn in (the run's, without the logo's bytes), which Edit directly draws them in again. */
+  style?: CardStyleBrief;
+  /** A version a person saved with Edit directly: the cards whose text they changed. */
+  edited?: number[];
 };
 
 export type Piece = {
@@ -351,6 +357,51 @@ export function parseRepurpose(
   let n = 0;
   for (const p of pieces) if (p.kind === 'post') p.index = p.index || ++n;
   return { pieces, rules };
+}
+
+/**
+ * A Xiaohongshu result written back in the workshop's format from its pieces, as Edit directly saves it: the note's
+ * title and body, then every card with its labels, its heading and its text.
+ */
+export function writeXhs(pieces: readonly Piece[]): string {
+  const out: string[] = [];
+  const labels = (p: Piece) => [
+    ...(p.sections ? [`Sections: ${p.sections}`] : []),
+    ...(p.kind === 'card' && p.layout === 'end' ? ['Layout: end'] : []),
+  ];
+  for (const kind of ['title', 'body'] as const)
+    for (const p of pieces.filter((x) => x.kind === kind))
+      out.push(
+        kind === 'title' ? '## Title' : '## Body',
+        ...labels(p),
+        p.text.trim(),
+      );
+  pieces
+    .filter((p) => p.kind === 'card')
+    .forEach((p, i) =>
+      out.push(
+        `## Card ${i + 1}`,
+        ...labels(p),
+        ...(p.heading?.trim() ? [`# ${p.heading.trim()}`] : []),
+        // A line of text starting with # would read as a heading, or end the card.
+        p.text.trim().replace(/^[ \t]*#+[ \t]*/gm, ''),
+      ),
+    );
+  return out.filter((line, i) => line || out[i - 1] !== '').join('\n');
+}
+
+/** The card a reviewer edits first, from 1: the first over the character limit or overflowing, else the cover. */
+export function cardToEdit(
+  content: string,
+  overflow: readonly number[] = [],
+): number {
+  const cards = (parseRepurpose('xhs', content)?.pieces || []).filter(
+    (p) => p.kind === 'card',
+  );
+  const i = cards.findIndex(
+    (c, k) => cardChars(c) > XHS.cardChars || overflow.includes(k + 1),
+  );
+  return i < 0 ? 1 : i + 1;
 }
 
 /** What a piece may hold: the number counted and the most allowed, or nothing for a piece without a limit. */

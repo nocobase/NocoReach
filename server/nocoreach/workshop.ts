@@ -27,16 +27,17 @@ import {
   destinationKey,
   isBlogArticle,
   isRepurposeForm,
+  parseRepurpose,
   repurposeBrief,
   sourceSubject,
   subredditName,
 } from '../../shared/repurpose.js';
 import {
-  CARD_FONTS,
   ENDING_HEADING_MAX,
   ENDING_TEXT_MAX,
   LOGO_BYTES,
   LOGO_TYPES,
+  isCardTemplate,
   isHexColor,
 } from '../../shared/xhs-card.js';
 import { projectId, requireAccess } from './policy.js';
@@ -53,7 +54,7 @@ import { memoryOf } from './execution/memory.js';
 // destination, each started with the chosen Agent. A task made from an opportunity keeps it on its source, which is how
 // Opportunities lists it among the opportunity's tasks; the opportunity itself stays as it was, and so does Skip. The
 // brand kit holds what the adaptations need about the brand beyond Memory: the project's own community and its sections,
-// and what Xiaohongshu cards are drawn with (logo, colors, typeface, closing page).
+// and what Xiaohongshu cards are drawn with (card style, logo, brand color, closing page).
 
 const DAY = 86400000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -83,8 +84,9 @@ function cleanCommunity(c: any) {
   return { name, url, sections };
 }
 
-// The brand kit's Xiaohongshu card settings (2026-11-16): an uploaded logo (a PNG, JPEG or WebP data URL whose bytes are
-// that image), the three colors, the typeface and the closing page. A missing value is its default (shared/xhs-card.ts).
+// The brand kit's Xiaohongshu card settings (2026-11-16; card styles 2026-11-17): the card style, an uploaded logo (a PNG,
+// JPEG or WebP data URL whose bytes are that image), the brand color and the closing page. A missing value is its default
+// (shared/xhs-card.ts); the style draws its own type, text and background colors.
 function cleanCards(c: any) {
   if (c == null) return null;
   let logo = null;
@@ -99,14 +101,8 @@ function cleanCards(c: any) {
     if (!valid) return fail(systemMessageText('workshop.logoInvalid', { 0: Math.round(LOGO_BYTES / 1024) }));
     logo = String(c.logo);
   }
-  const colors: Record<string, string> = {};
-  for (const k of ['primary', 'text', 'background']) {
-    const v = c.colors?.[k];
-    if (v == null || v === '') continue;
-    if (!isHexColor(v)) return fail(systemMessageText('workshop.colorInvalid'));
-    colors[k] = v.toLowerCase();
-  }
-  const font = CARD_FONTS.includes(c.font) ? c.font : 'sans';
+  if (c.color != null && c.color !== '' && !isHexColor(c.color)) return fail(systemMessageText('workshop.colorInvalid'));
+  const template = isCardTemplate(c.template) ? c.template : undefined, color = isHexColor(c.color) ? c.color.toLowerCase() : undefined;
   let ending = null;
   if (c.ending != null) {
     const heading = clean(c.ending.heading, ENDING_HEADING_MAX + 1), text = clean(c.ending.text, ENDING_TEXT_MAX + 1);
@@ -114,7 +110,16 @@ function cleanCards(c: any) {
     if (heading) ending = { heading, text };
     else if (text) return fail(systemMessageText('workshop.endingHeadingRequired'));
   }
-  return { logo, colors, font, ending };
+  return { ...(template ? { template } : {}), logo, ...(color ? { color } : {}), ending };
+}
+
+function cardSample(records: any[]) {
+  for (const r of records) {
+    if (r.form !== 'xhs' || !r.internal?.draft?.text) continue;
+    const cards = (parseRepurpose('xhs', r.internal.draft.text)?.pieces || []).filter(p => p.kind === 'card').slice(0, 18).map(({ layout, heading, text }) => ({ layout, ...(heading ? { heading } : {}), text }));
+    if (cards.length >= 2) return { subject: sourceSubject(r.source), cards };
+  }
+  return null;
 }
 
 function cleanSource(s: any) {
@@ -357,6 +362,8 @@ class WorkshopService {
       articles: [...byKey.values()].sort(libraryOrder).slice(0, ARTICLES_MAX),
       records: records.slice(0, RECORDS_MAX).map(shown), recordCount: records.length,
       brand: { revision: brand.revision, community: brand.community || null, cards: brand.cards || null },
+      // The card text Brand and templates previews card styles with: the latest Xiaohongshu set's, and what it was made from.
+      cardSample: cardSample(records),
       // What the cards are signed with when the brand kit has no logo: the website's icon (project-icon.ts), if read.
       siteIcon: (await this.repo().findOne({ filter: { key: `project-icon:${id}` } }))?.get('payload')?.dataUrl || null,
       // The voice adaptations follow (Memory › Voice and style), shown in the brand kit with a link to change it.

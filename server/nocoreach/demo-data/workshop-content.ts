@@ -6,6 +6,7 @@ import type {
   Query,
 } from './world/script/types.js';
 import { t } from './world/script/types.js';
+import { cardStyle } from '../../../shared/xhs-card.js';
 
 // Content workshop demo (2026-11-13): Acme's blog, so that both recommendation columns have articles with their own
 // figures (new or rising in the last 30 days; steady search clicks over the past year), and the posts the team adapted
@@ -481,10 +482,10 @@ export const WORKSHOP_BRAND = {
       en: ['Tutorials', 'Announcements', 'Q&A'],
     },
   },
-  // Xiaohongshu cards: Acme's blue, dark text on a near-white page, the default typeface, and a closing page.
+  // Xiaohongshu cards: the Editorial style in Acme's blue, and a closing page.
   cards: {
-    colors: { primary: '#1e40af', text: '#111827', background: '#f8fafc' },
-    font: 'sans' as const,
+    template: 'editorial' as const,
+    color: '#1e40af',
     ending: {
       heading: t(
         '关注 Acme，看更多交付团队的做法',
@@ -498,6 +499,20 @@ export const WORKSHOP_BRAND = {
     'Talk like a colleague: direct and specific, with real collaboration scenes as examples. No "revolutionary" or "one click solves it"; only give figures with a source, and say when demo data is fictional. In communities, say first that you work on Acme.',
   ),
 };
+
+/** The style the demo's card images are drawn in: Acme's brand kit, without a logo (scripts/render-demo-cards.ts). */
+export const demoCardStyle = (lang: 'zh' | 'en') =>
+  cardStyle(
+    {
+      template: WORKSHOP_BRAND.cards.template,
+      color: WORKSHOP_BRAND.cards.color,
+      ending: {
+        heading: WORKSHOP_BRAND.cards.ending.heading[lang],
+        text: WORKSHOP_BRAND.cards.ending.text,
+      },
+    },
+    { name: 'Acme', site: 'acme.example' },
+  );
 
 /** The topic the team adapted without an article: an online session two weeks from now. */
 export const WORKSHOP_TOPIC = {

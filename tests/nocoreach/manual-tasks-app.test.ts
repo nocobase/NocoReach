@@ -1293,6 +1293,75 @@ test('Agent card images are card-size PNGs owned by their run until its result l
     false,
   );
 });
+test('card images drawn with Edit directly are card-size PNGs a person uploads for a task, linked only by them', async ({
+  testApp,
+  connection,
+}) => {
+  const container = testApp.application.container;
+  const runtime = container.resolve(nocoReachToken);
+  (
+    runtime.plugin as unknown as { taskExecution: TaskService }
+  ).taskExecution.stop();
+  const manual = container.resolve(manualTasksToken);
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  await runtime.plugin.projects.create({
+    name: 'Card edit tests',
+    domain: 'card-edit.example.test',
+  });
+  const created = await create(admin, input());
+  const taskId = String((await created.json()).data.id);
+  const send = (
+    client: Client,
+    bytes: Buffer,
+    query = `projectId=1&requestId=${randomUUID()}&taskId=${taskId}`,
+  ) => {
+    const body = new FormData();
+    body.set('file', new File([bytes], 'card-01.png', { type: 'image/png' }));
+    return client.fetch(`/nocoreachTasks/media/card?${query}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost' },
+      body,
+    });
+  };
+  const uploaded = await send(admin, cardPng());
+  expect(uploaded.status).toBe(201);
+  const image = (await uploaded.json()).data as TaskMediaView;
+  expect((await send(admin, cardPng(1080, 1080))).status).toBe(400);
+  expect((await send(admin, png)).status).toBe(400);
+  expect(
+    (await send(admin, cardPng(), `projectId=1&requestId=${randomUUID()}`))
+      .status,
+  ).toBe(400);
+  const credentials = {
+    email: 'card-outsider@example.test',
+    password: 'fictional-password-123',
+  };
+  await container
+    .resolve(userAdministrationServiceToken)
+    .create({ ...credentials, name: 'Outsider' });
+  expect(
+    (await send(await signIn(testApp, credentials), cardPng())).status,
+  ).toBe(403);
+
+  const stored = await connection
+    .repository<TaskMediaRecord>('nrTaskMedia')
+    .findOne({ filter: { id: image.id } });
+  expect(stored).toMatchObject({ taskId: null, draftId: taskId });
+  expect(stored!.ownerId).toMatch(/^cards:/);
+  const actor = stored!.ownerId.slice('cards:'.length);
+  // Neither another person nor a draft link reaches it; the person who drew it links it, with its colors read.
+  await expect(
+    manual.cardImages(connection, `${actor}0`, '1', taskId, [image.id]),
+  ).rejects.toMatchObject({ reason: 'TASK_IMAGE_UNAVAILABLE' });
+  await expect(
+    manual.linkImages(connection, actor, '1', taskId, [image.id]),
+  ).rejects.toMatchObject({ reason: 'TASK_IMAGE_UNAVAILABLE' });
+  const [linked] = await manual.cardImages(connection, actor, '1', taskId, [
+    image.id,
+  ]);
+  expect(linked).toMatchObject({ id: image.id, name: 'card-01.png' });
+  expect(new Set(linked.colors)).toEqual(new Set(['#1e40af', '#f8fafc']));
+});
 test('input and binary validation reject active or mislabeled media', async () => {
   expect(
     ManualTaskInput.safeParse({ ...input(), attachmentIds: ['same', 'same'] })

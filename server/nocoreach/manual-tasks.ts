@@ -18,7 +18,7 @@ import type {
   AgentImage,
   MaterialAttachment,
 } from './execution/task-materials.js';
-import { pngInfo } from './png-colors.js';
+import { pngInfo, pngSize } from './png-colors.js';
 import { XHS } from '../../shared/repurpose.js';
 import { roleOf } from './policy.js';
 import type { OutboundNetwork } from './outbound-network.js';
@@ -93,6 +93,8 @@ const UNLINKED_LIMIT = 20;
 const AGENT_FILES = 60;
 /** The owner an Agent's upload is kept under until its run's result links it: the run, never a person. */
 const runOwner = (runId: string) => `run:${runId}`;
+/** Who keeps the card images a person draws with Edit directly until the edit links them: kept apart from their uploads. */
+const cardOwner = (actorId: string) => `cards:${actorId}`;
 // A pasted image is asked for in the types a task takes (never AVIF or SVG), and read for at most this long.
 const IMAGE_ACCEPT =
   'image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5';
@@ -441,6 +443,101 @@ export class ManualTasks {
         ...(info.colors ? { colors: info.colors } : {}),
       };
     });
+  }
+
+  /**
+   * A card image drawn in the reviewer's browser with Edit directly (2026-11-17): a PNG of exactly the card size,
+   * checked by its bytes and kept unlinked until the edit is saved (cardImages), at most AGENT_FILES at a time.
+   */
+  async cardImage(
+    actor: TaskCreator,
+    projectId: string,
+    taskId: string,
+    file: File,
+  ): Promise<TaskMediaView> {
+    await this.authorizeUpload(actor, projectId, taskId);
+    const stored = await validateTaskMedia(file);
+    const size =
+      stored.type === 'image/png'
+        ? pngSize(Buffer.from(await stored.slice(0, 64).arrayBuffer()))
+        : null;
+    if (!size || size.width !== XHS.width || size.height !== XHS.height)
+      denied(
+        'TASK_FILE_SIZE',
+        `Card images must be ${XHS.width}×${XHS.height} PNG images.`,
+        'INVALID_ARGUMENT',
+      );
+    const owner = cardOwner(actor.id);
+    return this.serial(`upload:${owner}`, async () => {
+      if (
+        (await this.media.count({ filter: { ownerId: owner, taskId: null } })) >=
+        AGENT_FILES
+      )
+        denied(
+          'TASK_MEDIA_QUOTA',
+          'Remove unused files before uploading more.',
+          'RESOURCE_EXHAUSTED',
+        );
+      const repository = this.files.repository('nrTaskMedia', {
+        disk: 'local',
+        accessPath: ACCESS_PATH,
+        policy: {
+          read: true,
+          create: {
+            scope: true,
+            defaults: {
+              ownerId: owner,
+              sessionId: actor.sessionId,
+              projectId,
+              draftId: taskId,
+              taskId: null,
+              expiresAt: new Date(Date.now() + EXPIRY),
+              deleting: false,
+            },
+          },
+          update: false,
+          delete: false,
+        },
+      });
+      const uploaded = await repository.uploadOne({ file: stored });
+      const row = await this.media.findOne({
+        filter: { id: uploaded.record.id },
+      });
+      if (!row) throw new Error('Uploaded task media record is missing.');
+      return this.mediaView(row);
+    });
+  }
+
+  /**
+   * Link the card images an edit is saved with, in its transaction (Edit directly, TaskService), as linkImages links
+   * images: each the actor's own card image of this project, unlinked or already this task's. Answers each with the
+   * colors read from its pixels (png-colors.ts).
+   */
+  async cardImages(
+    connection: DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<(MessageImage & { colors?: string[] })[]> {
+    const files = await this.link(
+      connection,
+      { actorId: cardOwner(actorId), projectId, taskId, ids },
+      (type) => type === 'image/png',
+      [
+        'TASK_IMAGE_UNAVAILABLE',
+        'An image is no longer available. Add it again.',
+      ],
+    );
+    const out: (MessageImage & { colors?: string[] })[] = [];
+    for (const file of files) {
+      const info = pngInfo(await this.bytes(file));
+      out.push({
+        ...this.messageImage(file),
+        ...(info?.colors ? { colors: info.colors } : {}),
+      });
+    }
+    return out;
   }
 
   /** Whether every one of `ids` is an image the run uploaded that is still kept: unlinked and not expired, or linked to its task. */

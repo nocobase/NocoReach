@@ -12,7 +12,7 @@ import { useBusinessAccess } from '#hooks/use-business-access';
 import { toast } from '#lib/toast';
 import { COMMUNITY_SECTIONS_MAX } from '../../../shared/repurpose.js';
 import { useProject } from '../reach-data.js';
-import { CardStyleFields } from './brand-cards.js';
+import { CardBrandFields, CardStyleSection } from './brand-cards.js';
 import type { WorkshopOutlet } from './index.js';
 import {
   brandCardsOf,
@@ -27,9 +27,9 @@ import {
 type Fields = { name: string; url: string; sections: string };
 
 /**
- * Brand and templates (Content workshop): the brand style Xiaohongshu cards are rendered with (PR 2), the voice
- * adaptations are written in, which lives in Memory and is changed there, and the project's own community, its sections
- * the destinations a community post can go to (PR 1).
+ * Brand and templates (Content workshop): the card style Xiaohongshu cards are drawn in and the brand basics every style
+ * uses (PR 2), the voice adaptations are written in, which lives in Memory and is changed there, and the project's own
+ * community, its sections the destinations a community post can go to (PR 1).
  */
 export default function WorkshopBrand() {
   useNocoReachLocale();
@@ -132,14 +132,22 @@ function BrandForm({
         void save();
       }}
     >
+      <CardStyleSection
+        fields={cards}
+        onChange={setCards}
+        sample={view.cardSample}
+        siteIcon={view.siteIcon}
+        project={project}
+        disabled={!can || busy}
+      />
       <fieldset className='space-y-3' disabled={!can || busy}>
-        <legend className='text-sm font-semibold'>
-          {$t('workshop.brandStyle')}
+        <legend className='w-full border-t pt-4 text-sm font-semibold'>
+          {$t('workshop.brandBasics')}
         </legend>
         <p className='text-sm text-muted-foreground'>
-          {$t('workshop.brandStyleHint')}
+          {$t('workshop.brandBasicsHint')}
         </p>
-        <CardStyleFields
+        <CardBrandFields
           fields={cards}
           onChange={setCards}
           onError={setFailure}

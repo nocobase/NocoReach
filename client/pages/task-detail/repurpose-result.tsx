@@ -114,12 +114,15 @@ export function RepurposeResult({
   out,
   review = false,
   fallback,
+  onEditCard,
 }: {
   data: TaskData;
   out: Artifact;
   review?: boolean;
   /** Shown instead when the text does not follow the format. */
   fallback: ReactNode;
+  /** On review, edits the text of a Xiaohongshu card, from 1. */
+  onEditCard?: (n: number) => void;
 }): ReactNode {
   const r = data.work.repurpose;
   const parsed = r ? parseRepurpose(r.form, out.content) : null;
@@ -132,6 +135,7 @@ export function RepurposeResult({
         out={out}
         checks={checks}
         review={review}
+        onEditCard={onEditCard}
       />
     );
   const pieces = (
@@ -196,11 +200,13 @@ function XhsResult({
   out,
   checks,
   review,
+  onEditCard,
 }: {
   pieces: Piece[];
   out: Artifact;
   checks: RepurposeCheck[];
   review: boolean;
+  onEditCard?: (n: number) => void;
 }) {
   const cards = pieces.filter((p) => p.kind === 'card'),
     note = pieces.filter((p) => p.kind !== 'card');
@@ -209,7 +215,7 @@ function XhsResult({
     <div className='flex flex-col gap-4' data-repurpose='xhs'>
       <RepurposeChecks checks={checks} />
       {set ? (
-        <CardGallery cards={cards} set={set} />
+        <CardGallery cards={cards} set={set} onEdit={onEditCard} />
       ) : (
         <div className='flex min-w-0 flex-col gap-4'>
           {cards.map((p) => (

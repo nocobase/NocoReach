@@ -26,6 +26,7 @@ import {
   type RunEvent,
 } from '../execution/model.js';
 import { playbookTitle } from '../execution/task-title.js';
+import { styleBrief } from '../../../shared/xhs-card.js';
 import { ACME_PAGES } from './acme-content.js';
 import type { DemoContent, DemoPerson } from './content.js';
 import type { DemoHost } from './host.js';
@@ -33,6 +34,7 @@ import type { DemoData } from './steps.js';
 import {
   WORKSHOP_BRAND,
   WORKSHOP_DRAFTS,
+  demoCardStyle,
   WORKSHOP_TOPIC,
   type WorkshopDraft,
 } from './workshop-content.js';
@@ -95,9 +97,9 @@ export async function writeWorkshop(
         revision: 1,
         community,
         cards: {
+          template: WORKSHOP_BRAND.cards.template,
           logo: null,
-          colors: { ...WORKSHOP_BRAND.cards.colors },
-          font: WORKSHOP_BRAND.cards.font,
+          color: WORKSHOP_BRAND.cards.color,
           ending: {
             heading: WORKSHOP_BRAND.cards.ending.heading[lang],
             text: WORKSHOP_BRAND.cards.ending.text,
@@ -491,7 +493,7 @@ export async function writeWorkshop(
 /**
  * The card images of the demo's Xiaohongshu tasks, rendered from their drafts with the card template
  * (scripts/render-demo-cards.ts), stored as the run's uploads linked to its task and added to the result as the Agent's
- * own would be (TaskService.cardSet): the set's colors are the brand kit's three, as the renders were measured.
+ * own would be (TaskService.cardSet): with the colors read from the renders and the style they were drawn in.
  */
 async function cardImages(
   host: DemoHost,
@@ -509,12 +511,17 @@ async function cardImages(
   if (!media) return;
   const { default: renders } = (await import('./xhs-card-images.json', {
     with: { type: 'json' },
-  })) as { default: Record<string, Record<'zh' | 'en', string[]>> };
+  })) as {
+    default: Record<
+      string,
+      Record<'zh' | 'en', { images: string[]; colors: string[] }>
+    >;
+  };
   const tasks = host.db.getRepository('nrTasks');
   const snapshots = host.db.getRepository('nrSnapshots');
-  const { primary, background, text } = WORKSHOP_BRAND.cards.colors;
   for (const { d, taskId, runId, artifact, sections } of carded) {
-    const files = (renders[d.key]?.[lang] ?? []).map(
+    const render = renders[d.key]?.[lang];
+    const files = (render?.images ?? []).map(
       (data, i) =>
         new File(
           [Buffer.from(data, 'base64')],
@@ -530,8 +537,9 @@ async function cardImages(
     const cards: CardSet = {
       images,
       ...(sections ? { sections } : {}),
-      colors: [primary, background, text],
+      ...(render?.colors.length ? { colors: render.colors } : {}),
       overflow: d.cards!.overflow,
+      style: styleBrief(demoCardStyle(lang)),
     };
     const result = { ...artifact, cards };
     await snapshots.update({

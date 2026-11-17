@@ -72,15 +72,20 @@ export function messageFileProblem(file: File, count: number, max: number) {
   return '';
 }
 
-/** A refused task media request, with the reason the server gave when it gave one. */
+/** A refused task media request, with the reason and the reader's words the server gave when it gave them. */
 class MediaError extends Error {
   constructor(
     readonly status: number,
     readonly reason?: string,
+    readonly text?: string,
   ) {
     super(`Task media request failed: ${status}`);
   }
 }
+
+/** What the server said when it refused a task media request, in the reader's language, or nothing. */
+export const mediaErrorText = (error: unknown) =>
+  error instanceof MediaError ? error.text || '' : '';
 
 // The task media endpoints (server/routes/manual-tasks.ts) take a file as multipart form data, which the pages' JSON
 // client does not send; the request carries the sign-in cookie as that client's do.
@@ -96,11 +101,19 @@ async function media(path: string, init: RequestInit) {
   if (!response.ok) {
     const body = (await Promise.resolve()
       .then(() => response.json())
-      .catch(() => null)) as { error?: { reason?: unknown } } | null;
-    const reason = body?.error?.reason;
+      .catch(() => null)) as {
+      error?: {
+        reason?: unknown;
+        message?: unknown;
+        localizedMessage?: { message?: unknown };
+      };
+    } | null;
+    const reason = body?.error?.reason,
+      text = body?.error?.localizedMessage?.message ?? body?.error?.message;
     throw new MediaError(
       response.status,
       typeof reason === 'string' ? reason : undefined,
+      typeof text === 'string' ? text : undefined,
     );
   }
   return response;
@@ -152,6 +165,31 @@ export function useImageUpload() {
   const upload = useTaskFileUpload();
   return async (file: File, requestId: string): Promise<MessageImage> =>
     imageOf(await upload(file, requestId));
+}
+
+/**
+ * Upload one Xiaohongshu card image drawn in the browser with Edit directly (2026-11-17); the server keeps it unlinked
+ * until the edit is saved with it.
+ */
+export function useCardImageUpload() {
+  const scope = useContext(TaskImageContext);
+  return async (
+    image: Blob,
+    name: string,
+    requestId: string,
+  ): Promise<MessageImage> => {
+    if (!scope) throw new Error('Task images need the task page.');
+    const body = new FormData();
+    body.set('file', new File([image], name, { type: 'image/png' }));
+    return imageOf(
+      await storedFile(
+        await media(`/card?${mediaQuery(scope, requestId)}`, {
+          method: 'POST',
+          body,
+        }),
+      ),
+    );
+  };
 }
 
 /**

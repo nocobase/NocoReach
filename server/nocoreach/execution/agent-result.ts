@@ -122,7 +122,7 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
             : []),
           ...(resultKind === 'xhsCards'
             ? [
-                `小红书图文：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；## Title、## Body 是笔记的标题和正文。卡片图片按 materials.cardTemplate 渲染成 ${XHS.width}×${XHS.height} 的 PNG，每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。渲染时检查文字有没有溢出：把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`,
+                `小红书图文：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；## Title、## Body 是笔记的标题和正文。卡片图片按 materials.cardTemplate 渲染成 ${XHS.width}×${XHS.height} 的 PNG（样式、颜色、字体和 Logo 都由模板决定，不改模板、不另加），每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。渲染时检查文字有没有溢出：把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`,
               ]
             : []),
         ]

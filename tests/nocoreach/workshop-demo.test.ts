@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  XHS,
   parseRepurpose,
   repurposeChecks,
   type Destination,
@@ -54,7 +55,12 @@ describe('Content workshop demo', () => {
                 cards: {
                   images: [],
                   sections: 4,
-                  colors: Object.values(WORKSHOP_BRAND.cards.colors),
+                  colors: (
+                    CARD_IMAGES as Record<
+                      string,
+                      Record<string, { colors: string[] }>
+                    >
+                  )[d.key][lang].colors,
                   overflow: d.cards.overflow,
                 },
               }
@@ -103,10 +109,18 @@ describe('Content workshop demo', () => {
         const cards = parseRepurpose('xhs', d.draft[lang])!.pieces.filter(
           (p) => p.kind === 'card',
         );
-        const images = (
-          CARD_IMAGES as Record<string, Record<string, string[]>>
+        const { images, colors } = (
+          CARD_IMAGES as Record<
+            string,
+            Record<string, { images: string[]; colors: string[] }>
+          >
         )[d.key][lang];
         expect(images, `${lang} ${d.key}`).toHaveLength(cards.length);
+        // The colors are measured from the images as the server measures an upload, within the limit.
+        expect(colors.length, `${lang} ${d.key}`).toBeGreaterThan(0);
+        expect(colors.length, `${lang} ${d.key}`).toBeLessThanOrEqual(
+          XHS.colors,
+        );
         for (const image of images)
           expect(
             Buffer.from(image, 'base64').subarray(8, 12).toString('latin1'),

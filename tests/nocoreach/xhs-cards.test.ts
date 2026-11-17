@@ -9,12 +9,16 @@ import {
   repurposeChecks,
   sectionNumbers,
   sourceSections,
+  writeXhs,
 } from '../../shared/repurpose.js';
 import {
-  CARD_COLORS,
+  CARD_COLOR,
+  CARD_TEMPLATES,
+  DEFAULT_TEMPLATE,
   cardStyle,
   cardTemplate,
   styleBrief,
+  styleOf,
 } from '../../shared/xhs-card.js';
 import {
   pngInfo,
@@ -69,6 +73,30 @@ describe('Xiaohongshu result text', () => {
     expect(
       parseRepurpose('xhs', '## Title\nTickets\n## Body\nTwo tables.'),
     ).toBeNull();
+  });
+
+  it('writes edited pieces back in the format it reads, a line of text never becoming a heading', () => {
+    const text = result([
+      card(1, 'Tickets in a day', 'From one inbox', 'Sections: 1–3'),
+      card(2, 'Owners', 'Each card has one.'),
+      '## Card 3\nLayout: end\n# Follow Acme\nacme.example',
+    ]);
+    const pieces = parseRepurpose('xhs', text)!.pieces;
+    expect(parseRepurpose('xhs', writeXhs(pieces))!.pieces).toEqual(pieces);
+    const edited = pieces.map((p) =>
+      p.index === 2
+        ? { ...p, heading: ' New owners ', text: '# Not a heading\n## Card 9' }
+        : p,
+    );
+    const again = parseRepurpose('xhs', writeXhs(edited))!.pieces;
+    expect(again.filter((p) => p.kind === 'card')).toHaveLength(3);
+    expect(again.find((p) => p.index === 2)).toMatchObject({
+      heading: 'New owners',
+      text: 'Not a heading\nCard 9',
+      sections: '2',
+      layout: 'text',
+    });
+    expect(again.find((p) => p.index === 3)?.layout).toBe('end');
   });
 
   it('counts a card’s heading and text without spaces, and reads section ranges', () => {
@@ -210,33 +238,71 @@ describe('Xiaohongshu result envelope', () => {
 });
 
 describe('Xiaohongshu card template', () => {
+  const icon = 'data:image/png;base64,iVBORw0KGgo=';
   const style = cardStyle(
     {
-      colors: { primary: '#1E40AF', text: 'red' },
-      font: 'serif',
+      template: 'dark',
+      color: '#1E40AF',
       ending: { heading: 'Follow', text: 'acme.example' },
     },
     {
       name: 'Acme</script><script>alert(1)</script>',
       site: 'acme.example',
-      icon: 'data:image/png;base64,iVBORw0KGgo=',
+      icon,
     },
   );
 
-  it('takes the brand kit’s values with defaults for what is missing or invalid, the website icon as the logo', () => {
+  it('takes the brand kit’s style and color with defaults for what is missing or invalid, the website icon as the logo', () => {
     expect(style).toMatchObject({
-      primary: '#1E40AF',
-      text: CARD_COLORS.text,
-      background: CARD_COLORS.background,
-      font: 'serif',
-      logo: 'data:image/png;base64,iVBORw0KGgo=',
+      template: 'dark',
+      color: '#1e40af',
+      logo: icon,
       ending: { heading: 'Follow', text: 'acme.example' },
     });
+    expect(
+      cardStyle(
+        { template: 'poster' as never, color: 'red' },
+        { name: 'Acme' },
+      ),
+    ).toMatchObject({ template: DEFAULT_TEMPLATE, color: CARD_COLOR });
     expect(
       cardStyle(null, { name: 'Acme', icon: 'javascript:alert(1)' }),
     ).not.toHaveProperty('logo');
     // The Agent is told whether there is a logo; only the template carries its bytes.
     expect(styleBrief(style).logo).toBe(true);
+  });
+
+  it('draws an edit with the style its set was drawn in and the logo the brand kit has now', () => {
+    const now = cardStyle(
+      { template: 'memo', color: '#0f766e' },
+      { name: 'Acme', icon: 'data:image/png;base64,bmV3' },
+    );
+    expect(styleOf(styleBrief(style), now)).toMatchObject({
+      template: 'dark',
+      color: '#1e40af',
+      logo: 'data:image/png;base64,bmV3',
+      ending: { heading: 'Follow', text: 'acme.example' },
+    });
+    expect(
+      styleOf({ ...styleBrief(style), logo: false }, now),
+    ).not.toHaveProperty('logo');
+    // A set from before styles were recorded is drawn in the brand kit's style now.
+    expect(styleOf(undefined, now)).toBe(now);
+  });
+
+  it('draws every built-in style from the same page, which tells its parent when it has measured the cards', () => {
+    for (const template of CARD_TEMPLATES) {
+      const page = cardTemplate(
+        { ...style, template },
+        {
+          cards: [{ layout: 'cover', heading: 'H', text: 'T' }],
+          exporting: true,
+        },
+      );
+      expect(page).toContain(JSON.stringify(template));
+      expect(page).toContain('window.CARD_EXPORT = true;');
+      expect(page).toContain('nocoreach-xhs-card');
+    }
   });
 
   it('writes the style as data that cannot close the script, and the cards beside it or inline for a preview', () => {

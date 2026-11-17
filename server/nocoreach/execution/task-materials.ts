@@ -60,6 +60,21 @@ export interface TaskAttachmentReader {
     run: { id: string; projectId: string },
     file: File,
   ): Promise<AgentImage>;
+  /**
+   * Link the card images a person drew with Edit directly to the task in the caller's transaction, each with the colors
+   * read from it (manual-tasks.ts cardImages).
+   */
+  cardImages(
+    connection: import('@nocobase/db').DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<
+    (import('../../../shared/task-images.js').MessageImage & {
+      colors?: string[];
+    })[]
+  >;
   /** Whether each of `ids` is an image this run uploaded and still has (unlinked, or linked to its task). */
   runImages(
     run: { id: string; projectId: string; taskId: string },
