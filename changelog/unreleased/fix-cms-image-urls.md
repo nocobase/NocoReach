@@ -1,5 +1,0 @@
-## Articles: images reach the NocoBase CMS with their files and working addresses
-
-- Images added in NocoReach (sent with a message, pasted into the review card's editor or attached at creation) are uploaded to a NocoBase CMS with their file. Before, the upload went out as the text "[object FormData]": the CMS kept an attachment without a file and NocoReach wrote the storage's bare address (such as `https://static-docs.nocobase.com/`) into the article, so the images were broken.
-- Each uploaded image's address is opened once through the project's website egress before the article is written with it. When it does not open as an image, publishing stops at the Images step with a message that the image reached the target but its address does not open, and asks for the target's file storage to be checked; Retry uploads the image again.
-- Addresses kept from the faulty uploads are ignored, so the next publish uploads those images again. An article already published or a CMS draft already pushed keeps its broken images: fix them in the CMS, or delete the draft there and use Push again once the task shows it missing.
