@@ -308,11 +308,13 @@ describe('Xiaohongshu card template', () => {
 
   it('writes the style as data that cannot close the script, and the cards beside it or inline for a preview', () => {
     const page = cardTemplate(style);
-    expect(page).toContain('<script src="cards.js"></script>');
+    expect(page).toMatch(
+      /<script nonce="[0-9a-f]{24}" src="cards.js"><\/script>/,
+    );
     expect(page).not.toContain('</script><script>alert');
     expect(page).toContain('\\u003c/script>');
-    expect(cardTemplate(style, 'x" onload="alert(1)')).toContain(
-      '<script src="xonloadalert1"></script>',
+    expect(cardTemplate(style, 'x" onload="alert(1)')).toMatch(
+      /<script nonce="[0-9a-f]{24}" src="xonloadalert1"><\/script>/,
     );
     const preview = cardTemplate(style, {
       cards: [{ layout: 'cover', heading: '</script>', text: '' }],

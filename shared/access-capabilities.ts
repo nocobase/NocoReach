@@ -352,8 +352,15 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'save',
     ]),
     'nrAgent.saveDefault',
-    // Content workshop › Brand and templates.
-    'nrWorkshop.saveBrand',
+    // Content workshop › Brand and templates, and its card styles made with AI.
+    ...list('nrWorkshop', [
+      'saveBrand',
+      'styleModel',
+      'draftStyle',
+      'saveStyle',
+      'renameStyle',
+      'deleteStyle',
+    ]),
     ...list('nrSkills', ['readLink', 'setEnabled']),
     'nrProjects.edit',
   ],

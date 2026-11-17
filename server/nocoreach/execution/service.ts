@@ -247,9 +247,9 @@ export class TaskService {
   }
   /** The brand kit's card style as it is now: its settings, the project's name and site, and its logo or the site's icon. */
   private async cardStyleNow(project: string, tx?: any) {
-    const [kit, info, icon] = await Promise.all([this.p.workshop?.brand(project, tx), this.p.project(project).catch(() => null), this.snapshot(`project-icon:${project}`, tx)]);
+    const [kit, info, icon, saved] = await Promise.all([this.p.workshop?.brand(project, tx), this.p.project(project).catch(() => null), this.snapshot(`project-icon:${project}`, tx), this.p.workshop?.styles?.list(project, tx)]);
     const domain = String(info?.domains?.[0] || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    return cardStyle(kit?.cards, { name: info?.name, site: domain || undefined, icon: icon?.dataUrl || null });
+    return cardStyle(kit?.cards, { name: info?.name, site: domain || undefined, icon: icon?.dataUrl || null }, saved || []);
   }
   // What a Content workshop run adapts: the source as chosen, with the article's body read when the task was created
   // (WorkshopService), where a community post goes, the angle asked for, and the drafts of earlier adaptations of the
@@ -263,8 +263,11 @@ export class TaskService {
     const r = w.repurpose!, base = { ...r, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}), ...(stored?.earlier?.length ? { earlier: stored.earlier } : {}) };
     if (r.form !== 'xhs') return { repurpose: base };
     const sections = sourceSections({ body: stored?.body, points: r.source.kind === 'topic' ? r.source.points : undefined });
-    const style = await this.cardStyleNow(project, tx);
-    return { repurpose: { ...base, ...(sections.length ? { sections: sections.map((heading, i) => ({ no: i + 1, heading })) } : {}), style: styleBrief(style) }, cardTemplate: cardTemplate(style) };
+    const style = await this.cardStyleNow(project, tx), repurpose = { ...base, ...(sections.length ? { sections: sections.map((heading, i) => ({ no: i + 1, heading })) } : {}), style: styleBrief(style) };
+    // Cards a Skill draws (Draw with a Skill, 2026-11-17) get no template: the Skill makes the images, with the brand
+    // kit's logo beside it.
+    if (style.skill) return { repurpose, ...(style.logo ? { cardLogo: style.logo } : {}) };
+    return { repurpose, cardTemplate: cardTemplate(style) };
   }
   // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
@@ -455,10 +458,13 @@ export class TaskService {
     // The page's data (search, visits, audit, tracked keywords, earlier tasks on it) as a short summary (2026-10-08).
     const data = await this.p.taskData?.forRun(project, { url: (content as any)?.url, taskId }).catch(() => '') || '';
     const knowledge = await this.p.knowledge?.forAgent(project) || [];
-    const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
+    const repurpose = w.repurpose ? await this.repurposeInput(project, taskId, w, tx) : {};
+    // Cards a Skill draws need that Skill: it goes with the run, and a run without it is not started.
+    const cardSkill = (repurpose as { repurpose?: { style?: { skill?: string } } }).repurpose?.style?.skill;
+    const skills = await this.p.skills?.forAgent(project, [...(stage.skills || []), ...(cardSkill ? [cardSkill] : [])]) || [];
+    if (cardSkill && !skills.some((s: { name: string }) => s.name === cardSkill)) return fail(systemMessageText('workshop.skillMissing', { 0: cardSkill }), 409);
     // A Content workshop playbook's result is read by the form it makes, a copy's too (shared/repurpose.ts).
     const form = w.playbook?.form, resultKind = mode === 'plan' ? (form ? FORM_RESULT_KIND[form] : w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
-    const repurpose = w.repurpose ? await this.repurposeInput(project, taskId, w, tx) : {};
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
     const unfinished = await this.unfinished(runs, w, stage.key, index, tx);
     const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...repurpose, ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });

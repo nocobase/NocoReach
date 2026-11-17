@@ -36,6 +36,8 @@ export const PROJECT_SNAPSHOTS = new Set([
   'bilibili',
   // The Content workshop's brand kit (`brand-kit:<project>`, workshop.ts).
   'brand-kit',
+  // Its card styles made with AI (`card-styles:<project>`, card-styles.ts).
+  'card-styles',
   'chat',
   'community',
   'competitor-research',
