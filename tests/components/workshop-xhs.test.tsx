@@ -16,6 +16,7 @@ import {
   styleBrief,
   type TemplateCard,
 } from '../../shared/xhs-card';
+import type { SavedStyle } from '../../shared/card-design';
 import { RepurposeResult } from '../../client/pages/task-detail/repurpose-result';
 import {
   XhsCardEditor,
@@ -309,14 +310,20 @@ function Brand({
   onError?: (message: string) => void;
 }) {
   const [fields, setFields] = useState(initial);
+  const [styles, setStyles] = useState<SavedStyle[]>([]);
   return (
     <>
       <CardStyleSection
+        projectId='1'
         fields={fields}
         onChange={setFields}
         sample={sample}
         siteIcon={null}
         project={project}
+        styles={styles}
+        onStyles={setStyles}
+        skills={[]}
+        savedTemplate={initial.template}
       />
       <CardBrandFields
         fields={fields}
