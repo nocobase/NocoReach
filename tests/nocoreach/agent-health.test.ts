@@ -31,15 +31,24 @@ function store(
     subject?: { kind: string; id: string };
   })[],
   taskRuns: Record<string, { status: string; error?: string }> = {},
+  live: { online?: boolean; runners?: unknown[] } = {},
 ) {
   const list = vi.fn(async () => runs);
   const agents = {
     tx: { read: () => 'connection' },
     agents: {
-      listActive: async () => [{ id: 'claude', name: 'Claude · Fable 5.1' }],
+      listActive: async () => [
+        {
+          id: 'claude',
+          name: 'Claude · Fable 5.1',
+          modelEntries: [{ tool: 'claude', model: 'claude-fable-5-1' }],
+        },
+      ],
     },
-    availability: async () => new Map([['claude', { online: true, busy: 0 }]]),
+    availability: async () =>
+      new Map([['claude', { online: live.online ?? true, busy: 0 }]]),
     runs: { list },
+    runners: { all: async () => live.runners ?? [] },
     views: async () => [
       {
         id: 'claude',
@@ -192,5 +201,46 @@ describe('local agent health', () => {
       mine: 0,
       names: [],
     });
+  });
+
+  // 2026-11-10: the runtime was online with Claude Code signed out, and every page said it was offline.
+  it('says why an agent that is not online cannot start, on every page', async () => {
+    const mac = {
+      id: 'mac',
+      name: 'CheeseMac-Isolated',
+      status: 'online',
+      trust: 'team',
+      ownerUserId: 'owner',
+      enabledTools: null,
+      tools: [{ kind: 'claude', authenticated: false, status: 'needsLogin' }],
+      lastSeenAt: '2026-11-10T11:59:00Z',
+    };
+    const { store: s } = store([], {}, { online: false, runners: [mac] });
+    // The task page asks without the viewer: the computer is not named.
+    const plain = await s.status('1', undefined, 'admin');
+    expect(plain.online).toBe(false);
+    expect(plain.options[0].blocker).toEqual({
+      kind: 'signIn',
+      runtime: null,
+      tool: 'claude',
+    });
+    expect(plain.runtimes).toEqual({
+      total: 1,
+      online: 1,
+      ready: 0,
+      issue: { kind: 'signIn', runtime: null, tools: ['claude'] },
+    });
+    const page = await s.status('1', undefined, 'admin', {
+      seesMachines: true,
+    });
+    expect(page.options[0].blocker).toEqual({
+      kind: 'signIn',
+      runtime: 'CheeseMac-Isolated',
+      tool: 'claude',
+    });
+    // An agent that can start has no blocker.
+    expect(
+      (await store([], {}, { runners: [mac] }).store.status('1')).options[0],
+    ).not.toHaveProperty('blocker');
   });
 });

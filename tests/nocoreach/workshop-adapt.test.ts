@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { adaptPage } from '../../server/nocoreach/execution/service';
 import { projectWork } from '../../server/nocoreach/execution/model';
-import { isBlogIndex } from '../../shared/repurpose';
+import { isBlogListing } from '../../shared/repurpose';
 
 // Content workshop's Adapt this on a live task: only a blog article, known by the site's content or by having been
 // written with Write blog post.
@@ -49,14 +49,25 @@ describe('adaptPage', () => {
     expect(adaptPage({}, merging as any, site, {})).toBeNull();
   });
 
-  it('tells a blog section index from an article', () => {
-    expect(isBlogIndex(`${ORIGIN}/blog`)).toBe(true);
-    expect(isBlogIndex(`${ORIGIN}/en/news/`)).toBe(true);
-    expect(isBlogIndex('https://blog.acme.example/')).toBe(true);
-    expect(isBlogIndex('https://blog.acme.example/zh/')).toBe(true);
-    expect(isBlogIndex(`${ORIGIN}/blog/new-board`)).toBe(false);
-    expect(isBlogIndex(`${ORIGIN}/en/changelog/2-4-1`)).toBe(false);
+  it('tells a page listing articles from an article', () => {
+    expect(isBlogListing(`${ORIGIN}/blog`)).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/en/news/`)).toBe(true);
+    expect(isBlogListing('https://blog.acme.example/')).toBe(true);
+    expect(isBlogListing('https://blog.acme.example/zh/')).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/blog/new-board`)).toBe(false);
+    expect(isBlogListing(`${ORIGIN}/en/changelog/2-4-1`)).toBe(false);
     // On a blog host every path is a post.
-    expect(isBlogIndex('https://blog.acme.example/new-board')).toBe(false);
+    expect(isBlogListing('https://blog.acme.example/new-board')).toBe(false);
+    // A section's later pages, and its tag, category, author and archive pages, list articles too.
+    expect(isBlogListing(`${ORIGIN}/changelog/page/3/`)).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/ja-JP/changelog/page/2/`)).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/cn/blog/tags/customer-stories/page/4`)).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/blog/category/guides`)).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/blog/author/ethan/`)).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/blog?page=2`)).toBe(true);
+    expect(isBlogListing('https://blog.acme.example/page/2/')).toBe(true);
+    expect(isBlogListing('https://blog.acme.example/tag/kanban')).toBe(true);
+    expect(isBlogListing(`${ORIGIN}/blog/page-speed-tips`)).toBe(false);
+    expect(isBlogListing(`${ORIGIN}/blog/tagging-tasks`)).toBe(false);
   });
 });

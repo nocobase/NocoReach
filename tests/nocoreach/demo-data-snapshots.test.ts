@@ -11,6 +11,7 @@ const SHARED_SNAPSHOTS = new Set([
   'nr-task-materials',
   'nr-migrations',
   'mock-demo',
+  'editing-suggestions', // Editing and suggestions' own cloud model (cloud-models.ts), application-wide.
 ]);
 // A conservative scan also encounters these non-snapshot prefixes. Keep them explicit so a new storage namespace
 // cannot silently be excluded. Signals and command IDs live inside their owning project's snapshot.

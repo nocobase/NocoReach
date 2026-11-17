@@ -469,6 +469,7 @@ it('Website content reads the canonical of addresses outside the sitemap and lis
         type: 'blog',
         origin: 'https://www.nocobase.com',
         fetchedAt: new Date().toISOString(),
+        metaVersion: 2,
         canonical: t55,
       },
     ],

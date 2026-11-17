@@ -49,6 +49,36 @@ test('page metadata counts words and internal links only',()=>{
  const m=pageMeta('<title>Install &amp; run</title><meta name="description" content="Fast start"><body><p>安装 NocoBase in 5 minutes</p><a href="/docs/a">a</a><a href="https://ex.com/b">b</a><a href="https://other.com/c">c</a><a href="#top">t</a></body>','https://ex.com/docs/install');
  assert.equal(m.title,'Install & run');assert.equal(m.description,'Fast start');assert.equal(m.internalLinks,2);assert.ok(m.words>=5);
 });
+test('page metadata reads when an article was published, its language and its translations',()=>{
+ const links='<link rel="alternate" hreflang="en" href="https://ex.com/blog/a/"><link rel="alternate" hreflang="zh-CN" href="/zh-CN/blog/a/"><link rel="alternate" type="application/rss+xml" href="/rss.xml"><link rel="alternate" hreflang="x-default" href="https://ex.com/blog/a/">';
+ // nocobase.com writes the day only under the title, in each language's own way; related posts' days come later.
+ const page=(lang,day)=>`<html lang="${lang}"><head>${links}</head><body><header><a href="/">Ex</a> 2020-01-01</header><main><h1>A</h1><p>Intro</p><div class="bmeta"><span>Guides</span><span>${day}</span></div><p>Body</p><aside>Oct 13, 2026</aside></main></body></html>`;
+ const en=pageMeta(page('en','Nov 11, 2026'),'https://ex.com/blog/a/');
+ assert.equal(en.published,'2026-11-11');assert.equal(en.lang,'en');
+ assert.deepEqual(en.alternates,{en:'https://ex.com/blog/a/','zh-cn':'https://ex.com/zh-CN/blog/a/','x-default':'https://ex.com/blog/a/'});
+ assert.equal(pageMeta(page('zh-CN','2026年11月11日'),'https://ex.com/zh-CN/blog/a/').published,'2026-11-11');
+ assert.equal(pageMeta(page('en','11 November 2026'),'https://ex.com/blog/a/').published,'2026-11-11');
+ // Markup the page gives for it comes first: Open Graph, JSON-LD, microdata, a <time> in its <article>.
+ assert.equal(pageMeta('<meta property="article:published_time" content="2026-03-02T08:00:00+08:00"><h1>A</h1><p>Nov 11, 2026</p>','https://ex.com/blog/a').published,'2026-03-02');
+ assert.equal(pageMeta('<script type="application/ld+json">{"@type":"BlogPosting","datePublished": "2025-12-30","dateModified":"2026-01-04"}</script>','https://ex.com/blog/a').published,'2025-12-30');
+ assert.equal(pageMeta('<span itemprop="datePublished" content="2026-02-01">Feb 1</span>','https://ex.com/blog/a').published,'2026-02-01');
+ assert.equal(pageMeta('<article><h1>A</h1><time datetime="2026-04-05T10:00:00Z">April 5</time></article>','https://ex.com/blog/a').published,'2026-04-05');
+ // None, an impossible day, or one in the future: no date, nor a language or translations.
+ const none=pageMeta('<html><h1>A</h1><p>Version 2026.13.40 ships in 2099-01-01.</p></html>','https://ex.com/blog/a');
+ assert.equal(none.published,null);assert.equal(none.lang,null);assert.equal(none.alternates,null);
+});
+test('Website content reads again a page read before it kept publish dates and translations',async()=>{
+ const now=new Date().toISOString();let payload={sites:[{origin:'https://ex.com',confirmedAt:now}],pages:[
+  {url:'https://ex.com/blog/old',type:'blog',origin:'https://ex.com',fetchedAt:now},
+  {url:'https://ex.com/blog/failed',type:'blog',origin:'https://ex.com',fetchedAt:now,fetchError:'404'},
+  {url:'https://ex.com/blog/current',type:'blog',origin:'https://ex.com',fetchedAt:now,metaVersion:2}]};
+ const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>undefined};
+ const asked=[];const sc=new SiteContent({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>undefined}},sync:{snapshots:async()=>[]}},async url=>{asked.push(url);return {type:'text/html',text:'<html lang="en"><h1>Old</h1><p>Nov 3, 2026</p></html>'};});
+ assert.equal(await sc.enrich('1'),1);assert.deepEqual(asked,['https://ex.com/blog/old']);
+ assert.deepEqual([payload.pages[0].published,payload.pages[0].lang,payload.pages[0].metaVersion],['2026-11-03','en',2]);
+ // Read once: a failed read waits for its weekly retry, as before.
+ assert.equal(await sc.enrich('1'),0);
+});
 test('metrics join by path and leave pages outside the samples empty rather than zero',()=>{
  const pages=[{url:'https://ex.com/docs/a/',type:'docs'},{url:'https://ex.com/blog/b',type:'blog'}];
  const out=joinMetrics(pages,[{page:'/docs/a',views:40,sessions:30}],[{page:'https://ex.com/docs/a',clicks:3,impressions:100},{page:'https://ex.com/docs/a',clicks:2,impressions:50}]);

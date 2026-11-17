@@ -29,7 +29,7 @@ import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { RESTART_ACTION, attemptField, attemptOf, playbookChangeBlock, sameAttempt, type PlaybookChangeBlock, type ReplacedPlaybook } from '../../../shared/playbook-change.js';
-import { FORM_RESULT_KIND, articleTitle, isBlogIndex, parseRepurpose, repurposeChecks, sourceSections, type CardSet } from '../../../shared/repurpose.js';
+import { FORM_RESULT_KIND, articleTitle, isBlogListing, parseRepurpose, repurposeChecks, sourceSections, type CardSet } from '../../../shared/repurpose.js';
 import { cardStyle, cardTemplate, styleBrief } from '../../../shared/xhs-card.js';
 import { setColors } from '../png-colors.js';
 import { datesBetween } from '../search-history.js';
@@ -109,7 +109,7 @@ export function adaptPage(task: any, work: Work, site: any, identity: PageIdenti
   if (!url) return null;
   const key = (u: unknown) => { try { return pageKey(u, identity); } catch { return ''; } }, k = key(url);
   const page = k ? (Array.isArray(site?.pages) ? site.pages : []).find((p: any) => p?.type === 'blog' && !p.noindex && key(p.url) === k) : null;
-  if (page) return isBlogIndex(page.url) ? null : { url, title: articleTitle(page) };
+  if (page) return isBlogListing(page.url) ? null : { url, title: articleTitle(page) };
   if (![work.playbookId, work.flow?.id].includes('blog-post')) return null;
   return { url, title: work.article?.title || String(task.title || '') };
 }
