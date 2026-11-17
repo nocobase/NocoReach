@@ -5,6 +5,7 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Tone } from '#components/reach/tag';
 import { getWorkColumns } from '../task-execution-types';
 import type { TaskStanding } from '../../../shared/task-pending.js';
+import type { WechatLayout } from '../../../shared/wechat-layout.js';
 import type {
   GrowthFigure,
   GrowthKind,
@@ -128,6 +129,8 @@ export type Brand = {
   revision: number;
   community: Community | null;
   cards: BrandCards | null;
+  /** WeChat layout's font size and line height; null until saved, which lays out with the defaults. */
+  wechat?: WechatLayout | null;
 };
 export type WorkshopView = {
   hot: HotItem[];

@@ -6,6 +6,7 @@ import {
   demoCmsTarget,
 } from '../../server/nocoreach/demo-data/cms-article';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
+import { WORKSHOP_CMS_ARTICLES } from '../../server/nocoreach/demo-data/workshop-cms';
 import type { NocoBaseTarget } from '../../shared/article-publishing';
 
 const now = Date.parse('2026-11-12T12:00:00Z');
@@ -47,11 +48,29 @@ describe.each([
     });
     expect(await cms.findBySlug(deleted.slug)).toBeNull();
     expect((await cms.search('', 20)).map((a) => a.slug).sort()).toEqual(
-      [waiting.slug, published.slug].sort(),
+      [
+        waiting.slug,
+        published.slug,
+        ...WORKSHOP_CMS_ARTICLES.map((a) => a.slug),
+      ].sort(),
     );
     expect(await cms.search(published.title[lang].slice(0, 6), 20)).toEqual([
       expect.objectContaining({ id: String(published.id) }),
     ]);
+  });
+
+  // Content workshop › What to make › WeChat layout reads these bodies (Content workshop PR 3).
+  it('holds two published Library articles with a Markdown body', async () => {
+    for (const a of WORKSHOP_CMS_ARTICLES) {
+      const post = await cms.get(String(a.id));
+      expect(post).toMatchObject({
+        slug: a.slug,
+        status: 'published',
+        locales: { [lang]: { title: a.title[lang] } },
+      });
+      expect(post.locales[lang].body).toBe(a.body[lang]);
+      expect(await cms.findBySlug(a.slug)).toMatchObject({ id: String(a.id) });
+    }
   });
 
   it('gives each task its own article, title and comment', () => {

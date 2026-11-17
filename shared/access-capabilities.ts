@@ -277,6 +277,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ]),
     'nrArticles.targets',
     'nrWorkshop.view',
+    'nrWorkshop.article',
   ],
   analyze: [
     'nrAiSearch.ask',

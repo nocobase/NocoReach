@@ -5,6 +5,7 @@ import { pageIdentity, pageKey } from '../../shared/page-identity.js';
 import { topicKey } from '../../shared/followed-topics.js';
 import { awaitingRestart } from '../../shared/task-pending.js';
 import { growthOf, newPageOf } from '../../shared/growth.js';
+import { cleanWechatLayout } from '../../shared/wechat-layout.js';
 import {
   hotAway,
   hotDiscussions,
@@ -278,7 +279,8 @@ class WorkshopService {
       const row = await this.repo().findOne({ filter: { key: this.brandKey(id) }, transaction: tx }), cur = row?.get('payload') || { revision: 0, community: null };
       if (v.revision !== cur.revision) return fail(systemMessageText('workshop.brandChanged'), 409);
       // A request without `cards` (written before the card settings) leaves them as they are.
-      const next = { revision: cur.revision + 1, community, cards: cards === undefined ? cur.cards ?? null : cards, updatedAt: new Date().toISOString() };
+      // WeChat layout's font size and line height; a request without them (written before them) leaves them as they are.
+      const next = { revision: cur.revision + 1, community, cards: cards === undefined ? cur.cards ?? null : cards, wechat: v.wechat === undefined ? cur.wechat ?? null : cleanWechatLayout(v.wechat), updatedAt: new Date().toISOString() };
       if (row) await this.repo().update({ filterByTk: row.get('id'), values: { payload: next }, transaction: tx });
       else await this.repo().create({ values: { key: this.brandKey(id), payload: next }, transaction: tx });
       return next;
@@ -423,7 +425,7 @@ class WorkshopService {
       hot: hot.map(h => h.item),
       articles: this.library(input).articles,
       records: records.slice(0, RECORDS_MAX).map(shown), recordCount: records.length,
-      brand: { revision: brand.revision, community: brand.community || null, cards: brand.cards || null },
+      brand: { revision: brand.revision, community: brand.community || null, cards: brand.cards || null, ...(brand.wechat ? { wechat: cleanWechatLayout(brand.wechat) } : {}) },
       // The card text Brand and templates previews card styles with: the latest Xiaohongshu set's, and what it was made from.
       cardSample: cardSample(records),
       // What the cards are signed with when the brand kit has no logo: the website's icon (project-icon.ts), if read.
@@ -515,7 +517,15 @@ class WorkshopService {
     const snap = await this.p.articleTargets.provider(id, a.targetId).get(a.articleId).catch(() => null);
     const locales = Object.entries(snap?.locales || {}).filter(([, f]: any) => typeof f?.body === 'string' && f.body.trim());
     const hit: any = locales.find(([, f]: any) => f.title?.trim() === source.title) || locales[0];
-    return { targetId: a.targetId, articleId: a.articleId, ...(hit ? { locale: hit[0], body: hit[1].body.slice(0, BODY_MAX) } : {}) };
+    return { targetId: a.targetId, articleId: a.articleId, ...(hit ? { locale: hit[0], body: hit[1].body.slice(0, BODY_MAX), ...(typeof hit[1].title === 'string' && hit[1].title.trim() ? { title: hit[1].title.trim() } : {}) } : {}) };
+  }
+
+  // What to make › WeChat layout: the article's Markdown body from the publishing target holding it, laid out and copied
+  // in the browser; nothing is stored or created. An article no target holds, or one it cannot read, has none.
+  async articleText(id: string, v: any) {
+    const source = cleanSource({ kind: 'article', url: v.url, title: v.title });
+    const found = await this.articleBody(id, source).catch(() => null);
+    return found?.body ? { title: found.title || source.title, body: found.body, locale: found.locale } : { body: null };
   }
 
   // One task per form and destination, written together with the chosen Agent, then each started as an accepted hand-over
@@ -603,6 +613,7 @@ class WorkshopService {
     const user = (ctx: any) => [String(ctx.auth.user.id), ctx.auth.user.nickname || ctx.auth.user.username || String(ctx.auth.user.id)];
     const actions = {
       view: wrap((_ctx, id) => this.view(id)),
+      article: wrap((_ctx, id, v) => this.articleText(id, v)),
       create: wrap((ctx, id, v) => { const [actor, name] = user(ctx); return this.create(id, v, actor, name, ctx.getCurrentLocale?.()); }),
       saveBrand: wrap((_ctx, id, v) => this.saveBrand(id, v)),
       skip: wrap((ctx, id, v) => this.skip(id, v, user(ctx)[0])),

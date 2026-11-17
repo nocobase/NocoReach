@@ -1,4 +1,5 @@
 import { CMS_ARTICLES, DEMO_CMS } from '../cms-article.js';
+import { WORKSHOP_CMS_ARTICLES } from '../workshop-cms.js';
 import { HOUR, iso, json, notFound, object } from './kit.js';
 import type { World } from './world.js';
 
@@ -29,6 +30,19 @@ export function cms(world: World, u: URL): Response | undefined {
     description: a.description[lang],
     content: a.body[lang],
   }));
+  // Two blog articles published there long before, which Content workshop's WeChat layout reads (workshop-cms.ts).
+  for (const a of WORKSHOP_CMS_ARTICLES)
+    rows.push({
+      id: a.id,
+      slug: a.slug,
+      updatedAt: iso(
+        Math.floor(world.now / HOUR) * HOUR - a.updatedDaysAgo * 24 * HOUR,
+      ),
+      status: 'published',
+      title: a.title[lang],
+      description: a.description[lang],
+      content: a.body[lang],
+    });
   if (action === 'get')
     return json({
       data:
