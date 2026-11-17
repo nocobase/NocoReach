@@ -651,6 +651,15 @@ export class OutboundNetwork {
       target.hostname = pinned.address;
       headers.set('host', pinned.hostname);
     }
+    // undici's fetch encodes only its own FormData class; Node's global one would go out as the text
+    // "[object FormData]" (2026-11-17: images published to a NocoBase CMS arrived there as attachments without a
+    // file). A form is encoded here as the global fetch encodes it, with its multipart boundary.
+    let body = init.body;
+    if (body instanceof FormData) {
+      const form = new Response(body);
+      headers.set('content-type', form.headers.get('content-type')!);
+      body = new Uint8Array(await form.arrayBuffer());
+    }
     // Only fixed-provider fetches opt in. Connectivity tests and pinned public downloads
     // always use a fresh dispatcher, including when the same profile has an API pool.
     const transport = this.acquire(
@@ -663,6 +672,7 @@ export class OutboundNetwork {
     try {
       const options = {
         ...(init as unknown as UndiciRequestInit),
+        body: body as UndiciRequestInit['body'],
         headers: Object.fromEntries(headers),
         // Paid providers deliberately allow longer requests; preserve their deadline.
         signal: init.signal || AbortSignal.timeout(30000),

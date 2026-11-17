@@ -7915,6 +7915,7 @@
   "articles.provider.imageMissing": "글에 사용한 이미지를 더 이상 사용할 수 없습니다. 다시 추가하세요.",
   "articles.provider.imagesUnsupported": "이 대상은 작업의 이미지를 받지 않습니다.",
   "articles.provider.imageUploadDenied": "대상이 이미지 업로드를 거부했습니다. 관리자에게 키의 파일 업로드 권한을 요청하세요.",
+  "articles.provider.imageAddressUnusable": "이미지는 대상에 올라갔지만, 대상에서의 주소로 이미지를 열 수 없습니다. 관리자에게 대상의 파일 저장소가 공개되어 있는지 확인을 요청한 뒤 다시 시도하세요.",
   "articleTask.failedStepImages": "글의 이미지 업로드",
   "articles.imagesUnsupported": "{0}은(는) 작업의 이미지를 받지 않습니다. 승인 전에 이미지를 삭제하거나 다른 대상에 게시하세요.",
   "common.parenthetical": " ({0})",

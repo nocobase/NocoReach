@@ -23,6 +23,7 @@ import { XHS } from '../../shared/repurpose.js';
 import { roleOf } from './policy.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import { download } from './public-sources.js';
+import { IMAGE_ACCEPT, imageTypeOf } from './image-bytes.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { isRepurposePlaybook } from '../../shared/playbook-catalog.js';
 import { draftTask, relevantPages, type DraftPage } from './task-draft.js';
@@ -95,25 +96,8 @@ const AGENT_FILES = 60;
 const runOwner = (runId: string) => `run:${runId}`;
 /** Who keeps the card images a person draws with Edit directly until the edit links them: kept apart from their uploads. */
 const cardOwner = (actorId: string) => `cards:${actorId}`;
-// A pasted image is asked for in the types a task takes (never AVIF or SVG), and read for at most this long.
-const IMAGE_ACCEPT =
-  'image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.5';
+// A pasted image is read for at most this long (image-bytes.ts: what the read asks for and accepts).
 const IMPORT_TIMEOUT = 30_000;
-
-/** The task image type bytes start with, whatever the address or the response says; null for anything else. */
-function imageTypeOf(bytes: Buffer): string | null {
-  const is = (offset: number, value: string) =>
-    bytes.subarray(offset, offset + value.length).toString('latin1') === value;
-  if (
-    bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-  )
-    return 'image/png';
-  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255)
-    return 'image/jpeg';
-  if (is(0, 'GIF87a') || is(0, 'GIF89a')) return 'image/gif';
-  if (is(0, 'RIFF') && is(8, 'WEBP')) return 'image/webp';
-  return null;
-}
 
 /** A name for an image read from an address: the last part of its path, with the extension of what it is. */
 function importedName(url: URL, type: string): string {

@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "Ein Bild des Artikels ist nicht mehr verfügbar. Fügen Sie es erneut hinzu.",
   "articles.provider.imagesUnsupported": "Dieses Zielsystem übernimmt keine Bilder aus Aufgaben.",
   "articles.provider.imageUploadDenied": "Das Zielsystem hat das Hochladen des Bildes abgelehnt. Bitten Sie einen Administrator, dem Schlüssel das Hochladen von Dateien zu erlauben.",
+  "articles.provider.imageAddressUnusable": "Das Bild wurde in das Zielsystem hochgeladen, aber seine Adresse dort öffnet kein Bild. Bitten Sie einen Administrator zu prüfen, ob der Dateispeicher des Zielsystems öffentlich lesbar ist, und versuchen Sie es dann erneut.",
   "articleTask.failedStepImages": "Bilder des Artikels hochladen",
   "articles.imagesUnsupported": "{0} übernimmt keine Bilder aus Aufgaben. Entfernen Sie sie vor der Freigabe oder veröffentlichen Sie in einem anderen Zielsystem.",
   "common.parenthetical": " ({0})",

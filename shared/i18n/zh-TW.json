@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "文章用到的一張圖片已不可用，請重新新增。",
   "articles.provider.imagesUnsupported": "這個目標不支援任務裡的圖片。",
   "articles.provider.imageUploadDenied": "目標系統拒絕上傳圖片，請管理員給金鑰開通上傳檔案的權限。",
+  "articles.provider.imageAddressUnusable": "圖片已傳到目標系統，但它在那裡的地址打不開圖片。請管理員確認目標系統的檔案儲存可以公開存取，然後重試。",
   "articleTask.failedStepImages": "上傳文章用到的圖片",
   "articles.imagesUnsupported": "{0} 不支援任務裡的圖片。通過前請刪掉這些圖片，或改發到其他目標。",
   "common.listSeparator": "、",

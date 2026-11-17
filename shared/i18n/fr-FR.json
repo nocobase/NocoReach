@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "Une image de l’article n’est plus disponible. Ajoutez-la de nouveau.",
   "articles.provider.imagesUnsupported": "Cette destination n’accepte pas les images des tâches.",
   "articles.provider.imageUploadDenied": "La destination a refusé l’envoi de l’image. Demandez à un administrateur d’autoriser la clé à envoyer des fichiers.",
+  "articles.provider.imageAddressUnusable": "L’image a bien été envoyée à la destination, mais son adresse là-bas n’ouvre pas d’image. Demandez à un administrateur de vérifier que le stockage de fichiers de la destination est lisible publiquement, puis réessayez.",
   "articleTask.failedStepImages": "Envoi des images de l’article",
   "articles.imagesUnsupported": "{0} n’accepte pas les images des tâches. Retirez-les avant d’approuver ou publiez vers une autre destination.",
   "common.parenthetical": " ({0})",

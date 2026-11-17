@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ArticleError } from '../../server/nocoreach/articles/provider.js';
 
 // In-memory stand-ins for the systems article publishing talks to. They implement only the requests the providers
 // send, with the behavior that matters for conflicts: NocoBase writes blindly, the article API checks baseVersion,
@@ -31,6 +32,15 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
       params: URLSearchParams;
     }[],
     uploadDenied: false,
+    // The storage a file record names: its own public origin (`useOriginalUrl`, like static-docs.nocobase.com), else
+    // the CMS's /storage/uploads. `dropFiles`: the record is kept without its file, as NocoBase keeps one whose request
+    // was not multipart (2026-11-17). `closed`: the files do not open for readers (a storage that is not public).
+    storage: '',
+    dropFiles: false,
+    closed: false,
+    // Every address opened by the image check, and the addresses that serve a file.
+    opened: [] as string[],
+    served: new Set<string>(),
   };
   const stamp = () =>
     new Date(Date.UTC(2026, 9, 18, 0, 0, ++state.clock)).toISOString();
@@ -48,13 +58,14 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
         bytes: Buffer.from(await file.arrayBuffer()),
         params: u.searchParams,
       });
-      return ok({
-        data: {
-          id: state.uploads.length,
-          filename: file.name,
-          url: `/storage/uploads/${state.uploads.length}-${file.name}`,
-        },
-      });
+      const n = state.uploads.length,
+        filename = state.dropFiles ? null : `${n}-${file.name}`;
+      // NocoBase's address for a file record: base URL, path and file name (url-join of what is there).
+      const url = [state.storage || '/storage/uploads', filename]
+        .filter(Boolean)
+        .join('/');
+      if (filename) state.served.add(new URL(url, u.origin).href);
+      return ok({ data: { id: n, filename, url } });
     }
     const action = u.pathname.split(':')[1],
       body = init.body ? JSON.parse(String(init.body)) : undefined;
@@ -116,7 +127,16 @@ export function fakeNocoBase(rows: Record<string, unknown>[] = []) {
       values,
       { updatedAt: stamp() },
     );
-  return { state, fetcher, edit };
+  /** The image check (ArticleDelivery): an uploaded file's address opens unless the storage is closed. */
+  const checkImage = async (_project: string, address: string) => {
+    state.opened.push(address);
+    if (state.closed || !state.served.has(address))
+      throw new ArticleError(
+        'image_address_unusable',
+        `${address}: did not open`,
+      );
+  };
+  return { state, fetcher, edit, checkImage };
 }
 
 export function fakeArticleApi() {

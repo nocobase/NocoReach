@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "記事で使っている画像が使えなくなりました。追加し直してください。",
   "articles.provider.imagesUnsupported": "この公開先はタスクの画像に対応していません。",
   "articles.provider.imageUploadDenied": "公開先が画像のアップロードを拒否しました。管理者にキーへのファイルアップロード権限の付与を依頼してください。",
+  "articles.provider.imageAddressUnusable": "画像は公開先に届きましたが、そこでのアドレスでは画像を開けません。公開先のファイルストレージが一般公開されているか管理者に確認してもらってから、もう一度お試しください。",
   "articleTask.failedStepImages": "記事の画像をアップロード中",
   "articles.imagesUnsupported": "{0} はタスクの画像に対応していません。承認する前に画像を削除するか、別の公開先にしてください。",
   "common.parenthetical": "（{0}）",

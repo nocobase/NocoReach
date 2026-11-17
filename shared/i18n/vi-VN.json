@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "Một hình trong bài viết không còn dùng được. Hãy thêm lại.",
   "articles.provider.imagesUnsupported": "Đích xuất bản này không nhận hình ảnh từ nhiệm vụ.",
   "articles.provider.imageUploadDenied": "Đích xuất bản từ chối tải lên hình ảnh. Vui lòng nhờ quản trị viên cho phép khóa tải tệp lên.",
+  "articles.provider.imageAddressUnusable": "Hình ảnh đã được tải lên đích xuất bản, nhưng địa chỉ của nó ở đó không mở được hình. Vui lòng nhờ quản trị viên kiểm tra kho lưu trữ tệp của đích xuất bản có cho phép mọi người xem không, rồi thử lại.",
   "articleTask.failedStepImages": "Tải lên hình ảnh của bài viết",
   "articles.imagesUnsupported": "{0} không nhận hình ảnh từ nhiệm vụ. Hãy xóa các hình trước khi duyệt, hoặc xuất bản lên đích khác.",
   "common.listSeparator": ", ",
