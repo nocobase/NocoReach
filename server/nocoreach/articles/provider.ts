@@ -24,7 +24,9 @@ export type ArticleErrorCode =
   | 'invalid'
   | 'unavailable'
   // The request may have reached the target; read it again before retrying.
-  | 'unknown_outcome';
+  | 'unknown_outcome'
+  // An image was uploaded, but the address the target gave it does not open as an image (2026-11-17).
+  | 'image_address_unusable';
 
 /** The translation key of a provider error (`articles.provider.unknownOutcome`). */
 export const providerErrorKey = (code: ArticleErrorCode) =>

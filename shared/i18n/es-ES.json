@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "Una imagen del artículo ya no está disponible. Vuelve a añadirla.",
   "articles.provider.imagesUnsupported": "Este destino no admite imágenes de las tareas.",
   "articles.provider.imageUploadDenied": "El destino ha rechazado la subida de la imagen. Pide a un administrador que permita a la clave subir archivos.",
+  "articles.provider.imageAddressUnusable": "La imagen llegó al destino, pero su dirección allí no abre ninguna imagen. Pide a un administrador que compruebe que el almacenamiento de archivos del destino es de lectura pública y vuelve a intentarlo.",
   "articleTask.failedStepImages": "Subida de las imágenes del artículo",
   "articles.imagesUnsupported": "{0} no admite imágenes de las tareas. Quítalas antes de aprobar o publica en otro destino.",
   "common.parenthetical": " ({0})",

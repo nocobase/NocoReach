@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "Sebuah gambar di artikel sudah tidak tersedia. Tambahkan lagi.",
   "articles.provider.imagesUnsupported": "Tujuan ini tidak menerima gambar dari tugas.",
   "articles.provider.imageUploadDenied": "Tujuan menolak unggahan gambar. Minta administrator mengizinkan kunci mengunggah file.",
+  "articles.provider.imageAddressUnusable": "Gambar sudah sampai di tujuan, tetapi alamatnya di sana tidak membuka gambar. Minta administrator memastikan penyimpanan file tujuan dapat dibaca publik, lalu coba lagi.",
   "articleTask.failedStepImages": "Mengunggah gambar artikel",
   "articles.imagesUnsupported": "{0} tidak menerima gambar dari tugas. Hapus gambar sebelum menyetujui, atau terbitkan ke tujuan lain.",
   "common.parenthetical": " ({0})",

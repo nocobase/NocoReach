@@ -216,7 +216,11 @@ export class NocoBaseArticles implements ArticleProvider {
   }
   /**
    * The CMS's file manager takes the image (`attachments:create`, multipart `file`), into the storage of the article
-   * body field when it names one, as when an editor pastes an image there; the file record's `url` is its address.
+   * body field when it names one, as when an editor pastes an image there. The file record's `url` is the address
+   * NocoBase gives the file, the one a read returns as well: the storage's own (base URL, path and file name) when the
+   * storage serves files itself (`useOriginalUrl`), else the file's permanent address on the CMS (`/files/...`).
+   * A record that never received its file answers with the storage's base URL alone; ArticleDelivery opens the
+   * address before an article is written with it.
    */
   async uploadImage(image: ArticleImageFile) {
     const body = this.target.fields.locales[this.target.locales[0]]?.body;

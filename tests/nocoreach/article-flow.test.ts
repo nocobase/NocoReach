@@ -165,7 +165,13 @@ async function fixture({
   const p = {
     agents: fakeAgents(),
     articleTargets,
-    articles: new ArticleDelivery(articleTargets),
+    // An uploaded image's address opens where the CMS that took it serves it.
+    articles: new ArticleDelivery(articleTargets, (project, address) =>
+      (other.state.served.has(address) ? other : cms).checkImage(
+        project,
+        address,
+      ),
+    ),
     project: async (id) => {
       if (id !== '1') throw Object.assign(Error('project'), { status: 404 });
       return {
@@ -2707,6 +2713,150 @@ test('an image the CMS key may not upload stops publishing before the article; a
   expect(Object.values(d.work.imageUrls.cms)).toEqual([
     'https://cms.example.com/storage/uploads/1-shot.png',
   ]);
+});
+
+// 2026-11-17: every image published to the NocoBase CMS was kept as its storage's bare origin
+// (https://static-docs.nocobase.com/): the file never reached the CMS, which kept an attachment without it.
+const shotPost = (address: string) => ({
+  locales: {
+    zh: {
+      body: `# 你好\n\n新的截图放在这一段的下面。\n\n![截图](${address})`,
+    },
+  },
+  verifyText: '新的截图放在这一段的下面',
+  summary: 'Added the screenshot',
+});
+async function withShot(f) {
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  const shot = images.add('shot.png');
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('comment', { comment: 'Use Image 1.', imageIds: [shot] });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  return shot;
+}
+const writes = (f) => f.cms.state.requests.filter((r) => r.action === 'update');
+
+test('an image whose address in the CMS does not open stops publishing before the article is written; a retry uploads it again', async () => {
+  const f = await fixture();
+  const shot = await withShot(f);
+  // A file storage that is not public: the file is there, readers cannot open it.
+  f.cms.state.closed = true;
+  await draftAndApprove(f, shotPost(`/uploads/task-media/${shot}.png`));
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'publish_failed',
+    article: {
+      error: 'image_address_unusable',
+      errorStep: 'images',
+      errorDetail: expect.stringContaining(
+        'https://cms.example.com/storage/uploads/1-shot.png: did not open',
+      ),
+    },
+  });
+  expect(f.cms.state.opened).toEqual([
+    'https://cms.example.com/storage/uploads/1-shot.png',
+  ]);
+  expect(writes(f)).toEqual([]);
+  // An address that did not open is not kept.
+  expect(d.work.imageUrls).toBeUndefined();
+  f.cms.state.closed = false;
+  await f.command('retryPublish', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  const address = 'https://cms.example.com/storage/uploads/2-shot.png';
+  expect(f.cms.state.uploads).toHaveLength(2);
+  expect(d.work.imageUrls).toEqual({ cms: { [shot]: address } });
+  expect(writes(f)).toHaveLength(1);
+  expect(writes(f)[0].body.content_cn).toContain(`![截图](${address})`);
+});
+
+test('the bare storage address of an image the CMS kept without its file is never written; one kept by an earlier version is uploaded again', async () => {
+  const f = await fixture();
+  const shot = await withShot(f);
+  f.cms.state.storage = 'https://static.example.com';
+  f.cms.state.dropFiles = true;
+  await draftAndApprove(f, shotPost(`/uploads/task-media/${shot}.png`));
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'publish_failed',
+    article: {
+      error: 'image_address_unusable',
+      errorStep: 'images',
+      errorDetail: 'https://static.example.com/: not the address of a file',
+    },
+  });
+  // Not even opened, and nothing written.
+  expect(f.cms.state.opened).toEqual([]);
+  expect(writes(f)).toEqual([]);
+  // As v1.0.0-beta.87 kept it on production tasks: the bare origin, as if uploaded.
+  f.state.nrTasks[0].evidence.work.imageUrls = {
+    cms: { [shot]: 'https://static.example.com/' },
+  };
+  f.cms.state.dropFiles = false;
+  await f.command('retryPublish', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  const address = 'https://static.example.com/2-shot.png';
+  expect(d.work.imageUrls).toEqual({ cms: { [shot]: address } });
+  expect(writes(f)).toHaveLength(1);
+  expect(writes(f)[0].body.content_cn).toContain(`![截图](${address})`);
+  expect(writes(f)[0].body.content_cn).not.toContain(
+    'https://static.example.com/)',
+  );
+});
+
+test('a CMS draft written with broken image addresses is fixed by deleting it in the CMS and pushing it again', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  const shot = images.add('shot.png');
+  await f.command('comment', { comment: 'Use Image 1.', imageIds: [shot] });
+  await f.command('startTask', { playbookId: 'blog-post' });
+  f.cms.state.storage = 'https://static.example.com';
+  await draftAndApprove(f, {
+    ...freshPost,
+    locales: {
+      en: {
+        ...freshPost.locales.en,
+        body: `${freshPost.locales.en.body}\n\n![Shot](/uploads/task-media/${shot}.png)`,
+      },
+    },
+  });
+  let d = await f.view();
+  expect(d.work.release.state).toBe('awaiting_cms');
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  // The draft and the task as v1.0.0-beta.87 left them (task 396981985869825): the bare origin in both.
+  const draft = f.cms.state.rows.find((r) => r.slug === 'fresh');
+  draft.content = String(draft.content).replace(
+    'https://static.example.com/1-shot.png',
+    'https://static.example.com/',
+  );
+  f.state.nrTasks[0].evidence.work.imageUrls = {
+    cms: { [shot]: 'https://static.example.com/' },
+  };
+  // Someone deletes the draft in the CMS; the next check finds it missing, and Push again creates it anew.
+  f.cms.state.rows.splice(f.cms.state.rows.indexOf(draft), 1);
+  cmsDue(f);
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.article.cms.status).toBe('missing');
+  await f.command('repushDraft', { stageKey });
+  await f.settle();
+  d = await f.view();
+  const again = f.cms.state.rows.find((r) => r.slug === 'fresh');
+  const address = 'https://static.example.com/2-shot.png';
+  expect(again.content).toContain(`![Shot](${address})`);
+  expect(d.work.imageUrls).toEqual({ cms: { [shot]: address } });
+  expect(d.work.release).toMatchObject({
+    state: 'awaiting_cms',
+    article: { state: 'drafted', articleId: String(again.id) },
+  });
 });
 
 test('Edit directly: an image pasted into the body is linked when the edit is saved; one of another task is refused', async () => {

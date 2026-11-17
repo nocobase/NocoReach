@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "An image in the article is no longer available. Add it again.",
   "articles.provider.imagesUnsupported": "This target does not take images from tasks.",
   "articles.provider.imageUploadDenied": "The target refused the image upload. Ask an administrator to allow the key to upload files.",
+  "articles.provider.imageAddressUnusable": "The image reached the target, but its address there does not open as an image. Ask an administrator to check that the target's file storage is publicly readable, then retry.",
   "articleTask.failedStepImages": "Uploading the article’s images",
   "articles.imagesUnsupported": "{0} does not take images from tasks. Remove them before approving, or publish to another target.",
   "common.parenthetical": " ({0})",

@@ -54,7 +54,12 @@ async function setup(
     return f(url, init);
   });
   await targets.save('1', { revision: 0, target, ...secrets });
-  return { targets, delivery: new ArticleDelivery(targets), vars };
+  // Images are not published here (article-images.test.ts); an address opens.
+  return {
+    targets,
+    delivery: new ArticleDelivery(targets, async () => {}),
+    vars,
+  };
 }
 const cmsTarget = (extra: Partial<ArticleTarget> = {}): ArticleTarget =>
   ({
@@ -1273,9 +1278,12 @@ describe('a draft the target cannot take is explained in words', () => {
   });
 
   test('another target is named in front of its problem', () => {
-    const delivery = new ArticleDelivery({
-      target: (_project: string, id: string) => (id === 'news' ? news : cms),
-    } as unknown as ArticleTargets);
+    const delivery = new ArticleDelivery(
+      {
+        target: (_project: string, id: string) => (id === 'news' ? news : cms),
+      } as unknown as ArticleTargets,
+      async () => {},
+    );
     let error: unknown;
     try {
       delivery.alsoProposal('1', {

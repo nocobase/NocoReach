@@ -5,7 +5,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { ARTICLE_CAPABILITIES, ARTICLE_FIELDS, articleLocales, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
 import type { MaterialAttachment } from './task-materials.js';
 import type { ArticleTargets } from '../articles/targets.js';
-import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
+import { articlePages, draftImageIds, draftRejection, failed, primaryOnly, usableImageUrls, verifyPhrase, withImageUrls, writesNone, type ArticleDelivery, type ArticleProposal, type PublishFailure, type PublishOutcome } from '../articles/delivery.js';
 import { primaryChanges } from '../articles/edits.js';
 import { articleText, editPlaces } from '../articles/edit-places.js';
 import { restorable, writtenByHand } from '../../../shared/article-versions.js';
@@ -664,8 +664,9 @@ export class ArticleFlow {
       const primary = await rebased(0);
       let next: ArticleProposal;
       try {
-        // Images already uploaded to the target are written at their address there, which the base now holds too.
-        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: withImageUrls(old, w.imageUrls?.[old.targetId]).draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
+        // Images already uploaded to the target are written at their address there, which the base now holds too. An
+        // address that cannot be an image's stays the task image, uploaded again when the new version is published.
+        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: withImageUrls(old, usableImageUrls(w.imageUrls?.[old.targetId])).draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
       } catch (error) {
         if (error instanceof ArticleError) return fail(draftRejection(error), 409);
         throw error;
@@ -736,8 +737,9 @@ export class ArticleFlow {
           const p = proposalOf(artifact, i);
           if (stateOf(r, rec) === 'publishing' && p) legs.push({ i, p, key: rec.key, base: p.baseKey ? await this.s.snapshot(p.baseKey, tx) : null });
         }
-        // The task images the legs show that their target has not taken yet, read here on the task's connection.
-        const urls = w.imageUrls || {};
+        // The task images the legs show that their target has not taken yet, read here on the task's connection. A kept
+        // address that cannot be an image's (2026-11-17: a storage's bare origin) counts as not taken.
+        const urls = Object.fromEntries(Object.entries(w.imageUrls || {}).map(([t, m]) => [t, usableImageUrls(m)]));
         const wanted = [...new Set(legs.flatMap((l) => draftImageIds(l.p.draft).filter((id) => !urls[l.p.targetId]?.[id])))];
         const files: MaterialAttachment[] = wanted.length && this.s.p.taskAttachments ? await this.s.p.taskAttachments.forAgent(tx.connection, project, taskId, wanted) : [];
         return { r, artifact, legs, urls, files };
@@ -772,7 +774,9 @@ export class ArticleFlow {
   /**
    * Upload the task images a leg's draft shows that its target has not taken yet (2026-11-03), and keep each address
    * on the task at once (`imageUrls`, per target): a retry, an export check or a rebase uses the same address, and an
-   * image is never uploaded twice. Images the article does not show are not uploaded.
+   * image is never uploaded twice. Images the article does not show are not uploaded. An address is kept only once it
+   * opened as an image (ArticleDelivery.uploadImage); one that does not stops the leg at `images` with
+   * `image_address_unusable`, and the next attempt uploads that image again.
    */
   private async uploadImages(project: string, taskId: string, p: ArticleProposal, known: Record<string, string>, files: MaterialAttachment[]): Promise<{ urls: Record<string, string> } | PublishFailure> {
     const uploaded: Record<string, string> = {};

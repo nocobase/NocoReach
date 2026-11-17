@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "Uma imagem do artigo não está mais disponível. Adicione-a novamente.",
   "articles.provider.imagesUnsupported": "Este destino não aceita imagens de tarefas.",
   "articles.provider.imageUploadDenied": "O destino recusou o envio da imagem. Peça a um administrador para permitir que a chave envie arquivos.",
+  "articles.provider.imageAddressUnusable": "A imagem chegou ao destino, mas o endereço dela lá não abre uma imagem. Peça a um administrador para verificar se o armazenamento de arquivos do destino é de leitura pública e tente novamente.",
   "articleTask.failedStepImages": "Envio das imagens do artigo",
   "articles.imagesUnsupported": "{0} não aceita imagens de tarefas. Remova-as antes de aprovar ou publique em outro destino.",
   "common.listSeparator": ", ",

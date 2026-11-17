@@ -7913,6 +7913,7 @@
   "articles.provider.imageMissing": "文章用到的一张图片已不可用，请重新添加。",
   "articles.provider.imagesUnsupported": "这个目标不支持任务里的图片。",
   "articles.provider.imageUploadDenied": "目标系统拒绝上传图片，请管理员给密钥开通上传文件的权限。",
+  "articles.provider.imageAddressUnusable": "图片已传到目标系统，但它在那里的地址打不开图片。请管理员确认目标系统的文件存储可以公开访问，然后重试。",
   "articleTask.failedStepImages": "上传文章用到的图片",
   "articles.imagesUnsupported": "{0} 不支持任务里的图片。通过前请删掉这些图片，或改发到其他目标。",
   "common.listSeparator": "、",

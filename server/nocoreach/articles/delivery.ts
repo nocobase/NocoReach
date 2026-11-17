@@ -352,6 +352,33 @@ export function withImageUrls<T extends { draft: ArticleDraft }>(
   return { ...p, draft: { ...p.draft, locales } };
 }
 
+/**
+ * Whether an address can be an uploaded image's: http(s), with a path that names a file rather than the storage's root
+ * or a folder. A NocoBase file record that never received its file answers with its storage's base URL alone
+ * (2026-11-17: every image published to the NocoBase CMS was kept as `https://static-docs.nocobase.com/`).
+ */
+export function isImageAddress(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const u = new URL(value);
+    return ['https:', 'http:'].includes(u.protocol) && /[^/]$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** The kept addresses of one target's task images that can be an image's; the others are uploaded again. */
+export function usableImageUrls(
+  urls: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(urls || {}).filter(([, v]) => isImageAddress(v)),
+  );
+}
+
+/** Opens an image's address in a target as readers will load it; throws `image_address_unusable` when it does not. */
+export type ImageCheck = (project: string, address: string) => Promise<void>;
+
 const asChanges = (d: ArticleDraft): ArticleChanges => ({
   ...(d.slug ? { slug: d.slug } : {}),
   ...(d.status ? { status: d.status } : {}),
@@ -464,7 +491,10 @@ export function verifyPhrase(
 }
 
 export class ArticleDelivery {
-  constructor(private readonly targets: ArticleTargets) {}
+  constructor(
+    private readonly targets: ArticleTargets,
+    private readonly checkImage: ImageCheck,
+  ) {}
   provider(project: string, targetId: string) {
     return this.targets.provider(project, targetId);
   }
@@ -478,7 +508,10 @@ export class ArticleDelivery {
   ): Promise<ArticleSnapshot> {
     return this.provider(project, targetId).get(articleId);
   }
-  /** Upload an image an approved article shows to the target (provider `uploadImage`); its address there. */
+  /**
+   * Upload an image an approved article shows to the target (provider `uploadImage`); its address there, once it opens
+   * as an image the way readers will load it (2026-11-17). An article is never written with an address that does not.
+   */
   async uploadImage(
     project: string,
     targetId: string,
@@ -487,7 +520,14 @@ export class ArticleDelivery {
     const provider = this.provider(project, targetId);
     if (!provider.capabilities.images || !provider.uploadImage)
       throw new ArticleError('invalid', 'images_unsupported');
-    return provider.uploadImage(image);
+    const address = await provider.uploadImage(image);
+    if (!isImageAddress(address))
+      throw new ArticleError(
+        'image_address_unusable',
+        `${address}: not the address of a file`,
+      );
+    await this.checkImage(project, address);
+    return address;
   }
   /** What the draft changes against its base, field by field. Empty when the draft repeats the base. */
   proposal(
