@@ -38,6 +38,7 @@ const BRAND: Record<string, BrandLogoKey> = {
   x: 'x',
   bilibili: 'bilibili',
   xiaohongshu: 'xiaohongshu',
+  wechat: 'wechat',
   youtube: 'youtube',
   linkedin: 'linkedin',
   discord: 'discord',

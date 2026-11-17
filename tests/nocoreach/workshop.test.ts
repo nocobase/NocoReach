@@ -643,6 +643,36 @@ describe('Content workshop brand kit', () => {
     expect((await f.s.view('1')).brand).toEqual({ revision: 2, community: null, cards: null });
   });
 
+  // Content workshop PR 3: WeChat layout's font size and line height, kept with the brand kit.
+  it('saves the WeChat layout with the brand kit, each value one of the choices, and keeps it when a save leaves it out', async () => {
+    const f = fixture();
+    expect((await f.s.view('1')).brand.wechat).toBeUndefined();
+    expect((await f.s.saveBrand('1', { revision: 0, community: null, wechat: { fontSize: 16, lineHeight: 2 } })).wechat).toEqual({ fontSize: 16, lineHeight: 2 });
+    expect((await f.s.view('1')).brand.wechat).toEqual({ fontSize: 16, lineHeight: 2 });
+    expect((await f.s.saveBrand('1', { revision: 1, community: null })).wechat).toEqual({ fontSize: 16, lineHeight: 2 });
+    expect((await f.s.saveBrand('1', { revision: 2, community: null, wechat: { fontSize: 99, lineHeight: 'x' } })).wechat).toEqual({ fontSize: 15, lineHeight: 1.85 });
+  });
+
+  // What to make › WeChat layout reads the body from the publishing target holding the article, and stores nothing.
+  it("gives an article's Markdown body from its publishing target, and none when no target holds it", async () => {
+    const f = fixture();
+    const get = vi.fn(async () => ({ locales: { en: { title: ' Notes into tasks ', body: '# Notes into tasks\n\nBody.' }, zh: { title: '纪要', body: '' } } }));
+    f.p.articleTargets = {
+      match: vi.fn(async (_id, urls) => (urls[0] === 'https://acme.example/blog/notes' ? { article: { targetId: 'cms', articleId: '140' } } : null)),
+      provider: vi.fn(() => ({ get })),
+    };
+    expect(await f.s.articleText('1', { url: 'https://acme.example/blog/notes', title: 'Notes' })).toEqual({
+      title: 'Notes into tasks', body: '# Notes into tasks\n\nBody.', locale: 'en',
+    });
+    expect(f.p.articleTargets.provider).toHaveBeenCalledWith('1', 'cms');
+    expect(get).toHaveBeenCalledWith('140');
+    expect(await f.s.articleText('1', { url: 'https://acme.example/blog/other', title: 'Other' })).toEqual({ body: null });
+    get.mockRejectedValueOnce(new Error('down'));
+    expect(await f.s.articleText('1', { url: 'https://acme.example/blog/notes', title: 'Notes' })).toEqual({ body: null });
+    await expect(f.s.articleText('1', { url: 'ftp://acme.example/x', title: 'X' })).rejects.toThrow();
+    expect(f.state.nrSnapshots).toEqual([]);
+  });
+
   // Content workshop PR 2: the brand style Xiaohongshu cards are rendered with.
   it('saves the card settings: a built-in style, a small PNG, JPEG or WebP logo, a hex brand color and a closing page with a heading', async () => {
     const f = fixture();
