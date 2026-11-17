@@ -14,6 +14,8 @@ import { COMMUNITY_SECTIONS_MAX } from '../../../shared/repurpose.js';
 import { useProject } from '../reach-data.js';
 import { CardBrandFields, CardStyleSection } from './brand-cards.js';
 import type { WorkshopOutlet } from './index.js';
+import { WechatLayoutFields } from './wechat-layout-fields.js';
+import { cleanWechatLayout } from '../../../shared/wechat-layout.js';
 import {
   brandCardsOf,
   cardFieldsOf,
@@ -91,8 +93,11 @@ function BrandForm({
     sections: (c?.sections || []).join('\n'),
   });
   const [cards, setCards] = useState(() => cardFieldsOf(view.brand.cards));
+  // My styles change as soon as one is saved, renamed or deleted; the style in use is saved with the brand kit.
+  const [styles, setStyles] = useState(view.styles);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
+  const [wechat, setWechat] = useState(() => cleanWechatLayout(view.brand.wechat));
   const sections = sectionsOf(fields.sections);
   const empty = !fields.name.trim() && !fields.url.trim() && !sections.length;
   const problem =
@@ -114,6 +119,7 @@ function BrandForm({
           ? null
           : { name: fields.name.trim(), url: fields.url.trim(), sections },
         cards: brandCardsOf(cards),
+        wechat,
       });
       toast.success(() => $t('workshop.brandSaved'));
       onSaved();
@@ -133,11 +139,16 @@ function BrandForm({
       }}
     >
       <CardStyleSection
+        projectId={projectId}
         fields={cards}
         onChange={setCards}
         sample={view.cardSample}
         siteIcon={view.siteIcon}
         project={project}
+        styles={styles}
+        onStyles={setStyles}
+        skills={view.cardSkills}
+        savedTemplate={view.brand.cards?.template}
         disabled={!can || busy}
       />
       <fieldset className='space-y-3' disabled={!can || busy}>
@@ -155,6 +166,7 @@ function BrandForm({
           project={project}
         />
       </fieldset>
+      <WechatLayoutFields value={wechat} onChange={setWechat} disabled={!can || busy} />
       <div className='space-y-1.5 border-t pt-4'>
         <div className='flex items-center justify-between gap-3'>
           <h3 className='text-sm font-semibold'>{$t('workshop.voice')}</h3>

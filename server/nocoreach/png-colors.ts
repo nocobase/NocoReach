@@ -1,4 +1,5 @@
 import { inflateSync } from 'node:zlib';
+import { countedColors, setColors } from '../../shared/card-colors.js';
 
 /**
  * What NocoReach reads of a card image an Agent uploads (2026-11-16, Content workshop PR 2): its size from the PNG
@@ -8,9 +9,6 @@ import { inflateSync } from 'node:zlib';
  */
 
 const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const SHARE = 0.005;
-const NEAR = 16;
-const BLEND = 20;
 
 export type PngInfo = { width: number; height: number; colors?: string[] };
 
@@ -102,65 +100,8 @@ function pngColors(
     }
     [previous, line] = [line, previous];
   }
-  const min = width * height * SHARE;
-  return palette(
-    [...counts]
-      .filter(([, count]) => count >= min)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 40)
-      .map(([rgb]) => rgb),
-  ).map(hex);
+  return countedColors(counts, width * height);
 }
 
-const hex = (rgb: number) => `#${rgb.toString(16).padStart(6, '0')}`;
-const rgbOf = (v: number) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
-const distance = (a: number, b: number) => {
-  const [x, y] = [rgbOf(a), rgbOf(b)];
-  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
-};
-/** How far a color is from the blends of two others (the segment between them). */
-function blendDistance(c: number, a: number, b: number) {
-  const [p, x, y] = [rgbOf(c), rgbOf(a), rgbOf(b)];
-  const d = [y[0] - x[0], y[1] - x[1], y[2] - x[2]];
-  const len = d[0] ** 2 + d[1] ** 2 + d[2] ** 2;
-  const t = len
-    ? Math.max(
-        0,
-        Math.min(
-          1,
-          ((p[0] - x[0]) * d[0] + (p[1] - x[1]) * d[1] + (p[2] - x[2]) * d[2]) /
-            len,
-        ),
-      )
-    : 0;
-  return Math.hypot(
-    p[0] - x[0] - t * d[0],
-    p[1] - x[1] - t * d[1],
-    p[2] - x[2] - t * d[2],
-  );
-}
-
-/**
- * The colors among candidates (most used first) as a person would name them: shades within NEAR of an earlier one are
- * that one, and a color lying between two others is their blend (text drawn with opacity, anti-aliased edges, a tint
- * of the brand color), not a color of its own.
- */
-function palette(candidates: readonly number[]): number[] {
-  const kept: number[] = [];
-  for (const c of candidates)
-    if (!kept.some((k) => distance(k, c) < NEAR)) kept.push(c);
-  return kept.filter(
-    (c) =>
-      !kept.some((a, i) =>
-        kept.some(
-          (b, j) =>
-            j > i && a !== c && b !== c && blendDistance(c, a, b) < BLEND,
-        ),
-      ),
-  );
-}
-
-/** The colors of a set of cards: every card's colors together, a shade or blend of another counted with it. */
-export function setColors(lists: readonly (readonly string[])[]): string[] {
-  return palette(lists.flat().map((h) => parseInt(h.slice(1), 16))).map(hex);
-}
+// The counting rule is shared with the browser, which counts a card drawn on a canvas the same way.
+export { setColors };

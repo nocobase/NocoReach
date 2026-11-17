@@ -101,7 +101,13 @@ const envelope = z.object({
     .optional(),
 });
 
-export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
+export function resultRules(
+  mode: Run['mode'],
+  resultKind?: unknown,
+  // The Skill that draws Xiaohongshu cards instead of the template (Brand and templates › Draw with a Skill).
+  cardSkill?: unknown,
+): string[] {
+  const skill = typeof cardSkill === 'string' && cardSkill ? cardSkill : '';
   return [
     '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:object,merged?:{sha:string},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
     // The codes say whose problem a failure is (shared/run-failure.ts); the task page turns them into what to do.
@@ -122,7 +128,9 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
             : []),
           ...(resultKind === 'xhsCards'
             ? [
-                `小红书图文：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；## Title、## Body 是笔记的标题和正文。卡片图片按 materials.cardTemplate 渲染成 ${XHS.width}×${XHS.height} 的 PNG（样式、颜色、字体和 Logo 都由模板决定，不改模板、不另加），每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。渲染时检查文字有没有溢出：把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`,
+                skill
+                  ? `小红书图文：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；## Title、## Body 是笔记的标题和正文。这次没有卡片模板：卡片图片用 Skill ${skill} 出图（在 skills.json 里），xhs-cards 里关于模板和渲染的说明不适用，分卡片、字数和笔记的要求照旧。每张图片 ${XHS.width}×${XHS.height}，图上的文字和 content 里那张卡片一致；repurpose.style 里的品牌名（brand）、网站（site）、主色（color）和结尾页（ending）按这个 Skill 的做法用上，Logo 在 materials.cardLogo（有的话）。图片用 PNG，每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。Skill 能检查文字溢出时，把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`
+                  : `小红书图文：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；## Title、## Body 是笔记的标题和正文。卡片图片按 materials.cardTemplate 渲染成 ${XHS.width}×${XHS.height} 的 PNG（样式、颜色、字体和 Logo 都由模板决定，不改模板、不另加），每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。渲染时检查文字有没有溢出：把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`,
               ]
             : []),
         ]

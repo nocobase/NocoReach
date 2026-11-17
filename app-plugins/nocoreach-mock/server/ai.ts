@@ -26,6 +26,7 @@ export const MOCK_AI_OPERATIONS = [
   'topic-discovery',
   'market-suggest',
   'market-keywords',
+  'card-style',
 ] as const;
 export type MockAiOperation = (typeof MOCK_AI_OPERATIONS)[number];
 export const MOCK_AI_MODEL = {
@@ -330,6 +331,24 @@ function fixture(
         text: han
           ? `${short}（已按“${asked.slice(0, 30)}”改写）`
           : `${short} (rewritten: ${asked.slice(0, 60)})`,
+      };
+    }
+    // Card style › New style: one plain style, whatever was asked, named as simulated.
+    case 'card-style': {
+      const english = !/[\u4e00-\u9fff]/.test(str(input.look, 500));
+      const slot = (name: string, css = '') =>
+        `<div class="${name}" data-slot="${name}"${css ? ` style="${css}"` : ''}></div>`;
+      const frame = (inner: string) =>
+        `<div class="card"><div class="top"><span data-slot="brand"></span><span data-slot="page"></span></div>${inner}<div class="foot"><span data-slot="site"></span></div></div>`;
+      return {
+        name: english ? 'Simulated plain' : '模拟·素色',
+        summary: english
+          ? '[Simulated] White page, black text, brand-color headings.'
+          : `${LABEL}白底黑字，标题用品牌色。`,
+        css: '.card{display:flex;flex-direction:column;height:100%;padding:88px;background:#ffffff;color:#1f2328;font-family:var(--font-sans)}.top,.foot{display:flex;justify-content:space-between;font-size:28px}.heading{color:var(--brand-deep);font-weight:800;line-height:1.25;margin:64px 0 40px}.body{flex:1 1 0;min-height:0;line-height:1.6}.point{display:flex;gap:.5em;margin-bottom:.4em}.marker{color:var(--brand-deep);font-weight:700}',
+        cover: frame(slot('heading') + slot('body')),
+        text: frame(slot('heading') + slot('body')),
+        end: frame(slot('heading') + slot('body')),
       };
     }
     // New task › Organize with AI: the idea restated, citing only the figures of the first page it was given.

@@ -232,7 +232,7 @@ describe('Content workshop view', () => {
     expect(v.records.some((r) => 'internal' in r)).toBe(false);
     expect(v.recordCount).toBe(6);
     expect(v.hot).toEqual([]);
-    expect(Object.keys(v).sort()).toEqual(['articles', 'brand', 'cardSample', 'destinations', 'hot', 'recordCount', 'records', 'siteIcon', 'voice']);
+    expect(Object.keys(v).sort()).toEqual(['articles', 'brand', 'cardSample', 'cardSkills', 'destinations', 'hot', 'recordCount', 'records', 'siteIcon', 'styles', 'voice']);
     // No Xiaohongshu set yet: the card styles are previewed with sample text.
     expect(v.cardSample).toBeNull();
     expect(v.voice).toBe('Plain and direct.');
@@ -643,6 +643,36 @@ describe('Content workshop brand kit', () => {
     expect((await f.s.view('1')).brand).toEqual({ revision: 2, community: null, cards: null });
   });
 
+  // Content workshop PR 3: WeChat layout's font size and line height, kept with the brand kit.
+  it('saves the WeChat layout with the brand kit, each value one of the choices, and keeps it when a save leaves it out', async () => {
+    const f = fixture();
+    expect((await f.s.view('1')).brand.wechat).toBeUndefined();
+    expect((await f.s.saveBrand('1', { revision: 0, community: null, wechat: { fontSize: 16, lineHeight: 2 } })).wechat).toEqual({ fontSize: 16, lineHeight: 2 });
+    expect((await f.s.view('1')).brand.wechat).toEqual({ fontSize: 16, lineHeight: 2 });
+    expect((await f.s.saveBrand('1', { revision: 1, community: null })).wechat).toEqual({ fontSize: 16, lineHeight: 2 });
+    expect((await f.s.saveBrand('1', { revision: 2, community: null, wechat: { fontSize: 99, lineHeight: 'x' } })).wechat).toEqual({ fontSize: 15, lineHeight: 1.85 });
+  });
+
+  // What to make › WeChat layout reads the body from the publishing target holding the article, and stores nothing.
+  it("gives an article's Markdown body from its publishing target, and none when no target holds it", async () => {
+    const f = fixture();
+    const get = vi.fn(async () => ({ locales: { en: { title: ' Notes into tasks ', body: '# Notes into tasks\n\nBody.' }, zh: { title: '纪要', body: '' } } }));
+    f.p.articleTargets = {
+      match: vi.fn(async (_id, urls) => (urls[0] === 'https://acme.example/blog/notes' ? { article: { targetId: 'cms', articleId: '140' } } : null)),
+      provider: vi.fn(() => ({ get })),
+    };
+    expect(await f.s.articleText('1', { url: 'https://acme.example/blog/notes', title: 'Notes' })).toEqual({
+      title: 'Notes into tasks', body: '# Notes into tasks\n\nBody.', locale: 'en',
+    });
+    expect(f.p.articleTargets.provider).toHaveBeenCalledWith('1', 'cms');
+    expect(get).toHaveBeenCalledWith('140');
+    expect(await f.s.articleText('1', { url: 'https://acme.example/blog/other', title: 'Other' })).toEqual({ body: null });
+    get.mockRejectedValueOnce(new Error('down'));
+    expect(await f.s.articleText('1', { url: 'https://acme.example/blog/notes', title: 'Notes' })).toEqual({ body: null });
+    await expect(f.s.articleText('1', { url: 'ftp://acme.example/x', title: 'X' })).rejects.toThrow();
+    expect(f.state.nrSnapshots).toEqual([]);
+  });
+
   // Content workshop PR 2: the brand style Xiaohongshu cards are rendered with.
   it('saves the card settings: a built-in style, a small PNG, JPEG or WebP logo, a hex brand color and a closing page with a heading', async () => {
     const f = fixture();
@@ -673,5 +703,37 @@ describe('Content workshop brand kit', () => {
     await refused({ ending: { heading: 'x'.repeat(41), text: '' } });
     await refused({ ending: { heading: '', text: 'acme.example' } });
     expect((await f.s.view('1')).brand.revision).toBe(3);
+  });
+
+  // Card styles (2026-11-17): one of My styles, or a Skill that draws the cards, kept only while it is there.
+  it('keeps one of My styles or a Skill on the Skills page as the card style, and refuses one that is gone', async () => {
+    const f = fixture();
+    f.p.skills = {
+      list: async () => ({
+        skills: [
+          { name: 'guizang-social-card-skill', description: 'Generate social card image sets.' },
+          { name: 'poster-maker', description: 'Draws carousel cards as PNG images for Instagram.' },
+          { name: 'xhs-cards', description: 'Use when turning an article into Xiaohongshu cards and render the images.' },
+          { name: 'seo-title-description', description: 'Use when writing page titles.' },
+        ],
+      }),
+    };
+    const design = { css: '.c{color:red}', cover: '<div data-slot="heading"></div><div data-slot="body"></div>', text: '<div data-slot="heading"></div><div data-slot="body"></div>', end: '<div data-slot="heading"></div><div data-slot="body"></div>' };
+    const style = await f.s.styles.save('1', { name: 'Forest', design }, { id: '7', name: 'He' });
+    const saved = await f.s.saveBrand('1', { revision: 0, community: null, cards: { template: `mine:${style.id}`, skill: 'guizang-social-card-skill' } });
+    expect(saved.cards).toMatchObject({ template: `mine:${style.id}`, skill: 'guizang-social-card-skill' });
+    await expect(f.s.saveBrand('1', { revision: 1, community: null, cards: { template: 'mine:gone' } })).rejects.toMatchObject({ status: 409 });
+    await expect(f.s.saveBrand('1', { revision: 1, community: null, cards: { skill: 'baoyu-xhs-images' } })).rejects.toMatchObject({ status: 409 });
+    await expect(f.s.saveBrand('1', { revision: 1, community: null, cards: { skill: '../x' } })).rejects.toMatchObject({ status: 400 });
+    const v = await f.s.view('1');
+    expect(v.styles.map((s) => s.name)).toEqual(['Forest']);
+    // The two NocoReach has tried, added or not, and the project's own Skills that say they draw card images.
+    expect(v.cardSkills).toEqual([
+      { name: 'guizang-social-card-skill', added: true },
+      { name: 'baoyu-xhs-images', added: false },
+      { name: 'poster-maker', description: 'Draws carousel cards as PNG images for Instagram.', added: true },
+    ]);
+    // The style the brand kit draws with is not deleted.
+    await expect(f.s.styles.remove('1', { styleId: style.id }, async (tx) => (await f.s.brand('1', tx)).cards?.template)).rejects.toMatchObject({ status: 409 });
   });
 });

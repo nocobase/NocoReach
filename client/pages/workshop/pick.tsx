@@ -45,6 +45,7 @@ import type { TaskData } from '../task-execution-types.js';
 import type { WorkshopOutlet } from './index.js';
 import { CategoryTag } from '../strategy/growth';
 import {
+  cardFieldsOf,
   errorText,
   getFormNames,
   hotHeadlineText,
@@ -60,6 +61,8 @@ import {
   type Made,
   type WorkshopView,
 } from './model.js';
+import { WechatRow } from './wechat-preview.js';
+import { cleanWechatLayout } from '../../../shared/wechat-layout.js';
 
 type Item = { form: RepurposeForm; destination?: Destination };
 const itemKey = (i: Item) => `${i.form}|${destinationKey(i.destination)}`;
@@ -881,6 +884,16 @@ function Step2({
             </div>
           </div>
         </div>
+        {/* WeChat layout makes no task: an article's body, laid out and copied (a topic or trending item has none). */}
+        {source.kind === 'article' ? (
+          <WechatRow
+            projectId={projectId}
+            url={source.url}
+            title={source.title}
+            layout={cleanWechatLayout(view.brand.wechat)}
+            color={cardFieldsOf(view.brand.cards).color}
+          />
+        ) : null}
         {hot && count ? (
           <p className='text-xs text-muted-foreground' data-link-note=''>
             {$t('workshop.hot.linkNote', {

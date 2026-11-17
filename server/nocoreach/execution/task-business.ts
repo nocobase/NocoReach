@@ -205,7 +205,8 @@ export class TaskBusiness {
     const sections: Record<string, unknown> = {
       context: Object.fromEntries(
         Object.entries(input).filter(
-          ([key]) => !['knowledge', 'skills', 'cardTemplate'].includes(key),
+          ([key]) =>
+            !['knowledge', 'skills', 'cardTemplate', 'cardLogo'].includes(key),
         ),
       ),
       metrics: {

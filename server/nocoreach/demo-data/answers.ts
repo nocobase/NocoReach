@@ -3,6 +3,7 @@ import type {
   DemoModelRequest,
 } from '@nocobase/app-plugin-demo-mode/server/tokens';
 
+import { demoSavedStyle } from './card-style.js';
 import { demoContent } from './content.js';
 import { ACME_PAGES } from './acme-content.js';
 import { CRM_PAGES } from './crm-content.js';
@@ -890,6 +891,11 @@ function business(operation: string, input: Value, en: boolean): Value | null {
         ),
         changes: [],
       };
+    // Card style › New style: the demo's saved style (card-style.ts), whatever look was asked for.
+    case 'card-style': {
+      const { name, summary, design } = demoSavedStyle(en ? 'en' : 'zh');
+      return { name, summary, ...design };
+    }
     case 'analysis-rule-draft':
       return {
         name: t('关注文档页点击下降', 'Watch for falling clicks on docs pages'),

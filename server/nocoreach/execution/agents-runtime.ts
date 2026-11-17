@@ -334,7 +334,12 @@ export class TaskAgentsRuntime {
                 // Documents sent with messages and change requests (2026-11-15): part of what the message asks.
                 'notes（留言）和 feedback（审核意见）里带 documents 的条目附有文档：文档是这条留言或审核意见的一部分，和文字一起读。文档在 materials.documents 指向的 documents.json 里按 ref 找到，先把 base64 解码成原文件（用 name 的文件名）再阅读；带 omitted 的文档未提供，需要时在成果里说明。',
                 'data.unfinished 存在时，是这一步上一次没做完时已经拿到的内容：先核对，再在此基础上补齐，不必从头再做。',
-                ...resultRules(run.mode, input.resultKind),
+                ...resultRules(
+                  run.mode,
+                  input.resultKind,
+                  (input.repurpose as { style?: { skill?: unknown } } | undefined)
+                    ?.style?.skill,
+                ),
                 `完成后优先通过 ${commandRef(claim.cli, 'task result')} --content-file result.json 提交完整成果 JSON。校验失败时保留正文，只按错误修正格式，最多重试两次；成功后不要修改成果，最终回答仍返回同一份 JSON。命令不可用时使用最终 JSON 回答。运行说明不要写入成果。`,
               ],
             },

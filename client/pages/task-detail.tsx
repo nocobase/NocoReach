@@ -33,6 +33,7 @@ import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { RepurposeResult } from './task-detail/repurpose-result.js';
 import { XhsCardEditor, XhsDoneTools, type CardSelection } from './task-detail/xhs-cards.js';
+import { drawnBySkill } from '../../shared/xhs-card.js';
 import { cardToEdit } from '../../shared/repurpose.js';
 import { repurposeReviewTitle } from './workshop/model.js';
 import { TaskProperties } from './task-detail/task-properties.js';
@@ -584,8 +585,9 @@ function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;bu
   const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   // Xiaohongshu cards are edited card by card and drawn again in this browser (XhsCardEditor), with the brand kit's style
-  // for the logo and for a set that does not record its own; a version without images is edited by asking the Agent.
-  const cardStyle=w.repurpose?.form==='xhs'&&out.cards?.images.length?data.repurpose?.cardStyle:undefined;
+  // for the logo and for a set that does not record its own; a version without images, or whose cards a Skill drew, is
+  // edited by asking the Agent.
+  const cardStyle=w.repurpose?.form==='xhs'&&out.cards?.images.length&&!drawnBySkill(out.cards.style)?data.repurpose?.cardStyle:undefined;
   return <StageCard title={w.repurpose?repurposeReviewTitle(w.repurpose):$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
     :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}{(w.repurpose?.form!=='xhs'||cardStyle)&&<Button variant="ghost" disabled={busy} onClick={()=>{if(cardStyle)setCardEdit(cardToEdit(out.content,out.cards?.overflow));else{setDraft(out.content);setEditing(true);}}}><Pencil/>{$t('taskDetail.editDirectly')}</Button>}</>}>

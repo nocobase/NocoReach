@@ -18,6 +18,7 @@ import {
 import type { Artifact, TaskData } from '../task-execution-types.js';
 import { text } from './styles.js';
 import { CardGallery } from './xhs-cards.js';
+import { drawnBySkill } from '../../../shared/xhs-card.js';
 
 // Content workshop results on the task page (mockup v3 frame 4): the pieces of an X, LinkedIn or community post, each
 // copied on its own, with its length against the platform's limit and the source sections it comes from. The review
@@ -215,7 +216,14 @@ function XhsResult({
     <div className='flex flex-col gap-4' data-repurpose='xhs'>
       <RepurposeChecks checks={checks} />
       {set ? (
-        <CardGallery cards={cards} set={set} onEdit={onEditCard} />
+        <>
+          <CardGallery cards={cards} set={set} onEdit={onEditCard} />
+          {review && drawnBySkill(set.style) ? (
+            <p className='text-sm text-muted-foreground'>
+              {$t('workshop.skillDrewCards', { 0: set.style!.skill! })}
+            </p>
+          ) : null}
+        </>
       ) : (
         <div className='flex min-w-0 flex-col gap-4'>
           {cards.map((p) => (

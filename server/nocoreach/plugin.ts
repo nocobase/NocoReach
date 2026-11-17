@@ -2,6 +2,7 @@
 import { CollectorConnections } from './collector-connections.js';
 import { ArticleTargets } from './articles/targets.js';
 import { ArticleDelivery } from './articles/delivery.js';
+import { imageCheck } from './articles/image-check.js';
 import { assertPristineMockDataset } from './mock-isolation.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -211,7 +212,7 @@ export class Connections{
   this.searchIndex=new SearchIndex(this);this.searchIndex.register();
   // Article publishing targets (articles/): CMS and API calls use the project's website egress, repository calls GitHub's.
   this.articleTargets=new ArticleTargets(this.variables,(id,connection)=>(url,init)=>this.network.fetch(connection,url,init,String(id)));this.articleTargets.register(this);
-  this.articles=new ArticleDelivery(this.articleTargets);
+  this.articles=new ArticleDelivery(this.articleTargets,imageCheck(this.network));
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   // Snoozed tasks come back on their day (execution/snooze.ts); checked every minute, so a restart misses none.

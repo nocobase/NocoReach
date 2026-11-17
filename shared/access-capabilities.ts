@@ -277,6 +277,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ]),
     'nrArticles.targets',
     'nrWorkshop.view',
+    'nrWorkshop.article',
   ],
   analyze: [
     'nrAiSearch.ask',
@@ -352,8 +353,15 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'setSkill',
     ]),
     'nrAgent.saveDefault',
-    // Content workshop › Brand and templates.
-    'nrWorkshop.saveBrand',
+    // Content workshop › Brand and templates, and its card styles made with AI.
+    ...list('nrWorkshop', [
+      'saveBrand',
+      'styleModel',
+      'draftStyle',
+      'saveStyle',
+      'renameStyle',
+      'deleteStyle',
+    ]),
     ...list('nrSkills', ['readLink', 'setEnabled']),
     'nrProjects.edit',
   ],
