@@ -1,3 +1,12 @@
+import {
+  DESIGN_FONTS,
+  cleanDesign,
+  markupTree,
+  savedStyleId,
+  scopeCss,
+  type CardDesign,
+  type SavedStyle,
+} from './card-design.js';
 import { XHS } from './repurpose.js';
 
 /**
@@ -40,8 +49,13 @@ export const ENDING_TEXT_MAX = 60;
 
 /** The brand kit's card settings (`brand-kit:{project}` `.cards`); a missing value is its default. */
 export type BrandCards = {
-  /** The card style. */
-  template?: CardTemplateId;
+  /** The card style: a built-in one, or one of My styles by `savedStyleRef` (`mine:<id>`). */
+  template?: CardTemplateId | `mine:${string}`;
+  /**
+   * The Skill that draws the cards instead of a template (Draw with a Skill, 2026-11-17): its name on the Skills page.
+   * The Agent runs it; NocoReach gives it no template and only receives the images.
+   */
+  skill?: string | null;
   /** A logo uploaded to the brand kit; none is the website's icon. */
   logo?: string | null;
   /** The brand color. */
@@ -50,9 +64,15 @@ export type BrandCards = {
   ending?: { heading: string; text: string } | null;
 };
 
-/** Everything a card is drawn with: the brand kit's settings with their defaults, and the project's name and site. */
+/**
+ * Everything a card is drawn with: the brand kit's settings with their defaults, and the project's name and site. A
+ * style made with AI is `custom`, with its name and design; cards a Skill draws name the Skill, and have no template.
+ */
 export type CardStyle = {
-  template: CardTemplateId;
+  template: CardTemplateId | 'custom';
+  name?: string;
+  design?: CardDesign;
+  skill?: string;
   color: string;
   brand: string;
   site?: string;
@@ -64,15 +84,31 @@ export type CardStyle = {
 const LOGO_URL =
   /^data:image\/(?:png|jpeg|webp|gif|svg\+xml|x-icon|vnd\.microsoft\.icon);base64,[A-Za-z0-9+/=]+$/;
 
+/** A Skill's name as the Skills page keeps it. */
+export const isSkillName = (value: unknown): value is string =>
+  typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value);
+
+/**
+ * The brand kit's card style with its defaults. A saved style is looked up in My styles; one no longer there is the
+ * default style. A Skill keeps the style the template would have used, for the brand color, logo and closing page.
+ */
 export function cardStyle(
   cards: BrandCards | null | undefined,
   project: { name?: string; site?: string; icon?: string | null },
+  saved: readonly SavedStyle[] = [],
 ): CardStyle {
   const logo = cards?.logo || project.icon || undefined;
+  const mine = saved.find((x) => x.id === savedStyleId(cards?.template));
   return {
-    template: isCardTemplate(cards?.template)
-      ? cards.template
-      : DEFAULT_TEMPLATE,
+    template: mine
+      ? 'custom'
+      : isCardTemplate(cards?.template)
+        ? cards.template
+        : DEFAULT_TEMPLATE,
+    ...(mine
+      ? { name: mine.name, design: cleanDesign(mine.design).design }
+      : {}),
+    ...(isSkillName(cards?.skill) ? { skill: cards.skill } : {}),
     color: isHexColor(cards?.color) ? cards.color.toLowerCase() : CARD_COLOR,
     brand: String(project.name || '').slice(0, 60),
     ...(project.site ? { site: project.site.slice(0, 100) } : {}),
@@ -96,14 +132,21 @@ export function styleOf(
   brief: CardStyleBrief | undefined,
   current: CardStyle,
 ): CardStyle {
-  if (!brief || !isCardTemplate(brief.template)) return current;
-  const { logo, ...rest } = brief;
+  const custom = brief?.template === 'custom' && brief.design;
+  if (!brief || (!isCardTemplate(brief.template) && !custom)) return current;
+  const { logo, design, skill, ...rest } = brief;
   return {
     ...rest,
+    ...(custom ? { design: cleanDesign(design).design } : {}),
+    ...(isSkillName(skill) ? { skill } : {}),
     color: isHexColor(rest.color) ? rest.color : current.color,
     ...(logo && current.logo ? { logo: current.logo } : {}),
   };
 }
+
+/** Whether a set's cards were drawn by a Skill, so its text goes back to the Agent rather than being drawn again here. */
+export const drawnBySkill = (brief: CardStyleBrief | undefined) =>
+  isSkillName(brief?.skill);
 
 /** The card set in `cards.js`, as the template reads it. */
 export type TemplateCard = {
@@ -177,6 +220,7 @@ function hex(h, s, l) {
 }
 const [H0, S0, L0] = hslOf(S.color);
 const DEEP = hex(H0, S0, Math.min(L0, 0.42));
+const LIGHT = hex(H0, Math.max(S0, 0.7) * (S0 > 0.08 ? 1 : 0), 0.74);
 const mix = (a, b, t) => {
   const x = rgbOf(a), y = rgbOf(b);
   return '#' + x.map((v, i) => Math.round(255 * (v + (y[i] - v) * t)).toString(16).padStart(2, '0')).join('');
@@ -449,6 +493,82 @@ const LOOKS = {
   },
 };
 
+// A style made with AI (shared/card-design.ts): the layout built element by element from its cleaned tree (markupTree;
+// no markup is parsed here), with its slots filled, inside a card its CSS is scoped to ([data-design]). Text goes in with textContent; the parts NocoReach adds
+// carry classes the style's CSS may set: a heading's .first and .second halves, a body's .para, .point (with .marker and
+// .point-text) and .note, and a cover's contents as .item (with .item-no and .item-text). Its text is sized as a built-in
+// style's is, and a card whose markup grows past the card does not fit either.
+LOOKS.custom = function (c, n, total, all) {
+  const D = S.design || {};
+  const root = el('div', '--brand:' + S.color + ';--brand-deep:' + DEEP + ';--brand-light:' + LIGHT + ';--font-sans:' + FONTS.sans + ';--font-serif:' + FONTS.serif + ';--font-mono:' + FONTS.mono + ';font-family:var(--font-sans);display:flex;flex-direction:column');
+  root.dataset.design = '';
+  const build = (node, svg) => {
+    if (typeof node === 'string') return document.createTextNode(node);
+    const inSvg = svg || node[0] === 'svg';
+    const e = inSvg ? document.createElementNS('http://www.w3.org/2000/svg', node[0]) : document.createElement(node[0]);
+    for (const k of Object.keys(node[1])) e.setAttribute(k, node[1][k]);
+    for (const child of node[2]) e.appendChild(build(child, inSvg));
+    return e;
+  };
+  for (const node of D[c.layout] || D.text || []) root.appendChild(build(node, false));
+  const tagged = (tag, name, text) => {
+    const e = el(tag, '', text);
+    e.className = name;
+    return e;
+  };
+  const slot = (name) => root.querySelector('[data-slot="' + name + '"]');
+  const put = (name, text) => {
+    const s = slot(name);
+    if (s) s.textContent = text;
+  };
+  put('brand', S.brand);
+  put('site', S.site || S.brand);
+  put('page', pageOf(n, total));
+  put('no', two(n));
+  put('total', two(total));
+  const logo = slot('logo');
+  if (logo && S.logo) {
+    const img = el('img', 'width:100%;height:100%;object-fit:contain;display:block');
+    img.src = S.logo;
+    logo.replaceChildren(img);
+  } else if (logo) logo.textContent = (S.brand || '·').trim().charAt(0).toUpperCase();
+  const fitsCard = () => root.scrollHeight <= XHS.height + 1;
+  const h = slot('heading'), body = slot('body'), list = slot('contents');
+  // The heading is sized against the body at its smallest, which then takes what room is left.
+  if (body) body.style.fontSize = '36px';
+  if (h) {
+    const [a, b] = halves(c.layout === 'cover' ? c.heading || paras(c.text)[0] : c.heading || '');
+    h.replaceChildren(tagged('span', 'first', a));
+    if (b) add(h, el('br'), tagged('span', 'second', b));
+    h.style.whiteSpace = 'pre-wrap';
+    const lines = () => {
+      const lh = parseFloat(getComputedStyle(h).lineHeight);
+      return h.offsetHeight <= 3 * (isNaN(lh) ? 1.3 * parseFloat(h.style.fontSize) : lh) + 2 && fitsCard();
+    };
+    sized(h, c.layout === 'cover' ? [148, 140, 128, 116, 104, 96, 88, 80] : c.layout === 'end' ? [96, 88, 80, 72, 64] : HEAD, lines, null, 'narrow');
+  }
+  if (list && c.layout === 'cover') {
+    contents(all).forEach((t, i) => add(list, add(tagged('div', 'item'), tagged('span', 'item-no', two(i + 2)), tagged('span', 'item-text', t))));
+    jobs.push({ sizes: [44, 40, 36], apply: (s) => (list.style.fontSize = s + 'px'), ok: fitsCard, drop: list, items: [...list.children] });
+  }
+  if (body) {
+    body.dataset.fit = '';
+    body.style.minHeight = '0';
+    body.style.overflow = 'hidden';
+    const text = c.layout === 'cover' ? (c.heading ? c.text : paras(c.text).slice(1).join('\n')) : c.text;
+    const pts = c.layout === 'text' ? points(text) : paras(text), many = c.layout === 'text' && listed(pts);
+    if (many) body.classList.add('listed');
+    let k = 0;
+    for (const p of pts)
+      add(body, isNote(p) ? tagged('div', 'note', p)
+        : many ? add(tagged('div', 'point'), tagged('span', 'marker', two(++k)), tagged('span', 'point-text', unmarked(p)))
+        : tagged('p', 'para', c.layout === 'text' ? unmarked(p) : p));
+    const fits = () => body.scrollHeight <= body.clientHeight + 1 && fitsCard();
+    sized(body, c.layout === 'text' ? BODY : [56, 52, 48, 44, 40, 36], fits, h && c.layout === 'text' ? under(h, 0.76) : null, 'smaller');
+  }
+  return root;
+};
+
 function card(c, n, total, all) {
   const root = (LOOKS[S.template] || LOOKS.editorial)(c, n, total, all);
   root.style.cssText = 'width:' + XHS.width + 'px;height:' + XHS.height + 'px;position:relative;overflow:hidden;box-sizing:border-box;line-height:1.5;font-size:40px;text-wrap:pretty;' + root.style.cssText;
@@ -461,9 +581,17 @@ const n = Number(window.CARD_N || new URLSearchParams(location.search).get('n'))
 const shown = n ? [n] : cards.map((_, i) => i + 1);
 document.body.style.cssText = 'margin:0;' + (n ? '' : 'display:flex;flex-direction:column;gap:24px;background:#e5e7eb');
 for (const k of shown) if (cards[k - 1]) document.body.appendChild(card(cards[k - 1], k, cards.length, cards));
-const svgOf = (node) =>
-  '<svg xmlns="http://www.w3.org/2000/svg" width="' + XHS.width + '" height="' + XHS.height + '"><foreignObject x="0" y="0" width="' + XHS.width + '" height="' + XHS.height + '">' +
-  new XMLSerializer().serializeToString(node) + '</foreignObject></svg>';
+// A card of a style made with AI takes its stylesheet with it, as its CSS is not inline.
+const designCss = document.getElementById('design-css');
+const svgOf = (node) => {
+  let out = node;
+  if (designCss && node.hasAttribute('data-design')) {
+    out = el('div', 'width:' + XHS.width + 'px;height:' + XHS.height + 'px');
+    add(out, designCss.cloneNode(true), node.cloneNode(true));
+  }
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + XHS.width + '" height="' + XHS.height + '"><foreignObject x="0" y="0" width="' + XHS.width + '" height="' + XHS.height + '">' +
+    new XMLSerializer().serializeToString(out) + '</foreignObject></svg>';
+};
 // A page not laid out yet measures every box as empty, where any text seems to fit: the hidden frame that draws a set in
 // the browser sometimes runs before its first layout. Sizing waits until the cards have their size, for a few seconds at
 // most; a page still not laid out then reports every card as not fitting rather than size the text blind.
@@ -504,7 +632,7 @@ const fit = (measured) => {
     if (!tidied) job.apply(sizes[fit]);
   }
   const over = [...document.querySelectorAll('[data-card]')]
-    .filter((c) => !measured || [...c.querySelectorAll('[data-fit]')].some((f) => f.scrollHeight > f.clientHeight + 1))
+    .filter((c) => !measured || [...c.querySelectorAll('[data-fit]')].some((f) => f.scrollHeight > f.clientHeight + 1) || (c.hasAttribute('data-design') && c.scrollHeight > c.clientHeight + 1))
     .map((c) => Number(c.dataset.card));
   document.body.dataset.overflow = over.join(',');
   document.title = 'overflow:' + (over.join(',') || 'none');
@@ -532,18 +660,34 @@ export function cardTemplate(
     | { cards: TemplateCard[]; n?: number; exporting?: boolean } = 'cards.js',
 ): string {
   const size = json({ width: XHS.width, height: XHS.height });
+  // Only the page's own scripts run, and it loads nothing but data URLs (the logo): a style made with AI is cleaned,
+  // and this holds even if something got past the cleaning.
+  const nonce = Array.from(
+    globalThis.crypto.getRandomValues(new Uint8Array(12)),
+    (b) => b.toString(16).padStart(2, '0'),
+  ).join('');
+  const csp = `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'`;
   const cards =
     typeof source === 'string'
-      ? `<script src="${source.replace(/[^\w./-]/g, '')}"></script>`
-      : `<script>window.CARDS = ${json(source.cards)};${source.n ? ` window.CARD_N = ${Number(source.n)};` : ''}${source.exporting ? ' window.CARD_EXPORT = true;' : ''}</script>`;
+      ? `<script nonce="${nonce}" src="${source.replace(/[^\w./-]/g, '')}"></script>`
+      : `<script nonce="${nonce}">window.CARDS = ${json(source.cards)};${source.n ? ` window.CARD_N = ${Number(source.n)};` : ''}${source.exporting ? ' window.CARD_EXPORT = true;' : ''}</script>`;
+  const design =
+    style.template === 'custom' && style.design
+      ? cleanDesign(style.design).design
+      : undefined;
+  // The style's CSS, every selector inside the card, after the card's own: its root fills the card unless it says otherwise.
+  const sheet = design
+    ? `<style id="design-css">[data-design]>*{flex:1 0 auto;box-sizing:border-box;width:100%}\n${scopeCss(design.css)}</style>`
+    : '';
   return `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=${XHS.width}">
-<title>overflow:pending</title></head>
+<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=${XHS.width}">
+<title>overflow:pending</title>${sheet}</head>
 <body>
 ${cards}
-<script>
-const S = ${json(style)};
+<script nonce="${nonce}">
+const S = ${json(design ? { ...style, design: { cover: markupTree(design.cover), text: markupTree(design.text), end: markupTree(design.end) } } : style.template === 'custom' ? { ...style, template: DEFAULT_TEMPLATE } : style)};
 const XHS = ${size};
+const FONTS = ${json(DESIGN_FONTS)};
 ${SCRIPT}
 </script>
 </body></html>

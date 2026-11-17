@@ -22,11 +22,13 @@ import {
   type RepurposeForm,
   type RepurposeSource,
 } from '../../../shared/repurpose.js';
+import { savedStyleId, type SavedStyle } from '../../../shared/card-design.js';
 import {
   CARD_COLOR,
   DEFAULT_TEMPLATE,
   isCardTemplate,
   isHexColor,
+  isSkillName,
   type BrandCards,
   type CardTemplateId,
   type TemplateCard,
@@ -140,6 +142,10 @@ export type WorkshopView = {
   siteIcon: string | null;
   /** The latest Xiaohongshu set's cards, which the card styles are previewed with, and what it was made from. */
   cardSample: { subject: string; cards: TemplateCard[] } | null;
+  /** My styles: card styles made with AI and saved to the project. */
+  styles: SavedStyle[];
+  /** The Skills Draw with a Skill offers, and whether the project has each on its Skills page. */
+  cardSkills: CardSkill[];
   voice: string;
   destinations: {
     reddit: {
@@ -209,11 +215,13 @@ export const workshopRequest = <T>(
   action: string,
   projectId: number | string,
   body: object = {},
+  signal?: AbortSignal,
 ) =>
   api.action<T>('nrWorkshop', action, {
     method: 'POST',
     body: { projectId: String(projectId), ...body },
     unwrap: 'data',
+    signal,
   });
 
 /** Each form's name, in the interface language. */
@@ -307,9 +315,17 @@ export const resultName = (form: RepurposeForm, destination?: Destination) =>
 export const repurposeReviewTitle = (r: Repurpose) =>
   $t('workshop.reviewTitle', { 0: resultName(r.form, r.destination) });
 
+/** A Skill Draw with a Skill offers: the two NocoReach has tried, and the project's own that draw card images. */
+export type CardSkill = { name: string; description?: string; added: boolean };
+
+/** A card style the brand kit can name: a built-in one, or one of My styles (`mine:<id>`). */
+export type StyleRef = CardTemplateId | `mine:${string}`;
+
 // Brand and templates' card settings (brand-cards.tsx): the card style, and the brand basics every style draws with.
 export type CardFields = {
-  template: CardTemplateId;
+  template: StyleRef;
+  /** The Skill that draws the cards instead of the style (Draw with a Skill), or null. */
+  skill: string | null;
   /** An uploaded logo; null uses the website's icon. */
   logo: string | null;
   color: string;
@@ -318,7 +334,11 @@ export type CardFields = {
 };
 
 export const cardFieldsOf = (c: BrandCards | null | undefined): CardFields => ({
-  template: isCardTemplate(c?.template) ? c.template : DEFAULT_TEMPLATE,
+  template:
+    isCardTemplate(c?.template) || savedStyleId(c?.template)
+      ? (c!.template as StyleRef)
+      : DEFAULT_TEMPLATE,
+  skill: isSkillName(c?.skill) ? c.skill : null,
   logo: c?.logo || null,
   color: isHexColor(c?.color) ? c.color : CARD_COLOR,
   endingHeading: c?.ending?.heading || '',
@@ -327,6 +347,7 @@ export const cardFieldsOf = (c: BrandCards | null | undefined): CardFields => ({
 
 export const brandCardsOf = (f: CardFields): BrandCards => ({
   template: f.template,
+  skill: f.skill,
   logo: f.logo,
   color: f.color,
   ending: f.endingHeading.trim()

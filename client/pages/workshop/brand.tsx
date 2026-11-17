@@ -91,6 +91,8 @@ function BrandForm({
     sections: (c?.sections || []).join('\n'),
   });
   const [cards, setCards] = useState(() => cardFieldsOf(view.brand.cards));
+  // My styles change as soon as one is saved, renamed or deleted; the style in use is saved with the brand kit.
+  const [styles, setStyles] = useState(view.styles);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const sections = sectionsOf(fields.sections);
@@ -133,11 +135,16 @@ function BrandForm({
       }}
     >
       <CardStyleSection
+        projectId={projectId}
         fields={cards}
         onChange={setCards}
         sample={view.cardSample}
         siteIcon={view.siteIcon}
         project={project}
+        styles={styles}
+        onStyles={setStyles}
+        skills={view.cardSkills}
+        savedTemplate={view.brand.cards?.template}
         disabled={!can || busy}
       />
       <fieldset className='space-y-3' disabled={!can || busy}>

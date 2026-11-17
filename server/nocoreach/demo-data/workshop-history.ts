@@ -27,6 +27,7 @@ import {
 } from '../execution/model.js';
 import { playbookTitle } from '../execution/task-title.js';
 import { styleBrief } from '../../../shared/xhs-card.js';
+import { demoSavedStyle } from './card-style.js';
 import { ACME_PAGES } from './acme-content.js';
 import type { DemoContent, DemoPerson } from './content.js';
 import type { DemoHost } from './host.js';
@@ -106,6 +107,27 @@ export async function writeWorkshop(
           },
         },
         updatedAt: at(9),
+      },
+    },
+  });
+  // My styles holds one style made with AI (Card style › New style, 2026-11-17), saved by the editor a week ago, so the
+  // demo's card style picker shows it beside the built-in ones; the brand kit keeps drawing in the built-in style.
+  const style = demoSavedStyle(lang);
+  await snapshots.create({
+    values: {
+      key: `card-styles:${id}`,
+      payload: {
+        styles: [
+          {
+            id: 'demo-forest',
+            ...style,
+            savedAt: at(7, 40),
+            savedBy: {
+              id: String(people.editor ?? context.actorId),
+              name: content.people.editor.name,
+            },
+          },
+        ],
       },
     },
   });

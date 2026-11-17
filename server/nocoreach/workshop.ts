@@ -39,7 +39,10 @@ import {
   LOGO_TYPES,
   isCardTemplate,
   isHexColor,
+  isSkillName,
 } from '../../shared/xhs-card.js';
+import { savedStyleId } from '../../shared/card-design.js';
+import { CardStyles } from './card-styles.js';
 import { projectId, requireAccess } from './policy.js';
 import { sumPageDays } from './page-days.js';
 import { pagesById } from './execution/task-scan.js';
@@ -102,7 +105,10 @@ function cleanCards(c: any) {
     logo = String(c.logo);
   }
   if (c.color != null && c.color !== '' && !isHexColor(c.color)) return fail(systemMessageText('workshop.colorInvalid'));
-  const template = isCardTemplate(c.template) ? c.template : undefined, color = isHexColor(c.color) ? c.color.toLowerCase() : undefined;
+  // A style of My styles is named `mine:<id>` (card-styles.ts); Draw with a Skill names the Skill instead of a template.
+  const template = isCardTemplate(c.template) || savedStyleId(c.template) ? c.template : undefined, color = isHexColor(c.color) ? c.color.toLowerCase() : undefined;
+  if (c.skill != null && c.skill !== '' && !isSkillName(c.skill)) return fail(systemMessageText('workshop.skillMissing', { 0: String(c.skill).slice(0, 64) }));
+  const skill = isSkillName(c.skill) ? c.skill : null;
   let ending = null;
   if (c.ending != null) {
     const heading = clean(c.ending.heading, ENDING_HEADING_MAX + 1), text = clean(c.ending.text, ENDING_TEXT_MAX + 1);
@@ -110,8 +116,12 @@ function cleanCards(c: any) {
     if (heading) ending = { heading, text };
     else if (text) return fail(systemMessageText('workshop.endingHeadingRequired'));
   }
-  return { ...(template ? { template } : {}), logo, ...(color ? { color } : {}), ending };
+  return { ...(template ? { template } : {}), ...(skill ? { skill } : {}), logo, ...(color ? { color } : {}), ending };
 }
+
+// Skills whose description says they draw card images, for Draw with a Skill; xhs-cards, the step's own Skill, renders
+// the template.
+const CARD_SKILL = /(?:卡片|cards?)[^。.\n]{0,30}(?:图片|出图|生图|配图|images?|png)|(?:图片|出图|生图|配图|images?|png)[^。.\n]{0,30}(?:卡片|cards?)|social[ -]?cards?/i;
 
 function cardSample(records: any[]) {
   for (const r of records) {
@@ -263,7 +273,8 @@ const titleDestination = (d: any) => d.kind === 'reddit' ? `r/${d.subreddit}` : 
 class WorkshopService {
   p: any;
   sums = new Map<string, { at: number; value: any }>();
-  constructor(p: any) { this.p = p; }
+  styles: CardStyles;
+  constructor(p: any) { this.p = p; this.styles = new CardStyles(p); }
   repo() { return this.p.db.getRepository('nrSnapshots'); }
   brandKey(id: string) { return `brand-kit:${id}`; }
   async brand(id: string, tx?: any) {
@@ -273,6 +284,10 @@ class WorkshopService {
   // The brand kit is saved whole under a revision, as analysis rules and targets are: a second window's save is refused.
   async saveBrand(id: string, v: any) {
     const community = cleanCommunity(v.community), cards = v.cards === undefined ? undefined : cleanCards(v.cards);
+    // The card style must still be one of My styles, and the Skill one on the Skills page.
+    const mine = savedStyleId(cards?.template);
+    if (mine && !(await this.styles.list(id)).some(s => s.id === mine)) return fail(systemMessageText('workshop.styleGone'), 409);
+    if (cards?.skill && !(await this.cardSkills(id)).some(s => s.name === cards.skill && s.added)) return fail(systemMessageText('workshop.skillMissing', { 0: cards.skill }), 409);
     return this.p.db.sequelize.transaction(async (tx: any) => {
       await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: this.brandKey(id) }, transaction: tx });
       const row = await this.repo().findOne({ filter: { key: this.brandKey(id) }, transaction: tx }), cur = row?.get('payload') || { revision: 0, community: null };
@@ -283,6 +298,20 @@ class WorkshopService {
       else await this.repo().create({ values: { key: this.brandKey(id), payload: next }, transaction: tx });
       return next;
     });
+  }
+
+  /**
+   * The Skills Draw with a Skill offers (mockup xhs-card-styles.html frame 4): the two NocoReach has tried, whether or not
+   * the project has them on its Skills page, and every Skill there whose description says it draws cards.
+   */
+  async cardSkills(id: string) {
+    const list = (await this.p.skills?.list(id).catch(() => null))?.skills || [];
+    const known = ['guizang-social-card-skill', 'baoyu-xhs-images'];
+    const added = list.filter((s: any) => s.name !== 'xhs-cards' && (known.includes(s.name) || CARD_SKILL.test(`${s.name} ${s.description || ''}`)));
+    return [
+      ...known.map(name => ({ name, added: list.some((s: any) => s.name === name) })),
+      ...added.filter((s: any) => !known.includes(s.name)).map((s: any) => ({ name: s.name, description: String(s.description || '').slice(0, 300), added: true })),
+    ];
   }
 
   // Skip on a Trending now card: the opportunity leaves the workshop's Trending now and stays as it was on Opportunities.
@@ -426,6 +455,9 @@ class WorkshopService {
       brand: { revision: brand.revision, community: brand.community || null, cards: brand.cards || null },
       // The card text Brand and templates previews card styles with: the latest Xiaohongshu set's, and what it was made from.
       cardSample: cardSample(records),
+      // My styles (card-styles.ts), and the Skills Draw with a Skill offers.
+      styles: await this.styles.list(id),
+      cardSkills: await this.cardSkills(id),
       // What the cards are signed with when the brand kit has no logo: the website's icon (project-icon.ts), if read.
       siteIcon: (await this.repo().findOne({ filter: { key: `project-icon:${id}` } }))?.get('payload')?.dataUrl || null,
       // The voice adaptations follow (Memory › Voice and style), shown in the brand kit with a link to change it.
@@ -605,6 +637,12 @@ class WorkshopService {
       view: wrap((_ctx, id) => this.view(id)),
       create: wrap((ctx, id, v) => { const [actor, name] = user(ctx); return this.create(id, v, actor, name, ctx.getCurrentLocale?.()); }),
       saveBrand: wrap((_ctx, id, v) => this.saveBrand(id, v)),
+      // Card style › New style (card-styles.ts): the model's notes, a draft, and My styles' save, rename and delete.
+      styleModel: wrap(() => this.styles.model()),
+      draftStyle: wrap((ctx, _id, v) => this.styles.draft(v, ctx.getCurrentLocale?.())),
+      saveStyle: wrap((ctx, id, v) => { const [actor, name] = user(ctx); return this.styles.save(id, v, { id: actor, name }); }),
+      renameStyle: wrap((_ctx, id, v) => this.styles.rename(id, v)),
+      deleteStyle: wrap((_ctx, id, v) => this.styles.remove(id, v, async (tx) => (await this.brand(id, tx)).cards?.template)),
       skip: wrap((ctx, id, v) => this.skip(id, v, user(ctx)[0])),
     };
     this.p.app.resourceManager.define({ name: 'nrWorkshop', actions });
