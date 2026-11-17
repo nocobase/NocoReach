@@ -447,11 +447,13 @@ export class ManualTasks {
 
   /**
    * A card image drawn in the reviewer's browser with Edit directly (2026-11-17): a PNG of exactly the card size,
-   * checked by its bytes and kept unlinked until the edit is saved (cardImages), at most AGENT_FILES at a time.
+   * checked by its bytes and kept unlinked until the edit is saved (cardImages), at most AGENT_FILES at a time. Like any
+   * upload it is kept under the request it came with (`draftId`, a UUID column): never the task's ID.
    */
   async cardImage(
     actor: TaskCreator,
     projectId: string,
+    draftId: string,
     taskId: string,
     file: File,
   ): Promise<TaskMediaView> {
@@ -489,7 +491,7 @@ export class ManualTasks {
               ownerId: owner,
               sessionId: actor.sessionId,
               projectId,
-              draftId: taskId,
+              draftId,
               taskId: null,
               expiresAt: new Date(Date.now() + EXPIRY),
               deleting: false,

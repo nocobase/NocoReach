@@ -19,6 +19,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'page', // An opportunity's place (`page:<host/path>`), kept on a task's `evidence.part` and its proposal.
   'task', // Proposal group of a task handed off without an opportunity (`task:<id>`), kept inside the strategy snapshot.
   'run', // Owner of an Agent's uploaded card images (`run:<runId>`), a column of nrTaskMedia.
+  'cards', // Owner of card images a person draws with Edit directly (`cards:<userId>`), a column of nrTaskMedia.
   'workshop', // Task key of a Content workshop start (`workshop:<user>:<request>:<item>`), kept on nrTasks.
   'ai-answer',
   'ai-cited',

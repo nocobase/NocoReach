@@ -1310,10 +1310,11 @@ test('card images drawn with Edit directly are card-size PNGs a person uploads f
   });
   const created = await create(admin, input());
   const taskId = String((await created.json()).data.id);
+  const requestId = randomUUID();
   const send = (
     client: Client,
     bytes: Buffer,
-    query = `projectId=1&requestId=${randomUUID()}&taskId=${taskId}`,
+    query = `projectId=1&requestId=${requestId}&taskId=${taskId}`,
   ) => {
     const body = new FormData();
     body.set('file', new File([bytes], 'card-01.png', { type: 'image/png' }));
@@ -1346,7 +1347,8 @@ test('card images drawn with Edit directly are card-size PNGs a person uploads f
   const stored = await connection
     .repository<TaskMediaRecord>('nrTaskMedia')
     .findOne({ filter: { id: image.id } });
-  expect(stored).toMatchObject({ taskId: null, draftId: taskId });
+  // Kept under the request it came with: draftId is a UUID column, which PostgreSQL holds to it (a task ID failed there).
+  expect(stored).toMatchObject({ taskId: null, draftId: requestId });
   expect(stored!.ownerId).toMatch(/^cards:/);
   const actor = stored!.ownerId.slice('cards:'.length);
   // Neither another person nor a draft link reaches it; the person who drew it links it, with its colors read.

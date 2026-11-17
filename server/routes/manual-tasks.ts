@@ -329,6 +329,7 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
           data: await service().cardImage(
             creator(context),
             input.projectId,
+            input.requestId,
             input.taskId,
             context.req.valid('form').file,
           ),
