@@ -25,7 +25,9 @@ import {
 import { Section } from '#components/reach/page';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { getSourceNames } from '../strategy/board';
+import { joinSentences } from '#lib/format';
 import type { View, Rule } from './types';
+import { schemeName } from './scheme-name';
 type Execute = (
   action: 'create' | 'rename' | 'activate' | 'addRule' | 'updateRule',
   body: object,
@@ -70,12 +72,12 @@ export function SchemeManager({
     setTarget(id);
     setName(
       id && mode === 'create'
-        ? `${view.schemes?.find((s) => s.id === id)?.name?.slice(0, 30)} · ${$t('analysisSchemes.copySuffix')}`.slice(
+        ? `${schemeName(view.schemes?.find((s) => s.id === id)?.name).slice(0, 30)} · ${$t('analysisSchemes.copySuffix')}`.slice(
             0,
             40,
           )
         : mode === 'rename'
-          ? view.schemes?.find((s) => s.id === id)?.name || ''
+          ? schemeName(view.schemes?.find((s) => s.id === id)?.name)
           : '',
     );
     setError('');
@@ -144,7 +146,9 @@ export function SchemeManager({
               aria-pressed={s.id === view.schemeId}
               onClick={() => select(s.id)}
             >
-              <span className='block break-words font-medium'>{s.name}</span>
+              <span className='block break-words font-medium'>
+                {schemeName(s.name)}
+              </span>
               <span className='text-xs text-muted-foreground'>
                 {s.id === view.activeSchemeId
                   ? $t('analysisSchemes.active')
@@ -160,7 +164,7 @@ export function SchemeManager({
                       size='icon'
                       disabled={disabled || view.schemes!.length >= 5}
                       aria-label={$t('analysisSchemes.copyNamed', {
-                        0: s.name,
+                        0: schemeName(s.name),
                       })}
                       onClick={() => open('create', s.id)}
                     >
@@ -169,7 +173,7 @@ export function SchemeManager({
                   }
                 />
                 <TooltipContent>
-                  {$t('analysisSchemes.copyNamed', { 0: s.name })}
+                  {$t('analysisSchemes.copyNamed', { 0: schemeName(s.name) })}
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -182,7 +186,7 @@ export function SchemeManager({
                       size='icon'
                       disabled={disabled}
                       aria-label={$t('analysisSchemes.renameNamed', {
-                        0: s.name,
+                        0: schemeName(s.name),
                       })}
                       onClick={() => open('rename', s.id)}
                     >
@@ -191,7 +195,7 @@ export function SchemeManager({
                   }
                 />
                 <TooltipContent>
-                  {$t('analysisSchemes.renameNamed', { 0: s.name })}
+                  {$t('analysisSchemes.renameNamed', { 0: schemeName(s.name) })}
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -225,11 +229,15 @@ export function SchemeManager({
           <DialogTitle>
             {dialog === 'rename'
               ? $t('analysisSchemes.renameNamed', {
-                  0: view.schemes.find((s) => s.id === target)?.name,
+                  0: schemeName(
+                    view.schemes.find((s) => s.id === target)?.name,
+                  ),
                 })
               : target
                 ? $t('analysisSchemes.copyNamed', {
-                    0: view.schemes.find((s) => s.id === target)?.name,
+                    0: schemeName(
+                      view.schemes.find((s) => s.id === target)?.name,
+                    ),
                   })
                 : $t('analysisSchemes.new')}
           </DialogTitle>
@@ -285,7 +293,7 @@ export function SchemeManager({
         <AlertDialogContent finalFocus={triggerRef}>
           <AlertDialogTitle>
             {$t('analysisSchemes.useNamed', {
-              0: view.schemes.find((s) => s.id === target)?.name,
+              0: schemeName(view.schemes.find((s) => s.id === target)?.name),
             })}
           </AlertDialogTitle>
           <AlertDialogDescription>
@@ -414,11 +422,16 @@ export function AddRule({
         >
           <DialogTitle>
             {$t(rule ? 'analysisSchemes.editRule' : 'analysisSchemes.addTo', {
-              0: rule?.label || view.schemeName,
+              0: rule?.label || schemeName(view.schemeName),
             })}
           </DialogTitle>
+          {/* A rule added here has no growth to compute, so it never becomes an opportunity and is listed under
+              Current situation (2026-11-17). */}
           <DialogDescription>
-            {$t('analysisSchemes.ruleHelp')}
+            {joinSentences([
+              $t('analysisSchemes.ruleHelp'),
+              $t('analysisSchemes.customRuleSituation'),
+            ])}
           </DialogDescription>
           <form
             onSubmit={(e) => {

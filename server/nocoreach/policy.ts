@@ -36,7 +36,7 @@ const ADMIN_ONLY={
  nrPlaybooks:['save','copy','remove','restore','draft'],nrWorkshop:['saveBrand','styleModel','draftStyle','saveStyle','renameStyle','deleteStyle'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],
  nrKnowledge:['add','edit','remove','saveMemory','followTopic'],nrGrowthSources:['setMarkets'],nrKnowledgeAdd:['suggest','confirm'],nrMemory:['sources','draft','check','accept','dismiss'],
- nrProjects:['create','edit'],nrAnalysisRules:['save','propose','apply','create','rename','activate','draft','addRule','updateRule'],nrMembers:['setRole'],
+ nrProjects:['create','edit'],nrAnalysisRules:['save','propose','apply','create','rename','activate','draft','addRule','updateRule','setSkill'],nrMembers:['setRole'],
 };
 const adminOnly=(resource,action)=>Boolean(ADMIN_ONLY[resource]?.includes(action));
 async function requireAccess(ctx){

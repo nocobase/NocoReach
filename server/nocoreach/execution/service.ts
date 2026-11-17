@@ -461,7 +461,9 @@ export class TaskService {
     const repurpose = w.repurpose ? await this.repurposeInput(project, taskId, w, tx) : {};
     // Cards a Skill draws need that Skill: it goes with the run, and a run without it is not started.
     const cardSkill = (repurpose as { repurpose?: { style?: { skill?: string } } }).repurpose?.style?.skill;
-    const skills = await this.p.skills?.forAgent(project, [...(stage.skills || []), ...(cardSkill ? [cardSkill] : [])]) || [];
+    // The Skill that found the opportunity goes with the step's own, once (2026-11-17, skill-analysis.ts).
+    const finder = task.evidence?.insight?.skill?.id;
+    const skills = await this.p.skills?.forAgent(project, [...(stage.skills || []), ...(typeof finder === 'string' ? [finder] : []), ...(cardSkill ? [cardSkill] : [])]) || [];
     if (cardSkill && !skills.some((s: { name: string }) => s.name === cardSkill)) return fail(systemMessageText('workshop.skillMissing', { 0: cardSkill }), 409);
     // A Content workshop playbook's result is read by the form it makes, a copy's too (shared/repurpose.ts).
     const form = w.playbook?.form, resultKind = mode === 'plan' ? (form ? FORM_RESULT_KIND[form] : w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;

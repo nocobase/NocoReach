@@ -240,7 +240,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrAgent', ['status', 'repos']),
     'nrAiQuestions.view',
     ...list('nrAiSearch', ['list', 'open', 'brand', 'gap', 'gaps']),
-    'nrAnalysisRules.view',
+    ...list('nrAnalysisRules', ['view', 'skillChoices']),
     'nrAnalysis.status',
     'nrAudit.report',
     ...list('nrBacklinks', ['list', 'getRun', 'sites', 'saved']),
@@ -350,6 +350,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'propose',
       'apply',
       'save',
+      'setSkill',
     ]),
     'nrAgent.saveDefault',
     // Content workshop › Brand and templates, and its card styles made with AI.

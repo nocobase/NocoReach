@@ -66,6 +66,8 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'topic-hot',
   'topic-rise',
   'youtube-hot',
+  // A growth point a Skill of the daily analysis found (skill-analysis.ts, `skill:<skill id>:<kind>:<hash>`).
+  'skill',
   'forum',
   'connect',
   'content',

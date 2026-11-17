@@ -1483,6 +1483,7 @@ export {
   lowCtrGrowth,
   newQuerySignals,
   suggestionGroups,
+  groupChange,
   competitorGaps,
   demandSignals,
   risingKeywordSignals,

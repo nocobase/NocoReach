@@ -36,9 +36,18 @@ import {
 } from './analysis-rules/growth-sources';
 import { useGrowthSources } from './analysis-rules/growth-sources-data';
 import type { Rule, Settings, View } from './analysis-rules/types';
+import { AnalysisSkills } from './analysis-rules/skills';
+import { CATEGORY } from './strategy/growth-category';
+import {
+  RULE_TABS,
+  ruleCategoryOf,
+  ruleOrderOf,
+  type RuleCategory,
+} from '../../shared/analysis-rule-categories.js';
+import { Link } from 'react-router';
 import { PageAiEntry } from '../online-agent/page-entry';
 import { usePageChange } from '../online-agent/page-changes';
-import { formatDateTime, joinList } from '#lib/format';
+import { formatDateTime } from '#lib/format';
 
 const call = <T,>(action: string, projectId: number, body: object = {}) =>
   api.action<T>('nrAnalysisRules', action, {
@@ -63,22 +72,20 @@ function settingsOf(rules: Rule[], change: Rule): Settings['rules'] {
       ]),
   );
 }
-// Sources by the area the rules summary names; the rule list is tabbed by these areas.
-const COVERAGE_AREAS = [
-  ['search', ['gsc', 'keywords', 'rank', 'trends', 'ai-search']],
-  ['traffic', ['ga4', 'github-traffic']],
-  ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
-  [
-    'community',
-    ['topics', 'discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x'],
-  ],
-  ['product', ['github', 'packages']],
-  ['competitors', ['competitors']],
-] as const;
-const areaOf = (source: string): string =>
-  COVERAGE_AREAS.find(([, sources]) =>
-    (sources as readonly string[]).includes(source),
-  )?.[0] ?? 'other';
+// The rules by the opportunity category they find, in the order of the Opportunities filter, and the rest under Current
+// situation (2026-11-17, shared/analysis-rule-categories.ts); the server says each rule's, an older one is placed here.
+const categoryOf = (rule: Rule): RuleCategory =>
+  rule.category ?? ruleCategoryOf(rule.id);
+const tabName = (tab: RuleCategory): string =>
+  tab === 'situation' ? $t('strategy.currentSituation') : CATEGORY[tab][1]();
+const TAB_HELP: Record<RuleCategory, string> = {
+  trending: 'analysisRules.tabHelp.trending',
+  'new-content': 'analysisRules.tabHelp.newContent',
+  'competitor-gaps': 'analysisRules.tabHelp.competitorGaps',
+  optimize: 'analysisRules.tabHelp.optimize',
+  situation: 'analysisRules.tabHelp.situation',
+};
+// Under Current situation the rules keep their source headings, in this order.
 const SOURCE_ORDER = [
   'gsc',
   'keywords',
@@ -125,6 +132,10 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     'nrAnalysisRules.updateRule',
     projectId,
   );
+  const { can: canSetSkill } = useBusinessAccess(
+    'nrAnalysisRules.setSkill',
+    projectId,
+  );
   const [view, setView] = useState<View>();
   const [growthSources, setGrowthSources] = useGrowthSources(projectId);
   const [error, setError] = useMessageState('');
@@ -132,7 +143,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const [saveError, setSaveError] = useMessageState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
-  const [openArea, setOpenArea] = useState<string>();
+  const [openArea, setOpenArea] = useState<RuleCategory>();
   const selectedSchemeRef = useRef<string | undefined>(undefined);
   const aliveRef = useRef(true),
     pendingRef = useRef(false),
@@ -191,7 +202,13 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   };
   const mutate = async (
     action:
-      'save' | 'rename' | 'create' | 'activate' | 'addRule' | 'updateRule',
+      | 'save'
+      | 'rename'
+      | 'create'
+      | 'activate'
+      | 'addRule'
+      | 'updateRule'
+      | 'setSkill',
     body: object,
   ) => {
     if (pendingRef.current || !view) return false;
@@ -207,7 +224,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       selectedSchemeRef.current = next.schemeId;
       setView(next);
       const added = next.rules.find((r) => r.id === next.addedRuleId);
-      if (added) setOpenArea(areaOf(added.source));
+      if (added) setOpenArea(categoryOf(added));
       closeEditor();
       toast.success(() =>
         $t(
@@ -264,8 +281,15 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       if (aliveRef.current) setBusy(false);
     }
   };
+  // Current situation's source headings; the four growth tabs list their rules in the category's order instead.
   const groups: string[] = view
-    ? [...new Set(view.rules.map((r) => r.source))].sort(
+    ? [
+        ...new Set(
+          view.rules
+            .filter((r) => categoryOf(r) === 'situation')
+            .map((r) => r.source),
+        ),
+      ].sort(
         (a, b) =>
           (SOURCE_ORDER.includes(a)
             ? SOURCE_ORDER.indexOf(a)
@@ -283,40 +307,144 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       (_match, separator, letter: string) =>
         `${separator ? ' ' : ''}${letter.toUpperCase()}`,
     );
-  const coverageAreas = COVERAGE_AREAS;
-  const areas = [
-    ...coverageAreas.map(([area]) => area as string),
-    'other',
-  ].filter((area) => groups.some((g) => areaOf(g) === area));
-  const area = openArea && areas.includes(openArea) ? openArea : areas[0];
-  const editingArea = editing
-    ? areaOf(view?.rules.find((r) => r.id === editing)?.source ?? '')
-    : undefined;
-  const areaName = (key: string) => {
-    const label = $t(`analysisRules.scope.${key}`);
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  };
-  const enabledSources = groups.filter((g) =>
-    view?.rules.some((r) => r.source === g && r.enabled),
+  const areas = RULE_TABS.filter((tab) =>
+    view?.rules.some((r) => categoryOf(r) === tab),
   );
-  const coverage = joinList([
-    ...coverageAreas
-      .filter(([, sources]) =>
-        enabledSources.some((source) =>
-          (sources as readonly string[]).includes(source),
-        ),
-      )
-      .map(([area]) => $t(`analysisRules.scope.${area}`)),
-    ...(enabledSources.some(
-      (source) =>
-        !coverageAreas.some(([, sources]) =>
-          (sources as readonly string[]).includes(source),
-        ),
-    )
-      ? [$t('analysisRules.scope.other')]
-      : []),
-  ]);
+  const area = openArea && areas.includes(openArea) ? openArea : areas[0];
+  const editingRule = editing
+    ? view?.rules.find((r) => r.id === editing)
+    : undefined;
+  const editingArea = editingRule ? categoryOf(editingRule) : undefined;
+  const inTab = (tab: RuleCategory) =>
+    (view?.rules ?? [])
+      .filter((r) => categoryOf(r) === tab)
+      .sort((a, b) => ruleOrderOf(a.id) - ruleOrderOf(b.id));
   const last = view?.last;
+  // One rule: in a growth tab it shows its source's logo before its name and the source's name in its last line, as
+  // those tabs have no source headings.
+  const ruleItem = (r: Rule, withSource: boolean): ReactElement | null => {
+    if (!view) return null;
+    return (
+      <li key={r.id} data-rule={r.id} className='flex flex-col gap-2 p-4'>
+        <div className='flex items-start justify-between gap-3'>
+          <div className='flex min-w-0 flex-wrap items-center gap-2'>
+            <h4 className='flex min-w-0 items-center gap-2 break-words text-sm font-medium'>
+              {withSource ? <SourceLogo source={r.source} size='sm' /> : null}
+              {$legacyText(r.label)}
+            </h4>
+            {r.params.some((p) => p.value !== p.default) ? (
+              <Tag tone='blue'>{$t('analysisRules.changed')}</Tag>
+            ) : null}
+          </div>
+          <label className='flex shrink-0 items-center gap-2 text-xs text-muted-foreground'>
+            <span>
+              {$t(
+                r.enabled ? 'analysisRules.enabled' : 'analysisRules.disabled',
+              )}
+            </span>
+            {canSave ? (
+              <Switch
+                checked={r.enabled}
+                disabled={busy || Boolean(editing)}
+                aria-label={$t('analysisRules.turn', {
+                  0: $legacyText(r.label),
+                })}
+                onCheckedChange={(on) =>
+                  void save({
+                    rules: settingsOf(view.rules, {
+                      ...r,
+                      enabled: Boolean(on),
+                    }),
+                  })
+                }
+              />
+            ) : null}
+          </label>
+        </div>
+        <p className='text-sm text-muted-foreground'>
+          {$legacyText(r.description)}
+        </p>
+        <div
+          className='flex flex-wrap items-center gap-x-5 gap-y-2'
+          data-numbers=''
+        >
+          {r.params.map((p) => (
+            <span key={p.key} className='text-sm'>
+              <span className='text-muted-foreground'>
+                {$legacyText(p.label)}{' '}
+              </span>
+              <span className='font-medium tabular-nums'>
+                {p.value}
+                {/* "2%" not "2 %"; word units such as days keep their space. */}
+                {p.unit
+                  ? `${p.unit === '%' ? '' : ' '}${ruleUnitLabel(p.unit, p.value)}`
+                  : ''}
+              </span>
+            </span>
+          ))}
+        </div>
+        {r.id === 'other-market' && growthSources ? (
+          <MarketsLine
+            projectId={projectId}
+            view={growthSources}
+            onSaved={setGrowthSources}
+          />
+        ) : null}
+        {r.id === 'site-search' && growthSources ? (
+          <SiteSearchLine view={growthSources} />
+        ) : null}
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <p className='text-xs text-muted-foreground' data-found=''>
+            {withSource ? <>{sourceName(r.source)} · </> : null}
+            {!r.enabled
+              ? $t('analysisRules.disabledHelp')
+              : r.run && ['insufficient', 'error'].includes(r.run.status)
+                ? $t(`analysisSchemes.run.${r.run.status}`)
+                : r.found !== null
+                  ? $tj('analysisRules.time', { 0: r.found })
+                  : $t('analysisRules.notRunYet')}
+            {r.costUsd ? (
+              <>
+                {' · '}
+                <RuleCost rule={r} />
+              </>
+            ) : null}
+          </p>
+          {canUpdateRule && r.custom ? (
+            <AddRule
+              key={`${view.schemeId}:${r.id}`}
+              rule={r}
+              view={view}
+              disabled={busy || Boolean(editing)}
+              execute={async (action, body) =>
+                (await mutate(action, body)) || undefined
+              }
+            />
+          ) : null}
+          {canSave && r.params.length ? (
+            <Button
+              variant='ghost'
+              size='sm'
+              disabled={busy || Boolean(editing && editing !== r.id)}
+              onClick={() => void edit(r.id)}
+            >
+              {$t('analysisRules.editParameters')}
+            </Button>
+          ) : null}
+        </div>
+        {canSave && editing === r.id ? (
+          <RuleEditor
+            key={`${r.id}:${view.revision}`}
+            rule={r}
+            busy={busy}
+            error={saveError}
+            onClose={closeEditor}
+            onSave={(next) => save({ rules: settingsOf(view.rules, next) })}
+          />
+        ) : null}
+      </li>
+    );
+  };
   return (
     <PageContainer className='nr-page'>
       <PageHeader
@@ -392,14 +520,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
             description={
               <>
                 <p data-rules-summary=''>
-                  {$t(
-                    coverage
-                      ? 'analysisRules.conciseSummary'
-                      : 'analysisRules.conciseEmpty',
-                    {
-                      0: coverage,
-                    },
-                  )}
+                  {$t('analysisRules.categoriesSummary')}
                 </p>
                 <p>
                   {$t('analysisRules.enabledCount', {
@@ -447,9 +568,10 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 {saveError}
               </p>
             ) : null}
-            {/* Rules by area, each source a heading with its rules shown, instead of fold-out groups (UI review A10);
-                the areas are chosen like a table's row filters, a segmented control (2026-10-22 decision D1). The
-                area with an open editor cannot be left until it is saved or cancelled. */}
+            {/* Rules by the opportunity category they find, chosen like a table's row filters, a segmented control
+                (2026-10-22 decision D1; categories 2026-11-17). The tab with an open editor cannot be left until it is
+                saved or cancelled. Each tab says in one line what it answers and where what it finds goes; Current
+                situation keeps a heading per source. */}
             {areas.length ? (
               <div
                 role='tablist'
@@ -468,7 +590,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                     disabled={Boolean(editingArea && editingArea !== key)}
                     onClick={() => setOpenArea(key)}
                   >
-                    {areaName(key)}
+                    {tabName(key)}
                   </button>
                 ))}
               </div>
@@ -478,165 +600,65 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               role='tabpanel'
               aria-labelledby={area ? `rules-tab-${area}` : undefined}
               className='flex flex-col gap-5'
+              data-category={area}
             >
-              {groups.map((g) => (
+              {/* Every tab stays mounted and the others hidden, so an open editor keeps its state. */}
+              {areas.map((tab) => (
                 <div
-                  key={g}
-                  data-source={g}
-                  hidden={areaOf(g) !== area}
-                  className='flex flex-col gap-2'
+                  key={tab}
+                  data-tab={tab}
+                  hidden={tab !== area}
+                  className='flex flex-col gap-5'
                 >
-                  <h3 className='flex items-center gap-2 text-sm font-medium'>
-                    <SourceLogo source={g} size='sm' />
-                    {sourceName(g)}
-                    <span className='text-xs font-normal text-muted-foreground tabular-nums'>
-                      {$t('analysisRules.groupEnabled', {
-                        0: view.rules.filter((r) => r.source === g && r.enabled)
-                          .length,
-                        1: view.rules.filter((r) => r.source === g).length,
-                      })}
-                    </span>
-                  </h3>
-                  <ul className='divide-y rounded-lg border'>
-                    {view.rules
-                      .filter((r) => r.source === g)
-                      .map((r) => (
-                        <li
-                          key={r.id}
-                          data-rule={r.id}
-                          className='flex flex-col gap-2 p-4'
-                        >
-                          <div className='flex items-start justify-between gap-3'>
-                            <div className='flex min-w-0 flex-wrap items-center gap-2'>
-                              <h4 className='break-words text-sm font-medium'>
-                                {$legacyText(r.label)}
-                              </h4>
-                              {r.params.some((p) => p.value !== p.default) ? (
-                                <Tag tone='blue'>
-                                  {$t('analysisRules.changed')}
-                                </Tag>
-                              ) : null}
-                            </div>
-                            <label className='flex shrink-0 items-center gap-2 text-xs text-muted-foreground'>
-                              <span>
-                                {$t(
-                                  r.enabled
-                                    ? 'analysisRules.enabled'
-                                    : 'analysisRules.disabled',
-                                )}
-                              </span>
-                              {canSave ? (
-                                <Switch
-                                  checked={r.enabled}
-                                  disabled={busy || Boolean(editing)}
-                                  aria-label={$t('analysisRules.turn', {
-                                    0: $legacyText(r.label),
-                                  })}
-                                  onCheckedChange={(on) =>
-                                    void save({
-                                      rules: settingsOf(view.rules, {
-                                        ...r,
-                                        enabled: Boolean(on),
-                                      }),
-                                    })
-                                  }
-                                />
-                              ) : null}
-                            </label>
-                          </div>
-                          <p className='text-sm text-muted-foreground'>
-                            {$legacyText(r.description)}
-                          </p>
-                          <div
-                            className='flex flex-wrap items-center gap-x-5 gap-y-2'
-                            data-numbers=''
-                          >
-                            {r.params.map((p) => (
-                              <span key={p.key} className='text-sm'>
-                                <span className='text-muted-foreground'>
-                                  {$legacyText(p.label)}{' '}
-                                </span>
-                                <span className='font-medium tabular-nums'>
-                                  {p.value}
-                                  {/* "2%" not "2 %"; word units such as days keep their space. */}
-                                  {p.unit
-                                    ? `${p.unit === '%' ? '' : ' '}${ruleUnitLabel(p.unit, p.value)}`
-                                    : ''}
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                          {r.id === 'other-market' && growthSources ? (
-                            <MarketsLine
-                              projectId={projectId}
-                              view={growthSources}
-                              onSaved={setGrowthSources}
-                            />
-                          ) : null}
-                          {r.id === 'site-search' && growthSources ? (
-                            <SiteSearchLine view={growthSources} />
-                          ) : null}
-                          <div className='flex flex-wrap items-center justify-between gap-2'>
-                            <p
-                              className='text-xs text-muted-foreground'
-                              data-found=''
+                  <p className='text-sm text-muted-foreground' data-tab-help=''>
+                    {tab === 'situation'
+                      ? $t(TAB_HELP.situation)
+                      : $tj(TAB_HELP[tab], {
+                          0: (
+                            <Link
+                              to={`/opportunities?category=${tab}`}
+                              className='text-foreground hover:underline'
                             >
-                              {!r.enabled
-                                ? $t('analysisRules.disabledHelp')
-                                : r.run &&
-                                    ['insufficient', 'error'].includes(
-                                      r.run.status,
-                                    )
-                                  ? $t(`analysisSchemes.run.${r.run.status}`)
-                                  : r.found !== null
-                                    ? $tj('analysisRules.time', { 0: r.found })
-                                    : $t('analysisRules.notRunYet')}
-                              {r.costUsd ? (
-                                <>
-                                  {' · '}
-                                  <RuleCost rule={r} />
-                                </>
-                              ) : null}
-                            </p>
-                            {canUpdateRule && r.custom ? (
-                              <AddRule
-                                key={`${view.schemeId}:${r.id}`}
-                                rule={r}
-                                view={view}
-                                disabled={busy || Boolean(editing)}
-                                execute={async (action, body) =>
-                                  (await mutate(action, body)) || undefined
-                                }
-                              />
-                            ) : null}
-                            {canSave && r.params.length ? (
-                              <Button
-                                variant='ghost'
-                                size='sm'
-                                disabled={
-                                  busy || Boolean(editing && editing !== r.id)
-                                }
-                                onClick={() => void edit(r.id)}
-                              >
-                                {$t('analysisRules.editParameters')}
-                              </Button>
-                            ) : null}
-                          </div>
-                          {canSave && editing === r.id ? (
-                            <RuleEditor
-                              key={`${r.id}:${view.revision}`}
-                              rule={r}
-                              busy={busy}
-                              error={saveError}
-                              onClose={closeEditor}
-                              onSave={(next) =>
-                                save({ rules: settingsOf(view.rules, next) })
-                              }
-                            />
-                          ) : null}
-                        </li>
-                      ))}
-                  </ul>
+                              {$t('analysisRules.opportunitiesPath', {
+                                0: tabName(tab),
+                              })}
+                            </Link>
+                          ),
+                        })}
+                  </p>
+                  {tab !== 'situation' ? (
+                    <ul className='divide-y rounded-lg border'>
+                      {inTab(tab).map((r) => ruleItem(r, true))}
+                    </ul>
+                  ) : (
+                    groups.map((g) => (
+                      <div
+                        key={g}
+                        data-source={g}
+                        className='flex flex-col gap-2'
+                      >
+                        <h3 className='flex items-center gap-2 text-sm font-medium'>
+                          <SourceLogo source={g} size='sm' />
+                          {sourceName(g)}
+                          <span className='text-xs font-normal text-muted-foreground tabular-nums'>
+                            {$t('analysisRules.groupEnabled', {
+                              0: inTab('situation').filter(
+                                (r) => r.source === g && r.enabled,
+                              ).length,
+                              1: inTab('situation').filter(
+                                (r) => r.source === g,
+                              ).length,
+                            })}
+                          </span>
+                        </h3>
+                        <ul className='divide-y rounded-lg border'>
+                          {inTab('situation')
+                            .filter((r) => r.source === g)
+                            .map((r) => ruleItem(r, false))}
+                        </ul>
+                      </div>
+                    ))
+                  )}
                 </div>
               ))}
             </div>
@@ -679,6 +701,13 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               ) : null}
             </div>
           </Section>
+          <AnalysisSkills
+            view={view}
+            projectId={projectId}
+            canEdit={canSetSkill}
+            disabled={busy || Boolean(editing)}
+            execute={async (body) => Boolean(await mutate('setSkill', body))}
+          />
           {last ? (
             <p className='text-xs text-muted-foreground'>
               {$tj('analysisRules.lastAnalyzed', {
@@ -688,6 +717,16 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               {$tj('analysisRules.rulesFoundChangesData', {
                 0: last.found ?? '—',
               })}
+              {last.skills?.count ? (
+                <>
+                  {' '}
+                  ·{' '}
+                  {$tj('analysisSkills.lastFound', {
+                    0: last.skills.count,
+                    1: last.skills.found,
+                  })}
+                </>
+              ) : null}
               {/* Without a count the clause is left out rather than reading "— passed to the AI" (UI review E7). */}
               {last.passed != null ? (
                 <> · {$tj('analysisRules.passedAi', { 0: last.passed })}</>

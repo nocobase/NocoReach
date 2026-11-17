@@ -210,6 +210,97 @@ function business(operation: string, input: Value, en: boolean): Value | null {
         })),
       };
     }
+    // A Skill in the daily analysis (skill-analysis.ts) cites what its method looks at: content-strategy the keyword
+    // group with the most searches and no page, competitors the competitor page with the most visits, ai-seo the
+    // questions whose AI answers name others and not us. Any other Skill finds nothing in the demo data.
+    case 'daily-skill': {
+      const data = object(input.data),
+        skill = str(input.skill, 80);
+      if (skill === 'content-strategy') {
+        const volume = (items: Value[]) =>
+          items.reduce((n, i) => n + (Number(i.volume) || 0), 0);
+        const best = list(data.keywords)
+          .map((g) => ({
+            group: str(g.group, 60),
+            items: list(g.items).filter((i) => i.ourPosition == null),
+          }))
+          .filter((g) => g.items.length >= 3)
+          .sort((a, b) => volume(b.items) - volume(a.items))[0];
+        return {
+          candidates: best
+            ? [
+                {
+                  title: t(
+                    `补齐“${best.group}”主题`,
+                    `Cover the "${best.group}" topic`,
+                  ),
+                  why: t(
+                    '这组词都有人搜，本站还没有对应的页面。按主题集群写一组页面，可以一起拿到这些搜索。',
+                    'People search all of these words and the site has no page for them. A cluster of pages on the topic can take these searches together.',
+                  ),
+                  keywords: best.items
+                    .slice(0, 9)
+                    .map((i) => str(i.keyword, 120)),
+                  pages: [],
+                  questions: [],
+                },
+              ]
+            : [],
+        };
+      }
+      if (skill === 'competitors') {
+        const page = list(data.competitorPages)[0];
+        return {
+          candidates: page
+            ? [
+                {
+                  title: t(
+                    `对照 ${str(page.competitor, 60)} 的页面写对比页`,
+                    `Write a comparison page against ${str(page.competitor, 60)}'s page`,
+                  ),
+                  why: t(
+                    '竞品靠这个页面拿到了本站没有覆盖的搜索，正面对比能接住比较中的读者。',
+                    'The competitor takes searches the site does not cover with this page; a direct comparison meets readers who are comparing.',
+                  ),
+                  keywords: [],
+                  pages: [str(page.url, 500)],
+                  questions: [],
+                },
+              ]
+            : [],
+        };
+      }
+      if (skill === 'ai-seo') {
+        const questions = list(data.aiQuestions)
+          .filter(
+            (q) =>
+              q.namesUs === false &&
+              Array.isArray(q.named) &&
+              q.named.length > 0,
+          )
+          .slice(0, 4);
+        return {
+          candidates: questions.length
+            ? [
+                {
+                  title: t(
+                    '让 AI 回答这些问题时提到我们',
+                    'Get named when AI answers these questions',
+                  ),
+                  why: t(
+                    'AI 回答这些问题时只提到了别的产品；补一页可被引用的对比和步骤说明，更容易被引用。',
+                    'AI answers to these questions name other products only; a citable page with comparisons and steps is more likely to be cited.',
+                  ),
+                  keywords: [],
+                  pages: [],
+                  questions: questions.map((q) => str(q.question, 300)),
+                },
+              ]
+            : [],
+        };
+      }
+      return { candidates: [] };
+    }
     case 'daily-judge':
       return {
         key: str(object(input.signal).key, 200),
