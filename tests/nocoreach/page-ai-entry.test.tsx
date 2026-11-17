@@ -333,7 +333,7 @@ test('a proposed rule change shows its before and after, and Confirm saves it th
   );
   expect(within(card).getByText('待确认')).toBeVisible();
   // The live rule names it; the old value is muted beside the new one.
-  expect(within(card).getByText('页面搜索点击下降')).toBeVisible();
+  expect(within(card).getByText('点击下降')).toBeVisible();
   expect(card).toHaveTextContent('30% → 改为 50%');
   expect(within(card).getByText('Only clear drops')).toBeVisible();
   // Proposing saved nothing.
