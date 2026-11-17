@@ -116,9 +116,10 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const repurpose=(r:Item)=>{const p=new URLSearchParams(params);p.set('opportunity',r.card.id);void navigate({pathname:'repurpose',search:`?${p}`});};
  const hot=(r:Item)=>Boolean(state)&&isHot(r,state!,taskId=>standingOf(byId.get(String(taskId))));
  const detail=(r:Item)=><Detail key={r.card.id} row={r} project={project} tasks={byId} workshop={workshopTasks(r.card.id)} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)} onRepurpose={hot(r)?()=>repurpose(r):undefined}/>;
+ const feedback=<>{(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}<HandOffNotice result={notice}/></>;
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
-  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
-  <HandOffNotice result={notice}/>
+  {/* An open drawer covers the page, so what an action in it did or why it failed is said in the drawer instead. */}
+  {!opened&&feedback}
   <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?allPending.length:k==='watch'?allWatching.length:rows.length-allPending.length+allSettled.length}`:''}</button>)}</nav>
   {state&&<CategoryFilter value={category} categories={counted} onChange={c=>go({category:c??'',item:''})}/>}
   {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>inCategory(categoryOf(r.card)))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
@@ -136,10 +137,10 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
    </div>
    {selected&&detail(selected)}
   </div>}
-  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
+  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} error={error} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
   {handing&&project&&state?<OpportunityHandOffDialog projectId={project.id} state={state} row={handing} playbooks={playbooks?.playbooks} onClose={()=>setHanding(undefined)} onDone={r=>handed(handing,r)}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
-   <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
+   <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className='flex flex-col gap-3 p-4 pt-12'>{opened&&<>{feedback}{detail(opened)}</>}</div></SheetContent>
   </Sheet>
   <Outlet context={{onCreated:()=>{reloadTasks();refreshNavBadges();}}}/>
  </PageContainer>;
