@@ -5,6 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import { BUILT_IN_SKILLS, BUILT_IN_VERSION } from './skills-builtin.js';
 import { download } from './public-sources.js';
+import { allCards } from './opportunity-board.js';
+import { SKILL_ANALYSIS, monthlySkillTokens } from '../../shared/skill-analysis.js';
 // Skills (SPEC §6.0): how a kind of work is done, in the open Agent Skills format — SKILL.md (name, description, body)
 // and the text files that come with it. One library for every project; each project turns Skills on or off. A step of a
 // Playbooks can name Skills, and those always go to the Agent; the ones turned on go with every task for the Agent to use when
@@ -95,10 +97,20 @@ class Skills{
  // Only a library entry can resolve content, so intentionally removed built-ins stay removed.
  async content(skill){const saved=await this.snapshot(`nr-skill:${skill.id}`);if(saved)return saved;const builtin=skill.builtIn&&BUILT_IN_SKILLS.find(b=>b.id===skill.id);return builtin?{body:builtin.body,files:builtin.files}:{body:'',files:[]};}
  async enabledIds(id,tx){return (await this.snapshot(`nr-skills-enabled:${id}`,tx))?.ids||[];}
- async list(id){const [d,on]=await Promise.all([this.library(undefined,true),this.enabledIds(id)]);
-  return {revision:d.revision,skills:d.skills.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>({...withSummary(s),enabled:on.includes(s.id)}))};}
+ // Skills in the daily analysis (2026-11-17): the project's active analysis scheme picks up to five; the list marks them
+ // and a Skill's detail says what it found lately. The setting itself is the scheme's (analysis-rules.ts setSkill).
+ async analysisUse(id){return (await this.p.analysisRules?.activeSkills(id).catch(()=>null))||null;}
+ // Opportunities the Skill found first in the last 30 days, and how many of them were handed off to the Agent.
+ async foundBy(id,skillId){const state=await this.p.strategy?.state(id).catch(()=>null),since=Date.now()-SKILL_ANALYSIS.recentDays*86400000;if(!state)return {found:0,handedOff:0};
+  const cards=allCards(state).filter(c=>c.skill?.id===skillId&&Date.parse(c.firstSeenAt||'')>=since),handed=new Set((state.proposals||[]).filter(p=>p.taskId&&p.insight?.id).map(p=>p.insight.id));
+  return {found:cards.length,handedOff:cards.filter(c=>handed.has(c.id)).length};}
+ async list(id){const [d,on,use]=await Promise.all([this.library(undefined,true),this.enabledIds(id),this.analysisUse(id)]);
+  return {revision:d.revision,skills:d.skills.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>({...withSummary(s),enabled:on.includes(s.id),...(use?.ids.includes(s.id)?{analysis:true}:{})})),
+   ...(use?{analysis:{schemeId:use.schemeId,schemeName:use.schemeName,used:use.ids.length,max:use.max}}:{})};}
  async get(id,v){const d=await this.library(undefined,true),skill=d.skills.find(s=>s.id===v.skillId);if(!skill)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
-  const c=await this.content(skill);return {skill:{...withSummary(skill),enabled:(await this.enabledIds(id)).includes(skill.id)},body:c.body,files:c.files};}
+  const c=await this.content(skill),use=await this.analysisUse(id);
+  return {skill:{...withSummary(skill),enabled:(await this.enabledIds(id)).includes(skill.id)},body:c.body,files:c.files,
+   analysis:use?{schemeId:use.schemeId,schemeName:use.schemeName,used:use.ids.length,max:use.max,on:use.ids.includes(skill.id),monthlyTokens:monthlySkillTokens(c.body||''),...await this.foundBy(id,skill.id)}:null};}
  // Every change rewrites the Skill's content and its line in the library under one lock.
  async change(skillId,fn){return this.lock(async tx=>{const d=await this.library(tx),i=d.skills.findIndex(s=>s.id===skillId);if(i<0)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
   const c=await this.snapshot(`nr-skill:${skillId}`,tx)||{body:'',files:[]};const next=fn({...d.skills[i]},{body:c.body,files:c.files},d.skills);
@@ -188,7 +200,7 @@ class Skills{
  // One Skill (skillId) or several ticked in the list (skillIds), under one lock.
  async remove(v){const ids=[...new Set(Array.isArray(v.skillIds)?v.skillIds.map(String):[String(v.skillId)])];if(!ids.length||ids.length>MAX_SKILLS||ids.some(x=>!ID.test(x)))fail(systemMessageText('skills.pickSkillsDelete'));
   return this.lock(async tx=>{const d=await this.library(tx),gone=d.skills.filter(s=>ids.includes(s.id));if(!gone.length)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
-   await this.put('nr-skills',{...d,revision:d.revision+1,skills:d.skills.filter(s=>!ids.includes(s.id))},tx);for(const s of gone)await this.repo().destroy({filter:{key:`nr-skill:${s.id}`},transaction:tx});return {revision:d.revision+1,removed:gone.map(s=>s.name)};});}
+   await this.put('nr-skills',{...d,revision:d.revision+1,skills:d.skills.filter(s=>!ids.includes(s.id))},tx);for(const s of gone)await this.repo().destroy({filter:{key:`nr-skill:${s.id}`},transaction:tx});return {revision:d.revision+1,removed:gone.map(s=>s.name),ids:gone.map(s=>s.id)};}).then(async out=>{const {ids:goneIds,...result}=out;await this.p.analysisRules?.forgetSkills(goneIds).catch(e=>this.p.app?.logger?.warn?.('NocoReach Skills not removed from analysis schemes',{message:e?.message}));return result;});}
  async setEnabled(id,v){return this.lock(async tx=>{const d=await this.library(tx);if(!d.skills.some(s=>s.id===v.skillId))fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
   const ids=(await this.enabledIds(id,tx)).filter(x=>x!==v.skillId&&d.skills.some(s=>s.id===x));if(v.enabled)ids.push(v.skillId);
   await this.put(`nr-skills-enabled:${id}`,{ids},tx);return {skillId:v.skillId,enabled:Boolean(v.enabled)};});}
@@ -207,4 +219,4 @@ class Skills{
   this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');
   this.p.app.on?.('afterStart',()=>this.upgrade().catch(e=>this.p.app.logger?.warn?.('NocoReach Skills library not upgraded',{message:e?.message})));}
 }
-export { Skills, parseSkillMd, parseLink, cleanPath, ID, MAX_FILES, MAX_FILE, AGENT_BUDGET };
+export { Skills, parseSkillMd, parseLink, cleanPath, withSummary, ID, MAX_FILES, MAX_FILE, AGENT_BUDGET };

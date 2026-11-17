@@ -19,6 +19,8 @@ import { roundEstimate } from '../../shared/growth.js';
 import { markQuestions } from './ai-questions.js';
 import * as topic from './topic-signals.js';
 import * as sources from './source-signals.js';
+import { runSkills } from './skill-analysis.js';
+import { languageOf } from './language.js';
 // Signal engine (SPEC §9): deterministic rules per data source. Reads saved data only; never calls external services.
 // A change keeps its key from day to day (no dates in keys since 2026-10-08), so a watched change can be followed.
 // Only growth points are actionable (2026-11-10, shared/growth.ts): each carries `growth`, its size and the rows behind
@@ -259,7 +261,9 @@ class SignalEngine{
   for(const source of inputs.contentSources)coverage[source.source]=source.items.length?systemMessageText('socialSignals.coverage',{0:source.items.length}):null;
   return {inputs,coverage};}
  // Recomputed from saved data; optional custom rules use the configured model; first-seen dates persist so a signal can be marked as new.
- async current(id,keep){
+ // `skills`: the daily analysis also runs the scheme's Skills (skill-analysis.ts), which call the model; other callers
+ // keep the Skills' last runs as they were.
+ async current(id,keep,opts={}){
   const snapshot=await this.p.analysisRules?.snapshot?.(id),{inputs,coverage}=await this.inputs(id),config=snapshot?.config||await this.p.analysisRules?.config(id).catch(()=>null);
   if(snapshot)inputs.ruleCatalog=snapshot.catalog;
   const {ranked,found}=computeAll(inputs,config),settings=resolver(config,snapshot?.catalog||RULES);
@@ -269,11 +273,15 @@ class SignalEngine{
   const contentCatalog=contentRuleCatalog([...CONTENT_SOURCES,...(inputs.automaticDefinitions||[])]);
   const ruleRuns=(snapshot?.catalog||RULES).map(rule=>({ruleId:rule.id,status:!settings.on(rule.id)?'disabled':found[rule.id]?'matched':contentCatalog.some(r=>r.id===rule.id)?(contentRuleReady(contentCatalog.find(r=>r.id===rule.id),inputs.contentSources,settings,inputs.now)?'not_matched':'insufficient'):'unknown',source:rule.source}));
   for(const result of custom.runs){const run=ruleRuns.find(r=>r.ruleId===result.ruleId);if(run)Object.assign(run,result);}
-  const analysisRunId=randomUUID(),all=choose(ranked,keep),now=new Date().toISOString(),row=await this.repo().findOne({filter:{key:this.key(id)}}),prev=row?.get('payload')?.seen||{},seen={};for(const s of all)seen[s.key]=prev[s.key]||now;
-  const payload={computedAt:now,analysisRunId,schemeId:snapshot?.schemeId,schemeVersion:snapshot?.schemeVersion,seen,coverage,found,total:ranked.length,ruleRuns};if(row)await this.repo().update({filterByTk:row.id,values:{payload}});else await this.repo().create({values:{key:this.key(id),payload}});
+  const analysisRunId=randomUUID(),all=choose(ranked,keep),now=new Date().toISOString(),row=await this.repo().findOne({filter:{key:this.key(id)}}),prev=row?.get('payload')?.seen||{},seen={};
+  // What the Skills find is passed on with the rules' changes, after the 40 are chosen, and is not counted as a rule's.
+  let skillRuns=row?.get('payload')?.skillRuns;
+  if(opts.skills&&snapshot){const skills=await this.p.analysisRules.resolveSkills(snapshot.skillIds).catch(()=>[]);if(skills.length){const out=await runSkills(this.p,{skills,inputs,V:(rule,key)=>settings.value(rule,key),language:languageOf(await this.p.project(id).catch(()=>null))});const keys=new Set(all.map(s=>s.key));all.push(...out.signals.filter(s=>!keys.has(s.key)&&keys.add(s.key)));skillRuns=out.runs;}else skillRuns=[];}
+  for(const s of all)seen[s.key]=prev[s.key]||now;
+  const payload={computedAt:now,analysisRunId,schemeId:snapshot?.schemeId,schemeVersion:snapshot?.schemeVersion,seen,coverage,found,total:ranked.length,ruleRuns,...(skillRuns?{skillRuns}:{})};if(row)await this.repo().update({filterByTk:row.id,values:{payload}});else await this.repo().create({values:{key:this.key(id),payload}});
   return {...payload,analysisSnapshot:snapshot,missing:Object.entries(coverage).filter(([,v])=>!v).map(([k])=>k),items:all.map(s=>({...s,analysisRunId,ruleId:ruleOf(s.key,snapshot?.catalog||RULES),firstSeenAt:seen[s.key],isNew:seen[s.key]===now}))};}
  // The last computation (分析规则): how many changes each rule found, and which sources had no data.
- async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {analysisRunId:v.analysisRunId,ruleRuns:v.ruleRuns,schemeId:v.schemeId,schemeVersion:v.schemeVersion,computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
+ async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {analysisRunId:v.analysisRunId,ruleRuns:v.ruleRuns,skillRuns:v.skillRuns||null,schemeId:v.schemeId,schemeVersion:v.schemeVersion,computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('signals.signalCalculationNotCompleteTry'));}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }

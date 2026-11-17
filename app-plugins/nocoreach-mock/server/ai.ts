@@ -9,6 +9,7 @@ export const MOCK_AI_OPERATIONS = [
   'analysis-rule-draft',
   'analysis-rule-evaluate',
   'daily-report',
+  'daily-skill',
   'daily-judge',
   'daily-judge-many',
   'daily-rewrite',
@@ -141,6 +142,9 @@ function fixture(
       };
     case 'daily-report':
       return report(input, ctx, stamp);
+    // A Skill in the daily analysis proposes nothing in the fixture: no cited data, no growth to compute.
+    case 'daily-skill':
+      return { candidates: [] };
     case 'daily-judge':
       return review(object(input.signal));
     case 'daily-judge-many':

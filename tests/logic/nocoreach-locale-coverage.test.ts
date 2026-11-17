@@ -428,6 +428,10 @@ describe('NocoReach semantic-key translations', () => {
       // each cloud row picks its own model since 2026-11-13).
       '服务器上的模型（NocoBase AI 插件），每天分析数据、提出机会，也帮你起草做法。':
         '服务器上的模型（「模型服务」里的对话模型），每天分析数据、提出机会，也负责编辑与建议：改写选中的文字、整理新任务、起草做法等。',
+      // Analysis rules grouped by Opportunities category (2026-11-17): the community rule is named by what it counts,
+      // and Rank drop no longer finds a page entering the top 10.
+      社区反复问到的主题: '社区高频词',
+      '掉了几位、从前 20 掉出前 100，或进入前 10': '掉了几位，或从前 20 掉出前 100',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

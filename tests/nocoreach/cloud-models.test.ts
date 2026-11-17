@@ -61,6 +61,7 @@ test('editing and suggestions keep one application-wide model choice, empty unti
 test('scheduled and background model calls are the daily analysis’s, everything else editing and suggestions’', () => {
   for (const operation of [
     'daily-report',
+    'daily-skill',
     'daily-judge',
     'daily-judge-many',
     'daily-rewrite',

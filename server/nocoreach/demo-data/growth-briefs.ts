@@ -57,6 +57,8 @@ export interface GrowthBrief {
   ignored?: number;
   /** Found this many days ago (2026-11-10 step 2b), for growth points newer than their place in the list says. */
   found?: number;
+  /** The Skill of the daily analysis that proposed it (2026-11-17), rather than a rule. */
+  skill?: { id: string; name: string };
 }
 
 const text = (
@@ -1049,6 +1051,8 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       },
       source: 'keywords',
       priority: 'high',
+      // Handled since the approval workflow topic took its place in To do (2026-11-17), as both are demand gaps.
+      ignored: 2,
       effort: 'medium',
       growth: (lang) =>
         demandGap(
@@ -1115,6 +1119,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       ),
       newPage: { section: '/blog/', linkFrom: ['/', '/docs/guests'] },
       source: 'ai-search',
+      skill: { id: 'ai-seo', name: 'ai-seo' },
       priority: 'high',
       effort: 'medium',
       growth: (lang) =>
@@ -1358,6 +1363,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       objective: t('拿下客户门户这组关键词', 'Win the client portal keywords'),
       newPage: { section: '/use-cases/', linkFrom: ['/docs/guests'] },
       source: 'competitors',
+      skill: { id: 'competitors', name: 'competitors' },
       priority: 'medium',
       effort: 'medium',
       growth: (lang) =>
@@ -1744,6 +1750,7 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
       ),
       newPage: { section: '/blog/', linkFrom: ['/features/portfolio'] },
       source: 'keywords',
+      skill: { id: 'content-strategy', name: 'content-strategy' },
       priority: 'medium',
       ignored: 2,
       effort: 'medium',
@@ -2399,6 +2406,64 @@ export function acmeGrowthBriefs(now: Date): GrowthBrief[] {
               ],
             ],
           ),
+        ),
+    },
+    {
+      key: 'acme-growth-approvals',
+      title: t(
+        '补齐“审批流”主题：9 个词每月 5,800 次搜索',
+        'Cover the approval workflow topic: 9 keywords searched 5,800 times a month',
+      ),
+      reason: t(
+        '这 9 个词每月搜索 5,800 次，本站都没排进前 20；只有 /features/approvals 一页讲到审批。',
+        'These 9 keywords are searched 5,800 times a month and we rank in the top 20 for none; only /features/approvals covers approvals.',
+      ),
+      meaning: t(
+        '审批流是 Acme 团队版的主要功能。这 9 个词分在了解、比较、上手三个阶段，现在只有 /features/approvals 一页覆盖“了解”；搜“簽核流程範本”“簽核系統 比較”的人找不到我们的内容。',
+        'Approval workflows are a main feature of Acme Team. These 9 keywords span learning, comparing and getting started, but only /features/approvals covers learning; people searching for approval process templates or comparing approval software find nothing of ours.',
+      ),
+      suggestion: t(
+        '写两篇：“审批流程模板：5 个常用流程和设置方法”（上手）、“线上签核系统怎么选”（比较），都链接到审批功能页。',
+        'Write two articles, “Approval process templates: 5 common workflows and how to set them up” (getting started) and “How to choose an online approval system” (comparing), both linking to the approvals feature page.',
+      ),
+      objective: t(
+        '用两篇内容拿下审批流这组关键词',
+        'Win the approval workflow keyword group with two articles',
+      ),
+      newPage: { section: '/blog/', linkFrom: ['/features/approvals'] },
+      source: 'keywords',
+      skill: { id: 'content-strategy', name: 'content-strategy' },
+      priority: 'high',
+      found: 1,
+      effort: 'medium',
+      growth: (lang) =>
+        demandGap(
+          pick<Keyword[]>(
+            lang,
+            [
+              ['簽核流程', 1300, 34, [tasks(4)]],
+              ['線上簽核系統', 1000, 41, [nimbus(7)]],
+              ['電子簽核', 880, 38, []],
+              ['審批流程', 720, 29, [tasks(2)]],
+              ['簽核流程範本', 590, 22, []],
+              ['簽核系統 比較', 480, 45, [tasks(6), nimbus(9)]],
+              ['採購簽核流程', 390, 26, []],
+              ['請假簽核流程', 260, 19, []],
+              ['簽核 app', 180, 37, [nimbus(5)]],
+            ],
+            [
+              ['approval workflow', 1300, 34, [tasks(4)]],
+              ['approval workflow software', 1000, 41, [nimbus(7)]],
+              ['online approval system', 880, 38, []],
+              ['approval process template', 720, 29, [tasks(2)]],
+              ['approval workflow examples', 590, 22, []],
+              ['best approval software', 480, 45, [tasks(6), nimbus(9)]],
+              ['purchase approval process', 390, 26, []],
+              ['leave approval workflow', 260, 19, []],
+              ['approval workflow app', 180, 37, [nimbus(5)]],
+            ],
+          ),
+          '/keywords?tab=suggest',
         ),
     },
     {

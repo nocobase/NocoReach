@@ -455,7 +455,9 @@ export class TaskService {
     // The page's data (search, visits, audit, tracked keywords, earlier tasks on it) as a short summary (2026-10-08).
     const data = await this.p.taskData?.forRun(project, { url: (content as any)?.url, taskId }).catch(() => '') || '';
     const knowledge = await this.p.knowledge?.forAgent(project) || [];
-    const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
+    // The Skill that found the opportunity goes with the step's own, once (2026-11-17, skill-analysis.ts).
+    const finder = task.evidence?.insight?.skill?.id;
+    const skills = await this.p.skills?.forAgent(project, [...(stage.skills || []), ...(typeof finder === 'string' ? [finder] : [])]) || [];
     // A Content workshop playbook's result is read by the form it makes, a copy's too (shared/repurpose.ts).
     const form = w.playbook?.form, resultKind = mode === 'plan' ? (form ? FORM_RESULT_KIND[form] : w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
     const repurpose = w.repurpose ? await this.repurposeInput(project, taskId, w, tx) : {};

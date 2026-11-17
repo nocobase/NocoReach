@@ -388,7 +388,31 @@ test('imports the demo through the API and clears all business data while preser
       );
     expect((await read('knowledge')).items).toHaveLength(8);
     const strategy = await read('strategy');
-    expect(strategy.insights.items).toHaveLength(id === main ? 28 : 18);
+    expect(strategy.insights.items).toHaveLength(id === main ? 29 : 18);
+    // The last analysis's rule and Skill counts belong to the latest batch, for Analysis rules (2026-11-17).
+    const run = await read('signals');
+    expect(run).toMatchObject({
+      schemeId: 'default',
+      schemeVersion: 1,
+      analysisRunId: strategy.insights.evidence.signals.analysisRunId,
+    });
+    expect(
+      run.skillRuns.map((r: { skillId: string }) => r.skillId),
+    ).toEqual(['content-strategy', 'competitors', 'ai-seo']);
+    if (id === main)
+      expect(
+        strategy.insights.items.find(
+          (c: { id: string }) =>
+            c.id === 'editorial-opportunity-acme-growth-approvals',
+        )?.skill,
+      ).toEqual({ id: 'content-strategy', name: 'content-strategy' });
+    // A Skill the team wrote, beside the built-in ones (Skill definitions are shared by every project).
+    const team = (
+      await snapshots.findOne({ filter: { key: 'nr-skills' } })
+    )?.get('payload').skills.find(
+      (x: { name: string }) => x.name === 'comparison-pages',
+    );
+    expect(team?.id).toMatch(/^sk-/);
     expect(strategy.proposals).toHaveLength(14);
     const timeline = strategy as StrategyState;
     const watches = Object.values(timeline.watch!).filter(

@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 import AnalysisRules from '#pages/analysis-rules';
 import { setDictionary } from '#i18n';
 import english from '../../shared/i18n/en.json';
@@ -141,7 +142,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 const start = async () => {
-  const ui = render(<AnalysisRules />);
+  const ui = render(<AnalysisRules />, { wrapper: MemoryRouter });
   await screen.findByText('规则');
   return ui;
 };
@@ -185,6 +186,7 @@ test('step 2b rules: a paid rule says its monthly cost, Other-language markets i
 });
 test('manual editing validates parameters, retains all rules, and a switch does not erase custom values', async () => {
   const { container } = await start();
+  await userEvent.click(screen.getByRole('tab', { name: '内容优化' }));
   const rule = within(
     container.querySelector('[data-rule="gsc-click-drop"]') as HTMLElement,
   );
@@ -217,6 +219,7 @@ test('read-only members see rules but no mutations', async () => {
 test('a custom role can save rule settings without gaining AI or scheme actions', async () => {
   context.actions = ['nrAnalysisRules.save'];
   const { container } = await start();
+  await userEvent.click(screen.getByRole('tab', { name: '内容优化' }));
   const rule = within(
     container.querySelector('[data-rule="gsc-click-drop"]')! as HTMLElement,
   );
@@ -266,12 +269,42 @@ test('the AI entry opens the chat about the scheme in view, with the page prompt
   ]);
 });
 
-test('rules are tabbed by area; the area with an open editor cannot be left', async () => {
+// Tabs by the Opportunities category a rule finds, and Current situation for the rest (2026-11-17).
+test('rules are tabbed by opportunity category, Trending now first; the tab with an open editor cannot be left', async () => {
   const { container } = await start();
-  const tab = screen.getByRole('tab', { name: '搜索表现' });
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+    '当下热点',
+    '新内容机会',
+    '竞品差距',
+    '内容优化',
+    '当前状况',
+  ]);
+  expect(screen.getByRole('tab', { name: '当下热点' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  // A growth tab names each rule's source on the rule, says what it answers and where its findings go.
+  const trending = container.querySelector(
+    '[data-tab="trending"]',
+  ) as HTMLElement;
+  expect(trending.querySelector('h3')).toBeNull();
+  expect(
+    within(trending).getByRole('link', { name: '机会 › 当下热点' }),
+  ).toHaveAttribute('href', '/opportunities?category=trending');
+  expect(
+    trending.querySelector('[data-rule="keyword-rising"] [data-found]')
+      ?.textContent,
+  ).toMatch(/^\S.* · /);
+  expect(
+    container.querySelector(
+      '[data-tab="situation"] [data-source="discourse"] [data-rule="community-theme"]',
+    ),
+  ).not.toBeNull();
+  const tab = screen.getByRole('tab', { name: '内容优化' });
+  await userEvent.click(tab);
   expect(tab).toHaveAttribute('aria-selected', 'true');
   const group = within(
-    container.querySelector('[data-source="gsc"]') as HTMLElement,
+    container.querySelector('[data-tab="optimize"]') as HTMLElement,
   );
   expect(group.getAllByRole('switch').length).toBeGreaterThan(0);
   await userEvent.click(
@@ -308,7 +341,9 @@ test('a change confirmed in the chat shows on the page without a reload', async 
     within(rules).getByRole('button', { name: '规则是什么' }),
   );
   expect(
-    await screen.findByText(/^关注/, { selector: '[data-rules-summary]' }),
+    await screen.findByText('找 4 类机会；其余规则只更新当前状况。', {
+      selector: '[data-rules-summary]',
+    }),
   ).toBeVisible();
   expect(screen.queryByText(/默认配置|已调整/)).not.toBeInTheDocument();
   expect(screen.queryByText(/当前关注 Search Console/)).not.toBeInTheDocument();
@@ -337,16 +372,16 @@ test('rule groups omit connection health and collection times while retaining co
     ),
   ).not.toBeInTheDocument();
   const section = container.querySelector<HTMLElement>(
-    '[data-source="youtube"]',
+    '[data-tab="situation"] [data-source="youtube"]',
   )!;
   expect(section).not.toBeVisible();
-  const tab = screen.getByRole('tab', { name: '内容表现' });
+  const tab = screen.getByRole('tab', { name: '当前状况' });
   expect(tab).toHaveAttribute('aria-selected', 'false');
   await userEvent.click(tab);
   expect(tab).toHaveAttribute('aria-selected', 'true');
   expect(section).toBeVisible();
-  // YouTube's three rules and Popular videos on followed topics (step 2b).
-  expect(within(section).getAllByRole('switch')).toHaveLength(4);
+  // YouTube's three rules; Popular videos on followed topics is under Trending now.
+  expect(within(section).getAllByRole('switch')).toHaveLength(3);
   expect(calls('save')).toHaveLength(0);
 });
 
@@ -374,7 +409,7 @@ test('scheme selection reloads its own rules and copy opens a modal with source 
       };
     return previous(resource, op, options);
   });
-  render(<AnalysisRules />);
+  render(<AnalysisRules />, { wrapper: MemoryRouter });
   await screen.findByText('我的方案');
   await userEvent.click(
     screen.getByRole('button', { name: /第二方案\s*未启用/ }),
@@ -410,7 +445,7 @@ test('add-rule validation messages update when switching language without cleari
     storeRevision: 0,
     schemes: [{ id: 'default', name: '默认分析', version: 1 }],
   });
-  render(<AnalysisRules />);
+  render(<AnalysisRules />, { wrapper: MemoryRouter });
   await userEvent.click(
     await screen.findByRole('button', { name: '添加规则', exact: true }),
   );

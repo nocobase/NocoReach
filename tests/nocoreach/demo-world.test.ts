@@ -93,7 +93,7 @@ describe.each(['zh-CN', 'en-US'])(
         const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
           new Date(now),
         );
-        expect(growth).toHaveLength(which === 'main' ? 24 : 14);
+        expect(growth).toHaveLength(which === 'main' ? 25 : 14);
         const lang = language === 'en-US' ? 'en' : 'zh';
         const kinds = growth.map((brief) => brief.growth(lang).kind);
         // Acme has two or more of each category; with Acme CRM every kind is shown.

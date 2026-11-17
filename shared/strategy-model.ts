@@ -64,10 +64,14 @@ export type Signal = {
   topics?: { title: string; url: string | null }[];
   /** A growth point's size and the rows behind it (shared/growth.ts); only growth points are actionable. */
   growth?: Growth;
+  /** The analysis scheme's Skill that found it (server/nocoreach/skill-analysis.ts), none for a rule's change. */
+  skill?: { id: string; name: string };
 };
 export type Evidence = {
   signals?: {
     computedAt: string;
+    /** The run whose rule counts Analysis rules shows beside this batch (signals.ts). */
+    analysisRunId?: string;
     coverage: Record<string, string | null>;
     missing: string[];
     items: Signal[];
@@ -118,6 +122,8 @@ export type Opportunity = {
   signalIds?: string[];
   /** The growth of the first growth point it cites, as the server computed it. */
   growth?: Growth;
+  /** The Skill that found that growth point, when a Skill did (2026-11-17). */
+  skill?: { id: string; name: string };
   lifecycle?: string;
   reviewAt?: string;
   category?: string;

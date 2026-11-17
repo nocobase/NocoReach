@@ -11,7 +11,7 @@ import type { LegacyDatabase } from './legacy/database.js';
 export const EDITING_MODEL_KEY = 'editing-suggestions:model';
 
 /**
- * The model calls of Daily analysis: the analysis with its custom rules, the weekly project knowledge check with its
+ * The model calls of Daily analysis: the analysis with its custom rules and the scheme's Skills (daily-skill), the weekly project knowledge check with its
  * topic suggestions, the automatic mapping of sources, the weekly topic discovery (topic-discovery) and the monthly
  * read of other markets, with the markets the AI suggests and their local keywords (market-suggest, market-keywords).
  * Every other call (`OnlineProvider.complete` or `.stream`) is one a person asks for on a page and is Editing and
@@ -22,6 +22,7 @@ export const EDITING_MODEL_KEY = 'editing-suggestions:model';
  */
 const ANALYSIS_OPERATIONS: ReadonlySet<string> = new Set([
   'daily-report',
+  'daily-skill',
   'daily-judge',
   'daily-judge-many',
   'daily-rewrite',

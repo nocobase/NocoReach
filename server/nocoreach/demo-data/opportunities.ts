@@ -108,6 +108,7 @@ export function opportunityHistory(
     growth?: Growth;
     ignored?: number;
     found?: number;
+    skill?: { id: string; name: string };
   }[] = [
     ...(which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
       context.clock.now,
@@ -130,6 +131,7 @@ export function opportunityHistory(
       growth: brief.growth(lang),
       ...(brief.ignored ? { ignored: brief.ignored } : {}),
       ...(brief.found ? { found: brief.found } : {}),
+      ...(brief.skill ? { skill: brief.skill } : {}),
     })),
     ...copy.briefs.map(
       ([
@@ -196,6 +198,7 @@ export function opportunityHistory(
       firstSeenAt: at(discovered),
       updatedAt: at(0),
       ...(entry.growth ? { growth: entry.growth } : {}),
+      ...(entry.skill ? { skill: entry.skill } : {}),
     };
   });
   const signalFor = (card: Opportunity): Signal => ({
@@ -210,6 +213,7 @@ export function opportunityHistory(
     action: card.newPage ? 'create' : 'optimize',
     isNew: age(card.firstSeenAt!) <= 2,
     ...(card.growth ? { growth: card.growth } : {}),
+    ...(card.skill ? { skill: card.skill } : {}),
   });
   const handoff = (card: Opportunity, task: OpportunityTask) => {
     const snapshot = evidence(age(task.createdAt), [signalFor(card)]);

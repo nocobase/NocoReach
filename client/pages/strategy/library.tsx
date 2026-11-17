@@ -2,7 +2,7 @@ import { useMessageState, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,Outlet,useNavigate,useSearchParams} from 'react-router';
-import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon} from 'lucide-react';
+import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon,XIcon} from 'lucide-react';
 import {Tooltip,TooltipContent,TooltipTrigger} from '#components/ui/tooltip';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag,TONE_CLASS,type Tone} from '#components/reach/tag';
@@ -85,23 +85,26 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
  usePageTab(getTabs().find(([k])=>k===tab)?.[1]);
  const askedCategory=params.get('category'),category=isGrowthCategory(askedCategory)?askedCategory:null,inCategory=(c?:GrowthCategory)=>!category||c===category;
- const allPending=rows.filter(r=>r.state==='pending').sort(pendingOrder),pending=allPending.filter(r=>inCategory(categoryOf(r.card)));
+ // `?skill=` (2026-11-17, from a Skill's detail): only what that Skill found, on every tab, until the filter is removed.
+ const skillFilter=params.get('skill'),bySkill=(x:{skill?:{id:string}})=>!skillFilter||x.skill?.id===skillFilter;
+ const keepCard=(c:Row['card'])=>inCategory(categoryOf(c))&&bySkill(c),keepSignal=(s:Signal)=>inCategory(signalCategory(s))&&bySkill(s);
+ const allPending=rows.filter(r=>r.state==='pending').sort(pendingOrder),pending=allPending.filter(r=>keepCard(r.card));
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='done'?linked:undefined;
  // 观察中: the latest analysis's changes the AI advised watching (not already an opportunity or a task), biggest first, as on 洞察.
  const judged=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})):[];
- const allWatching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)})),watching=allWatching.filter(x=>inCategory(signalCategory(x.s)));
+ const allWatching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)})),watching=allWatching.filter(x=>keepSignal(x.s));
  const ended=state?recentlyEnded(state):[];
  // 忽略 / 恢复 a watched change.
  async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);refreshNavBadges();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 已处理 also lists the latest analysis's changes that need nothing — 无需处理, ignored, or handed off without an
  // opportunity — except those an opportunity already stands for (that one is listed instead).
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(x=>x.key)));
- const allSettled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored))),settled=allSettled.filter(x=>inCategory(signalCategory(x.s)));
+ const allSettled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored))),settled=allSettled.filter(x=>keepSignal(x.s));
  const watched=watching.find(x=>x.s.key===watchKey)||settled.find(x=>x.s.key===watchKey);
- // What the category filter counts: the tab's own items, before the filter.
- const counted=tab==='pending'?allPending.map(r=>categoryOf(r.card)):tab==='watch'?allWatching.map(x=>signalCategory(x.s)):[...rows.filter(r=>r.state!=='pending').map(r=>categoryOf(r.card)),...allSettled.map(x=>signalCategory(x.s))];
- function go(next:{tab?:string;item?:string;sort?:string;order?:string;category?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
+ // What the category filter counts: the tab's own items before the category filter, within the Skill filter if any.
+ const counted=tab==='pending'?allPending.filter(r=>bySkill(r.card)).map(r=>categoryOf(r.card)):tab==='watch'?allWatching.filter(x=>bySkill(x.s)).map(x=>signalCategory(x.s)):[...rows.filter(r=>r.state!=='pending'&&bySkill(r.card)).map(r=>categoryOf(r.card)),...allSettled.filter(x=>bySkill(x.s)).map(x=>signalCategory(x.s))];
+ function go(next:{tab?:string;item?:string;sort?:string;order?:string;category?:string;skill?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts. An
  // opportunity with several places asks which ones first, makes a task for each and stays here on its task list.
@@ -122,7 +125,8 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
   {!opened&&feedback}
   <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?allPending.length:k==='watch'?allWatching.length:rows.length-allPending.length+allSettled.length}`:''}</button>)}</nav>
   {state&&<CategoryFilter value={category} categories={counted} onChange={c=>go({category:c??'',item:''})}/>}
-  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>inCategory(categoryOf(r.card)))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
+  {skillFilter&&<p className="flex flex-wrap items-center gap-2 text-sm" data-skill-filter={skillFilter}><span className="text-muted-foreground">{$t('strategy.skillFilter')}</span><Tag tone="violet" className="font-mono">{rows.find(r=>r.card.skill?.id===skillFilter)?.card.skill?.name||skillFilter}<button type="button" className="ml-0.5 rounded-full hover:opacity-70" aria-label={$t('strategy.removeSkillFilter')} onClick={()=>go({skill:'',item:''})}><XIcon/></button></Tag></p>}
+  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>keepCard(r.card))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
   :!allPending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
   :!pending.length?<p className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>{$t('strategy.nothingMatches')}</p>
@@ -286,7 +290,7 @@ function Detail({row,project,tasks,workshop,busy,onGive,onIgnore,onRestore,onOpe
   {growth&&<GrowthRow growth={growth}/>}
   {growth?.weeks&&<DiscussionWeeks weeks={growth.weeks}/>}
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
-  {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
+  {(card.meaning||card.skill)&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}{card.skill&&<Link to={`/skills?skill=${encodeURIComponent(card.skill.id)}`} className="mt-1 block w-fit text-xs text-primary hover:underline" data-found-by-skill={card.skill.id}>{$t('analysisSkills.foundBy',{0:card.skill.name})} ›</Link>}</Block>}
   {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
   {/* Where says which of the three it is (2026-11-10): a new page, an existing page or off the site. */}

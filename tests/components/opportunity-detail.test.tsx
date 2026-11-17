@@ -827,3 +827,47 @@ it('filters the opportunities by category on every tab, from the address', async
     ).getByRole('button', { name: 'growth.category.trending 0' }),
   ).toHaveAttribute('aria-pressed', 'true');
 });
+
+// Skills in the daily analysis (2026-11-17): an opportunity a Skill found names the Skill in Why it is worth doing,
+// linking to it on Skills; Skills links back with ?skill=, which lists only what that Skill found.
+it('an opportunity a Skill found names it, and the address lists only what that Skill found', async () => {
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      items: [
+        {
+          ...card,
+          skill: { id: 'content-strategy', name: 'content-strategy' },
+        },
+        other,
+      ],
+    },
+  };
+  show('/opportunities?skill=content-strategy');
+  const brief = await screen.findByRole('article', { name: card.title });
+  expect(
+    within(brief).getByRole('link', {
+      name: 'analysisSkills.foundBy(content-strategy) ›',
+    }),
+  ).toHaveAttribute('href', '/skills?skill=content-strategy');
+  const listed = () =>
+    screen
+      .getAllByRole('button', { current: undefined })
+      .filter((b) => b.hasAttribute('aria-current'))
+      .map((b) => b.textContent);
+  expect(listed()).toEqual([expect.stringContaining(card.title)]);
+  const categories = () =>
+    within(
+      screen.getByRole('group', { name: 'growth.category.filter' }),
+    ).getAllByRole('button')[0].textContent;
+  expect(categories()).toBe('growth.category.all 1');
+  const filter = document.querySelector('[data-skill-filter]') as HTMLElement;
+  expect(filter.textContent).toContain('strategy.skillFilter');
+  expect(filter.textContent).toContain('content-strategy');
+  fireEvent.click(
+    within(filter).getByRole('button', { name: 'strategy.removeSkillFilter' }),
+  );
+  await waitFor(() => expect(listed()).toHaveLength(2));
+  expect(categories()).toBe('growth.category.all 2');
+});

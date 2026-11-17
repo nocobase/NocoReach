@@ -799,6 +799,15 @@ test('Skills: a step names the Skills it uses; they and the ones turned on come 
  const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(JSON.stringify(stored).includes('标题 30–60 字符'),'the authorized input is reproducible');
 });
 
+// The Skill of the daily analysis that found the opportunity goes to the agent with the step's own (2026-11-17).
+test('a task from an opportunity a Skill found hands that Skill to the agent with the step\'s',async()=>{
+ const f=fixture(undefined,{reason:'original',insight:{id:'i',signalIds:['skill:content-strategy:demand-gap:abc'],skill:{id:'content-strategy',name:'content-strategy'}}});const me=await connectAgent(f);const asked=[];
+ f.s.p.skills={forAgent:async(project,required)=>{asked.push([project,required]);return [];}};
+ await f.s.playbooks.save('1',{playbookId:'optimize-page',revision:0,name:'优化现有页面',category:'optimize',steps:[{kind:'change',instruction:'优化',skills:['seo-title-description']}]});
+ await f.command('startTask',{playbookId:'optimize-page'});await claim(f);
+ assert.deepEqual(asked,[['1',['seo-title-description','content-strategy']]]);void me;
+});
+
 test('discovered Runner agents deliver drafts through official runs without a repository', async () => {
   const f = fixture();
   const researcher = { ...f.s.p.agents.agent, id: 'researcher', name: 'Researcher' };
