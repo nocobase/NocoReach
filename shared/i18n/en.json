@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "What to make",
   "workshop.articleColumn": "Blog post",
   "workshop.clicks30Column": "30-day clicks",
+  "workshop.clicks30Info": "Search Console clicks over the last 30 days, all language versions of the article together. Hover the figure to see each language.",
+  "workshop.sourceLanguage": "Source language",
   "workshop.madeColumn": "Made into",
   "workshop.noMatch": "No article titles or links contain “{0}”.",
   "workshop.next": "Next",

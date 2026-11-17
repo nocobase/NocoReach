@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "Quoi produire",
   "workshop.articleColumn": "Article de blog",
   "workshop.clicks30Column": "Clics sur 30 jours",
+  "workshop.clicks30Info": "Clics Search Console des 30 derniers jours, toutes les versions linguistiques de l’article réunies. Survolez le chiffre pour voir chaque langue.",
+  "workshop.sourceLanguage": "Langue d’origine",
   "workshop.madeColumn": "Déjà produit",
   "workshop.noMatch": "Aucun titre ni lien d’article ne contient « {0} ».",
   "workshop.next": "Suivant",

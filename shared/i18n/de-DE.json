@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "Was erstellen",
   "workshop.articleColumn": "Blogartikel",
   "workshop.clicks30Column": "Klicks (30 Tage)",
+  "workshop.clicks30Info": "Search-Console-Klicks der letzten 30 Tage, alle Sprachversionen des Artikels zusammen. Fahren Sie über die Zahl, um jede Sprache zu sehen.",
+  "workshop.sourceLanguage": "Ausgangssprache",
   "workshop.madeColumn": "Erstellt als",
   "workshop.noMatch": "Kein Artikeltitel und kein Link enthält „{0}“.",
   "workshop.next": "Weiter",

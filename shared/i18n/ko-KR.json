@@ -8675,6 +8675,8 @@
   "workshop.stepForm": "만들 형식",
   "workshop.articleColumn": "블로그 글",
   "workshop.clicks30Column": "30일 클릭수",
+  "workshop.clicks30Info": "최근 30일 Search Console 클릭 수로, 글의 모든 언어 버전을 합한 값입니다. 숫자에 마우스를 올리면 언어별 클릭 수가 보입니다.",
+  "workshop.sourceLanguage": "원문 언어",
   "workshop.madeColumn": "만든 형식",
   "workshop.noMatch": "제목이나 링크에 \"{0}\"이(가) 포함된 글이 없습니다.",
   "workshop.next": "다음",

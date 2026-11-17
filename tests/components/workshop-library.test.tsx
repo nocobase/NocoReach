@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import enDictionary from '../../shared/i18n/en.json';
+import zhDictionary from '../../shared/i18n/zh.json';
 import { Library } from '../../client/pages/workshop/library';
 import { TopicStep } from '../../client/pages/workshop/pick';
 import type { Article, WorkshopView } from '../../client/pages/workshop/model';
@@ -19,13 +20,26 @@ afterEach(() => {
 });
 
 const ORIGIN = 'https://acme.example';
-const article = (path: string, extra: Partial<Article> = {}): Article => ({
-  url: `${ORIGIN}${path}`,
-  title: path.split('/').at(-1)!,
-  clicks30: 10,
-  made: [],
-  ...extra,
-});
+const article = (path: string, extra: Partial<Article> = {}): Article => {
+  const a = {
+    url: `${ORIGIN}${path}`,
+    title: path.split('/').at(-1)!,
+    clicks30: 10,
+    made: [],
+    ...extra,
+  };
+  return {
+    versions: [
+      {
+        url: a.url,
+        title: a.title,
+        clicks30: a.clicks30,
+        ...(a.published ? { published: a.published } : {}),
+      },
+    ],
+    ...a,
+  };
+};
 const view = (articles: Article[]) =>
   ({
     hot: [],
@@ -177,4 +191,137 @@ it('asks Adapt a new topic for the topic alone: no article list', () => {
   expect(screen.getAllByRole('textbox')).toHaveLength(3);
   expect(screen.queryByRole('radio')).toBeNull();
   expect(screen.queryByRole('tab')).toBeNull();
+});
+
+// One row per article (2026-11-17 user decision): nocobase.com writes most articles in English, Chinese and Japanese.
+const NB = 'https://www.nocobase.com';
+const governance: Article = {
+  url: `${NB}/blog/governance/`,
+  title: 'From AI Coding to Application Governance',
+  published: '2026-11-11',
+  clicks30: 73,
+  made: [],
+  versions: [
+    {
+      url: `${NB}/blog/governance/`,
+      title: 'From AI Coding to Application Governance',
+      lang: 'en',
+      published: '2026-11-11',
+      clicks30: 56,
+    },
+    {
+      url: `${NB}/zh-CN/blog/governance/`,
+      title: '从 AI 编程到应用治理',
+      lang: 'zh-CN',
+      published: '2026-11-11',
+      clicks30: 17,
+    },
+    {
+      url: `${NB}/ja-JP/blog/governance/`,
+      title: 'AI コーディングからアプリケーションガバナンスへ',
+      lang: 'ja-JP',
+      published: '2026-11-11',
+      clicks30: 0,
+    },
+  ],
+};
+const firebase: Article = {
+  url: `${NB}/blog/firebase/`,
+  title: 'Alternatives to Firebase',
+  published: '2026-10-20',
+  clicks30: 11,
+  made: [],
+  versions: [
+    {
+      url: `${NB}/blog/firebase/`,
+      title: 'Alternatives to Firebase',
+      lang: 'en',
+      published: '2026-10-20',
+      clicks30: 11,
+    },
+  ],
+};
+function Opened() {
+  return <p data-testid='opened'>{useLocation().search}</p>;
+}
+const library = (articles: Article[]) =>
+  render(
+    <MemoryRouter initialEntries={['/workshop']}>
+      <Routes>
+        <Route path='/workshop' element={<Library view={view(articles)} />} />
+        <Route path='/workshop/new' element={<Opened />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+const opened = () =>
+  Object.fromEntries(
+    new URLSearchParams(screen.getByTestId('opened').textContent || ''),
+  );
+
+it('lists an article once with its languages and their clicks together, and adapts the version shown', async () => {
+  const user = userEvent.setup();
+  library([governance, firebase]);
+  const rows = screen.getAllByRole('row').slice(1);
+  expect(rows).toHaveLength(2);
+  const [first, second] = rows;
+  // The English version for an English reader; every language tagged by its own name.
+  expect(
+    within(first).getByRole('link', {
+      name: 'From AI Coding to Application Governance',
+    }),
+  ).toHaveAttribute('href', `${NB}/blog/governance/`);
+  const tags = (row: HTMLElement) =>
+    [...row.querySelectorAll('[data-languages] [data-slot="tag"]')].map(
+      (t) => t.textContent,
+    );
+  expect(tags(first)).toEqual(['English', '简体中文', '日本語']);
+  expect(tags(second)).toEqual(['English']);
+  // The clicks of all three, each language's on hover.
+  expect(
+    first.querySelector('[data-clicks-each]')?.getAttribute('aria-label'),
+  ).toBe('73: English 56; 简体中文 17; 日本語 0');
+  expect(second.querySelector('[data-clicks-each]')).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'What is 30-day clicks' }),
+  ).toBeInTheDocument();
+  // Articles are counted, not pages.
+  expect(screen.getByRole('tab', { name: 'All 2' })).toBeInTheDocument();
+  // A title in any language finds it.
+  await user.type(
+    screen.getByRole('textbox', { name: 'Search titles or links' }),
+    '应用治理',
+  );
+  expect(screen.getAllByRole('row').slice(1)).toHaveLength(1);
+  await user.click(screen.getByRole('button', { name: 'Adapt' }));
+  expect(opened()).toEqual({
+    url: `${NB}/blog/governance/`,
+    title: 'From AI Coding to Application Governance',
+  });
+});
+
+it('shows a Chinese reader the Chinese version, and the original when there is none', async () => {
+  setDictionary(zhDictionary as Record<string, string>, 'zh-CN');
+  const user = userEvent.setup();
+  library([governance, firebase]);
+  const [first, second] = screen.getAllByRole('row').slice(1);
+  expect(
+    within(first).getByRole('link', { name: '从 AI 编程到应用治理' }),
+  ).toHaveAttribute('href', `${NB}/zh-CN/blog/governance/`);
+  expect(
+    within(first).getByText('/zh-CN/blog/governance/'),
+  ).toBeInTheDocument();
+  expect(
+    within(second).getByRole('link', { name: 'Alternatives to Firebase' }),
+  ).toBeInTheDocument();
+  await user.click(within(first).getByRole('button', { name: '加工' }));
+  expect(opened()).toEqual({
+    url: `${NB}/zh-CN/blog/governance/`,
+    title: '从 AI 编程到应用治理',
+  });
+});
+
+it('tags no language on a site written in one language', () => {
+  library([firebase]);
+  expect(document.querySelector('[data-languages]')).toBeNull();
+  expect(screen.getByText('/blog/firebase/')).toBeInTheDocument();
 });

@@ -154,6 +154,12 @@ describe('Content workshop view', () => {
       // A blog section's own index is not an article (v5 review): /blog, a localized /en/changelog/.
       page('/blog', '2026-11-12'),
       page('/en/changelog/', '2026-11-12'),
+      // Nor are the pages listing articles: a section's later pages and a tag's pages (nocobase.com, 2026-11-17).
+      page('/changelog/page/3/', '2026-11-12', { type: 'blog' }),
+      page('/ja-JP/changelog/page/2/', '2026-11-12', { type: 'blog' }),
+      page('/cn/blog/tags/customer-stories/page/4', '2026-11-12', { type: 'blog' }),
+      // The day the article says it was published comes first, over a build-stamped sitemap date.
+      page('/blog/said-date', STAMP, { published: '2026-11-08' }),
       // A build stamp and no later sighting: no known date.
       page('/blog/quiet', STAMP),
       page('/blog/undated-hit', STAMP),
@@ -193,6 +199,7 @@ describe('Content workshop view', () => {
     expect(sums.periods).toEqual([{ start: '2026-10-14', end: END }]);
     // Dated ones newest first, then those without a date, most clicked first.
     expect(v.articles.map((a) => [a.url.slice(ORIGIN.length), a.published ?? null, a.clicks30])).toEqual([
+      ['/blog/said-date', '2026-11-08', 0],
       ['/blog/new-board', '2026-11-04', 846],
       ['/blog/compare', '2026-10-20', 105],
       ['/blog/old-hit', '2025-06-10', 0],
@@ -210,7 +217,9 @@ describe('Content workshop view', () => {
     ]);
     expect(of('/blog/partly').made).toEqual([{ form: 'x', taskId: '4', no: 4, standing: 'review', at: '2026-11-04T09:00:00Z' }]);
     expect(of('/blog/new-board').made).toEqual([]);
-    expect(Object.keys(of('/blog/compare')).sort()).toEqual(['clicks30', 'made', 'published', 'title', 'url']);
+    expect(Object.keys(of('/blog/compare')).sort()).toEqual(['clicks30', 'made', 'published', 'title', 'url', 'versions']);
+    // An article in one language is one version, its language unknown here.
+    expect(of('/blog/compare').versions).toEqual([{ url: `${ORIGIN}/blog/compare`, title: 'compare', published: '2026-10-20', clicks30: 105 }]);
     // Records: workshop tasks only, newest first, a failed run marked, nothing kept for the server.
     expect(v.records.map((r) => [r.taskId, r.form, r.standing, r.failed ?? false])).toEqual([
       ['6', 'x', 'closed', false],
@@ -245,6 +254,63 @@ describe('Content workshop view', () => {
       [`${ORIGIN}/blog/a`, null],
       [`${ORIGIN}/blog/b`, null],
     ]);
+  });
+
+  // One row per article (2026-11-17 user decision): nocobase.com lists each article in English, Chinese and Japanese.
+  it('lists an article once with its translations, by hreflang, else by the same path under a language part', async () => {
+    const f = fixture();
+    const NB = 'https://www.nocobase.com';
+    const translated = (slug, langs) =>
+      Object.fromEntries([...langs.map((l) => [l.toLowerCase(), `${NB}${l === 'en' ? '' : `/${l}`}/blog/${slug}/`]), ['x-default', `${NB}/blog/${slug}/`]]);
+    const nb = (path, extra = {}) => ({ url: `${NB}${path}`, title: `${path.split('/').at(-2)} ${extra.lang || ''}`.trim(), type: 'blog', firstSeenAt: '2026-09-01T08:00:00Z', ...extra });
+    const governance = translated('governance', ['en', 'zh-CN', 'ja-JP']);
+    f.site.pages = [
+      nb('/blog/governance/', { lang: 'en', alternates: governance, published: '2026-11-11' }),
+      nb('/blog/firebase/', { lang: 'en', alternates: translated('firebase', ['en']), published: '2026-10-20' }),
+      nb('/zh-CN/blog/governance/', { lang: 'zh-CN', alternates: governance, published: '2026-11-11' }),
+      // Its own date a day later: the article goes by the first.
+      nb('/ja-JP/blog/governance/', { lang: 'ja-JP', alternates: governance, published: '2026-11-12' }),
+      // Read before translations were kept: the same path under /zh-CN is the same article.
+      nb('/blog/tickets/', { published: '2026-10-28' }),
+      nb('/zh-CN/blog/tickets/', { published: '2026-10-28' }),
+      // Only in Chinese; and one whose x-default names its Japanese version as the original.
+      nb('/zh-CN/blog/only-chinese/', { lang: 'zh-CN', alternates: { 'zh-cn': `${NB}/zh-CN/blog/only-chinese/` }, published: '2026-10-01' }),
+      nb('/ja-JP/blog/tokyo/', { lang: 'ja', alternates: { ja: `${NB}/ja-JP/blog/tokyo/`, en: `${NB}/blog/tokyo/`, 'x-default': `${NB}/ja-JP/blog/tokyo/` }, published: '2026-09-01' }),
+      nb('/blog/tokyo/', { lang: 'en', published: '2026-09-02' }),
+      // Its hreflang names no Chinese version: one with the same path stays its own article.
+      nb('/blog/apart/', { lang: 'en', alternates: { en: `${NB}/blog/apart/` }, published: '2026-08-01' }),
+      nb('/zh-CN/blog/apart/', { published: '2026-08-02' }),
+    ];
+    f.p.sync.link = async () => ({ get: (k) => (k === 'gscSiteUrl' ? 'sc-domain:nocobase.com' : null) });
+    sums.rows = [
+      { host: 'nocobase.com', path: '/blog/governance', period: 0, clicks: 56 },
+      { host: 'nocobase.com', path: '/zh-CN/blog/governance', period: 0, clicks: 17 },
+    ];
+    task(f, 1, { stage: 'done', repurpose: { form: 'x', source: { kind: 'article', url: `${NB}/zh-CN/blog/governance/`, title: 'governance zh-CN' } } });
+    const v = await f.s.view('1');
+    expect(v.articles.map((a) => [a.url.slice(NB.length), a.published, a.clicks30, a.versions.map((x) => [x.url.slice(NB.length), x.lang ?? null])])).toEqual([
+      ['/blog/governance/', '2026-11-11', 73, [['/blog/governance/', 'en'], ['/zh-CN/blog/governance/', 'zh-CN'], ['/ja-JP/blog/governance/', 'ja-JP']]],
+      ['/blog/tickets/', '2026-10-28', 0, [['/blog/tickets/', null], ['/zh-CN/blog/tickets/', 'zh-CN']]],
+      ['/blog/firebase/', '2026-10-20', 0, [['/blog/firebase/', 'en']]],
+      ['/zh-CN/blog/only-chinese/', '2026-10-01', 0, [['/zh-CN/blog/only-chinese/', 'zh-CN']]],
+      ['/ja-JP/blog/tokyo/', '2026-09-01', 0, [['/ja-JP/blog/tokyo/', 'ja'], ['/blog/tokyo/', 'en']]],
+      ['/zh-CN/blog/apart/', '2026-08-02', 0, [['/zh-CN/blog/apart/', 'zh-CN']]],
+      ['/blog/apart/', '2026-08-01', 0, [['/blog/apart/', 'en']]],
+    ]);
+    const governanceRow = v.articles[0];
+    expect(governanceRow.title).toBe('governance en');
+    expect(governanceRow.versions.map((x) => [x.title, x.published, x.clicks30])).toEqual([
+      ['governance en', '2026-11-11', 56],
+      ['governance zh-CN', '2026-11-11', 17],
+      ['governance ja-JP', '2026-11-12', 0],
+    ]);
+    // Made from the Chinese version: the article counts as adapted, and adapting its Japanese version reads that draft.
+    expect(governanceRow.made.map((m) => [m.taskId, m.form])).toEqual([['1', 'x']]);
+    f.state.nrTasks[0].evidence.work.results = [{ approvedAt: '2026-11-12T10:00:00Z', content: 'Chinese X thread' }];
+    await f.s.create('1', { requestId: '6d2b6a6e-5f0d-4c1e-9b7a-1f2e3d4c5b6a', source: { kind: 'article', url: `${NB}/ja-JP/blog/governance/`, title: 'governance ja-JP' }, items: [{ form: 'linkedin' }] }, '1', 'Tester', 'en-US');
+    const t = f.state.nrTasks.at(-1);
+    expect(t.evidence.work.repurpose.source).toEqual({ kind: 'article', url: `${NB}/ja-JP/blog/governance/`, title: 'governance ja-JP' });
+    expect(t.evidence.work.repurpose.earlier.map((e) => e.taskId)).toEqual(['1']);
   });
 
   it('lists live Trending now opportunities with what is hot, their discussions, material and tasks', async () => {

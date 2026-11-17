@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "做成什么",
   "workshop.articleColumn": "博客文章",
   "workshop.clicks30Column": "近 30 天点击",
+  "workshop.clicks30Info": "Search Console 近 30 天的点击，文章各语言版本合计。鼠标移到数字上可看每种语言的点击。",
+  "workshop.sourceLanguage": "原文语言",
   "workshop.madeColumn": "已做成",
   "workshop.noMatch": "没有标题或链接包含“{0}”的文章。",
   "workshop.next": "下一步",
