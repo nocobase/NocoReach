@@ -282,10 +282,11 @@ class WorkshopService {
     const input = await this.inputs(id), { site, brand, project, key, records, published, sums, reddit } = input;
     const clicks = new Map<string, number>();
     for (const r of sums?.rows || []) { const k = key(r.url); if (k) clicks.set(k, (clicks.get(k) || 0) + r.clicks); }
-    // Library: every blog article (the blog pages adaptPage() offers too, without a section's own index such as /blog or
-    // /changelog), with the forms already made from it by tasks not closed. A page's date: when NocoReach published it, else its sitemap date, else when the sitemap first listed
-    // it. A sitemap date half the site's pages share is its build time, and pages listed at the first read have no known
-    // date: neither is used, and a page without a date shows none.
+    // Library: every blog article (the blog pages adaptPage() offers too, without the pages listing them such as /blog,
+    // /changelog/page/2 or a tag's page), with the forms already made from it by tasks not closed. A page's date: the one
+    // it says it was published (site-content.ts publishedOf), else when NocoReach published it, else its sitemap date,
+    // else when the sitemap first listed it. A sitemap date half the site's pages share is its build time, and pages
+    // listed at the first read have no known date: neither is used, and a page without a date shows none.
     const all = site?.pages || [], pages = all.filter(isBlogArticle);
     const stamps = new Map<string, number>(), firstRead = all.map((p: any) => String(p.firstSeenAt || '')).filter(Boolean).sort()[0] || '';
     for (const p of all) { const d = String(p.lastmod || '').slice(0, 10); if (d) stamps.set(d, (stamps.get(d) || 0) + 1); }
@@ -300,7 +301,7 @@ class WorkshopService {
       const k = key(p.url);
       if (!k || byKey.has(k)) continue;
       const lastmod = String(p.lastmod || '').slice(0, 10), seen = String(p.firstSeenAt || '').slice(0, 10);
-      const date = published.get(k) || (lastmod && !buildStamp(lastmod) ? lastmod : '') || (seen && firstRead && seen > firstRead.slice(0, 10) ? seen : '');
+      const date = String(p.published || '').slice(0, 10) || published.get(k) || (lastmod && !buildStamp(lastmod) ? lastmod : '') || (seen && firstRead && seen > firstRead.slice(0, 10) ? seen : '');
       byKey.set(k, { url: p.url, title: articleTitle(p), ...(date ? { published: date } : {}), clicks30: sums ? clicks.get(k) || 0 : null, made: (mine.get(k) || []).map(madeOf) });
     }
     const hot = await this.hotItems(id, input).catch((e: any) => {

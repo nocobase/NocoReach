@@ -372,12 +372,23 @@ export function articleTitle(page: { url: string; title?: string }): string {
 }
 
 /**
- * Whether a page Website content lists as `blog` is the section's own index rather than an article: "/blog",
- * "/en/changelog/", or the home of a blog.* host. A page is `blog` by the first path segment after any locale prefix
- * (server/nocoreach/site-content.ts classify), so a blog page with nothing after that segment is the section itself.
- * Only meaningful for `blog` pages: elsewhere a one-segment path can be an article.
+ * Whether a page Website content lists as `blog` lists articles rather than being one. A page is `blog` by the first
+ * path segment after any locale prefix (server/nocoreach/site-content.ts classify), so these are: the section itself
+ * ("/blog", "/en/changelog/", the home of a blog.* host); its later pages ("/changelog/page/3/", "/blog?page=2"); and
+ * its tag, category, author and archive pages ("/cn/blog/tags/customer-stories/page/4"). Only meaningful for `blog`
+ * pages: elsewhere a one-segment path can be an article.
  */
-export function isBlogIndex(url: string): boolean {
+const LISTINGS = new Set([
+  'tag',
+  'tags',
+  'category',
+  'categories',
+  'author',
+  'authors',
+  'archive',
+  'archives',
+]);
+export function isBlogListing(url: string): boolean {
   let u: URL;
   try {
     u = new URL(url);
@@ -391,17 +402,22 @@ export function isBlogIndex(url: string): boolean {
   const rest = /^[a-z]{2}(-[a-z0-9]{2,4})?$/.test(parts[0] || '')
     ? parts.slice(1)
     : parts;
+  // On a blog.* host the articles start at the first segment; elsewhere after the section's (blog, news, changelog).
+  const first = /^blog\./.test(u.hostname) ? 0 : 1;
   return (
-    rest.length === 0 || (!/^blog\./.test(u.hostname) && rest.length === 1)
+    rest.length <= first ||
+    LISTINGS.has(rest[first]) ||
+    rest.some((p, i) => p === 'page' && /^\d+$/.test(rest[i + 1] || '')) ||
+    /^\d+$/.test(u.searchParams.get('page') || '')
   );
 }
 
-/** A blog article Content workshop lists and adapts: a `blog` page that is not noindex and not the section's index. */
+/** A blog article Content workshop lists and adapts: a `blog` page that is not noindex and lists no articles. */
 export const isBlogArticle = (p: {
   url?: unknown;
   type?: unknown;
   noindex?: unknown;
-}) => p?.type === 'blog' && !p.noindex && !isBlogIndex(String(p.url || ''));
+}) => p?.type === 'blog' && !p.noindex && !isBlogListing(String(p.url || ''));
 
 /**
  * A workshop task's brief, in the language it is created in: the article, topic or trending opportunity and what this

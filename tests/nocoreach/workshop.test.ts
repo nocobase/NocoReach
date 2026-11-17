@@ -154,6 +154,12 @@ describe('Content workshop view', () => {
       // A blog section's own index is not an article (v5 review): /blog, a localized /en/changelog/.
       page('/blog', '2026-11-12'),
       page('/en/changelog/', '2026-11-12'),
+      // Nor are the pages listing articles: a section's later pages and a tag's pages (nocobase.com, 2026-11-17).
+      page('/changelog/page/3/', '2026-11-12', { type: 'blog' }),
+      page('/ja-JP/changelog/page/2/', '2026-11-12', { type: 'blog' }),
+      page('/cn/blog/tags/customer-stories/page/4', '2026-11-12', { type: 'blog' }),
+      // The day the article says it was published comes first, over a build-stamped sitemap date.
+      page('/blog/said-date', STAMP, { published: '2026-11-08' }),
       // A build stamp and no later sighting: no known date.
       page('/blog/quiet', STAMP),
       page('/blog/undated-hit', STAMP),
@@ -193,6 +199,7 @@ describe('Content workshop view', () => {
     expect(sums.periods).toEqual([{ start: '2026-10-14', end: END }]);
     // Dated ones newest first, then those without a date, most clicked first.
     expect(v.articles.map((a) => [a.url.slice(ORIGIN.length), a.published ?? null, a.clicks30])).toEqual([
+      ['/blog/said-date', '2026-11-08', 0],
       ['/blog/new-board', '2026-11-04', 846],
       ['/blog/compare', '2026-10-20', 105],
       ['/blog/old-hit', '2025-06-10', 0],
