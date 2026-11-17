@@ -136,6 +136,57 @@ function cleanItems(items: any, brand: any) {
 const madeOf = (r: any) => ({ form: r.form, ...(r.destination ? { destination: r.destination } : {}), taskId: r.taskId, no: r.no, standing: r.standing, at: r.createdAt, ...(r.internal?.draft ? { drafted: true } : {}) });
 // What the page is sent of a record.
 const shown = ({ internal: _internal, ...r }: any) => r;
+
+// One Library row per article (2026-11-17 user decision): an article's translations are its versions. They are the
+// pages a page names in its `<link rel="alternate" hreflang>` (site-content.ts languagesOf; x-default only says which
+// one is the original). A page without such links (read before they were kept, or on a site without them) joins the
+// others without them whose path is the same once a leading language part (/zh-CN, /ja-JP) is left out. A version's
+// language is the hreflang a page names it by, else its `<html lang>`, else that language part.
+const LANGUAGE_PART = /^[a-z]{2}(-[a-z0-9]{2,4})?$/i;
+const KNOWN_LANGUAGES = new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' });
+function languageTag(v: unknown) {
+  const [base, ...rest] = String(v || '').trim().replace(/_/g, '-').split('-');
+  if (!/^[a-z]{2,3}$/i.test(base)) return null;
+  const script = rest.find(p => /^[a-z]{4}$/i.test(p)), region = rest.find(p => /^([a-z]{2}|\d{3})$/i.test(p));
+  return [base.toLowerCase(), script && script[0].toUpperCase() + script.slice(1).toLowerCase(), region?.toUpperCase()].filter(Boolean).join('-');
+}
+// A page key's leading language part ("zh-CN" of acme.example/zh-CN/blog/x), and the key without it.
+function languagePart(k: string) {
+  const part = k.slice(k.indexOf('/')).split('/')[1] || '';
+  try { return LANGUAGE_PART.test(part) && KNOWN_LANGUAGES.of(part) ? part : ''; } catch { return ''; }
+}
+const withoutLanguage = (k: string) => {
+  const part = languagePart(k), i = k.indexOf('/');
+  return part ? `${k.slice(0, i)}${k.slice(i + part.length + 1) || '/'}` : k;
+};
+/** The articles of `versions` (blog pages by key, in the site's order): each its keys and languages, the original first. */
+function articleGroups(versions: Map<string, any>, key: (u: string) => string) {
+  const root = new Map<string, string>(), named = new Map<string, string>(), originals = new Set<string>(), slugs = new Map<string, string>();
+  const find = (k: string) => { let r = k; while (root.get(r) !== r) r = root.get(r)!; return r; };
+  const join = (a: string, b: string) => { const ra = find(a), rb = find(b); if (ra !== rb) root.set(rb, ra); };
+  for (const k of versions.keys()) root.set(k, k);
+  for (const [k, v] of versions) {
+    const links = v.page.alternates && typeof v.page.alternates === 'object' ? Object.entries(v.page.alternates) : [];
+    for (const [lang, href] of links) {
+      const other = key(String(href));
+      if (!versions.has(other)) continue;
+      if (lang === 'x-default') { originals.add(other); continue; }
+      const tag = languageTag(lang);
+      if (tag && !named.has(other)) named.set(other, tag);
+      join(k, other);
+    }
+    if (links.length) continue;
+    const slug = withoutLanguage(k);
+    if (slugs.has(slug)) join(slugs.get(slug)!, k);
+    else slugs.set(slug, k);
+  }
+  const groups = new Map<string, string[]>();
+  for (const k of versions.keys()) { const r = find(k); groups.set(r, [...(groups.get(r) || []), k]); }
+  return [...groups.values()].map(keys => {
+    const first = keys.find(k => originals.has(k)) || keys.find(k => !languagePart(k)) || keys[0];
+    return [first, ...keys.filter(k => k !== first)].map(k => ({ key: k, lang: named.get(k) || languageTag(versions.get(k).page.lang) || languageTag(languagePart(k)) }));
+  });
+}
 // How many discussions a growth rests on: all its rows when every row is one (it keeps fewer than it counts), else
 // those read.
 const discussionCount = (g: any, discussions: any[]) =>
@@ -278,39 +329,49 @@ class WorkshopService {
     return { site, brand, project, key, records, published, info, sums, reddit, ght, skips };
   }
 
-  async view(id: string) {
-    const input = await this.inputs(id), { site, brand, project, key, records, published, sums, reddit } = input;
+  // Library: every blog article (the blog pages adaptPage() offers too, without the pages listing them such as /blog,
+  // /changelog/page/2 or a tag's page), its translations one row (articleGroups), with the forms already made from any
+  // of its versions by tasks not closed. A version's date: the one it says it was published (site-content.ts
+  // publishedOf), else when NocoReach published it, else its sitemap date, else when the sitemap first listed it. A
+  // sitemap date half the site's pages share is its build time, and pages listed at the first read have no known date:
+  // neither is used, and a page without a date shows none. An article goes by its first known date and its versions'
+  // clicks together. `of` finds an article by any version's key.
+  library({ site, key, records, published, sums }: any) {
     const clicks = new Map<string, number>();
     for (const r of sums?.rows || []) { const k = key(r.url); if (k) clicks.set(k, (clicks.get(k) || 0) + r.clicks); }
-    // Library: every blog article (the blog pages adaptPage() offers too, without the pages listing them such as /blog,
-    // /changelog/page/2 or a tag's page), with the forms already made from it by tasks not closed. A page's date: the one
-    // it says it was published (site-content.ts publishedOf), else when NocoReach published it, else its sitemap date,
-    // else when the sitemap first listed it. A sitemap date half the site's pages share is its build time, and pages
-    // listed at the first read have no known date: neither is used, and a page without a date shows none.
     const all = site?.pages || [], pages = all.filter(isBlogArticle);
     const stamps = new Map<string, number>(), firstRead = all.map((p: any) => String(p.firstSeenAt || '')).filter(Boolean).sort()[0] || '';
     for (const p of all) { const d = String(p.lastmod || '').slice(0, 10); if (d) stamps.set(d, (stamps.get(d) || 0) + 1); }
     const buildStamp = (d: string) => all.length >= 5 && (stamps.get(d) || 0) >= all.length / 2;
-    const mine = new Map<string, any[]>();
-    for (const r of records) if (r.source?.kind === 'article' && r.standing !== 'closed') {
-      const k = key(r.source.url);
-      if (k) mine.set(k, [...(mine.get(k) || []), r]);
-    }
-    const byKey = new Map<string, any>();
+    const versions = new Map<string, any>();
     for (const p of pages) {
       const k = key(p.url);
-      if (!k || byKey.has(k)) continue;
+      if (!k || versions.has(k)) continue;
       const lastmod = String(p.lastmod || '').slice(0, 10), seen = String(p.firstSeenAt || '').slice(0, 10);
       const date = String(p.published || '').slice(0, 10) || published.get(k) || (lastmod && !buildStamp(lastmod) ? lastmod : '') || (seen && firstRead && seen > firstRead.slice(0, 10) ? seen : '');
-      byKey.set(k, { url: p.url, title: articleTitle(p), ...(date ? { published: date } : {}), clicks30: sums ? clicks.get(k) || 0 : null, made: (mine.get(k) || []).map(madeOf) });
+      versions.set(k, { page: p, url: p.url, title: articleTitle(p), ...(date ? { published: date } : {}), clicks30: sums ? clicks.get(k) || 0 : null });
     }
+    const of = new Map<string, any>();
+    const articles = articleGroups(versions, key).map(group => {
+      const list = group.map(({ key: k, lang }) => { const { page: _page, ...v } = versions.get(k); return { ...v, ...(lang ? { lang } : {}) }; });
+      const date = list.map(v => v.published).filter(Boolean).sort()[0];
+      const a = { url: list[0].url, title: list[0].title, ...(date ? { published: date } : {}), clicks30: sums ? list.reduce((n, v) => n + v.clicks30, 0) : null, made: [], versions: list };
+      for (const { key: k } of group) of.set(k, a);
+      return a;
+    });
+    for (const r of records) if (r.source?.kind === 'article' && r.standing !== 'closed') of.get(key(r.source.url))?.made.push(madeOf(r));
+    return { articles: articles.sort(libraryOrder).slice(0, ARTICLES_MAX), of };
+  }
+
+  async view(id: string) {
+    const input = await this.inputs(id), { brand, project, records, reddit } = input;
     const hot = await this.hotItems(id, input).catch((e: any) => {
       this.p.app?.logger?.warn?.('NocoReach could not read the trending opportunities for Content workshop', { projectId: id, message: e?.message });
       return [];
     });
     return {
       hot: hot.map(h => h.item),
-      articles: [...byKey.values()].sort(libraryOrder).slice(0, ARTICLES_MAX),
+      articles: this.library(input).articles,
       records: records.slice(0, RECORDS_MAX).map(shown), recordCount: records.length,
       brand: { revision: brand.revision, community: brand.community || null },
       // The voice adaptations follow (Memory › Voice and style), shown in the brand kit with a link to change it.
@@ -421,11 +482,14 @@ class WorkshopService {
     const { playbooks } = await this.p.taskExecution.playbooks.list(id);
     const chosen = items.map(it => playbooks.find((p: any) => p.id === FORM_PLAYBOOK[it.form]) || fail(systemMessageText('playbook.playbookNotExistRefreshPick'), 404));
     // An article or a trending opportunity adapted before: the Agent reads the drafts of the latest earlier tasks
-    // (approved, or waiting for review) and takes another angle.
+    // (approved, or waiting for review) and takes another angle. An article's are those made from any of its languages.
     const input = source.kind === 'topic' ? null : await this.inputs(id);
     if (source.kind === 'opportunity') source = await this.hotSource(id, source.id, input, locale);
     const k = source.kind === 'article' ? input.key(source.url) : '';
-    const same = (r: any) => source.kind === 'article' ? r.source?.kind === 'article' && Boolean(k) && input.key(r.source.url) === k : source.kind === 'opportunity' && r.source?.kind === 'opportunity' && r.source.id === source.id;
+    const of = source.kind === 'article' ? this.library(input).of : new Map(), mine = of.get(k);
+    const same = (r: any) => source.kind === 'article'
+      ? r.source?.kind === 'article' && Boolean(k) && (mine ? of.get(input.key(r.source.url)) === mine : input.key(r.source.url) === k)
+      : source.kind === 'opportunity' && r.source?.kind === 'opportunity' && r.source.id === source.id;
     const earlier = input ? input.records.filter((r: any) => same(r) && r.internal.draft).sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, EARLIER_MAX) : [];
     const body = source.kind === 'article' ? await this.articleBody(id, source).catch(() => null) : null;
     if (body) Object.assign(source, { targetId: body.targetId, articleId: body.articleId });

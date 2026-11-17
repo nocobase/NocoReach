@@ -1,4 +1,6 @@
-import { $legacyText, $t } from '#i18n';
+import { $legacyText, $t, getCurrentLocale } from '#i18n';
+import { resolveLocale } from '../../../shared/i18n/locales.js';
+import { contentLanguageName } from '../content-language';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Tone } from '#components/reach/tag';
 import { getWorkColumns } from '../task-execution-types';
@@ -36,7 +38,20 @@ export type Made = {
   /** It has a draft (approved, or waiting for review) the Agent reads when the same source is adapted again. */
   drafted?: boolean;
 };
-/** A blog article in Library, with the tasks made from it that are not closed. */
+/** One language of a Library article: its own page. */
+export type ArticleVersion = {
+  url: string;
+  title: string;
+  /** Its language tag ("zh-CN"), when the site says it or its path does. */
+  lang?: string;
+  published?: string;
+  clicks30: number | null;
+};
+/**
+ * A blog article in Library, one row for all its translations (2026-11-17 user decision), with the tasks made from any
+ * of them that are not closed. `url` and `title` are the original's, the first of `versions`; `published` is the first
+ * known date, and `clicks30` the versions' clicks together.
+ */
 export type Article = {
   url: string;
   title: string;
@@ -44,6 +59,7 @@ export type Article = {
   /** Search Console clicks of the last 30 days; null without Search Console. */
   clicks30: number | null;
   made: Made[];
+  versions: ArticleVersion[];
 };
 /** A task handed off from the opportunity on Opportunities. */
 export type Handed = {
@@ -119,13 +135,56 @@ export type LibraryFilter = 'all' | 'todo' | 'made';
 /** Library's filters: everything, articles nothing was made from yet, and those adapted. */
 export const libraryFilter = (f: LibraryFilter) => (a: Article) =>
   f === 'all' || (f === 'made') === a.made.length > 0;
-/** Whether a Library article matches a search: its title or its address. */
+/** Whether a Library article matches a search: the title or the address of any of its languages. */
 export const librarySearch = (a: Article, query: string) => {
   const q = query.trim().toLowerCase();
   return (
-    !q || a.title.toLowerCase().includes(q) || a.url.toLowerCase().includes(q)
+    !q ||
+    a.versions.some(
+      (v) =>
+        v.title.toLowerCase().includes(q) || v.url.toLowerCase().includes(q),
+    )
   );
 };
+/**
+ * The version a Library row shows and Adapt starts from: the one in the interface language, else one in the same
+ * language written another way (zh-CN for a zh-TW reader), else the original.
+ */
+export function shownVersion(
+  a: Article,
+  locale: string = getCurrentLocale(),
+): ArticleVersion {
+  const base = locale.split('-')[0];
+  return (
+    a.versions.find((v) => v.lang && resolveLocale(v.lang) === locale) ??
+    a.versions.find((v) => v.lang && v.lang.split('-')[0] === base) ??
+    a.versions[0]
+  );
+}
+/** An article's address without the site: "/blog/client-portal". */
+export const pathOf = (url: string) => {
+  try {
+    const u = new URL(url);
+    return decodeURI(u.pathname) + u.search;
+  } catch {
+    return url;
+  }
+};
+/** A version's language, or its address when neither the site nor the address says it. */
+export const versionName = (v: ArticleVersion) =>
+  v.lang ? languageName(v.lang) : pathOf(v.url);
+/** A version's language named in itself, as the language menu names it ("English", Japanese in Japanese). */
+export function languageName(lang: string): string {
+  const locale = resolveLocale(lang),
+    base = lang.split('-')[0].toLowerCase();
+  if (locale.split('-')[0] === base) return contentLanguageName(locale);
+  try {
+    const name = new Intl.DisplayNames([lang], { type: 'language' }).of(lang);
+    return name ? name.charAt(0).toLocaleUpperCase(lang) + name.slice(1) : lang;
+  } catch {
+    return lang;
+  }
+}
 
 export const workshopRequest = <T>(
   action: string,

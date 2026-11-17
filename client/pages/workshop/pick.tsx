@@ -11,6 +11,7 @@ import { Check } from 'lucide-react';
 import { $t, useNocoReachLocale } from '#i18n';
 import { RouteDialog } from '#components/route-dialog';
 import { useRouteOverlay } from '#components/use-route-overlay';
+import { Segmented } from '#components/reach/segmented';
 import { SourceLogo } from '#components/reach/source-logo';
 import { ListSkeleton, LoadError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
@@ -48,10 +49,13 @@ import {
   getFormNames,
   hotHeadlineText,
   opportunityNo,
+  pathOf,
   standingText,
   taskNo,
+  versionName,
   workshopRequest,
   type Article,
+  type ArticleVersion,
   type HotItem,
   type Made,
   type WorkshopView,
@@ -140,6 +144,16 @@ function Pick({
   // An article or a trending item comes with the address; otherwise it is a new topic, written in step 1.
   const given = Boolean(chosen || hotId);
   const hot = hotId ? view?.hot.find((h) => h.id === hotId) : undefined;
+  // An article comes with the version to start from (Library's shown one, a task's page); step 2 can switch to another
+  // of its languages, and the Agent gets that version's address and text.
+  const article =
+    chosen && !hotId
+      ? view?.articles.find((a) => a.versions.some((v) => v.url === chosen.url))
+      : undefined;
+  const [versionUrl, setVersionUrl] = useState<string>();
+  const version = article?.versions.find(
+    (v) => v.url === (versionUrl ?? chosen?.url),
+  );
   const [step, setStep] = useState<1 | 2>(1);
   const [topic, setTopic] = useState({ topic: '', points: '', links: '' });
   const source: RepurposeSource | null = hot
@@ -150,7 +164,11 @@ function Pick({
         headline: hotHeadlineText(hot),
       }
     : chosen && !hotId
-      ? { kind: 'article', ...chosen }
+      ? {
+          kind: 'article',
+          url: version?.url ?? chosen.url,
+          title: version?.title ?? chosen.title,
+        }
       : !given && topic.topic.trim()
         ? {
             kind: 'topic',
@@ -159,10 +177,6 @@ function Pick({
             ...(links(topic.links).length ? { links: links(topic.links) } : {}),
           }
         : null;
-  const article =
-    source?.kind === 'article'
-      ? view?.articles.find((a) => a.url === source.url)
-      : undefined;
   const topicProblem =
     topic.topic.trim().length > TOPIC_MAX
       ? $t('workshop.topicTooLong', { 0: TOPIC_MAX })
@@ -192,6 +206,10 @@ function Pick({
         view={view}
         source={source}
         article={article}
+        version={version}
+        onVersion={
+          article && article.versions.length > 1 ? setVersionUrl : undefined
+        }
         hot={hot}
         // A new topic goes back to step 1 to be edited; an article or a trending item is changed by closing the dialog
         // and picking another.
@@ -376,6 +394,8 @@ function Step2({
   view,
   source,
   article,
+  version,
+  onVersion,
   hot,
   onEdit,
   closeTo,
@@ -385,6 +405,9 @@ function Step2({
   view: WorkshopView;
   source: RepurposeSource;
   article?: Article;
+  /** The article's language adapted, and the way to choose another when it has more than one. */
+  version?: ArticleVersion;
+  onVersion?: (url: string) => void;
   hot?: HotItem;
   /** A new topic's way back to step 1. */
   onEdit?: () => void;
@@ -546,6 +569,7 @@ function Step2({
   // An article's stays open, to be told again from another angle.
   const locked = (item: Item) => Boolean(hot && madeFor(item));
   const names = getFormNames();
+  const published = version?.published ?? article?.published;
   return (
     <RouteDialog
       title={$t(
@@ -608,11 +632,9 @@ function Step2({
                   ? $t('workshop.topicSource', { 0: source.topic })
                   : source.headline}
             </b>
-            {article?.published ? (
+            {published ? (
               <span className='text-xs text-muted-foreground'>
-                {$t('workshop.publishedOn', {
-                  0: formatDate(article.published),
-                })}
+                {$t('workshop.publishedOn', { 0: formatDate(published) })}
               </span>
             ) : null}
             {onEdit ? (
@@ -624,6 +646,35 @@ function Step2({
               >
                 {$t('common.edit')}
               </Button>
+            ) : null}
+            {onVersion && article && source.kind === 'article' ? (
+              <div
+                className='flex basis-full flex-wrap items-center gap-x-3 gap-y-1'
+                data-source-language=''
+              >
+                <span className='text-muted-foreground'>
+                  {$t('workshop.sourceLanguage')}
+                </span>
+                <Segmented
+                  size='sm'
+                  label={$t('workshop.sourceLanguage')}
+                  options={article.versions.map((v) => ({
+                    id: v.url,
+                    label: versionName(v),
+                    title: v.title,
+                  }))}
+                  value={source.url}
+                  onChange={onVersion}
+                />
+                <a
+                  href={source.url}
+                  target='_blank'
+                  rel='noreferrer'
+                  className='min-w-0 truncate text-xs text-muted-foreground hover:underline'
+                >
+                  {pathOf(source.url)}
+                </a>
+              </div>
             ) : null}
           </div>
         )}

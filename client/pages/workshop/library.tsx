@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router';
 import { FileText, Search } from 'lucide-react';
 import { $t } from '#i18n';
 import { EmptyState } from '#components/reach/states';
+import { InfoTip } from '#components/reach/info-tip';
 import { SourceLogo } from '#components/reach/source-logo';
+import { Tag } from '#components/reach/tag';
 import { DataTableTabs } from '#components/seo/data-table-toolbar';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
@@ -29,10 +31,14 @@ import {
   libraryFilter,
   librarySearch,
   logoOf,
+  pathOf,
   resultName,
+  shownVersion,
   standingText,
   taskNo,
+  versionName,
   type Article,
+  type ArticleVersion,
   type LibraryFilter as Filter,
   type Made,
   type WorkshopView,
@@ -40,22 +46,14 @@ import {
 
 // Library (homepage v5, 2026-11-13 user decision, ui-references/content-workshop-2026-11-12/homepage-v5.png): every blog
 // article, newest first, picked by hand to go out to the fixed channels. Each row shows which forms were already made
-// from it as read-only icons (lit or grey), never a grid of choices; Adapt opens step 2 for it.
+// from it as read-only icons (lit or grey), never a grid of choices; Adapt opens step 2 for it. An article is one row
+// for all its translations (2026-11-17 user decision): the row shows the version in the interface language, else the
+// original, tags its languages and adds up their clicks; Adapt starts from the version shown.
 
 /** Rows shown before Show more, and how many more each press shows. */
 const PAGE = 20;
 /** The forms a row's icons stand for, in this order. */
 const FORMS: RepurposeForm[] = ['x', 'linkedin', 'xhs', 'community'];
-
-/** An article's address without the site: "/blog/client-portal". */
-const pathOf = (url: string) => {
-  try {
-    const u = new URL(url);
-    return decodeURI(u.pathname) + u.search;
-  } catch {
-    return url;
-  }
-};
 
 export function Library({ view }: { view: WorkshopView }) {
   const navigate = useNavigate();
@@ -90,10 +88,12 @@ export function Library({ view }: { view: WorkshopView }) {
         }
       />
     );
-  const adapt = (a: Article) =>
+  // Languages are tagged only on a site with translations: on one written in a single language, every row would say it.
+  const multilingual = view.articles.some((a) => a.versions.length > 1);
+  const adapt = (v: ArticleVersion) =>
     void navigate({
       pathname: 'new',
-      search: `?${new URLSearchParams({ url: a.url, title: a.title })}`,
+      search: `?${new URLSearchParams({ url: v.url, title: v.title })}`,
     });
   return (
     <div className='overflow-hidden rounded-lg border bg-card' data-library=''>
@@ -137,8 +137,19 @@ export function Library({ view }: { view: WorkshopView }) {
               <TableHead className='w-32'>
                 {$t('workshop.publishedColumn')}
               </TableHead>
-              <TableHead className='w-32 text-right'>
-                {$t('workshop.clicks30Column')}
+              <TableHead className='w-36 text-right'>
+                <span className='inline-flex items-center gap-1'>
+                  {$t('workshop.clicks30Column')}
+                  <InfoTip
+                    label={$t('common.what', {
+                      0: $t('workshop.clicks30Column'),
+                    })}
+                  >
+                    <span className='block max-w-xs'>
+                      {$t('workshop.clicks30Info')}
+                    </span>
+                  </InfoTip>
+                </span>
               </TableHead>
               <TableHead className='w-40'>
                 {$t('workshop.madeColumn')}
@@ -147,38 +158,60 @@ export function Library({ view }: { view: WorkshopView }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.slice(0, limit).map((a) => (
-              <TableRow key={a.url} data-article={a.made.length ? 'made' : ''}>
-                <TableCell className='max-w-0'>
-                  <a
-                    href={a.url}
-                    target='_blank'
-                    rel='noreferrer'
-                    className='block truncate font-medium hover:underline'
-                    title={a.title}
-                  >
-                    {a.title}
-                  </a>
-                  <div className='truncate text-xs text-muted-foreground'>
-                    {pathOf(a.url)}
-                  </div>
-                </TableCell>
-                <TableCell className='text-muted-foreground tabular-nums'>
-                  {a.published ? formatDate(a.published) : '—'}
-                </TableCell>
-                <TableCell className='text-right tabular-nums'>
-                  {a.clicks30 === null ? '—' : formatCount(a.clicks30)}
-                </TableCell>
-                <TableCell>
-                  <MadeIcons made={a.made} />
-                </TableCell>
-                <TableCell className='text-right'>
-                  <Button size='sm' variant='outline' onClick={() => adapt(a)}>
-                    {$t('workshop.adapt')}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {rows.slice(0, limit).map((a) => {
+              const v = shownVersion(a);
+              return (
+                <TableRow
+                  key={a.url}
+                  data-article={a.made.length ? 'made' : ''}
+                >
+                  <TableCell className='max-w-0'>
+                    <a
+                      href={v.url}
+                      target='_blank'
+                      rel='noreferrer'
+                      className='block truncate font-medium hover:underline'
+                      title={v.title}
+                    >
+                      {v.title}
+                    </a>
+                    <div className='mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground'>
+                      {multilingual && a.versions.some((x) => x.lang) ? (
+                        <span
+                          className='flex shrink-0 items-center gap-1'
+                          data-languages=''
+                        >
+                          {a.versions.map((x) => (
+                            <Tag key={x.url} tone='grey' title={x.title}>
+                              {versionName(x)}
+                            </Tag>
+                          ))}
+                        </span>
+                      ) : null}
+                      <span className='truncate'>{pathOf(v.url)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className='text-muted-foreground tabular-nums'>
+                    {a.published ? formatDate(a.published) : '—'}
+                  </TableCell>
+                  <TableCell className='text-right tabular-nums'>
+                    <Clicks article={a} />
+                  </TableCell>
+                  <TableCell>
+                    <MadeIcons made={a.made} />
+                  </TableCell>
+                  <TableCell className='text-right'>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      onClick={() => adapt(v)}
+                    >
+                      {$t('workshop.adapt')}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       ) : (
@@ -200,6 +233,33 @@ export function Library({ view }: { view: WorkshopView }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** An article's clicks, all its languages together; hovering them gives each language's. */
+function Clicks({ article }: { article: Article }) {
+  if (article.clicks30 === null) return <>—</>;
+  const total = formatCount(article.clicks30);
+  if (article.versions.length < 2) return <>{total}</>;
+  const each = article.versions.map(
+    (v) => `${versionName(v)} ${formatCount(v.clicks30 ?? 0)}`,
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            className='rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+            aria-label={`${total}: ${each.join('; ')}`}
+            data-clicks-each=''
+          />
+        }
+      >
+        {total}
+      </TooltipTrigger>
+      <TooltipContent>{each.join(' · ')}</TooltipContent>
+    </Tooltip>
   );
 }
 

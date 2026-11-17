@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "Tạo thành gì",
   "workshop.articleColumn": "Bài blog",
   "workshop.clicks30Column": "Lượt nhấp 30 ngày",
+  "workshop.clicks30Info": "Lượt nhấp từ Search Console trong 30 ngày qua, cộng tất cả phiên bản ngôn ngữ của bài viết. Di chuột lên con số để xem từng ngôn ngữ.",
+  "workshop.sourceLanguage": "Ngôn ngữ gốc",
   "workshop.madeColumn": "Đã làm thành",
   "workshop.noMatch": "Không có bài viết nào có tiêu đề hoặc liên kết chứa \"{0}\".",
   "workshop.next": "Tiếp theo",

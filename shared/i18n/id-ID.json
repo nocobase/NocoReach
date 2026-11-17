@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "Apa yang dibuat",
   "workshop.articleColumn": "Artikel blog",
   "workshop.clicks30Column": "Klik 30 hari",
+  "workshop.clicks30Info": "Klik Search Console selama 30 hari terakhir, gabungan semua versi bahasa artikel. Arahkan kursor ke angka untuk melihat tiap bahasa.",
+  "workshop.sourceLanguage": "Bahasa sumber",
   "workshop.madeColumn": "Sudah dibuat",
   "workshop.noMatch": "Tidak ada judul atau tautan artikel yang memuat \"{0}\".",
   "workshop.next": "Berikutnya",

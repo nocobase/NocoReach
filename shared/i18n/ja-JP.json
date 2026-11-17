@@ -8673,6 +8673,8 @@
   "workshop.stepForm": "作成する形式",
   "workshop.articleColumn": "ブログ記事",
   "workshop.clicks30Column": "30 日間のクリック数",
+  "workshop.clicks30Info": "Search Console の過去 30 日間のクリック数で、記事の各言語版の合計です。数字にカーソルを合わせると言語ごとの数が表示されます。",
+  "workshop.sourceLanguage": "元の言語",
   "workshop.madeColumn": "作成済み",
   "workshop.noMatch": "タイトルやリンクに「{0}」を含む記事はありません。",
   "workshop.next": "次へ",

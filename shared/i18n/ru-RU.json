@@ -8691,6 +8691,8 @@
   "workshop.stepForm": "Что создать",
   "workshop.articleColumn": "Статья блога",
   "workshop.clicks30Column": "Клики за 30 дней",
+  "workshop.clicks30Info": "Клики из Search Console за последние 30 дней по всем языковым версиям статьи вместе. Наведите курсор на число, чтобы увидеть каждый язык.",
+  "workshop.sourceLanguage": "Язык оригинала",
   "workshop.madeColumn": "Уже сделано",
   "workshop.noMatch": "Нет статей, в заголовке или ссылке которых есть «{0}».",
   "workshop.next": "Далее",
