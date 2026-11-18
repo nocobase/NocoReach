@@ -150,14 +150,16 @@ snowflake:
 # Install the commercial @nocobase/app-plugin-jobs-redis package and register its Server plugin
 # from @nocobase/app-plugin-jobs-redis/server in server/plugins.ts on every producer and consumer.
 # Upgrading deployments must set adapter: redis explicitly; the application no longer supplies Redis defaults.
+# Named configurations go under backends (jobs and queue alike); top-level entries such as jobs.redis are rejected.
 # jobs:
 #   default: redis
-#   redis:
-#     adapter: redis
-#     connection:
-#       host: 127.0.0.1
-#       port: 6379
-#     # namespace: my-app # defaults to the application name; set it when deployments share one Redis
+#   backends:
+#     redis:
+#       adapter: redis
+#       connection:
+#         host: 127.0.0.1
+#         port: 6379
+#       # namespace: my-app # defaults to the application name; set it when deployments share one Redis
 
 # The jobs configuration the Scheduler plugin's schedules run on, by name. Left out, they follow jobs.default.
 # scheduler:

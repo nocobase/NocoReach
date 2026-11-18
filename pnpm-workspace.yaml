@@ -313,9 +313,26 @@ minimumReleaseAgeExclude:
   - '@nocobase/mailer@0.1.0-beta.1'
   - '@nocobase/app-plugin-notification-providers@1.0.0-beta.16'
   - '@nocobase/lifecycle@0.1.0-beta.4'
+  # Demo Mode beta.11 and the framework, Agents, Users and Runner releases it requires.
+  - '@nocobase/agent-protocol@0.1.0-beta.18'
+  - '@nocobase/agent-runner@0.1.0-beta.26'
+  - '@nocobase/app-cli-client@0.1.0-beta.20'
+  - '@nocobase/app-cli@1.0.0-beta.33'
+  - '@nocobase/app-client@4.0.0-beta.10'
+  - '@nocobase/app-plugin-agents@2.0.0-beta.11'
+  - '@nocobase/app-plugin-demo-mode@0.2.0-beta.11'
+  - '@nocobase/app-plugin-file@1.0.0-beta.31'
+  - '@nocobase/app-plugin-notification-in-app@2.0.0-beta.4'
+  - '@nocobase/app-plugin-notification@2.0.0-beta.8'
+  - '@nocobase/app-plugin-users@2.0.0-beta.19'
+  - '@nocobase/app-server@5.0.0-beta.4'
+  - '@nocobase/app-skills@0.1.0-beta.64'
+  - '@nocobase/db@1.0.0-beta.28'
+  - '@nocobase/document-extractor@0.1.0-beta.1'
+  - '@nocobase/drive@0.1.0-beta.8'
 # NocoReach-owned patches of published packages; docs/DEVELOPMENT.md, Template and dependencies, says why each exists.
 # Scheduler: upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 # Authorization: its client is bundled into the page; a new version needs the patch re-applied and reviewed.
 patchedDependencies:
-  '@nocobase/app-plugin-authorization@1.0.0-beta.36': patches/@nocobase__app-plugin-authorization@1.0.0-beta.36.patch
-  '@nocobase/app-plugin-scheduler@1.0.0-beta.23': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.23.patch
+  '@nocobase/app-plugin-authorization@1.0.0-beta.37': patches/@nocobase__app-plugin-authorization@1.0.0-beta.37.patch
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.24': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.24.patch

@@ -1,4 +1,8 @@
 import {
+  limitBytes,
+  useFileUploadLimit,
+} from '@nocobase/app-plugin-file/client';
+import {
   buildPageContext,
   contextChips,
   uiItemKey,
@@ -80,13 +84,16 @@ export function Composer({
   const sources = useChatSources();
   const labels = useComposerLabels();
   const files = useChatAttachments();
+  // The destination Drive disk's limit (`maxFileSizeMb`), published with the page by the File plugin.
+  const limit = useFileUploadLimit();
   const attachments = useMemo(
     (): AgentComposerAttachments => ({
+      maxSize: limitBytes(limit),
       upload: (file, signal) => files.upload(file, signal),
       discard: (attachment) => files.discard(attachment),
       ...(registerAddFiles ? { registerAdd: registerAddFiles } : {}),
     }),
-    [files, registerAddFiles],
+    [files, limit, registerAddFiles],
   );
 
   const input: ChatContextInput = {
