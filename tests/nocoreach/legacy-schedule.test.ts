@@ -5,7 +5,7 @@ import { test } from 'vitest';
 
 import { DailyAnalysis, NODE_TYPE, WORKFLOW_TITLE } from '../../server/nocoreach/daily-analysis.js';
 import { JOB_STATUS, LegacyWorkflows, ScheduledRuns, STALE_RUN_MS } from '../../server/nocoreach/legacy/schedule.js';
-import { analysisCompletion, analysisObservation } from '../../server/providers/nocoreach.js';
+import { analysisCompletion, analysisObservation, schedulerCompletion } from '../../server/providers/nocoreach.js';
 
 const KEY = 'nocoreach.daily-analysis';
 
@@ -72,6 +72,20 @@ test('a firing reports success only when every project succeeded or had already 
   assert.equal(failed.status, 'failed');
   assert.equal(failed.reason, '项目 2：还没有接入在线 AI');
   assert.deepEqual(analysisCompletion(JOB_STATUS.FAILED, { error: '项目不存在' }), { status: 'failed', reason: '项目不存在' });
+});
+
+test('new and historical failures fit the Scheduler reason column and retain snapshot details', () => {
+  const prefix = 'a'.repeat(254) + '🚀';
+  const reason = prefix + 'b'.repeat(245);
+  const completion = analysisCompletion(JOB_STATUS.FAILED, { error: reason });
+  assert.equal(schedulerCompletion(completion).reason, prefix);
+  assert.equal(completion.reason, reason);
+  const run = { occurrenceId: 'o', status: 'failed' as const, acceptedAt: '', updatedAt: '', reason, result: { items: 1 } };
+  assert.deepEqual(analysisObservation(run), {
+    state: 'completed',
+    completion: { status: 'failed', reason: prefix, result: run.result },
+  });
+  assert.equal(run.reason, reason);
 });
 
 test('the Scheduler\'s question about a firing is answered from its record; a silent one is reported interrupted', () => {

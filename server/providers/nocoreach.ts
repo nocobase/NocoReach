@@ -115,6 +115,17 @@ interface AnalysisPayload {
 
 const analysisReference = (occurrenceId: string) => ({ type: ANALYSIS_TARGET, id: occurrenceId });
 
+// Bound the input before iterating: each Unicode code point uses at most two UTF-16 code units.
+function limitCharacters(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return Array.from(text.slice(0, max * 2)).slice(0, max).join('');
+}
+
+/** Scheduler stores reason in varchar(255); the run snapshot keeps its longer diagnostic. */
+export function schedulerCompletion(completion: ScheduleExecutionCompletion): ScheduleExecutionCompletion {
+  return completion.reason ? { ...completion, reason: limitCharacters(completion.reason, 255) } : completion;
+}
+
 /** What the instruction returned — `{ <projectId>: run entry }` — as the occurrence's outcome: short, no model output. */
 export function analysisCompletion(status: number, result: unknown): ScheduleExecutionCompletion {
   const entries = Object.entries((result ?? {}) as Record<string, Record<string, unknown>>);
@@ -126,14 +137,14 @@ export function analysisCompletion(status: number, result: unknown): ScheduleExe
       ok: Boolean(r?.ok),
       ...(typeof r?.items === 'number' ? { items: r.items } : {}),
       ...(typeof r?.skipped === 'string' ? { skipped: r.skipped } : {}),
-      ...(typeof r?.error === 'string' ? { error: r.error.slice(0, 300) } : {}),
+      ...(typeof r?.error === 'string' ? { error: limitCharacters(r.error, 300) } : {}),
     };
   const failed = entries.filter(([, r]) => !r?.ok);
   return status === JOB_STATUS.RESOLVED && !failed.length
     ? { status: 'succeeded', result: { projects } }
     : {
         status: 'failed',
-        reason: failed.map(([id, r]) => `项目 ${id}：${typeof r?.error === 'string' ? r.error : '分析失败'}`).join('；').slice(0, 500),
+        reason: limitCharacters(failed.map(([id, r]) => `项目 ${id}：${typeof r?.error === 'string' ? r.error : '分析失败'}`).join('；'), 500),
         result: { projects },
       };
 }
@@ -143,7 +154,7 @@ export function analysisObservation(run: ScheduledRun | null): ScheduleTargetObs
   if (run.status === 'succeeded' || run.status === 'failed' || run.status === 'cancelled')
     return {
       state: 'completed',
-      completion: { status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result } : {}) },
+      completion: schedulerCompletion({ status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result } : {}) }),
     };
   // Accepted or running, and silent since: the process that ran it was stopped, and it will not report.
   if (Date.now() - Date.parse(run.updatedAt) > STALE_RUN_MS)
@@ -283,14 +294,14 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
         } catch (error) {
           // Shutdown: the task returns to waiting and runs again after the restart.
           if (signal.aborted) throw new JobInterruptedError();
-          completion = { status: 'failed', reason: String((error as Error)?.message || '分析失败').slice(0, 300) };
+          completion = { status: 'failed', reason: limitCharacters(String((error as Error)?.message || '分析失败'), 300) };
         }
         await nr.analysisRuns.put(occurrenceId, {
           status: completion.status === 'succeeded' || completion.status === 'cancelled' ? completion.status : 'failed',
           ...(completion.reason ? { reason: completion.reason } : {}),
           ...(completion.result ? { result: completion.result } : {}),
         });
-        await handle.reportCompletion(occurrenceId, reference, completion);
+        await handle.reportCompletion(occurrenceId, reference, schedulerCompletion(completion));
       }
     };
 
