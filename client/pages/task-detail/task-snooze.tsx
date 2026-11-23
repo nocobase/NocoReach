@@ -44,6 +44,19 @@ import { timeZoneName } from '#lib/time-zone-name';
 // (server/nocoreach/execution/snooze.ts). The task page names it at the top of its main column; acting on the card
 // ends it.
 
+// Mainland China's zones read as Beijing time in Chinese (taskSnooze.chinaTime) rather than "GMT+8"; others as people name them.
+const CHINA_ZONES = new Set([
+  'Asia/Shanghai',
+  'Asia/Chongqing',
+  'Asia/Chungking',
+  'Asia/Harbin',
+  'PRC',
+]);
+const zoneName = (zone: string) =>
+  CHINA_ZONES.has(zone)
+    ? $t('taskSnooze.chinaTime')
+    : timeZoneName(zone, getCurrentLocale());
+
 type Update = (command: string, body?: object) => Promise<TaskData | undefined>;
 type Choice = 'week' | 'twoWeeks' | 'month' | 'date';
 
@@ -168,10 +181,7 @@ function SnoozeForm({
         />
       </Field>
       <Field>
-        <FieldLabel id={`${id}-until`}>
-          {$t('taskSnooze.until')}
-          {` · ${zone ? `${timeZoneName(zone, getCurrentLocale())} (${zone})` : $t('taskSnooze.scheduleTimezone')}`}
-        </FieldLabel>
+        <FieldLabel id={`${id}-until`}>{$t('taskSnooze.until')}</FieldLabel>
         <Segmented
           label={$t('taskSnooze.until')}
           value={choice}
@@ -217,6 +227,7 @@ function SnoozeForm({
                 0: snoozeDay(day),
                 1: snoozeWeekday(day),
                 2: owner,
+                3: zone ? zoneName(zone) : $t('taskSnooze.scheduleTimezone'),
               })
             : $t('taskSnooze.chooseDay')}
         </p>

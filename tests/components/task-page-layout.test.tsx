@@ -2426,12 +2426,22 @@ test('Snooze… puts the task aside until a day with what it waits for', async (
   await user.click(screen.getByRole('button', { name: '更多' }));
   await user.click(await screen.findByRole('menuitem', { name: '延后…' }));
   const dialog = await screen.findByRole('dialog', { name: '延后任务' });
-  expect(dialog).toHaveTextContent('到那天回到“待确认”');
+  // 2026-11-11 user request: the dialog says what snoozing is for, where the task is meanwhile (Tasks › Snoozed) and
+  // what happens on the day; the field is only Snooze until, the time zone is in the sentence below it.
+  expect(dialog).toHaveTextContent('任务要等站外的事情时');
+  expect(dialog).toHaveTextContent('在“任务 › 已延后”里能看到');
+  expect(dialog).toHaveTextContent('到那天回到“待确认”，并提醒负责人');
+  expect(dialog).not.toHaveTextContent('待我处理');
   expect(
     within(dialog).getByRole('button', { name: '2 周后' }),
   ).toHaveAttribute('aria-pressed', 'true');
-  expect(dialog).toHaveTextContent('上午 9 点回来，并提醒 Super Admin');
-  await within(dialog).findByText(/Asia\/Shanghai/);
+  expect(
+    within(dialog).getByText('延后到', { selector: 'label' }),
+  ).toBeVisible();
+  await within(dialog).findByText(
+    /上午 9 点（北京时间）回来，并提醒 Super Admin/,
+  );
+  expect(dialog).not.toHaveTextContent('Asia/Shanghai');
   await user.type(
     within(dialog).getByRole('textbox', { name: '在等什么' }),
     '等权限文档写好',
@@ -2770,7 +2780,7 @@ test('saving an existing snooze keeps its configuration day after the schedule t
   });
   expect(save).toBeDisabled();
   schedule.resolve({ schedule: { timezone: 'Asia/Shanghai' } });
-  await within(dialog).findByText(/Asia\/Shanghai/);
+  await within(dialog).findByText(/（北京时间）/);
   await userEvent.click(save);
   expect(commands).toEqual([
     expect.objectContaining({
