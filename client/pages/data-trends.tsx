@@ -33,13 +33,13 @@ import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
 import { Tag } from "#components/reach/tag";
 import { InfoTip, NotesTip } from "#components/reach/info-tip";
-import { TrendKeywords, type KeywordWatch } from "./trends-keywords";
+import { TrendKeywords, TrendsQuery, RelatedSearchesHelp, type KeywordWatch } from "./trends-keywords";
 import { formatDateTime } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 
 type Query = { query: string; value: number; isNew?: boolean };
 type Rival = { id: string; name: string; included: boolean };
-type View = KeywordWatch & { connected: boolean; product?: string; competitors?: Rival[]; maxRivals?: number; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
+type View = KeywordWatch & { connected: boolean; product?: string; competitors?: Rival[]; maxRivals?: number; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; relatedUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 const change = (v: number | null) => (v === null ? "—" : <Delta value={v} />);
 
@@ -138,7 +138,8 @@ export default function DataTrends() {
                 </div>
               </Card>
               <div>
-                <h2 className="flex items-center gap-1 text-sm font-semibold">{$tj('dataTrends.relatedSearches',{0:terms[0],1:chosen.length ? $t('dataTrends.selected',{0:chosen.length}) : ""})}<InfoTip label={$t('common.info')}>{$t('dataTrends.relatedSearchesHelp')}</InfoTip></h2>
+                <h2 className="flex items-center gap-1 text-sm font-semibold">{$tj('dataTrends.relatedSearches',{0:terms[0],1:chosen.length ? $t('dataTrends.selected',{0:chosen.length}) : ""})}<InfoTip label={$t('common.info')}><RelatedSearchesHelp term={terms[0]} /></InfoTip></h2>
+                <TrendsQuery place={view.place || $t('common.worldwide')} url={view.relatedUrl} />
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 {list($t('common.rising'), "rising", view.rising || [], $t('common.noClearlyRisingRelatedSearches'))}

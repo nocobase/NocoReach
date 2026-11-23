@@ -32,6 +32,23 @@ const getOwn = () => ($t('trendsKeywords.topicRelativeInterest'));
 const helper = createColumnHelper<WatchedKeyword>();
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
+// The conditions the related searches were queried with, named as Google Trends names its own options, and a link to
+// the same query on the Google Trends Explore page (built by the server from the same terms and region).
+export function TrendsQuery({ place, url }: { place: string; url?: string | null }) {
+  return (
+    <p className="nr-footnote" data-trends-query>
+      {$t('trendsKeywords.queryConditions', { 0: $legacyText(place) })}
+      {url ? <> · <a className="nr-link" href={url} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}
+    </p>
+  );
+}
+
+// What related searches are, after Google Trends' own help: searches by the same people, Top by relative popularity
+// and Rising by growth since the previous period.
+export function RelatedSearchesHelp({ term }: { term: string }) {
+  return <><p>{$t('trendsKeywords.relatedSearchesMeaning', { 0: term })}</p><p>{$t('trendsKeywords.relatedSearchesTop')}</p><p>{$t('trendsKeywords.relatedSearchesRising')}</p><p>{$t('dataTrends.relatedSearchesHelp')}</p></>;
+}
+
 // The 12-month line as a small sparkline.
 function Spark({ points }: { points: WatchedKeyword["points"] }) {
   const vals = points.map((p) => p.value);
@@ -102,7 +119,6 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
               <span className="flex items-center gap-1">{$t('common.last4Weeks')} <b className="text-lg tabular-nums">{k.recent ?? "—"}</b><InfoTip label={$t('trendsKeywords.whatNumbersMean')}>{getOwn()}</InfoTip></span>
               <span>{$t('common.change')} {change(k.change)}</span>
               <span className="text-muted-foreground">{$tj('trendsKeywords.value12MonthAverage',{0:k.average ?? "—"})}</span>
-              {k.checkUrl ? <a className="nr-link inline-flex items-center gap-0.5" href={k.checkUrl} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="size-3" /></a> : null}
             </div>
             <div className="nr-chart-box" data-keyword-chart>
               <ResponsiveContainer width="100%" height={200}>
@@ -115,7 +131,10 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-sm text-muted-foreground">{chosen.length ? $t('trendsKeywords.relatedSearchesSelected',{0:chosen.length}) : $t('trendsKeywords.selectRelatedSearchesHandThem')}</p>
+            <div className="space-y-0.5">
+              <p className="flex items-center gap-1 text-sm text-muted-foreground">{chosen.length ? $t('trendsKeywords.relatedSearchesSelected',{0:chosen.length}) : $t('trendsKeywords.selectRelatedSearchesHandThem')}<InfoTip label={$t('common.info')}><RelatedSearchesHelp term={k.keyword} /></InfoTip></p>
+              <TrendsQuery place={place} url={k.checkUrl} />
+            </div>
             {rows($t('common.rising'), "rising", k.rising, $t('common.noClearlyRisingRelatedSearches'))}
             {rows($t('common.top'), "top", k.top, $t('common.googleGaveNoRelatedSearches'))}
           </>

@@ -3,7 +3,7 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { TrendsSource, termsOf, specification, result, summary } from '../../server/nocoreach/trends-source.js';
+import { TrendsSource, termsOf, specification, result, summary, trendsUrl } from '../../server/nocoreach/trends-source.js';
 import { trendsSignals } from '../../server/nocoreach/signals.js';
 import * as __trends_source from '../../server/nocoreach/trends-source.js';
 const test=__vitest_test;
@@ -19,9 +19,15 @@ test('Google Trends query: up to five terms over 12 months, related searches of 
  assert.equal(specification({terms:'NocoBase'}).requests[0].body.location_code,undefined,'worldwide sends no location');assert.throws(()=>specification({terms:'NocoBase',locationCode:1}),/不支持这个地区/);
  const r=result([reply([{type:'google_trends_graph',keywords:['NocoBase','Retool'],data:[...weeks(2,i=>[40+i,70]),{date_from:'2025-10-19',missing_data:true,values:[0,0]}]}]),reply([{type:'google_trends_queries_list',data:{top:[{query:'nocobase docker',value:100}],rising:[{query:'nocobase ai',value:350},{query:'',value:5}]}}])],spec);
  assert.equal(r.status,'completed');assert.equal(r.costUsd,0.022);assert.deepEqual(r.result.points.map(p=>p.values),[[40,70],[41,70],[null,null]]);
- assert.deepEqual(r.result.rising,[{query:'nocobase ai',value:350}]);assert.equal(r.result.checkUrl,'https://trends.google.com/trends/explore?q=NocoBase');
+ assert.deepEqual(r.result.rising,[{query:'nocobase ai',value:350}]);assert.equal('checkUrl' in r.result,false,'classic Explore check_url is not kept');
  assert.equal(result([reply([]),{status_code:40000,tasks:[{status_code:40000}]}],spec).status,'failed');
  const sum=summary({terms:['A','B'],points:weeks(8,i=>[i<4?20:30,50])});assert.deepEqual(sum.map(x=>[x.term,x.recent,x.change]),[['A',30,0.5],['B',50,0]]);
+});
+
+test('Open in Google Trends links the current Explore page with the same terms, region and time range',()=>{
+ assert.equal(trendsUrl(['NocoBase','Retool'],2840),'https://trends.google.com/explore?q=NocoBase%2CRetool&date=today%2012-m&geo=US&hl=en');
+ assert.equal(trendsUrl(['ai agent builder'],0),'https://trends.google.com/explore?q=ai%20agent%20builder&date=today%2012-m&hl=en','worldwide sends no geo');
+ assert.equal(trendsUrl(['NocoBase'],2826),'https://trends.google.com/explore?q=NocoBase&date=today%2012-m&geo=GB&hl=en');
 });
 
 test('weekly check keeps the latest run; rising searches first seen after the first run are marked new and become a signal',async()=>{
@@ -31,7 +37,7 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
  s.d4s.run=async(id,kind,v)=>{assert.equal(kind,'trends');assert.match(v.requestKey,/^trends-1-/);return {status:'completed',result:{terms:v.terms,points:weeks(8,i=>[i<4?20:40,30]),top:[],rising:rising[runs++],checkUrl:null}};};
  await assert.rejects(s.connect('1',{terms:''}),/至少填一个词/);
  await s.connect('1',{terms:'NocoBase, Retool'});await s.runs.wait('1');
- let v=await s.view('1');assert.deepEqual(v.terms,['NocoBase','Retool']);assert.equal(v.place,'全球');assert.deepEqual(v.rising.map(q=>q.isNew),[false],'the first run marks nothing new');
+ let v=await s.view('1');assert.deepEqual(v.terms,['NocoBase','Retool']);assert.equal(v.checkUrl,trendsUrl(['NocoBase','Retool'],null));assert.equal(v.relatedUrl,trendsUrl(['NocoBase'],null));assert.equal(v.place,'全球');assert.deepEqual(v.rising.map(q=>q.isNew),[false],'the first run marks nothing new');
  assert.deepEqual((await s.check('1')),{skipped:true},'not again within the week');
  await s.check('1',{force:true});v=await s.view('1');assert.deepEqual(v.rising.map(q=>[q.query,q.isNew]),[['nocobase docker',false],['nocobase ai',true]]);
  const st=await s.status('1');assert.equal(st.summary[0].change,1);assert.ok(st.nextCheckAt);
@@ -72,7 +78,7 @@ test('Followed topics: one request each (own line and related searches), taken f
  assert.deepEqual(await new TrendsSource({...p,followedTopics:{of:async()=>null}}).syncTopics('1'),[]);
  await s.topicsChanged('1');let v=await s.view('1');assert.equal(v.connected,false,'no product comparison needed');assert.equal(v.keywords[0].keyword,'AI agent builder');await s.keywordRun;
  assert.deepEqual(await s.syncTopics('1'),[],'the same list changes nothing');
- v=await s.view('1');const k=v.keywords[0];assert.deepEqual([k.recent,k.change,k.average],[60,0.5,50]);assert.deepEqual(k.rising.map(q=>q.isNew),[false],'the first run marks nothing new');assert.match(v.notes[0],/各自单独查/);
+ v=await s.view('1');const k=v.keywords[0];assert.deepEqual([k.recent,k.change,k.average],[60,0.5,50]);assert.equal(k.checkUrl,trendsUrl(['AI agent builder'],0));assert.deepEqual(k.rising.map(q=>q.isNew),[false],'the first run marks nothing new');assert.match(v.notes[0],/各自单独查/);
  assert.deepEqual(await s.checkAll('1'),{ok:true,error:''});assert.equal(calls.length,1,'not again within the week');
  await s.checkAll('1',{force:true});v=await s.view('1');assert.deepEqual(v.keywords[0].rising.map(q=>[q.query,q.isNew]),[['n8n ai agent',false],['ai agent builder free',true]]);
  const sig=trendsSignals({tr:rows[0].payload,now:Date.now()});assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['trends-kw-rising','trends-kw-move']);assert.match(sig[1].title,/「AI agent builder」.*近 4 周上升 50%/);
