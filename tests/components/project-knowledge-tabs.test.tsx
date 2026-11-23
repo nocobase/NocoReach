@@ -360,14 +360,13 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
   expect(within(region).queryByText('A CLI ships with it.')).toBeNull();
   await user.click(within(region).getByRole('button', { name: '查看' }));
   expect(within(region).getByText('A CLI ships with it.')).toBeInTheDocument();
-  // The status line reads "Updated"; Check now is at the top right, not in the line.
+  // The status line reads "Updated", with Check now beside it in the same line.
   expect(
     within(region).getByText('更新于 10-19 · 1 条建议'),
   ).toBeInTheDocument();
   expect(
-    within(region).queryByRole('button', { name: '立即检查' }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '立即检查' })).toBeInTheDocument();
+    within(region).getByRole('button', { name: '立即检查' }),
+  ).toBeEnabled();
   await user.click(within(region).getByRole('button', { name: '补充' }));
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(

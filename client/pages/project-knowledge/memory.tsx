@@ -13,7 +13,12 @@ import {
   type ReactNode,
 } from 'react';
 import { Link, Outlet, useLocation, useOutletContext } from 'react-router';
-import { ChevronDown, LoaderCircleIcon, PencilIcon } from 'lucide-react';
+import {
+  ChevronDown,
+  LoaderCircleIcon,
+  PencilIcon,
+  RefreshCw,
+} from 'lucide-react';
 import { LongText } from '#components/long-text';
 import { chipClass } from '#components/reach/chip';
 import { cn } from '#lib/utils';
@@ -24,8 +29,6 @@ import {
 } from '../../../shared/followed-topics';
 import { AiMark } from '#components/reach/actor';
 import { InfoTip } from '#components/reach/info-tip';
-import { HeaderActions } from '#components/reach/page';
-import { RefreshButton } from '#components/reach/refresh-button';
 import { InlineError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -209,7 +212,7 @@ function MemoryUpdates({
   const d = status.draft,
     c = status.lastCheck;
   // When the AI last looked for updates, read as every status line's "Updated" (2026-10-22 decision D2); the weekly
-  // routine is in the ⓘ, and Check now sits at the top right as every page's refresh does.
+  // routine is in the ⓘ, and Check now sits right after it in the suggestions line, as the confirmed mockup shows.
   const checkLine = status.aiReady ? (
     <span className='flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground'>
       <span>
@@ -230,14 +233,18 @@ function MemoryUpdates({
         {$t('projectKnowledge.weeklyCheckHelpTopics')}
       </InfoTip>
       {canCheck ? (
-        <HeaderActions>
-          <RefreshButton
-            busy={status.running === 'check'}
-            disabled={busy || Boolean(status.running)}
-            label={$t('common.checkNow')}
-            onClick={() => void updates.run('check')}
+        <Button
+          size='xs'
+          variant='ghost'
+          disabled={busy || Boolean(status.running)}
+          onClick={() => void updates.run('check')}
+        >
+          <RefreshCw
+            className={status.running === 'check' ? 'animate-spin' : undefined}
+            aria-hidden='true'
           />
-        </HeaderActions>
+          {$t('common.checkNow')}
+        </Button>
       ) : null}
     </span>
   ) : (
