@@ -1986,7 +1986,7 @@
   "skills.selected": "{0} ausgewählt",
   "trendsKeywords.relatedSearchesSelected": "Ausgewählte verwandte Suchanfragen: {0}",
   "trendsKeywords.queryConditions": "Region: {0} · Zeitraum: {1} · Kategorie: Alle Kategorien · Suchtyp: Websuche",
-  "trendsKeywords.timeRangePast12Months": "Letzte 12 Monate",
+  "trendsKeywords.unknown": "Unbekannt",
   "trendsKeywords.relatedSearchesMeaning": "Personen, die nach „{0}“ gesucht haben, haben in derselben Suchsitzung auch nach diesen Begriffen gesucht. Es sind nicht einfach Begriffe, die „{0}“ enthalten.",
   "trendsKeywords.relatedSearchesTop": "Am beliebtesten: die häufigsten dieser Suchanfragen auf einer relativen Skala, auf der 100 die meistgesuchte unter ihnen ist und 50 halb so oft gesucht wird.",
   "trendsKeywords.relatedSearchesRising": "Steigend: die Suchanfragen, deren Suchhäufigkeit gegenüber dem vorherigen gleich langen Zeitraum am stärksten gestiegen ist; der Prozentwert ist dieser Anstieg.",

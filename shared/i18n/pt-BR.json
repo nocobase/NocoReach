@@ -1986,7 +1986,7 @@
   "skills.selected": "Habilidades selecionadas: {0}",
   "trendsKeywords.relatedSearchesSelected": "Pesquisas relacionadas selecionadas: {0}",
   "trendsKeywords.queryConditions": "Região: {0} · Período: {1} · Categoria: Todas as categorias · Tipo de pesquisa: Pesquisa na Web",
-  "trendsKeywords.timeRangePast12Months": "Últimos 12 meses",
+  "trendsKeywords.unknown": "Desconhecido",
   "trendsKeywords.relatedSearchesMeaning": "Quem pesquisou \"{0}\" também pesquisou estes termos na mesma sessão de pesquisa. Não são apenas termos que contêm \"{0}\".",
   "trendsKeywords.relatedSearchesTop": "Mais populares: as pesquisas mais frequentes, numa escala relativa em que 100 é a mais pesquisada entre elas e 50 é pesquisada metade das vezes.",
   "trendsKeywords.relatedSearchesRising": "Em alta: as pesquisas cuja frequência mais cresceu em relação ao período anterior de mesma duração; a porcentagem é esse aumento.",

@@ -37,14 +37,17 @@ const right = { headerClassName: "text-right", cellClassName: "text-right tabula
 // weeks of the saved run (not today's settings), and a link to the same query on the Google Trends Explore page, built
 // by the server from the same terms, region and dates.
 export function TrendsQuery({ place, range, url }: { place: string; range?: TrendsRange | null; url?: string | null }) {
-  const time = range ? `${formatDate(range.from, { withYear: true })} – ${formatDate(range.to, { withYear: true })}` : $t('trendsKeywords.timeRangePast12Months');
+  const time = range ? `${formatDate(range.from, { withYear: true })} – ${formatDate(range.to, { withYear: true })}` : $t('trendsKeywords.unknown');
   return (
     <p className="nr-footnote" data-trends-query>
-      {$t('trendsKeywords.queryConditions', { 0: $legacyText(place), 1: time })}
+      {$t('trendsKeywords.queryConditions', { 0: place, 1: time })}
       {url ? <> · <a className="nr-link" href={url} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}
     </p>
   );
 }
+
+// The region a saved list was queried for, as shown: null when an older snapshot cannot tell it, never today's region.
+export const shownPlace = (place: string | null | undefined, fallback: string) => (place === null ? $t('trendsKeywords.unknown') : $legacyText(place || fallback));
 
 // What related searches are, after Google Trends' own help: searches by the same people, Top by relative popularity
 // and Rising by growth since the previous period.
@@ -112,8 +115,8 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
     </section>
   );
   return (
-    <DetailDrawer open onClose={onClose} title={k.keyword} description={$t('common.past12Months',{0:$legacyText(k.place || place),1:k.checkedAt ? $t('common.checked',{0:formatDateTime(k.checkedAt)}) : ""})}
-      actions={<SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t('common.handOffAgentValue',{0:chosen.length}) : $t('common.handOffAgent')} description={$t('common.selectedRelatedSearchesBecomeOne')} draft={() => trendsDraft(k.keyword, k.place || place, chosen)} />}>
+    <DetailDrawer open onClose={onClose} title={k.keyword} description={$t('common.past12Months',{0:shownPlace(k.place, place),1:k.checkedAt ? $t('common.checked',{0:formatDateTime(k.checkedAt)}) : ""})}
+      actions={<SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t('common.handOffAgentValue',{0:chosen.length}) : $t('common.handOffAgent')} description={$t('common.selectedRelatedSearchesBecomeOne')} draft={() => trendsDraft(k.keyword, shownPlace(k.place, place), chosen)} />}>
       <div className="space-y-4">
         {k.lastRun && !k.lastRun.ok && !k.checking ? <InlineError action={k.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={onRetry}>{$t('common.queryAgain')}</Button> : undefined}>{$tj('common.lastCheckNotComplete',{0:$legacyText(k.lastRun.errors[0])})}</InlineError> : null}
         {!k.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{k.checking || !k.lastRun ? $t('trendsKeywords.checkingUsuallyMinuteTwo') : $t('common.noDataYet')}</p> : (
@@ -136,7 +139,7 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
             </div>
             <div className="space-y-0.5">
               <p className="text-sm text-muted-foreground">{chosen.length ? $t('trendsKeywords.relatedSearchesSelected',{0:chosen.length}) : $t('trendsKeywords.selectRelatedSearchesHandThem')}<InfoTip className="ml-1" label={$t('common.info')}><RelatedSearchesHelp term={k.keyword} /></InfoTip></p>
-              <TrendsQuery place={k.place || place} range={k.range} url={k.checkUrl} />
+              <TrendsQuery place={shownPlace(k.place, place)} range={k.range} url={k.checkUrl} />
             </div>
             {rows($t('common.rising'), "rising", k.rising, $t('common.noClearlyRisingRelatedSearches'))}
             {rows($t('common.top'), "top", k.top, $t('common.googleGaveNoRelatedSearches'))}

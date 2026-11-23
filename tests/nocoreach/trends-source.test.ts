@@ -15,7 +15,7 @@ test('Google Trends query: up to five terms over 12 months, related searches of 
  assert.deepEqual(termsOf('NocoBase, Retool、 retool ,Appsmith'),['NocoBase','Retool','Appsmith']);
  assert.throws(()=>termsOf('a,b,c,d,e,f'.split(',').map(x=>x+x)),/最多比较 5 个词/);assert.throws(()=>termsOf(''),/至少填一个词/);assert.throws(()=>termsOf('x'),/2–60/);
  const spec=specification({terms:'NocoBase, Retool',locationCode:2840});
- assert.deepEqual(spec.requests.map(r=>[r.body.keywords,r.body.item_types[0],r.body.time_range,r.body.location_code]),[[['NocoBase','Retool'],'google_trends_graph','past_12_months',2840],[['NocoBase'],'google_trends_queries_list','past_12_months',2840]]);
+ assert.deepEqual(spec.requests.map(r=>[r.body.keywords,r.body.item_types[0],r.body.date_from+' '+r.body.date_to,r.body.location_code]),[[['NocoBase','Retool'],'google_trends_graph',`${spec.range.from} ${spec.range.to}`,2840],[['NocoBase'],'google_trends_queries_list',`${spec.range.from} ${spec.range.to}`,2840]]);
  assert.equal(specification({terms:'NocoBase'}).requests[0].body.location_code,undefined,'worldwide sends no location');assert.throws(()=>specification({terms:'NocoBase',locationCode:1}),/不支持这个地区/);
  const r=result([reply([{type:'google_trends_graph',keywords:['NocoBase','Retool'],data:[...weeks(2,i=>[40+i,70]),{date_from:'2025-10-19',missing_data:true,values:[0,0]}]}]),reply([{type:'google_trends_queries_list',data:{top:[{query:'nocobase docker',value:100}],rising:[{query:'nocobase ai',value:350},{query:'',value:5}]}}])],spec);
  assert.equal(r.status,'completed');assert.equal(r.costUsd,0.022);assert.deepEqual(r.result.points.map(p=>p.values),[[40,70],[41,70],[null,null]]);
@@ -28,36 +28,46 @@ test('Open in Google Trends links the current Explore page with the same terms, 
  const range={from:'2025-11-23',to:'2026-11-21'};
  assert.equal(trendsUrl(['NocoBase','Retool'],2840,range),'https://trends.google.com/explore?q=NocoBase%2CRetool&date=2025-11-23%202026-11-21&geo=US&hl=en');
  assert.equal(trendsUrl(['ai agent builder'],0,range),'https://trends.google.com/explore?q=ai%20agent%20builder&date=2025-11-23%202026-11-21&hl=en','worldwide sends no geo');
- assert.equal(trendsUrl(['NocoBase'],2826),'https://trends.google.com/explore?q=NocoBase&date=today%2012-m&geo=GB&hl=en','no weeks known: the past 12 months');
+ assert.equal(trendsUrl(['NocoBase'],2826,null),null,'no dates known: no link, never a moving window');assert.equal(trendsUrl(['NocoBase'],null,range),null,'no region known: no link');
  // a comma inside a term would split it in Trends' q: it becomes a space, so the terms stay two, not three
  const q=t=>new URL(trendsUrl(t,0,range)).searchParams.get('q');
  assert.equal(q(['Acme, Inc.','NocoBase']),'Acme Inc.,NocoBase');assert.equal(q(['Acme， Inc.']),'Acme Inc.');assert.notEqual(q(['Acme, Inc.']),q(['Acme',' Inc.']));
  // the weeks a run covered: Google's own date_to, or the last week's start plus six days for a snapshot saved before
- assert.deepEqual(__trends_source.rangeOf([{date_from:'2025-11-23',date_to:'2025-11-29'},{date_from:'2026-11-15',date_to:'2026-11-21'}]),range);
- assert.deepEqual(__trends_source.rangeOf([{date:'2025-11-23'},{date:'2026-11-15'}]),range);assert.equal(__trends_source.rangeOf([]),null);
+ // the past 12 months as two dates, as DataForSEO counts them; a request given dates sends them instead of a moving range
+ const {pastYear,snapshotQuery,keywordSpecification}=__trends_source;assert.deepEqual(pastYear(Date.UTC(2026,10,21,15)),{from:'2025-11-21',to:'2026-11-21'});
+ const fixed={from:'2025-01-01',to:'2026-01-01'},ks=keywordSpecification({keyword:'NocoBase',range:fixed});assert.deepEqual([ks.request.date_from,ks.request.date_to,'time_range' in ks.request,ks.range],['2025-01-01','2026-01-01',false,fixed]);
+ assert.deepEqual(specification({terms:'NocoBase',range:fixed}).requests[1].body.date_from,'2025-01-01');
+ // a snapshot saved before region and dates were kept: both read from the check_url DataForSEO returned with it
+ assert.deepEqual(snapshotQuery({at:'2026-11-02T08:00:00Z',checkUrl:'https://trends.google.com/trends/explore?hl=en&geo=US&date=2025-11-02%202026-11-02&q=nocobase'}),{locationCode:2840,place:'美国',range:{from:'2025-11-02',to:'2026-11-02'}});
+ assert.deepEqual(snapshotQuery({at:'2026-11-02T08:00:00Z',checkUrl:'https://trends.google.com/trends/explore?q=nocobase&date=today%2012-m'}),{locationCode:0,place:'全球',range:{from:'2025-11-02',to:'2026-11-02'}},'no geo is Worldwide; a moving date counts back from the day it was queried');
+ assert.deepEqual(snapshotQuery({at:'2026-11-02T08:00:00Z',checkUrl:null}),{locationCode:null,place:null,range:{from:'2025-11-02',to:'2026-11-02'}},'nothing to tell the region: unknown');
+ assert.deepEqual(snapshotQuery({at:'2026-11-02T08:00:00Z',checkUrl:'https://trends.google.com/trends/explore?q=x&geo=MX'}).place,null,'a region outside the list: unknown');
 });
 
-test('The conditions and links describe the saved lists: their own region and weeks, after a region switch and a failed refresh',async()=>{
+test('The conditions and links describe the saved lists: the region and dates they were queried for, after a region switch, a failed refresh and an upgrade',async()=>{
  const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list:[]})},followedTopics:{of:async()=>['Acme, Inc.']}};
  const s=new TrendsSource(p),graph=weeks(52,()=>[50]).map(w=>({...w,date_to:new Date(Date.parse(w.date_from)+6*DAY).toISOString().slice(0,10)})),lists={type:'google_trends_queries_list',data:{top:[{query:'acme',value:100}],rising:[]}};
- const range={from:'2025-10-05',to:'2026-10-03'};let fail=false;
- // the real parsers: the region comes from the request, the weeks from Google's own dates
- s.d4s.run=async(id,kind,v)=>{if(fail)throw new Error('down');if(kind==='trends'){const spec=specification(v);return {status:'completed',result:result([reply([{type:'google_trends_graph',data:graph}]),reply([lists])],spec).result};}
-  const spec=__trends_source.keywordSpecification(v);return {status:'completed',result:__trends_source.keywordResult(reply([{type:'google_trends_graph',data:graph},lists]),spec).result};};
+ const range=__trends_source.pastYear(Date.now()),sent=[];let fail=false;
+ // the real parsers: the region and the dates come from the request the run fixed before asking
+ s.d4s.run=async(id,kind,v)=>{if(fail)throw new Error('down');if(kind==='trends'){const spec=specification(v);sent.push(spec.requests[1].body);return {status:'completed',result:result([reply([{type:'google_trends_graph',data:graph}]),reply([lists])],spec).result};}
+  const spec=__trends_source.keywordSpecification(v);sent.push(spec.request);return {status:'completed',result:__trends_source.keywordResult(reply([{type:'google_trends_graph',data:graph},lists]),spec).result};};
  await s.connect('1',{terms:'NocoBase',locationCode:2840});await s.runs.wait('1');await s.topicsChanged('1');await s.keywordRun;
  let v=await s.view('1'),k=v.keywords[0];
  assert.deepEqual([v.queryPlace,v.range,v.relatedUrl],['美国',range,trendsUrl(['NocoBase'],2840,range)]);
- assert.deepEqual([k.place,k.range,k.checkUrl],['美国',range,trendsUrl(['Acme, Inc.'],2840,range)]);assert.match(k.checkUrl,/q=Acme%20Inc\.&date=2025-10-05%202026-10-03&geo=US/);
+ assert.deepEqual([k.place,k.range,k.checkUrl],['美国',range,trendsUrl(['Acme, Inc.'],2840,range)]);assert.match(k.checkUrl,new RegExp(`q=Acme%20Inc\\.&date=${range.from}%20${range.to}&geo=US`));
+ assert.deepEqual(sent.map(b=>[b.date_from,b.date_to,b.location_code]),[[range.from,range.to,2840],[range.from,range.to,2840]],'the request asked for exactly these dates and region');
  // switched to Japan, not queried again yet: the US topic list keeps its US conditions and link
  s.start=()=>{};await s.connect('1',{terms:'NocoBase',locationCode:2392});v=await s.view('1');k=v.keywords[0];
  assert.equal(v.place,'日本');assert.equal(v.checkUrl,null,'the comparison waits for its Japanese run');assert.deepEqual([k.place,k.checkUrl],['美国',trendsUrl(['Acme, Inc.'],2840,range)]);
  // a refresh that fails keeps the old lists with their own region and weeks
  fail=true;await s.checkKeyword('1',k.id,{force:true});v=await s.view('1');assert.equal(v.keywords[0].lastRun.ok,false);assert.equal(v.keywords[0].checkUrl,k.checkUrl);
- // a snapshot saved before the region was kept: stamped with the region it was queried in when the region changes
- const kw=rows[0].payload.keywords[0];delete kw.latest.locationCode;delete kw.latest.range;rows[0].payload.locationCode=2840;
- await s.connect('1',{terms:'NocoBase',locationCode:2826});v=await s.view('1');k=v.keywords[0];
- assert.deepEqual([k.place,k.range],['美国',{from:'2025-10-05',to:'2026-10-03'}],'the weeks come from the saved points');
+ // switched from the US to Japan before upgrading: the older US snapshot keeps its region from its check_url, not Japan
+ const kw=rows[0].payload.keywords[0];delete kw.latest.locationCode;delete kw.latest.range;kw.latest.at='2026-11-02T08:00:00.000Z';kw.latest.checkUrl='https://trends.google.com/trends/explore?q=Acme&geo=US&date=today%2012-m&hl=en';
+ v=await s.view('1');k=v.keywords[0];assert.equal(v.place,'日本');assert.deepEqual([k.place,k.range,k.checkUrl],['美国',{from:'2025-11-02',to:'2026-11-02'},trendsUrl(['Acme, Inc.'],2840,{from:'2025-11-02',to:'2026-11-02'})]);
+ // and one whose check_url cannot tell: the region is unknown and there is no link, never Japan's
+ delete kw.latest.checkUrl;v=await s.view('1');k=v.keywords[0];assert.deepEqual([k.place,k.checkUrl],[null,null]);
+ await s.connect('1',{terms:'NocoBase',locationCode:2826});
  // the next run in the new region moves the conditions with it
  fail=false;await s.checkKeyword('1',k.id,{force:true});assert.equal((await s.view('1')).keywords[0].place,'英国');
 });
@@ -69,7 +79,7 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
  s.d4s.run=async(id,kind,v)=>{assert.equal(kind,'trends');assert.match(v.requestKey,/^trends-1-/);return {status:'completed',result:{terms:v.terms,points:weeks(8,i=>[i<4?20:40,30]),top:[],rising:rising[runs++],checkUrl:null}};};
  await assert.rejects(s.connect('1',{terms:''}),/至少填一个词/);
  await s.connect('1',{terms:'NocoBase, Retool'});await s.runs.wait('1');
- let v=await s.view('1');assert.deepEqual(v.terms,['NocoBase','Retool']);const wk={from:'2025-10-05',to:'2025-11-29'};assert.deepEqual(v.range,wk);assert.equal(v.checkUrl,trendsUrl(['NocoBase','Retool'],0,wk));assert.equal(v.relatedUrl,trendsUrl(['NocoBase'],0,wk));assert.equal(v.place,'全球');assert.deepEqual(v.rising.map(q=>q.isNew),[false],'the first run marks nothing new');
+ let v=await s.view('1');assert.deepEqual(v.terms,['NocoBase','Retool']);const wk=__trends_source.pastYear(Date.now());assert.deepEqual(v.range,wk);assert.equal(v.checkUrl,trendsUrl(['NocoBase','Retool'],0,wk));assert.equal(v.relatedUrl,trendsUrl(['NocoBase'],0,wk));assert.equal(v.place,'全球');assert.deepEqual(v.rising.map(q=>q.isNew),[false],'the first run marks nothing new');
  assert.deepEqual((await s.check('1')),{skipped:true},'not again within the week');
  await s.check('1',{force:true});v=await s.view('1');assert.deepEqual(v.rising.map(q=>[q.query,q.isNew]),[['nocobase docker',false],['nocobase ai',true]]);
  const st=await s.status('1');assert.equal(st.summary[0].change,1);assert.ok(st.nextCheckAt);
@@ -97,7 +107,7 @@ test('Update now, saving and adding a topic ask DataForSEO anew; the weekly chec
 test('Followed topics: one request each (own line and related searches), taken from Memory and queried at once, up to ten, weekly after',async()=>{
  const {keywordSpecification,keywordResult}=__trends_source;
  const spec=keywordSpecification({keyword:' ai  agent builder ',locationCode:2840});assert.equal(spec.kind,'trends-keyword');assert.deepEqual(spec.request.keywords,['ai agent builder']);assert.deepEqual(spec.request.item_types,['google_trends_graph','google_trends_queries_list']);assert.equal(spec.request.location_code,2840);assert.equal(spec.estimatedUsd,0.011);
- const r=keywordResult(reply([{type:'google_trends_graph',data:weeks(3,i=>[50+i])},{type:'google_trends_queries_list',data:{top:[{query:'ai agent',value:100}],rising:[{query:'n8n ai agent',value:250}]}}]));
+ const r=keywordResult(reply([{type:'google_trends_graph',data:weeks(3,i=>[50+i])},{type:'google_trends_queries_list',data:{top:[{query:'ai agent',value:100}],rising:[{query:'n8n ai agent',value:250}]}}]),spec);
  assert.deepEqual(r.result.points.map(p=>p.value),[50,51,52]);assert.deepEqual(r.result.rising,[{query:'n8n ai agent',value:250}]);assert.equal(r.costUsd,0.011);assert.equal(keywordResult({status_code:40000,tasks:[]}).status,'failed');
  const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  let topics=['AI agent builder'];const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],followedTopics:{of:async()=>topics}};
@@ -110,7 +120,7 @@ test('Followed topics: one request each (own line and related searches), taken f
  assert.deepEqual(await new TrendsSource({...p,followedTopics:{of:async()=>null}}).syncTopics('1'),[]);
  await s.topicsChanged('1');let v=await s.view('1');assert.equal(v.connected,false,'no product comparison needed');assert.equal(v.keywords[0].keyword,'AI agent builder');await s.keywordRun;
  assert.deepEqual(await s.syncTopics('1'),[],'the same list changes nothing');
- v=await s.view('1');const k=v.keywords[0];assert.deepEqual([k.recent,k.change,k.average],[60,0.5,50]);assert.equal(k.checkUrl,trendsUrl(['AI agent builder'],0,{from:'2025-10-05',to:'2025-11-29'}));assert.deepEqual(k.rising.map(q=>q.isNew),[false],'the first run marks nothing new');assert.match(v.notes[0],/各自单独查/);
+ v=await s.view('1');const k=v.keywords[0];assert.deepEqual([k.recent,k.change,k.average],[60,0.5,50]);assert.equal(k.checkUrl,trendsUrl(['AI agent builder'],0,__trends_source.pastYear(Date.now())));assert.deepEqual(k.rising.map(q=>q.isNew),[false],'the first run marks nothing new');assert.match(v.notes[0],/各自单独查/);
  assert.deepEqual(await s.checkAll('1'),{ok:true,error:''});assert.equal(calls.length,1,'not again within the week');
  await s.checkAll('1',{force:true});v=await s.view('1');assert.deepEqual(v.keywords[0].rising.map(q=>[q.query,q.isNew]),[['n8n ai agent',false],['ai agent builder free',true]]);
  const sig=trendsSignals({tr:rows[0].payload,now:Date.now()});assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['trends-kw-rising','trends-kw-move']);assert.match(sig[1].title,/「AI agent builder」.*近 4 周上升 50%/);

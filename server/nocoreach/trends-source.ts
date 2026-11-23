@@ -28,37 +28,45 @@ const DAY=86400000,WEEK=7*DAY,PATH='keywords_data/google_trends/explore/live',MA
 const LOCATIONS=[[0,systemMessageText('common.worldwide')],[2840,systemMessageText('aiQuestions.unitedStates')],[2826,systemMessageText('competitorResearch.unitedKingdom')],[2276,systemMessageText('competitorResearch.germany')],[2250,systemMessageText('competitorResearch.france')],[2392,systemMessageText('competitorResearch.japan')],[2156,systemMessageText('competitorResearch.china')],[2356,systemMessageText('competitorResearch.india')],[2076,systemMessageText('competitorResearch.brazil')]];
 // Google Trends' own two-letter region codes for the DataForSEO location codes above (0 is Worldwide, no geo).
 const GEO={2840:'US',2826:'GB',2276:'DE',2250:'FR',2392:'JP',2156:'CN',2356:'IN',2076:'BR'};
-// The link to the current Google Trends Explore page with the snapshot's own conditions: the same terms, the region the
-// snapshot was queried for and its own weeks as a custom time range (`today 12-m` would move with the day the link is
-// opened), All categories and Web Search (DataForSEO's defaults, as the requests below set no category or type) and
-// English, the requests' language. DataForSEO's check_url opens classic Explore, whose numbers did not match ours.
+// The link to the current Google Trends Explore page with the snapshot's own conditions: the same terms, the region and
+// the dates the run was queried for (`today 12-m` would move with the day the link is opened), All categories and Web
+// Search (DataForSEO's defaults, as the requests below set no category or type) and English, the requests' language.
+// DataForSEO's check_url opens classic Explore, whose numbers did not match ours. Without a known region or dates there
+// is no link, rather than one to other data.
 // Trends separates the terms in `q` with commas and has no way to keep one inside a term, so a comma within a term
 // becomes a space ("Acme, Inc." is searched as "Acme Inc.") rather than splitting it into two terms.
-function trendsUrl(terms,locationCode,range=null){const geo=GEO[Number(locationCode||0)];
+function trendsUrl(terms,locationCode,range){if(locationCode===null||locationCode===undefined||!range)return null;const geo=GEO[Number(locationCode)];
  const q=terms.map(t=>String(t).replace(/[,，]/g,' ').replace(/\s+/g,' ').trim()).join(',');
- return `https://trends.google.com/explore?${new URLSearchParams({q,date:range?`${range.from} ${range.to}`:'today 12-m',...(geo?{geo}:{}),hl:'en'}).toString().replace(/\+/g,'%20')}`;}
-const day=(d,n=0)=>new Date(Date.parse(`${d}T00:00:00Z`)+n*DAY).toISOString().slice(0,10);
-// The weeks a run covered: from the first week's start to the last week's end (Google's date_to; for a snapshot saved
-// before the range was kept, the last week's start plus six days).
-function rangeOf(data){const weeks=(Array.isArray(data)?data:[]).filter(d=>/^\d{4}-\d{2}-\d{2}/.test(String(d?.date_from||d?.date||'')));if(!weeks.length)return null;
- const first=String(weeks[0].date_from||weeks[0].date).slice(0,10),last=weeks[weeks.length-1],to=/^\d{4}-\d{2}-\d{2}/.test(String(last.date_to||''))?String(last.date_to).slice(0,10):day(String(last.date_from||last.date).slice(0,10),6);
- return {from:first,to};}
+ return `https://trends.google.com/explore?${new URLSearchParams({q,date:`${range.from} ${range.to}`,...(geo?{geo}:{}),hl:'en'}).toString().replace(/\+/g,'%20')}`;}
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
+// The past 12 months as dates, ending on the given day: what DataForSEO's past_12_months means and what it takes when
+// date_from is left out ("the current day and month of the preceding year"). A run fixes them before it asks, and the
+// request, the snapshot and the link all use the same two dates.
+function pastYear(ms){const d=new Date(ms),to=d.toISOString().slice(0,10),from=new Date(Date.UTC(d.getUTCFullYear()-1,d.getUTCMonth(),d.getUTCDate())).toISOString().slice(0,10);return {from,to};}
+const rangeIn=r=>r&&DATE.test(String(r.from))&&DATE.test(String(r.to))&&r.from<r.to?{from:r.from,to:r.to}:null;
 const placeName=code=>(LOCATIONS.find(([c])=>c===Number(code||0))||LOCATIONS[0])[1];
-// The conditions a saved run was queried with: its own region (a snapshot saved before the region was kept falls back
-// to the one given, see connect) and its own weeks, so the page and the link describe the list shown, not today's
-// settings, also after a region switch not yet queried again or a refresh that failed.
-function snapshotQuery(latest,fallbackLocation){const locationCode=Number(latest?.locationCode??fallbackLocation??0),range=latest?.range||rangeOf(latest?.points);
- return {locationCode,place:placeName(locationCode),range};}
-// A finished run as saved: its region and weeks kept with it (a reused run saved before they were kept has neither).
-const saved=(r,locationCode)=>({...r,locationCode:r.locationCode??Number(locationCode||0),range:r.range||rangeOf(r.points)});
+// What a snapshot saved before its region and dates were kept says about them: the check_url DataForSEO returned with it
+// names the region (`geo`, none for Worldwide) and the dates when absolute. A relative or missing date is past_12_months
+// counted back from the day it was queried, as DataForSEO counts it.
+function legacyQuery(latest){let url=null;try{url=latest?.checkUrl?new URL(latest.checkUrl):null;}catch{url=null;}
+ const trends=Boolean(url&&/(^|\.)trends\.google\.[a-z.]+$/.test(url.hostname)),geo=trends?String(url.searchParams.get('geo')||'').toUpperCase():null;
+ const locationCode=!trends?null:!geo?0:(Number(Object.keys(GEO).find(k=>GEO[k]===geo))||null);
+ const [from,to]=trends?String(url.searchParams.get('date')||'').split(' '):[];
+ return {locationCode,range:rangeIn({from,to})||(latest?.at&&Number.isFinite(Date.parse(latest.at))?pastYear(Date.parse(latest.at)):null)};}
+// The conditions a saved run was queried with, so the page and the link describe the list shown, not today's settings,
+// also after a region switch not yet queried again or a refresh that failed. An older snapshot's region comes from its
+// check_url; when that cannot tell, the region is unknown (place null) and there is no link.
+function snapshotQuery(latest){const old=latest?.locationCode===undefined||!latest?.range?legacyQuery(latest):null;
+ const locationCode=latest?.locationCode!==undefined?latest.locationCode:old.locationCode,range=rangeIn(latest?.range)||old?.range||null;
+ return {locationCode,place:locationCode===null?null:placeName(locationCode),range};}
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null;};
 // Up to five terms, each a phrase of 2–60 characters, the first being the product.
 function termsOf(input){const list=(Array.isArray(input)?input:String(input||'').split(/[,，、\n]/)).map(t=>String(t).trim().replace(/\s+/g,' ')).filter(Boolean),seen=new Set(),out=[];
  for(const t of list){if(t.length<2||t.length>60||/["\\]/.test(t))fail(systemMessageText('messages.invalidSearchTerm', { 0: t.slice(0,20) }));if(!seen.has(t.toLowerCase())){seen.add(t.toLowerCase());out.push(t);}}
  if(!out.length)fail(systemMessageText('trendsSource.enterLeastOneTermLike'));if(out.length>5)fail(systemMessageText('trendsSource.compareUp5Terms'));return out;}
-function specification(v){const terms=termsOf(v.terms),location=Number(v.locationCode||0);if(!LOCATIONS.some(([c])=>c===location))fail(systemMessageText('trendsSource.regionNotSupported'));
- const base={time_range:'past_12_months',language_code:'en',...(location?{location_code:location}:{})};
- return {kind:'trends',terms,locationCode:location||null,requests:[{path:PATH,body:{keywords:terms,...base,item_types:['google_trends_graph']}},{path:PATH,body:{keywords:[terms[0]],...base,item_types:['google_trends_queries_list']}}],
+function specification(v){const terms=termsOf(v.terms),location=Number(v.locationCode||0),range=rangeIn(v.range)||pastYear(Date.now());if(!LOCATIONS.some(([c])=>c===location))fail(systemMessageText('trendsSource.regionNotSupported'));
+ const base={date_from:range.from,date_to:range.to,language_code:'en',...(location?{location_code:location}:{})};
+ return {kind:'trends',terms,locationCode:location||null,range,requests:[{path:PATH,body:{keywords:terms,...base,item_types:['google_trends_graph']}},{path:PATH,body:{keywords:[terms[0]],...base,item_types:['google_trends_queries_list']}}],
   estimatedUsd:0.022,reservationUsd:0.05,timeoutMs:TIMEOUT,priceVersion:'official-list-2026-07'};}
 // Weekly points with one value per term (null where Google has none) and the related searches of the first term.
 function result(raws,spec){const tasks=raws.map(r=>(Array.isArray(r?.tasks)?r.tasks[0]:null)||{}),costs=raws.map((r,i)=>num(r?.cost)??num(tasks[i].cost));
@@ -67,16 +75,16 @@ function result(raws,spec){const tasks=raws.map(r=>(Array.isArray(r?.tasks)?r.ta
  const items=i=>tasks[i].result?.[0]?.items||[],graph=items(0).find(x=>x?.type==='google_trends_graph'),lists=items(1).find(x=>x?.type==='google_trends_queries_list')?.data||{};
  const points=(graph?.data||[]).filter(d=>d?.date_from).map(d=>({date:String(d.date_from).slice(0,10),values:spec.terms.map((_,i)=>d.missing_data?null:num(d.values?.[i]))}));
  const list=a=>(Array.isArray(a)?a:[]).map(x=>({query:String(x?.query||'').trim().slice(0,120),value:num(x?.value)||0})).filter(x=>x.query).slice(0,25);
- return {status:'completed',errorCode:null,result:{terms:spec.terms,locationCode:spec.locationCode||0,range:rangeOf(graph?.data),points,top:list(lists.top),rising:list(lists.rising)},costUsd};}
+ return {status:'completed',errorCode:null,result:{terms:spec.terms,locationCode:spec.locationCode||0,range:spec.range,points,top:list(lists.top),rising:list(lists.rising)},costUsd};}
 // One watched keyword: interest over 12 months and its related searches in one request.
-function keywordSpecification(v){const [keyword]=termsOf([v.keyword]),location=Number(v.locationCode||0);if(!LOCATIONS.some(([c])=>c===location))fail(systemMessageText('trendsSource.regionNotSupported'));
- return {kind:'trends-keyword',keyword,locationCode:location||null,path:PATH,request:{keywords:[keyword],time_range:'past_12_months',language_code:'en',...(location?{location_code:location}:{}),item_types:['google_trends_graph','google_trends_queries_list']},
+function keywordSpecification(v){const [keyword]=termsOf([v.keyword]),location=Number(v.locationCode||0),range=rangeIn(v.range)||pastYear(Date.now());if(!LOCATIONS.some(([c])=>c===location))fail(systemMessageText('trendsSource.regionNotSupported'));
+ return {kind:'trends-keyword',keyword,locationCode:location||null,range,path:PATH,request:{keywords:[keyword],date_from:range.from,date_to:range.to,language_code:'en',...(location?{location_code:location}:{}),item_types:['google_trends_graph','google_trends_queries_list']},
   estimatedUsd:TOPIC_PRICES.trendsUsd,reservationUsd:0.025,timeoutMs:TIMEOUT,priceVersion:'official-list-2026-07'};}
 function keywordResult(raw,spec){const task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},costUsd=num(raw?.cost)??num(task.cost);
  if(raw?.status_code!==20000||task.status_code!==20000)return {status:'failed',errorCode:systemMessageText('trendsSource.googleTrendsCheckFailed'),result:null,costUsd};
  const items=task.result?.[0]?.items||[],graph=items.find(x=>x?.type==='google_trends_graph'),lists=items.find(x=>x?.type==='google_trends_queries_list')?.data||{};
  const list=a=>(Array.isArray(a)?a:[]).map(x=>({query:String(x?.query||'').trim().slice(0,120),value:num(x?.value)||0})).filter(x=>x.query).slice(0,25);
- return {status:'completed',errorCode:null,result:{locationCode:spec?.locationCode||0,range:rangeOf(graph?.data),points:(graph?.data||[]).filter(d=>d?.date_from).map(d=>({date:String(d.date_from).slice(0,10),value:d.missing_data?null:num(d.values?.[0])})),top:list(lists.top),rising:list(lists.rising)},costUsd};}
+ return {status:'completed',errorCode:null,result:{locationCode:spec?.locationCode||0,range:spec?.range||null,points:(graph?.data||[]).filter(d=>d?.date_from).map(d=>({date:String(d.date_from).slice(0,10),value:d.missing_data?null:num(d.values?.[0])})),top:list(lists.top),rising:list(lists.rising)},costUsd};}
 const keywordId=k=>createHash('sha1').update(k.toLowerCase()).digest('hex').slice(0,10);
 const KEYWORD_NOTES=[systemMessageText('trendsSource.followedTopicCheckedSeparately')];
 const avg=list=>{const v=list.filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
@@ -96,8 +104,7 @@ class TrendsSource{
  async mutate(id,fn){this.runs.assertActive();return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});this.runs.assertActive();const state=await fn(row?.get('payload')||null);this.runs.assertActive();if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else if(state)await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  async connect(id,v){return this.runs.run(id,async()=>{if(!this.d4s.config(id)?.verifiedAt)fail(systemMessageText('trendsSource.trendsUsesDataforseoCheckGoogle'),409);
   const [product]=termsOf([String(v.product??(Array.isArray(v.terms)?v.terms[0]:String(v.terms||'').split(/[,，、\n]/)[0])??'')]),cur=await this.state(id),{terms}=await this.rivals(id,{...cur,product}),spec=specification({terms,locationCode:v.locationCode});
-  await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.locationCode])===JSON.stringify([spec.terms,spec.locationCode]);const keywords=(old?.keywords||[]).map(k=>k.latest&&k.latest.locationCode==null?{...k,latest:{...k.latest,locationCode:Number(old.locationCode||0)}}:k);
-   return {...(same?old:{latest:null,risingSeen:{},lastRun:null,keywords,pick:old?.pick}),product,terms:spec.terms,locationCode:spec.locationCode,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString()};});
+  await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.locationCode])===JSON.stringify([spec.terms,spec.locationCode]);return {...(same?old:{latest:null,risingSeen:{},lastRun:null,keywords:old?.keywords||[],pick:old?.pick}),product,terms:spec.terms,locationCode:spec.locationCode,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString()};});
   this.start(id);return this.status(id);},`connect:${JSON.stringify(v)}`);}
  // The comparison's words: the product, then the competitors in 竞品 (the picked four when there are more).
  async rivals(id,s){const product=s?.product||s?.terms?.[0]||'',list=((await this.p.competitors?.state(id).catch(()=>null))?.list||[]).filter(c=>{const n=String(c.name||'').trim();return n.length>=2&&n.length<=60&&!/["\\]/.test(n)&&n.toLowerCase()!==product.toLowerCase();});
@@ -112,11 +119,11 @@ class TrendsSource{
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options),'brand');}
  async collect(id,{force=false,retry=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('trendsSource.connectTrendsFirst'),409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};
-  const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
-  this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
+  const today=businessNow(this.p,id,'dataforseo'),now=new Date(today).toISOString(),at=new Date().toISOString(),range=pastYear(today);let run,error='';
+  this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,range,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
-   return {...cur,latest:{at:run.reused&&cur.latest?.at||now,...saved(r,s.locationCode)},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
+   return {...cur,latest:{at:run.reused&&cur.latest?.at||now,...r,locationCode:r.locationCode??Number(s.locationCode||0),range:r.range||range},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
   return {ok:!error,error};}
  // Followed topics: the topics in Memory, in their order (the first MAX_KEYWORDS). A topic kept keeps its line and
  // searches, a new one waits for its first check, a removed one is forgotten with its data. Returns the new topics' ids;
@@ -135,11 +142,11 @@ class TrendsSource{
  checkKeyword(id,kid,options={}){return this.runs.run(id,()=>this.collectKeyword(id,kid,options),`keyword:${kid}`);}
  async collectKeyword(id,kid,{force=false,retry=false}={}){const s=await this.state(id),k=(s?.keywords||[]).find(x=>x.id===kid);if(!k)return {skipped:true};
   if(!force&&k.lastRun&&Date.now()-Date.parse(k.lastRun.at)<WEEK-6*3600000)return {skipped:true};
-  const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
-  this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
+  const today=businessNow(this.p,id,'dataforseo'),now=new Date(today).toISOString(),at=new Date().toISOString(),range=pastYear(today);let run,error='';
+  this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,range,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(x.risingSeen||{})},first=!x.latest;for(const q of r.rising){const key=q.query.toLowerCase();if(!(key in seen))seen[key]=first?'':now;}
-   return {...x,latest:{at:run.reused&&x.latest?.at||now,...saved(r,s.locationCode)},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
+   return {...x,latest:{at:run.reused&&x.latest?.at||now,...r,locationCode:r.locationCode??Number(s.locationCode||0),range:r.range||range},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
   return {ok:!error,error};}
  async checkKeywords(id,{force=false}={}){const errors=[];for(const k of (await this.state(id))?.keywords||[]){const key=`${id}:${k.id}`;if(this.keywordChecks.has(key))continue;this.keywordChecks.add(key);
   try{const r=await this.checkKeyword(id,k.id,{force});if(r.error)errors.push(`${k.keyword}：${r.error}`);}finally{this.keywordChecks.delete(key);}}return errors;}
@@ -155,13 +162,13 @@ class TrendsSource{
    nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,summary:summary(s.latest)};}
  // The 趋势 page: the 12-month lines, each term's recent change, related searches (rising ones first seen this week marked).
  async view(id){await this.sync(id).catch(()=>false);await this.syncTopics(id).catch(()=>[]);const s=await this.state(id),week=businessNow(this.p,id,'dataforseo')-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
-  const keywords=(s?.keywords||[]).map(k=>{const q=k.latest?snapshotQuery(k.latest,s?.locationCode):null;return {id:k.id,keyword:k.keyword,addedAt:k.addedAt,checking:this.keywordChecks.has(`${id}:${k.id}`),lastRun:k.lastRun||null,checkedAt:k.latest?.at||null,
-   place:q?.place??null,range:q?.range??null,checkUrl:q?trendsUrl([k.keyword],q.locationCode,q.range):null,
+  const keywords=(s?.keywords||[]).map(k=>{const q=k.latest?snapshotQuery(k.latest):null;return {id:k.id,keyword:k.keyword,addedAt:k.addedAt,checking:this.keywordChecks.has(`${id}:${k.id}`),lastRun:k.lastRun||null,checkedAt:k.latest?.at||null,
+   place:q?q.place:placeName(s?.locationCode),range:q?.range??null,checkUrl:q?trendsUrl([k.keyword],q.locationCode,q.range):null,
    points:k.latest?.points||[],...keywordSummary(k),top:k.latest?.top||[],rising:(k.latest?.rising||[]).map(x=>({...x,isNew:newSince(k.risingSeen,x,week)}))};});
   const shared={dataforseo,checking:this.runs.has(id),keywords,maxKeywords:MAX_KEYWORDS,keywordPlace:placeName(s?.locationCode)};
   if(!s?.terms?.length||s.status==='disconnected')return {connected:false,...shared,notes:keywords.length?KEYWORD_NOTES:undefined};const l=s.latest,seen=s.risingSeen||{};
-  const {competitors}=await this.rivals(id,s),q=l?snapshotQuery(l,s.locationCode):null;
-  return {connected:true,...shared,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,place:placeName(s.locationCode),checking:this.runs.has(id),lastRun:s.lastRun||null,checkedAt:l?.at||null,queryPlace:q?.place??null,range:q?.range??null,checkUrl:q?trendsUrl(l.terms||s.terms,q.locationCode,q.range):null,relatedUrl:q?trendsUrl([(l.terms||s.terms)[0]],q.locationCode,q.range):null,
+  const {competitors}=await this.rivals(id,s),q=l?snapshotQuery(l):null;
+  return {connected:true,...shared,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,place:placeName(s.locationCode),checking:this.runs.has(id),lastRun:s.lastRun||null,checkedAt:l?.at||null,queryPlace:q?q.place:placeName(s.locationCode),range:q?.range??null,checkUrl:q?trendsUrl(l.terms||s.terms,q.locationCode,q.range):null,relatedUrl:q?trendsUrl([(l.terms||s.terms)[0]],q.locationCode,q.range):null,
    points:l?.points||[],summary:summary(l),top:l?.top||[],rising:(l?.rising||[]).map(q=>({...q,isNew:Boolean(seen[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=week})),
    notes:[systemMessageText('trendsSource.valuesGoogleTrendsRelativeInterest'),systemMessageText('trendsSource.relatedSearchesUseFirstTerm'),...(keywords.length?KEYWORD_NOTES:[])]};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{if(this.runs.has(String(id)))continue;await this.syncTopics(String(id));const t=await this.state(String(id));if((!t?.terms?.length||t.status==='disconnected')&&!(t?.keywords||[]).length)continue;await this.sync(String(id));if(!this.runs.has(String(id)))await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
@@ -173,4 +180,4 @@ class TrendsSource{
    pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }
-export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, trendsUrl, rangeOf, LOCATIONS };
+export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, trendsUrl, pastYear, snapshotQuery, LOCATIONS };
