@@ -14,6 +14,10 @@ import {
   specification as backlinksSpec,
 } from '../../server/nocoreach/backlinks-service';
 import {
+  result as domainResult,
+  specification as domainSpec,
+} from '../../server/nocoreach/domain-service';
+import {
   compare,
   type Partition,
 } from '../../server/nocoreach/execution/effect';
@@ -256,6 +260,46 @@ describe.each(['zh-CN', 'en-US'])(
             );
         }
       }
+    });
+
+    it("pages through a site's ranking keywords in the sort Domain overview asks for", async () => {
+      const project = { id: 'main', ...content.projects.main, language };
+      const market =
+        language === 'zh-CN'
+          ? { locationCode: 2158, language: 'zh-TW' }
+          : { locationCode: 2840, language: 'en' };
+      const read = async (offset: number, sort?: string) => {
+        const spec = domainSpec({
+          view: 'keywords',
+          target: 'nocobase.com',
+          ...market,
+          offset,
+          sort,
+        });
+        const raw = await (
+          await worldResponse(
+            project,
+            `https://api.dataforseo.com/v3/${spec.path}`,
+            { method: 'POST', body: JSON.stringify([spec.request]) },
+            now,
+          )
+        ).json();
+        return domainResult(raw, spec).result;
+      };
+      const first = await read(0);
+      const total = first.totalCount;
+      expect(total).toBeGreaterThan(100);
+      const all = [...first.items];
+      for (let offset = 100; offset < total; offset += 100)
+        all.push(...(await read(offset)).items);
+      expect(all).toHaveLength(total);
+      expect(new Set(all.map((i: any) => i.keyword)).size).toBe(total);
+      const traffic = all.map((i: any) => i.traffic);
+      expect(traffic).toEqual([...traffic].sort((a, b) => b - a));
+      const volume = (await read(0, 'volume:asc')).items.map(
+        (i: any) => i.volume,
+      );
+      expect(volume).toEqual([...volume].sort((a, b) => a - b));
     });
 
     it('answers every Search & market › Backlinks lookup the way the service reads it', async () => {
