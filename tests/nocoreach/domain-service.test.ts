@@ -33,7 +33,7 @@ test('keyword pages: the default first page is unchanged; later pages and other 
  assert.deepEqual(specification({...base,sort:'position:asc'}).request.order_by,['ranked_serp_element.serp_item.rank_group,asc']);
  assert.deepEqual(specification({...base,sort:'difficulty:desc'}).request.order_by,['keyword_data.keyword_properties.keyword_difficulty,desc']);
  for(const offset of [50,-100,10100,'x',1.5])assert.throws(()=>specification({...base,offset}),/页/);
- for(const sort of ['keyword:asc','traffic','traffic:up','traffic:desc:x','ranked_serp_element.serp_item.etv:asc'])assert.throws(()=>specification({...base,sort}),/排序/);
+ for(const sort of ['constructor:asc','toString:desc','keyword:asc','traffic','traffic:up','traffic:desc:x','ranked_serp_element.serp_item.etv:asc'])assert.throws(()=>specification({...base,sort}),/排序/);
  assert.throws(()=>specification({...base,view:'pages',offset:100}),/页/);
 });
 // A store standing in for nrKeywordRuns: find/findOne/create with the filters the DataForSEO layer and the service use.

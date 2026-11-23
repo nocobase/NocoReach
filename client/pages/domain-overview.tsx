@@ -30,6 +30,7 @@ import { ScoreBadge } from "#components/seo/score-badge";
 import { IntentBadge, getIntentLabels, toIntent } from "#components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "#components/seo/csv";
 import { useProject } from "./reach-data";
+import { rankBatches } from "./domain-rank-batches";
 import { currentProjectId } from "./current-project";
 import { safeLink } from "./analytics";
 import { keywordRequest, getMarkets, marketLabel, metric, rankOf, rankRequest, type KeywordConnectionState, type Ranks } from "./keyword-api";
@@ -183,6 +184,8 @@ const kHelper = createColumnHelper<Row>();
 // table shows; each page is a lookup of its own, so one opened again within 30 days is not charged again.
 const PAGE = 100;
 const DEFAULT_SORT = "traffic:desc";
+// The furthest page DataForSEO Labs reads (offset 10,000); the count below the table still says how many there are.
+const MAX_OFFSET = 10000;
 const SORTABLE = ["traffic", "volume", "position", "difficulty"];
 // A sort's pages by offset: the first page and the later ones the server found already read.
 type Book = Record<number, Run>;
@@ -208,15 +211,19 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
   const [filterPage, setFilterPage] = useState(0);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const anchorRef = useSelectionAnchor();
-  // Search Console clicks for the pages not asked about yet, in one request (the server reads up to 1,000 keywords).
+  // Your site's Search Console clicks on the loaded keywords: on your own site for the clicks column, on a competitor's
+  // for the hand-off (ownClicks). Pages not asked about yet go in batches the server reads whole (up to 1,000 keywords);
+  // a page counts as asked once its batch answered, so a failed batch is asked again when another page loads.
   useEffect(() => {
-    if (!project || !own) return;
+    if (!project) return;
     const fresh = loaded.filter((r) => !rankedRef.current.has(String(r.id)));
-    if (!fresh.length) return;
-    fresh.forEach((r) => rankedRef.current.add(String(r.id)));
-    const words = fresh.flatMap((r) => (r.result?.items ?? []).map((i) => i.keyword)).slice(0, 1000);
-    if (words.length) void rankRequest(project.id, words).then((r) => setRanks((s) => ({ ...r, ranks: { ...s?.ranks, ...r.ranks } }))).catch(() => undefined);
-  }, [loaded, project, own]);
+    for (const batch of rankBatches(fresh)) {
+      batch.forEach((r) => rankedRef.current.add(String(r.id)));
+      void rankRequest(project.id, batch.flatMap((r) => (r.result?.items ?? []).map((i) => i.keyword)))
+        .then((r) => setRanks((s) => ({ ...r, ranks: { ...s?.ranks, ...r.ranks } })))
+        .catch(() => batch.forEach((r) => rankedRef.current.delete(String(r.id))));
+    }
+  }, [loaded, project]);
   // Reads one page in one sort (the person opened it or changed the sort); only the latest request is shown.
   const load = async (offset: number, by: string) => {
     const seq = ++latestRef.current;
@@ -294,7 +301,7 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
         </>}
         footer={<>
           {active ? (rows.length > 0 ? <TablePagination page={filterPage + 1} pageSize={PAGE} totalCount={rows.length} onPageChange={(p) => setFilterPage(p - 1)} /> : null)
-            : <TablePagination page={page + 1} pageSize={PAGE} totalCount={total} onPageChange={(p) => { if (!loading) openPage(p - 1); }} />}
+            : <TablePagination page={page + 1} pageSize={PAGE} totalCount={Math.min(total, MAX_OFFSET + PAGE)} onPageChange={(p) => { if (!loading) openPage(p - 1); }} />}
           <p className="flex items-center gap-1 border-t border-border px-4 py-2 text-xs text-muted-foreground tabular-nums" data-domain-loaded="">{$t('domainOverview.loadedOfTotal',{0:loadedCount.toLocaleString(getCurrentLocale()),1:Math.max(total, loadedCount).toLocaleString(getCurrentLocale())})}<InfoTip label={$t('common.info')}>{$t('domainOverview.keywordsBilling')}</InfoTip></p>
         </>} />
       {own ? <p className="px-4 pb-3 text-xs text-muted-foreground">{$t('domainOverview.siteClicksActualSearchConsole')}</p> : null}

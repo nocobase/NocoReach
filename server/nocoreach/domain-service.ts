@@ -19,7 +19,7 @@ function host(input){let v=String(input||'').trim().toLowerCase();try{if(/^https
 const PAGE=100,MAX_OFFSET=10000;
 const SORTS={traffic:'ranked_serp_element.serp_item.etv',volume:'keyword_data.keyword_info.search_volume',position:'ranked_serp_element.serp_item.rank_group',difficulty:'keyword_data.keyword_properties.keyword_difficulty'};
 const DEFAULT_SORT='traffic:desc';
-function sortOf(v){const s=v===undefined||v===null||v===''?DEFAULT_SORT:String(v),[field,dir]=s.split(':');if(!SORTS[field]||!['asc','desc'].includes(dir)||s.split(':').length!==2)error(systemMessageText('domain.sortNotSupported'));return s;}
+function sortOf(v){const s=v===undefined||v===null||v===''?DEFAULT_SORT:String(v),[field,dir]=s.split(':');if(!Object.hasOwn(SORTS,field)||!['asc','desc'].includes(dir)||s.split(':').length!==2)error(systemMessageText('domain.sortNotSupported'));return s;}
 function specification(v){
  if(!['keywords','pages'].includes(v.view)||!markets.includes(Number(v.locationCode))||!languages.includes(v.language))error(systemMessageText('aiSearch.pickSupportedRegionLanguage'));
  const offset=v.offset===undefined||v.offset===null?0:Number(v.offset),sort=v.view==='keywords'?sortOf(v.sort):DEFAULT_SORT;
