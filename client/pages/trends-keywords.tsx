@@ -19,25 +19,28 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
-import { formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime } from '#lib/format';
 import { EditTopicsLink } from './followed-topics';
 import { topicScopeText } from './followed-topics-scope';
 import { Delta } from '#components/reach/delta';
 
 type Query = { query: string; value: number; isNew?: boolean };
-export type WatchedKeyword = { id: string; keyword: string; addedAt: string; checking: boolean; lastRun: { at: string; ok: boolean; errors: string[] } | null; checkedAt: string | null; checkUrl: string | null; points: { date: string; value: number | null }[]; recent: number | null; change: number | null; average: number | null; top: Query[]; rising: Query[] };
+export type WatchedKeyword = { id: string; keyword: string; addedAt: string; checking: boolean; lastRun: { at: string; ok: boolean; errors: string[] } | null; checkedAt: string | null; place?: string | null; range?: TrendsRange | null; checkUrl: string | null; points: { date: string; value: number | null }[]; recent: number | null; change: number | null; average: number | null; top: Query[]; rising: Query[] };
+export type TrendsRange = { from: string; to: string };
 export type KeywordWatch = { dataforseo?: boolean; keywords?: WatchedKeyword[]; maxKeywords?: number; keywordPlace?: string };
 const change = (v: number | null) => (v === null ? "—" : <Delta value={v} />);
 const getOwn = () => ($t('trendsKeywords.topicRelativeInterest'));
 const helper = createColumnHelper<WatchedKeyword>();
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
-// The conditions the related searches were queried with, named as Google Trends names its own options, and a link to
-// the same query on the Google Trends Explore page (built by the server from the same terms and region).
-export function TrendsQuery({ place, url }: { place: string; url?: string | null }) {
+// The conditions the related searches were queried with, named as Google Trends names its own options: the region and
+// weeks of the saved run (not today's settings), and a link to the same query on the Google Trends Explore page, built
+// by the server from the same terms, region and dates.
+export function TrendsQuery({ place, range, url }: { place: string; range?: TrendsRange | null; url?: string | null }) {
+  const time = range ? `${formatDate(range.from, { withYear: true })} – ${formatDate(range.to, { withYear: true })}` : $t('trendsKeywords.timeRangePast12Months');
   return (
     <p className="nr-footnote" data-trends-query>
-      {$t('trendsKeywords.queryConditions', { 0: $legacyText(place) })}
+      {$t('trendsKeywords.queryConditions', { 0: $legacyText(place), 1: time })}
       {url ? <> · <a className="nr-link" href={url} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}
     </p>
   );
@@ -109,8 +112,8 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
     </section>
   );
   return (
-    <DetailDrawer open onClose={onClose} title={k.keyword} description={$t('common.past12Months',{0:$legacyText(place),1:k.checkedAt ? $t('common.checked',{0:formatDateTime(k.checkedAt)}) : ""})}
-      actions={<SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t('common.handOffAgentValue',{0:chosen.length}) : $t('common.handOffAgent')} description={$t('common.selectedRelatedSearchesBecomeOne')} draft={() => trendsDraft(k.keyword, place, chosen)} />}>
+    <DetailDrawer open onClose={onClose} title={k.keyword} description={$t('common.past12Months',{0:$legacyText(k.place || place),1:k.checkedAt ? $t('common.checked',{0:formatDateTime(k.checkedAt)}) : ""})}
+      actions={<SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t('common.handOffAgentValue',{0:chosen.length}) : $t('common.handOffAgent')} description={$t('common.selectedRelatedSearchesBecomeOne')} draft={() => trendsDraft(k.keyword, k.place || place, chosen)} />}>
       <div className="space-y-4">
         {k.lastRun && !k.lastRun.ok && !k.checking ? <InlineError action={k.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={onRetry}>{$t('common.queryAgain')}</Button> : undefined}>{$tj('common.lastCheckNotComplete',{0:$legacyText(k.lastRun.errors[0])})}</InlineError> : null}
         {!k.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{k.checking || !k.lastRun ? $t('trendsKeywords.checkingUsuallyMinuteTwo') : $t('common.noDataYet')}</p> : (
@@ -133,7 +136,7 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
             </div>
             <div className="space-y-0.5">
               <p className="text-sm text-muted-foreground">{chosen.length ? $t('trendsKeywords.relatedSearchesSelected',{0:chosen.length}) : $t('trendsKeywords.selectRelatedSearchesHandThem')}<InfoTip className="ml-1" label={$t('common.info')}><RelatedSearchesHelp term={k.keyword} /></InfoTip></p>
-              <TrendsQuery place={place} url={k.checkUrl} />
+              <TrendsQuery place={k.place || place} range={k.range} url={k.checkUrl} />
             </div>
             {rows($t('common.rising'), "rising", k.rising, $t('common.noClearlyRisingRelatedSearches'))}
             {rows($t('common.top'), "top", k.top, $t('common.googleGaveNoRelatedSearches'))}
