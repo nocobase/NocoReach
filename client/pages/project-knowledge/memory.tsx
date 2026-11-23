@@ -5,9 +5,20 @@ import {
   getCurrentLocale,
   useNocoReachLocale,
 } from '#i18n';
-import { Fragment, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { Link, Outlet, useLocation, useOutletContext } from 'react-router';
-import { LoaderCircleIcon, PencilIcon } from 'lucide-react';
+import {
+  ChevronDown,
+  LoaderCircleIcon,
+  PencilIcon,
+  RefreshCw,
+} from 'lucide-react';
 import { LongText } from '#components/long-text';
 import { chipClass } from '#components/reach/chip';
 import { cn } from '#lib/utils';
@@ -18,8 +29,6 @@ import {
 } from '../../../shared/followed-topics';
 import { AiMark } from '#components/reach/actor';
 import { InfoTip } from '#components/reach/info-tip';
-import { HeaderActions } from '#components/reach/page';
-import { RefreshButton } from '#components/reach/refresh-button';
 import { InlineError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -51,9 +60,11 @@ import {
 } from '#components/ui/select';
 import { joinList } from '#lib/format';
 
-// 记忆 tab: how full it is, the AI's update suggestions to accept or ignore, and one row per item — the project name,
-// the language the AI writes in, and the nine handbook sections. One Edit opens every item in a dialog over this tab
-// (user decision 2026-10-21, instead of a pencil per row); Generate from the website and materials first shows what the AI will read.
+// Memory tab: one line naming the items still empty (each a link to its row), one folded line for the AI's update
+// suggestions, then one row per item — the project name, the language the AI writes in, the handbook sections and the
+// followed topics. The content comes first so a new user sees what the page holds (2026-11-23): the suggestions open
+// only on Review. One Edit opens every item in a dialog over this tab (user decision 2026-10-21, instead of a pencil
+// per row); Generate from the website and materials first shows what the AI will read.
 export default function MemoryTab(): ReactElement {
   // Tabs and overlays are not gated routes: follow a language change here.
   useNocoReachLocale();
@@ -62,11 +73,30 @@ export default function MemoryTab(): ReactElement {
   const memory = memoryOf(project),
     sections = getMemorySections();
   // Followed topics is one more item; the characters stay the sections', which is what the length limit is about.
-  const filled =
-      sections.filter(([k]) => memory[k]).length +
-      (topicsOf(project).length ? 1 : 0),
-    items = sections.length + 1,
-    total = Object.values(memory).reduce((n, t) => n + t.length, 0);
+  const empty: [string, string][] = [];
+  for (const [k, title] of sections) {
+    if (!memory[k]) empty.push([k, title]);
+    if (k === 'competitors' && !topicsOf(project).length)
+      empty.push(['topics', $t('projectKnowledge.followedTopics')]);
+  }
+  const items = sections.length + 1,
+    total = Object.values(memory).reduce((n, t) => n + t.length, 0),
+    chars = total.toLocaleString(getCurrentLocale());
+  // A link in the summary scrolls to its row and tints it for a moment.
+  const [highlight, setHighlight] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlight) return;
+    const t = setTimeout(() => setHighlight(null), 2000);
+    return () => clearTimeout(t);
+  }, [highlight]);
+  function jump(item: string) {
+    const row = document.querySelector<HTMLElement>(
+      `[data-memory-item="${item}"]`,
+    );
+    row?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    row?.focus({ preventScroll: true });
+    setHighlight(item);
+  }
   const { can: canDraft } = useBusinessAccess('nrMemory.draft', project.id),
     { can: canSave } = useBusinessAccess('nrKnowledge.saveMemory', project.id);
   const location = useLocation();
@@ -74,11 +104,32 @@ export default function MemoryTab(): ReactElement {
     <div className='flex flex-col gap-4' data-memory-tab>
       <div className='flex flex-wrap items-center gap-2'>
         <p className='flex items-center gap-1.5 text-sm text-muted-foreground'>
-          {$tj('projectKnowledge.memorySummary', {
-            0: filled,
-            1: items,
-            2: total.toLocaleString(getCurrentLocale()),
-          })}
+          <span data-memory-summary>
+            {empty.length
+              ? $tj('projectKnowledge.memoryNotFilled', {
+                  0: (
+                    <>
+                      {empty.map(([k, title], i) => (
+                        <Fragment key={k}>
+                          {i ? $t('common.listSeparator') : null}
+                          <button
+                            type='button'
+                            className='nr-link'
+                            onClick={() => jump(k)}
+                          >
+                            {title}
+                          </button>
+                        </Fragment>
+                      ))}
+                    </>
+                  ),
+                  1: chars,
+                })
+              : $t('projectKnowledge.memoryAllFilled', {
+                  0: items,
+                  1: chars,
+                })}
+          </span>
           <InfoTip label={$t('projectKnowledge.whatMemory')}>
             <p>{help($t('projectKnowledge.memory'))}</p>
             <p>
@@ -120,7 +171,7 @@ export default function MemoryTab(): ReactElement {
         ) : null}
       </div>
       <MemoryUpdates projectId={project.id} updates={updates} />
-      <MemoryList context={context} />
+      <MemoryList context={context} highlight={highlight} />
       <Outlet context={context} />
     </div>
   );
@@ -139,7 +190,8 @@ function MemoryUpdates({
     { can: canDismiss } = useBusinessAccess('nrMemory.dismiss', projectId),
     { can: canSeen } = useBusinessAccess('nrMemory.seen', projectId);
   const { status, busy, error } = updates,
-    [showRead, setShowRead] = useState(false);
+    [showRead, setShowRead] = useState(false),
+    [open, setOpen] = useState(false);
   if (!status)
     return error ? (
       <InlineError
@@ -160,7 +212,7 @@ function MemoryUpdates({
   const d = status.draft,
     c = status.lastCheck;
   // When the AI last looked for updates, read as every status line's "Updated" (2026-10-22 decision D2); the weekly
-  // routine is in the ⓘ, and Check now sits at the top right as every page's refresh does.
+  // routine is in the ⓘ, and Check now sits right after it in the suggestions line, as the confirmed mockup shows.
   const checkLine = status.aiReady ? (
     <span className='flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground'>
       <span>
@@ -181,14 +233,18 @@ function MemoryUpdates({
         {$t('projectKnowledge.weeklyCheckHelpTopics')}
       </InfoTip>
       {canCheck ? (
-        <HeaderActions>
-          <RefreshButton
-            busy={status.running === 'check'}
-            disabled={busy || Boolean(status.running)}
-            label={$t('common.checkNow')}
-            onClick={() => void updates.run('check')}
+        <Button
+          size='xs'
+          variant='ghost'
+          disabled={busy || Boolean(status.running)}
+          onClick={() => void updates.run('check')}
+        >
+          <RefreshCw
+            className={status.running === 'check' ? 'animate-spin' : undefined}
+            aria-hidden='true'
           />
-        </HeaderActions>
+          {$t('common.checkNow')}
+        </Button>
       ) : null}
     </span>
   ) : (
@@ -324,16 +380,35 @@ function MemoryUpdates({
           className='rounded-lg border bg-card'
           aria-label={$t('projectKnowledge.suggestedUpdates')}
         >
-          <div className='flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2'>
+          <div
+            className={cn(
+              'flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2',
+              open && 'border-b',
+            )}
+          >
             <AiMark label={$t('common.aiSuggestions')} />
             <h2 className='text-sm font-semibold'>
               {$tj('projectKnowledge.suggestedUpdatesValue', {
                 0: status.suggestions.length,
               })}
             </h2>
+            <Button
+              size='xs'
+              variant='outline'
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open
+                ? $t('projectKnowledge.hideSuggestions')
+                : $t('projectKnowledge.reviewSuggestions')}
+              <ChevronDown
+                aria-hidden='true'
+                className={cn('transition-transform', open && 'rotate-180')}
+              />
+            </Button>
             <span className='ml-auto'>{checkLine}</span>
           </div>
-          {status.suggestions.map((x) => (
+          {(open ? status.suggestions : []).map((x) => (
             <Suggestion
               key={x.id}
               x={x}
@@ -445,14 +520,16 @@ function Suggestion({
 // Every item on its own row: the name and its content (five lines, then unfolds); Edit above changes them.
 function MemoryList({
   context,
+  highlight,
 }: {
   context: ProjectKnowledgeContext;
+  highlight: string | null;
 }): ReactElement {
   const { project } = context;
   const memory = memoryOf(project);
   return (
     <dl
-      className='rounded-lg border bg-card text-sm'
+      className='overflow-hidden rounded-lg border bg-card text-sm'
       aria-label={$t('projectKnowledge.memory')}
     >
       <Row label={$t('common.projectName')}>{project.name}</Row>
@@ -461,7 +538,7 @@ function MemoryList({
       </Row>
       {getMemorySections().map(([k, title, hint]) => (
         <Fragment key={k}>
-          <Row label={title} item={k}>
+          <Row label={title} item={k} highlight={highlight === k}>
             {memory[k] ? (
               // Five lines, the last fading out; a click unfolds the rest in place (guideline I14).
               <LongText>{memory[k]}</LongText>
@@ -472,7 +549,9 @@ function MemoryList({
               </span>
             )}
           </Row>
-          {k === 'competitors' ? <TopicsRow project={project} /> : null}
+          {k === 'competitors' ? (
+            <TopicsRow project={project} highlight={highlight === 'topics'} />
+          ) : null}
         </Fragment>
       ))}
     </dl>
@@ -483,15 +562,21 @@ function MemoryList({
 // faded with a request to trim the list; the sources search the first TOPICS_MAX meanwhile.
 function TopicsRow({
   project,
+  highlight,
 }: {
   project: ProjectKnowledgeContext['project'];
+  highlight: boolean;
 }): ReactElement {
   const topics = topicsOf(project),
     over = topics.length > TOPICS_MAX,
     cost = topicMonthlyCost(),
     usd = (v: number) => v.toFixed(2);
   return (
-    <Row label={$t('projectKnowledge.followedTopics')} item='topics'>
+    <Row
+      label={$t('projectKnowledge.followedTopics')}
+      item='topics'
+      highlight={highlight}
+    >
       <span className='flex flex-col gap-1.5'>
         {topics.length ? (
           <span className='flex flex-wrap items-center gap-1.5'>
@@ -551,16 +636,23 @@ function TopicsRow({
 function Row({
   label,
   item,
+  highlight = false,
   children,
 }: {
   label: string;
   item?: string;
+  highlight?: boolean;
   children: ReactNode;
 }): ReactElement {
   return (
     <div
-      className='flex flex-col gap-1 border-b px-4 py-3 last:border-0 sm:flex-row sm:gap-4'
+      className={cn(
+        'flex scroll-my-4 flex-col gap-1 border-b px-4 py-3 transition-colors duration-500 outline-none last:border-0 sm:flex-row sm:gap-4',
+        highlight && 'bg-nr-tint-blue',
+      )}
       data-memory-item={item}
+      data-highlight={highlight || undefined}
+      tabIndex={item ? -1 : undefined}
     >
       <dt className='shrink-0 text-muted-foreground sm:w-36 sm:pt-0.5'>
         {label}
