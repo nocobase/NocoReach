@@ -132,7 +132,7 @@ function KeywordDetail({ projectId, k, place, onClose, onRetry }: { projectId: n
               </ResponsiveContainer>
             </div>
             <div className="space-y-0.5">
-              <p className="flex items-center gap-1 text-sm text-muted-foreground">{chosen.length ? $t('trendsKeywords.relatedSearchesSelected',{0:chosen.length}) : $t('trendsKeywords.selectRelatedSearchesHandThem')}<InfoTip label={$t('common.info')}><RelatedSearchesHelp term={k.keyword} /></InfoTip></p>
+              <p className="text-sm text-muted-foreground">{chosen.length ? $t('trendsKeywords.relatedSearchesSelected',{0:chosen.length}) : $t('trendsKeywords.selectRelatedSearchesHandThem')}<InfoTip className="ml-1" label={$t('common.info')}><RelatedSearchesHelp term={k.keyword} /></InfoTip></p>
               <TrendsQuery place={place} url={k.checkUrl} />
             </div>
             {rows($t('common.rising'), "rising", k.rising, $t('common.noClearlyRisingRelatedSearches'))}
