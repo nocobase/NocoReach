@@ -119,7 +119,7 @@ test('one Edit opens every item in a dialog and sends only what changed', async 
   const user = userEvent.setup();
   const router = await mountProjectKnowledge('/project/memory');
   // Rows carry no edit buttons of their own; an empty item says so.
-  await screen.findByText('受众');
+  await screen.findAllByText('受众');
   const audience = document.querySelector<HTMLElement>(
     '[data-memory-item="audience"]',
   )!;
@@ -355,6 +355,10 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
   const user = userEvent.setup();
   await mountProjectKnowledge('/project/memory');
   const region = await screen.findByRole('region', { name: '更新建议' });
+  // The suggestions stay folded under their line until Review opens them.
+  expect(within(region).getByText('1 条更新建议')).toBeInTheDocument();
+  expect(within(region).queryByText('A CLI ships with it.')).toBeNull();
+  await user.click(within(region).getByRole('button', { name: '查看' }));
   expect(within(region).getByText('A CLI ships with it.')).toBeInTheDocument();
   // The status line reads "Updated"; Check now is at the top right, not in the line.
   expect(
@@ -374,14 +378,30 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
   );
 });
 
+test('the summary names the empty items and each one leads to its row', async () => {
+  const user = userEvent.setup();
+  await mountProjectKnowledge('/project/memory');
+  const summary = await waitFor(() =>
+    document.querySelector<HTMLElement>('[data-memory-summary]')!,
+  );
+  expect(summary).toHaveTextContent(/^还没填：受众、/);
+  expect(within(summary).queryByRole('button', { name: '产品' })).toBeNull();
+  await user.click(within(summary).getByRole('button', { name: '受众' }));
+  const audience = document.querySelector<HTMLElement>(
+    '[data-memory-item="audience"]',
+  )!;
+  expect(audience).toHaveAttribute('data-highlight', 'true');
+  expect(audience).toHaveFocus();
+});
+
 test('the tabs and their dialogs follow a language change in place', async () => {
   await mountProjectKnowledge('/project/memory/edit');
-  expect(await screen.findByText(/已填 2 \/ 10 项/)).toBeInTheDocument();
+  expect(await screen.findByText(/还没填/)).toBeInTheDocument();
   expect(
     await screen.findByRole('dialog', { name: '编辑记忆' }),
   ).toBeInTheDocument();
   act(() => setDictionary(english));
-  expect(await screen.findByText(/2 of 10 filled/)).toBeInTheDocument();
+  expect(await screen.findByText(/Not filled yet/)).toBeInTheDocument();
   expect(
     screen.getByRole('dialog', { name: 'Edit memory' }),
   ).toBeInTheDocument();
@@ -445,8 +465,14 @@ test('Followed topics sit below Competitors as chips, with the sources that sear
       'Reddit、Hacker News、YouTube、趋势、GitHub 热点、AI 问题都按这些话题找讨论和热点 · 每个话题每月约 $0.56 的 DataForSEO 费用',
     );
     expect(within(row).queryByText('请删减到 10 个')).not.toBeInTheDocument();
-    // The topics count as one more item beside the nine sections.
-    expect(screen.getByText(/已填 3 \/ 10 项/)).toBeInTheDocument();
+    // Filled topics leave the list of empty items.
+    const summary = document.querySelector('[data-memory-summary]')!;
+    expect(summary).toHaveTextContent(/^还没填：/);
+    expect(
+      within(summary as HTMLElement).queryByRole('button', {
+        name: '关注的话题',
+      }),
+    ).toBeNull();
   } finally {
     restore();
   }
@@ -536,6 +562,7 @@ test('a topic the weekly check found is offered with its evidence, under the sug
   const user = userEvent.setup();
   await mountProjectKnowledge('/project/memory');
   const region = await screen.findByRole('region', { name: '更新建议' });
+  await user.click(within(region).getByRole('button', { name: '查看' }));
   const card = await waitFor(() =>
     region.querySelector<HTMLElement>('[data-suggestion="t1"]')!,
   );
