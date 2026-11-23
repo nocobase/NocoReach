@@ -43,6 +43,9 @@ const DATE=/^\d{4}-\d{2}-\d{2}$/;
 // date_from is left out ("the current day and month of the preceding year"). A run fixes them before it asks, and the
 // request, the snapshot and the link all use the same two dates.
 function pastYear(ms){const d=new Date(ms),to=d.toISOString().slice(0,10),from=new Date(Date.UTC(d.getUTCFullYear()-1,d.getUTCMonth(),d.getUTCDate())).toISOString().slice(0,10);return {from,to};}
+// The dates of a run handed back: its own, kept with its result; one saved before they were kept (reused from then)
+// covered the 12 months up to the day it was made.
+const ranOn=(run,range)=>run?.reused&&Number.isFinite(Date.parse(run?.createdAt))?pastYear(Date.parse(run.createdAt)):range;
 const rangeIn=r=>r&&DATE.test(String(r.from))&&DATE.test(String(r.to))&&r.from<r.to?{from:r.from,to:r.to}:null;
 const placeName=code=>(LOCATIONS.find(([c])=>c===Number(code||0))||LOCATIONS[0])[1];
 // What a snapshot saved before its region and dates were kept says about them: the check_url DataForSEO returned with it
@@ -59,6 +62,13 @@ function legacyQuery(latest){let url=null;try{url=latest?.checkUrl?new URL(lates
 function snapshotQuery(latest){const old=latest?.locationCode===undefined||!latest?.range?legacyQuery(latest):null;
  const locationCode=latest?.locationCode!==undefined?latest.locationCode:old.locationCode,range=rangeIn(latest?.range)||old?.range||null;
  return {locationCode,place:locationCode===null?null:placeName(locationCode),range};}
+// The query a run is, for DataForSEO's reuse, uncertain-run and repeated-request checks: the spec without its dates,
+// which move every day. A run at 23:59 UTC whose result is uncertain still blocks an ordinary click at 00:01, and a
+// double click is still answered from the run of a few minutes before. Each request sends its own dates, and the
+// snapshot and the link use the dates of the run actually shown. The shape is the spec before dates were sent
+// (time_range past_12_months, the same window), so runs saved before then are still recognized.
+const undated=body=>{const {date_from,date_to,...rest}=body||{};return {keywords:rest.keywords,time_range:'past_12_months',...rest};};
+function identity(spec){const {range,...rest}=spec||{};return {...rest,...(rest.requests?{requests:rest.requests.map(q=>({...q,body:undated(q.body)}))}:{}),...(rest.request?{request:undated(rest.request)}:{})};}
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null;};
 // Up to five terms, each a phrase of 2–60 characters, the first being the product.
 function termsOf(input){const list=(Array.isArray(input)?input:String(input||'').split(/[,，、\n]/)).map(t=>String(t).trim().replace(/\s+/g,' ')).filter(Boolean),seen=new Set(),out=[];
@@ -97,7 +107,7 @@ function keywordSummary(k){const vals=(k.latest?.points||[]).map(x=>x.value),now
 const newSince=(seen,q,since)=>Boolean(seen?.[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=since;
 class TrendsSource{
  readonly runs: ProjectRuns;
- constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll'], 'dataforseo');this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.keywordChecks=new Set();this.runs.bindRequest(this.d4s,'run');}
+ constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll'], 'dataforseo');this.d4s=new DataForSeo(p,{trends:{specification,result,identity,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,identity,reuseMs:6*DAY}});this.keywordChecks=new Set();this.runs.bindRequest(this.d4s,'run');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `trends:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -123,7 +133,7 @@ class TrendsSource{
   this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,range,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
-   return {...cur,latest:{at:run.reused&&cur.latest?.at||now,...r,locationCode:r.locationCode??Number(s.locationCode||0),range:r.range||range},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
+   return {...cur,latest:{at:run.reused&&cur.latest?.at||now,...r,locationCode:r.locationCode??Number(s.locationCode||0),range:r.range||ranOn(run,range)},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
   return {ok:!error,error};}
  // Followed topics: the topics in Memory, in their order (the first MAX_KEYWORDS). A topic kept keeps its line and
  // searches, a new one waits for its first check, a removed one is forgotten with its data. Returns the new topics' ids;
@@ -146,7 +156,7 @@ class TrendsSource{
   this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,range,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry,forceRefresh:force});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(x.risingSeen||{})},first=!x.latest;for(const q of r.rising){const key=q.query.toLowerCase();if(!(key in seen))seen[key]=first?'':now;}
-   return {...x,latest:{at:run.reused&&x.latest?.at||now,...r,locationCode:r.locationCode??Number(s.locationCode||0),range:r.range||range},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
+   return {...x,latest:{at:run.reused&&x.latest?.at||now,...r,locationCode:r.locationCode??Number(s.locationCode||0),range:r.range||ranOn(run,range)},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
   return {ok:!error,error};}
  async checkKeywords(id,{force=false}={}){const errors=[];for(const k of (await this.state(id))?.keywords||[]){const key=`${id}:${k.id}`;if(this.keywordChecks.has(key))continue;this.keywordChecks.add(key);
   try{const r=await this.checkKeyword(id,k.id,{force});if(r.error)errors.push(`${k.keyword}：${r.error}`);}finally{this.keywordChecks.delete(key);}}return errors;}
@@ -180,4 +190,4 @@ class TrendsSource{
    pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }
-export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, trendsUrl, pastYear, snapshotQuery, LOCATIONS };
+export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, trendsUrl, pastYear, snapshotQuery, identity, LOCATIONS };

@@ -9,7 +9,8 @@ import { hash, VisibilityError } from './research-helpers.js';
 // unreadable reply) may already be billed, so it is recorded as unknown and never retried automatically. Each page
 // registers a kind: specification(v) returns {kind,path,request,estimatedUsd,reservationUsd,...} (or
 // {kind,requests:[{path,body}],...}) and result(raw,spec) the parsed run values (raw is the list of replies for
-// `requests`).
+// `requests`). A kind may also give identity(spec): what makes two runs the same query, for the reuse, uncertain and
+// repeated-request checks, when its spec carries values that change by themselves (Trends' dates, which move daily).
 const key=id=>'NOREACH_DATAFORSEO_'+id;
 const REUSE_MS=30*86400000;
 // A forced refresh (the person asking again on purpose) still gets the same query's run from the last RECENT_MS, so a
@@ -81,7 +82,7 @@ class DataForSeo{
   if(hash(c)!==hash(this.config(id)))error(systemMessageText('dataforseo.settingsChangedVerifyAgain'));
   await this.p.variable(key(id),JSON.stringify({...c,verifiedAt:new Date().toISOString()}),true);return this.status(id);
  }
- queryHash(id,c,spec){const identity=[id,c?hash(c.login+':'+c.password):'',spec],mockKey=this.p.network?.mockCacheKey('dataforseo',String(id));return hash(mockKey?[...identity,mockKey]:identity);}
+ queryHash(id,c,spec){const same=this.kinds[spec?.kind]?.identity,identity=[id,c?hash(c.login+':'+c.password):'',same?same(spec):spec],mockKey=this.p.network?.mockCacheKey('dataforseo',String(id));return hash(mockKey?[...identity,mockKey]:identity);}
  async preview(id,kind,v){const spec=this.kind(kind).specification(v),c=this.config(id);if(spec.kind!==kind)error(systemMessageText('dataforseo.queryTypeNotMatch'),400);const queryHash=this.queryHash(id,c,spec);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)?old.toJSON():null};}
  async run(id,kind,v){
   const c=this.config(id);if(!c?.verifiedAt)error(systemMessageText('aiSearch.saveVerifyDataforseoDataSources'));

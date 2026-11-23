@@ -154,3 +154,38 @@ test('产品与竞品: the product name is set once, the competitors come from �
  // renaming the product keeps the competitors
  await s.runs.wait('1');await s.connect('1',{product:'NocoBase CRM',locationCode:2840});assert.deepEqual((await s.status('1')).terms,['NocoBase CRM','Retool','Appsmith','ToolJet','Budibase']);
 });
+
+test('Trends dates do not make a run a new query: an uncertain run before UTC midnight still blocks, a double click is still reused',async()=>{
+ const {identity}=__trends_source;
+ // the identity is the spec as it was before dates were sent, so runs saved by the earlier version are still recognized
+ const spec=specification({terms:'NocoBase, Retool',locationCode:2840,range:{from:'2025-11-22',to:'2026-11-22'}});
+ assert.equal(JSON.stringify(identity(spec)),JSON.stringify({kind:'trends',terms:['NocoBase','Retool'],locationCode:2840,requests:['google_trends_graph','google_trends_queries_list'].map((t,i)=>({path:'keywords_data/google_trends/explore/live',body:{keywords:i?['NocoBase']:['NocoBase','Retool'],time_range:'past_12_months',language_code:'en',location_code:2840,item_types:[t]}})),estimatedUsd:0.022,reservationUsd:0.05,timeoutMs:120000,priceVersion:'official-list-2026-07'}));
+ assert.deepEqual(identity(specification({terms:'NocoBase',range:{from:'2025-11-23',to:'2026-11-23'}})),identity(specification({terms:'NocoBase',range:{from:'2025-11-22',to:'2026-11-22'}})));
+ const setup=()=>{const tables={nrSnapshots:[],nrKeywordRuns:[]};let n=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):k==='id'?String(r[k])===String(v):r[k]===v);
+  const wrap=r=>r&&{...r,id:r.id,get:k=>r[k],toJSON:()=>({...r})};
+  const repo=name=>({findOne:async o=>wrap(o.filterByTk!==undefined?tables[name].find(r=>r.id===o.filterByTk):tables[name].filter(r=>match(r,o.filter)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]),find:async o=>tables[name].filter(r=>match(r,o.filter)).map(wrap),
+   create:async o=>{const r={id:++n,createdAt:new Date().toISOString(),...o.values};tables[name].push(r);return wrap(r);},update:async o=>Object.assign(tables[name].find(r=>r.id===o.filterByTk),o.values.payload&&name==='nrSnapshots'?{payload:o.values.payload}:o.values)});
+  const p={db:{getRepository:repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},app:{logger:{warn(){}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],followedTopics:{of:async()=>['NocoBase']}};
+  const s=new TrendsSource(p),sent=[];return {s,tables,sent};};
+ const graph={type:'google_trends_graph',data:weeks(8,()=>[50])},lists={type:'google_trends_queries_list',data:{top:[{query:'nocobase docker',value:100}],rising:[]}};
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  // 23:59 UTC: the request times out, so it may be billed; 00:01: an ordinary Update now asks nothing
+  let {s,tables,sent}=setup();s.d4s.request=async(c,path,body)=>{sent.push(body[0]);throw Object.assign(new Error('timeout'),{safeCode:'timeout'});};
+  vi.setSystemTime(new Date('2026-11-22T23:59:00Z'));await s.syncTopics('1');const kid=(await s.state('1')).keywords[0].id;
+  await s.checkKeyword('1',kid,{force:true});assert.equal(sent.length,1);assert.equal(tables.nrKeywordRuns[0].status,'unknown');assert.equal(sent[0].date_to,'2026-11-22');
+  vi.setSystemTime(new Date('2026-11-23T00:01:00Z'));await s.checkAll('1',{force:true});assert.equal(sent.length,1,'the uncertain run of the evening before still blocks it');
+  assert.equal(tables.nrKeywordRuns.length,1);
+  // the person retries on purpose: asked again, with that day's dates
+  s.d4s.request=async(c,path,body)=>{sent.push(body[0]);return {status_code:20000,cost:0.011,tasks:[{status_code:20000,result:[{items:[graph,lists]}]}]};};
+  await s.checkKeyword('1',kid,{force:true,retry:true});assert.equal(sent.length,2);assert.equal(sent[1].date_to,'2026-11-23');
+  // a success at 23:58 and a second click at 00:03: the same run is reused, and the snapshot keeps that run's own dates
+  ({s,tables,sent}=setup());s.d4s.request=async(c,path,body)=>{sent.push(body[0]);return {status_code:20000,cost:0.011,tasks:[{status_code:20000,result:[{items:[graph,lists]}]}]};};
+  vi.setSystemTime(new Date('2026-11-22T23:58:00Z'));await s.syncTopics('1');await s.checkKeyword('1',kid,{force:true});assert.equal(sent.length,1);
+  vi.setSystemTime(new Date('2026-11-23T00:03:00Z'));await s.checkKeyword('1',kid,{force:true});assert.equal(sent.length,1,'within ten minutes the run is reused');
+  const k=(await s.view('1')).keywords[0];assert.deepEqual(k.range,{from:'2025-11-22',to:'2026-11-22'});assert.equal(k.checkUrl,trendsUrl(['NocoBase'],0,{from:'2025-11-22',to:'2026-11-22'}));
+  // the product comparison too: two requests once, none on the next click after midnight
+  vi.setSystemTime(new Date('2026-11-23T23:59:30Z'));await s.connect('1',{terms:'NocoBase'});await s.runs.wait('1');assert.equal(sent.length,3);
+  vi.setSystemTime(new Date('2026-11-24T00:02:00Z'));await s.check('1',{force:true});assert.equal(sent.length,3);assert.deepEqual((await s.view('1')).range,{from:'2025-11-23',to:'2026-11-23'});
+ }finally{vi.useRealTimers();}
+});
