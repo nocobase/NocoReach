@@ -7,13 +7,15 @@ import {
   type CardDesign,
   type SavedStyle,
 } from './card-design.js';
-import { XHS } from './repurpose.js';
+import { XHS, type CardSize } from './repurpose.js';
 
 /**
- * The Xiaohongshu card templates (2026-11-16, Content workshop PR 2; four card styles 2026-11-17). One HTML page, built
- * here from the brand kit and given to the Agent with its run's materials (`xhs-card.html`): the Agent writes its cards
- * to `cards.js` beside it (`window.CARDS = [{ layout, heading, text }]`), opens `xhs-card.html?n=3` in a headless
- * browser at 1080×1440 and saves a PNG of each card. Text is set as text, never as HTML.
+ * The carousel card templates (2026-11-16, Content workshop PR 2; four card styles 2026-11-17; 4:5 since 2026-11-24).
+ * One HTML page, built here from the brand kit at a place's card size and given to the Agent with its run's materials
+ * (`xhs-card.html`, its size in `<meta name="card-size">`): the Agent writes its cards to `cards.js` beside it
+ * (`window.CARDS = [{ layout, heading, text }]`), opens `xhs-card.html?n=3` in a headless browser at that size
+ * (1080×1440 for Xiaohongshu, 1080×1350 for Instagram and LinkedIn) and saves a PNG of each card. Text is set as text,
+ * never as HTML. At 4:5 the fixed parts of a card are a fifth shorter, so the text is set about as large as at 3:4.
  *
  * Each style sizes its text to the card: the heading and the body take the largest size of their steps that fits, so a
  * short card is set large and a long one smaller, and the text fills the card rather than its top. Once fonts have
@@ -166,7 +168,7 @@ export type CardMessage = {
 };
 export const CARD_MESSAGE = 'nocoreach-xhs-card';
 
-// The page's own script, in plain browser JavaScript. `S` is the style and `XHS` the card size. Every element is styled
+// The page's own script, in plain browser JavaScript. `S` is the style and `SIZE` the card size. Every element is styled
 // inline, without a stylesheet or pseudo-elements, so a card serialized on its own (CARD_EXPORT) draws the same.
 const SCRIPT = String.raw`
 const SANS = "'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Source Han Sans SC','Microsoft YaHei','Helvetica Neue',Arial,sans-serif";
@@ -203,6 +205,14 @@ const halves = (h) => {
 };
 const two = (n) => String(n).padStart(2, '0');
 const pageOf = (n, total) => two(n) + ' / ' + two(total);
+// A cover's heading and subtitle stop at this height, so its contents keep their room: about 57% of the card, at 3:4
+// (1440) and 4:5 (1350) alike; at 4:5 the covers start a little higher.
+const COVER_TOP = SIZE.height < 1440 ? 770 : 820;
+const COVER_PAD = SIZE.height < 1440 ? 72 : 96;
+// The fixed parts of a card (its header and footer, the gaps around the heading) are a fifth shorter on a card shorter
+// than 3:4, so the text keeps nearly the room it has at 3:4 and is set as large: \`v(150)\` is 150px at 3:4, 120 at 4:5.
+const V = SIZE.height < 1440 ? 0.8 : 1;
+const v = (px) => Math.round(px * V);
 
 // Colors: the brand color in HSL, made darker for text on a light card and lighter on a dark one, so any brand color reads.
 const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -291,20 +301,20 @@ const LOOKS = {
   // Editorial: a cream page, a black masthead rule, a serif headline whose second line is in the brand color.
   editorial(c, n, total, all) {
     const ink = '#1b1a17', bg = '#f4eee2', accent = DEEP;
-    const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:92px 88px 0;display:flex;flex-direction:column');
+    const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:' + v(92) + 'px 88px 0;display:flex;flex-direction:column');
     const head = el('div', 'flex:none;display:flex;justify-content:space-between;align-items:flex-end;font-family:' + SANS + ';font-size:30px;font-weight:600;letter-spacing:4px;padding-bottom:24px;border-bottom:5px solid ' + ink);
     add(head, el('span', 'text-transform:uppercase', S.brand), el('span', '', pageOf(n, total)));
-    const foot = el('div', 'flex:none;height:150px;box-sizing:border-box;border-top:2px solid ' + ink + ';display:flex;justify-content:space-between;align-items:center;font-family:' + SANS + ';font-size:28px;letter-spacing:1px;color:' + alpha(ink, 0.7));
+    const foot = el('div', 'flex:none;height:' + v(150) + 'px;box-sizing:border-box;border-top:2px solid ' + ink + ';display:flex;justify-content:space-between;align-items:center;font-family:' + SANS + ';font-size:28px;letter-spacing:1px;color:' + alpha(ink, 0.7));
     add(foot, el('span', '', S.site || S.brand), mark(44, bg, accent));
     const second = (b) => el('span', 'color:' + accent, b);
     if (c.layout === 'cover') {
-      const top = area('padding-top:110px');
+      const top = area('padding-top:' + v(110) + 'px');
       const h = heading(c.heading || paras(c.text)[0], 'font-family:' + SERIF + ';font-weight:800;line-height:1.22;letter-spacing:1px;white-space:pre-wrap', second);
       const sub = el('div', 'font-family:' + SANS + ';line-height:1.6;margin-top:44px;color:' + alpha(ink, 0.78) + ';white-space:pre-wrap', c.heading ? c.text : paras(c.text).slice(1).join('\n'));
       add(top, h, sub);
       top.style.flex = 'none';
-      top.style.maxHeight = '820px';
-      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:64px 0 32px');
+      top.style.maxHeight = COVER_TOP + 'px';
+      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:' + v(64) + 'px 0 ' + v(32) + 'px');
       const list = el('div', 'font-family:' + SANS);
       contents(all).forEach((t, i) => {
         const row = el('div', 'display:flex;gap:.8em;align-items:baseline;padding:.5em 0;border-top:2px solid ' + alpha(ink, 0.18));
@@ -326,10 +336,10 @@ const LOOKS = {
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, head, body, foot);
     }
-    const no = el('div', 'flex:none;margin-top:56px;font-family:' + SERIF + ';font-size:44px;font-weight:700;color:' + accent + ';letter-spacing:2px', 'No.' + two(n));
-    const h = heading(c.heading, 'flex:none;margin-top:24px;font-family:' + SERIF + ';font-weight:800;line-height:1.25;white-space:pre-wrap', second);
-    const rule = el('div', 'flex:none;width:120px;height:8px;background:' + accent + ';margin-top:48px');
-    const body = area('padding:52px 0 40px;font-family:' + SANS);
+    const no = el('div', 'flex:none;margin-top:' + v(56) + 'px;font-family:' + SERIF + ';font-size:44px;font-weight:700;color:' + accent + ';letter-spacing:2px', 'No.' + two(n));
+    const h = heading(c.heading, 'flex:none;margin-top:' + v(24) + 'px;font-family:' + SERIF + ';font-weight:800;line-height:1.25;white-space:pre-wrap', second);
+    const rule = el('div', 'flex:none;width:120px;height:8px;background:' + accent + ';margin-top:' + v(48) + 'px');
+    const body = area('padding:' + v(52) + 'px 0 ' + v(40) + 'px;font-family:' + SANS);
     const inner = el('div', 'margin:auto 0');
     for (const p of points(c.text)) add(inner, el('div', isNote(p) ? 'font-size:.62em;line-height:1.6;color:' + alpha(ink, 0.55) + ';margin-top:.5em' : 'line-height:1.66;margin-bottom:.6em', p));
     add(body, inner);
@@ -343,10 +353,10 @@ const LOOKS = {
     const ink = '#1c1c1e', bg = '#ffffff', accent = DEEP, tint = mix(accent, bg, 0.72);
     const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:0 84px;display:flex;flex-direction:column;font-family:' + SANS);
     const ring = (w, h, r) => el('i', 'display:block;box-sizing:border-box;width:' + w + 'px;height:' + h + 'px;border:5px solid ' + accent + ';border-radius:' + r);
-    const bar = el('div', 'flex:none;height:150px;display:flex;justify-content:space-between;align-items:center;color:' + accent + ';font-size:44px;font-weight:500');
+    const bar = el('div', 'flex:none;height:' + v(150) + 'px;display:flex;justify-content:space-between;align-items:center;color:' + accent + ';font-size:44px;font-weight:500');
     add(bar, el('span', '', '‹ ' + S.brand), add(el('span', 'display:flex;gap:40px;align-items:center'), ring(44, 52, '10px'), ring(52, 52, '50%')));
-    const date = el('div', 'flex:none;text-align:center;font-size:30px;color:' + alpha(ink, 0.45) + ';margin-bottom:36px', pageOf(n, total));
-    const tool = el('div', 'flex:none;height:150px;display:flex;justify-content:space-between;align-items:center;padding:0 12px');
+    const date = el('div', 'flex:none;text-align:center;font-size:30px;color:' + alpha(ink, 0.45) + ';margin-bottom:' + v(36) + 'px', pageOf(n, total));
+    const tool = el('div', 'flex:none;height:' + v(150) + 'px;display:flex;justify-content:space-between;align-items:center;padding:0 12px');
     add(tool, ring(52, 52, '50%'), ring(56, 48, '12px'), ring(52, 52, '14px'));
     const marker = (b) => el('span', 'background:linear-gradient(transparent 58%,' + tint + ' 58%,' + tint + ' 94%,transparent 94%);-webkit-box-decoration-break:clone;box-decoration-break:clone;padding:0 .08em', b);
     // A filled circle with a check drawn by two borders, sized by its text.
@@ -357,12 +367,12 @@ const LOOKS = {
     };
     const line = (p, css) => add(el('div', 'display:flex;gap:.5em;' + css), check(), el('span', 'min-width:0', p));
     if (c.layout === 'cover') {
-      const top = el('div', 'flex:none;max-height:820px;overflow:hidden');
+      const top = el('div', 'flex:none;max-height:' + COVER_TOP + 'px;overflow:hidden');
       top.dataset.fit = '';
       const h = heading(c.heading || paras(c.text)[0], 'font-weight:800;line-height:1.24;letter-spacing:1px;white-space:pre-wrap', marker);
       const sub = el('div', 'line-height:1.6;margin-top:40px;color:' + alpha(ink, 0.72) + ';white-space:pre-wrap', c.heading ? c.text : paras(c.text).slice(1).join('\n'));
       add(top, h, sub);
-      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:64px 0 24px');
+      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:' + v(64) + 'px 0 ' + v(24) + 'px');
       const list = el('div', 'font-weight:600');
       for (const t of contents(all)) list.appendChild(line(t, 'margin-bottom:.7em;line-height:1.5'));
       add(box, list);
@@ -381,7 +391,7 @@ const LOOKS = {
       return add(root, bar, body, tool);
     }
     const h = heading(c.heading, 'flex:none;font-weight:800;line-height:1.3;white-space:pre-wrap', marker);
-    const body = area('padding:56px 0 32px');
+    const body = area('padding:' + v(56) + 'px 0 ' + v(32) + 'px');
     const inner = el('div', 'margin:auto 0');
     const pts = points(c.text), list = listed(pts);
     for (const p of pts)
@@ -396,19 +406,19 @@ const LOOKS = {
   // Dark tech: a near-black page in the brand's hue, a lighter brand color for keywords, a panel for every point.
   dark(c, n, total, all) {
     const bg = hex(H0, Math.min(S0, 0.42), 0.085), fg = '#ffffff', accent = hex(H0, Math.max(S0, 0.7) * (S0 > 0.08 ? 1 : 0), 0.74);
-    const root = el('div', 'background:' + bg + ';color:' + fg + ';padding:96px 84px 0;display:flex;flex-direction:column;font-family:' + SANS);
+    const root = el('div', 'background:' + bg + ';color:' + fg + ';padding:' + v(96) + 'px 84px 0;display:flex;flex-direction:column;font-family:' + SANS);
     const pill = (t) => el('div', 'flex:none;align-self:flex-start;font-size:30px;font-weight:600;letter-spacing:1px;padding:12px 28px;border-radius:999px;color:' + accent + ';background:' + alpha(accent, 0.16), t);
-    const foot = el('div', 'flex:none;height:150px;box-sizing:border-box;border-top:2px solid ' + alpha(fg, 0.14) + ';display:flex;justify-content:space-between;align-items:center;font-size:30px;color:' + alpha(fg, 0.55));
+    const foot = el('div', 'flex:none;height:' + v(150) + 'px;box-sizing:border-box;border-top:2px solid ' + alpha(fg, 0.14) + ';display:flex;justify-content:space-between;align-items:center;font-size:30px;color:' + alpha(fg, 0.55));
     add(foot, add(el('span', 'display:flex;gap:18px;align-items:center'), mark(44, bg, accent), el('span', '', S.site || S.brand)), el('span', 'letter-spacing:2px', pageOf(n, total)));
     const second = (b) => el('span', 'color:' + accent, b);
     const panel = 'border-radius:28px;background:' + alpha(fg, 0.07) + ';border:2px solid ' + alpha(fg, 0.14);
     if (c.layout === 'cover') {
-      const top = el('div', 'flex:none;max-height:820px;overflow:hidden;padding-top:96px');
+      const top = el('div', 'flex:none;max-height:' + COVER_TOP + 'px;overflow:hidden;padding-top:' + COVER_PAD + 'px');
       top.dataset.fit = '';
       const h = heading(c.heading || paras(c.text)[0], 'font-weight:800;line-height:1.18;letter-spacing:1px;white-space:pre-wrap', second);
       const sub = el('div', 'line-height:1.6;margin-top:44px;color:' + alpha(fg, 0.7) + ';white-space:pre-wrap', c.heading ? c.text : paras(c.text).slice(1).join('\n'));
       add(top, h, sub);
-      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:72px 0 32px');
+      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:' + v(72) + 'px 0 ' + v(32) + 'px');
       const list = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:24px;align-content:start');
       contents(all).forEach((t, i) => list.appendChild(add(el('div', panel + ';padding:.8em .85em;line-height:1.45'), el('div', 'color:' + accent + ';font-weight:800;font-size:.8em;margin-bottom:.3em', two(i + 2)), el('div', 'font-weight:600', t))));
       add(box, list);
@@ -426,8 +436,8 @@ const LOOKS = {
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, body, foot);
     }
-    const h = heading(c.heading, 'flex:none;margin-top:60px;font-weight:800;line-height:1.24;white-space:pre-wrap', second);
-    const body = area('padding:56px 0 36px');
+    const h = heading(c.heading, 'flex:none;margin-top:' + v(60) + 'px;font-weight:800;line-height:1.24;white-space:pre-wrap', second);
+    const body = area('padding:' + v(56) + 'px 0 ' + v(36) + 'px');
     // The panels share the height the heading leaves, their text in their middle; a single point is a paragraph.
     const pts = points(c.text), list = listed(pts);
     const inner = el('div', list ? 'flex:1 0 auto;display:flex;flex-direction:column;gap:.4em' : 'margin:auto 0');
@@ -445,21 +455,21 @@ const LOOKS = {
   // Checklist: a white page, a heading whose second part is marked in the brand color, a numbered row for every point.
   checklist(c, n, total, all) {
     const ink = '#111827', bg = '#ffffff', accent = DEEP, tint = mix(accent, bg, 0.86);
-    const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:92px 80px 0;display:flex;flex-direction:column;font-family:' + SANS);
+    const root = el('div', 'background:' + bg + ';color:' + ink + ';padding:' + v(92) + 'px 80px 0;display:flex;flex-direction:column;font-family:' + SANS);
     const head = el('div', 'flex:none;display:flex;justify-content:space-between;align-items:center;font-size:30px;font-weight:700');
     add(head, add(el('span', 'display:flex;gap:16px;align-items:center;color:' + accent), mark(44, bg, accent), el('span', '', S.brand)), el('span', 'color:' + alpha(ink, 0.4) + ';letter-spacing:2px', pageOf(n, total)));
-    const foot = el('div', 'flex:none;height:132px;display:flex;align-items:center;font-size:28px;color:' + alpha(ink, 0.45), S.site || S.brand);
+    const foot = el('div', 'flex:none;height:' + v(132) + 'px;display:flex;align-items:center;font-size:28px;color:' + alpha(ink, 0.45), S.site || S.brand);
     const marked = (b) => el('span', 'color:' + accent + ';background:' + tint + ';border-radius:.14em;padding:0 .14em;-webkit-box-decoration-break:clone;box-decoration-break:clone', b);
     const badge = (t) => el('span', 'flex:none;width:1.5em;height:1.5em;margin-top:.05em;border-radius:.3em;background:' + accent + ';color:' + bg + ';font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.86em;line-height:1', t);
     // A row's number and text together, in the middle of the row's height.
     const row = (num, t, css) => add(el('div', 'display:flex;flex-direction:column;justify-content:center;border-bottom:3px dashed ' + alpha(ink, 0.13) + ';' + css), add(el('div', 'display:flex;gap:.6em;align-items:flex-start'), badge(num), el('span', 'min-width:0', t)));
     if (c.layout === 'cover') {
-      const top = el('div', 'flex:none;max-height:820px;overflow:hidden;padding-top:96px');
+      const top = el('div', 'flex:none;max-height:' + COVER_TOP + 'px;overflow:hidden;padding-top:' + COVER_PAD + 'px');
       top.dataset.fit = '';
       const h = heading(c.heading || paras(c.text)[0], 'font-weight:900;line-height:1.26;white-space:pre-wrap', marked);
       const sub = el('div', 'line-height:1.6;margin-top:40px;color:' + alpha(ink, 0.6) + ';white-space:pre-wrap', c.heading ? c.text : paras(c.text).slice(1).join('\n'));
       add(top, h, sub);
-      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:60px 0 24px');
+      const box = el('div', 'flex:1 1 0;min-height:0;overflow:hidden;padding:' + v(60) + 'px 0 ' + v(24) + 'px');
       const list = el('div', 'font-weight:700;border-top:3px solid ' + ink);
       contents(all).forEach((t, i) => list.appendChild(row(String(i + 1), t, 'padding:.55em 0;line-height:1.45')));
       add(box, list);
@@ -477,8 +487,8 @@ const LOOKS = {
       sized(t, [52, 48, 44, 40], fitBox(body));
       return add(root, head, body, foot);
     }
-    const h = heading(c.heading, 'flex:none;margin-top:72px;font-weight:900;line-height:1.3;white-space:pre-wrap', marked);
-    const body = area('padding:48px 0 32px');
+    const h = heading(c.heading, 'flex:none;margin-top:' + v(72) + 'px;font-weight:900;line-height:1.3;white-space:pre-wrap', marked);
+    const body = area('padding:' + v(48) + 'px 0 ' + v(32) + 'px');
     // The rows share the height the heading leaves, each a line of the table; a single point is a paragraph.
     const pts = points(c.text), list = listed(pts);
     const inner = el('div', list ? 'flex:1 0 auto;display:flex;flex-direction:column;border-top:4px solid ' + ink : 'margin:auto 0');
@@ -532,7 +542,7 @@ LOOKS.custom = function (c, n, total, all) {
     img.src = S.logo;
     logo.replaceChildren(img);
   } else if (logo) logo.textContent = (S.brand || '·').trim().charAt(0).toUpperCase();
-  const fitsCard = () => root.scrollHeight <= XHS.height + 1;
+  const fitsCard = () => root.scrollHeight <= SIZE.height + 1;
   const h = slot('heading'), body = slot('body'), list = slot('contents');
   // The heading is sized against the body at its smallest, which then takes what room is left.
   if (body) body.style.fontSize = '36px';
@@ -571,7 +581,7 @@ LOOKS.custom = function (c, n, total, all) {
 
 function card(c, n, total, all) {
   const root = (LOOKS[S.template] || LOOKS.editorial)(c, n, total, all);
-  root.style.cssText = 'width:' + XHS.width + 'px;height:' + XHS.height + 'px;position:relative;overflow:hidden;box-sizing:border-box;line-height:1.5;font-size:40px;text-wrap:pretty;' + root.style.cssText;
+  root.style.cssText = 'width:' + SIZE.width + 'px;height:' + SIZE.height + 'px;position:relative;overflow:hidden;box-sizing:border-box;line-height:1.5;font-size:40px;text-wrap:pretty;' + root.style.cssText;
   root.dataset.card = String(n);
   return root;
 }
@@ -586,16 +596,16 @@ const designCss = document.getElementById('design-css');
 const svgOf = (node) => {
   let out = node;
   if (designCss && node.hasAttribute('data-design')) {
-    out = el('div', 'width:' + XHS.width + 'px;height:' + XHS.height + 'px');
+    out = el('div', 'width:' + SIZE.width + 'px;height:' + SIZE.height + 'px');
     add(out, designCss.cloneNode(true), node.cloneNode(true));
   }
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + XHS.width + '" height="' + XHS.height + '"><foreignObject x="0" y="0" width="' + XHS.width + '" height="' + XHS.height + '">' +
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + SIZE.width + '" height="' + SIZE.height + '"><foreignObject x="0" y="0" width="' + SIZE.width + '" height="' + SIZE.height + '">' +
     new XMLSerializer().serializeToString(out) + '</foreignObject></svg>';
 };
 // A page not laid out yet measures every box as empty, where any text seems to fit: the hidden frame that draws a set in
 // the browser sometimes runs before its first layout. Sizing waits until the cards have their size, for a few seconds at
 // most; a page still not laid out then reports every card as not fitting rather than size the text blind.
-const laidOut = () => [...document.querySelectorAll('[data-card]')].every((c) => c.offsetHeight === XHS.height);
+const laidOut = () => [...document.querySelectorAll('[data-card]')].every((c) => c.offsetHeight === SIZE.height);
 const whenLaidOut = (then, tries = 100) => (laidOut() || !tries ? then(laidOut()) : setTimeout(() => whenLaidOut(then, tries - 1), 50));
 const fit = (measured) => {
   if (measured) for (const job of jobs) {
@@ -658,8 +668,9 @@ export function cardTemplate(
   source:
     | string
     | { cards: TemplateCard[]; n?: number; exporting?: boolean } = 'cards.js',
+  size: CardSize = XHS,
 ): string {
-  const size = json({ width: XHS.width, height: XHS.height });
+  const sizeJson = json({ width: size.width, height: size.height });
   // Only the page's own scripts run, and it loads nothing but data URLs (the logo): a style made with AI is cleaned,
   // and this holds even if something got past the cleaning.
   const nonce = Array.from(
@@ -680,13 +691,13 @@ export function cardTemplate(
     ? `<style id="design-css">[data-design]>*{flex:1 0 auto;box-sizing:border-box;width:100%}\n${scopeCss(design.css)}</style>`
     : '';
   return `<!doctype html>
-<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=${XHS.width}">
+<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=${size.width}"><meta name="card-size" content="${size.width}x${size.height}">
 <title>overflow:pending</title>${sheet}</head>
 <body>
 ${cards}
 <script nonce="${nonce}">
 const S = ${json(design ? { ...style, design: { cover: markupTree(design.cover), text: markupTree(design.text), end: markupTree(design.end) } } : style.template === 'custom' ? { ...style, template: DEFAULT_TEMPLATE } : style)};
-const XHS = ${size};
+const SIZE = ${sizeJson};
 const FONTS = ${json(DESIGN_FONTS)};
 ${SCRIPT}
 </script>

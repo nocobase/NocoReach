@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CARD_SPECS,
   XHS,
+  isCarouselForm,
   parseRepurpose,
   repurposeChecks,
   type Destination,
@@ -62,6 +64,9 @@ describe('Content workshop demo', () => {
                     >
                   )[d.key][lang].colors,
                   overflow: d.cards.overflow,
+                  ...(isCarouselForm(d.form)
+                    ? { ratio: CARD_SPECS[d.form].ratio }
+                    : {}),
                 },
               }
             : {}),
@@ -92,19 +97,31 @@ describe('Content workshop demo', () => {
     // Two drafts wait for review; the rest are approved, after they were made.
     expect(
       WORKSHOP_DRAFTS.filter((d) => d.state === 'review').map((d) => d.key),
-    ).toEqual(['release-linkedin', 'requests-reddit', 'requests-xhs']);
+    ).toEqual([
+      'choose-tool-instagram',
+      'release-linkedin',
+      'requests-reddit',
+      'requests-xhs',
+    ]);
     for (const d of WORKSHOP_DRAFTS)
       if (d.state === 'done') expect(d.approved).toBeLessThan(d.created);
   });
 
-  // Content workshop PR 2: the Xiaohongshu tasks' images are rendered from their drafts (scripts/render-demo-cards.ts),
-  // one per card in each language, so a changed draft needs its images rendered again.
-  it('has one rendered image per Xiaohongshu card', () => {
-    const drafts = WORKSHOP_DRAFTS.filter((d) => d.form === 'xhs');
-    expect(drafts.map((d) => d.state).sort()).toEqual(['done', 'review']);
+  // Content workshop PR 2: the carousel tasks' images are rendered from their drafts (scripts/render-demo-cards.ts),
+  // one per card in each language at the place's size, so a changed draft needs its images rendered again. Since
+  // 2026-11-24 Library's Choose a PM tool article was made into all three places: Instagram waits for review, LinkedIn's
+  // PDF is done.
+  it('has one rendered image per carousel card', () => {
+    const drafts = WORKSHOP_DRAFTS.filter((d) => isCarouselForm(d.form));
+    expect(drafts.map((d) => [d.key, d.state])).toEqual([
+      ['choose-tool-xhs', 'done'],
+      ['choose-tool-linkedin-carousel', 'done'],
+      ['choose-tool-instagram', 'review'],
+      ['requests-xhs', 'review'],
+    ]);
     for (const d of drafts)
       for (const lang of ['zh', 'en'] as const) {
-        const cards = parseRepurpose('xhs', d.draft[lang])!.pieces.filter(
+        const cards = parseRepurpose(d.form, d.draft[lang])!.pieces.filter(
           (p) => p.kind === 'card',
         );
         const { images, colors } = (
@@ -119,10 +136,22 @@ describe('Content workshop demo', () => {
         expect(colors.length, `${lang} ${d.key}`).toBeLessThanOrEqual(
           XHS.colors,
         );
-        for (const image of images)
+        for (const image of images) {
+          const bytes = Buffer.from(image, 'base64');
+          expect(bytes.subarray(8, 12).toString('latin1')).toBe('WEBP');
+          // VP8 lossy: the frame's width and height (14 bits each) follow its start code.
+          const at = bytes.indexOf(Buffer.from([0x9d, 0x01, 0x2a])) + 3;
           expect(
-            Buffer.from(image, 'base64').subarray(8, 12).toString('latin1'),
-          ).toBe('WEBP');
+            [
+              bytes.readUInt16LE(at) & 0x3fff,
+              bytes.readUInt16LE(at + 2) & 0x3fff,
+            ],
+            `${lang} ${d.key}`,
+          ).toEqual([
+            CARD_SPECS[d.form as 'xhs'].width,
+            CARD_SPECS[d.form as 'xhs'].height,
+          ]);
+        }
         // The closing page is the brand kit's, word for word.
         expect(cards.at(-1)).toMatchObject({
           layout: 'end',

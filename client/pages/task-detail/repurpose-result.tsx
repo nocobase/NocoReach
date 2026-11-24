@@ -7,9 +7,15 @@ import { formatCount, joinList } from '#lib/format';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import {
+  INSTAGRAM,
+  captionOpening,
+  charLength,
   destinationName,
+  hashtagsOf,
+  isCarouselForm,
   parseRepurpose,
   pieceLimit,
+  type CarouselForm,
   type Destination,
   type Piece,
   type RepurposeCheck,
@@ -32,6 +38,17 @@ const copy = (value: string) =>
       : toast.error(() => $t('workshop.copyFailed')),
   );
 
+// A carousel's two texts are named by its place: Xiaohongshu's note title and body, Instagram's caption and hashtags,
+// LinkedIn's document title and post text.
+const TITLE_KEY: Partial<Record<RepurposeForm, string>> = {
+  xhs: 'workshop.pieceNoteTitle',
+  'linkedin-carousel': 'workshop.pieceDocTitle',
+};
+const BODY_KEY: Partial<Record<RepurposeForm, string>> = {
+  xhs: 'workshop.pieceNoteBody',
+  instagram: 'workshop.pieceCaption',
+  'linkedin-carousel': 'workshop.piecePostText',
+};
 const pieceLabel = (form: RepurposeForm, p: Piece) =>
   p.kind === 'post'
     ? form === 'x'
@@ -40,16 +57,25 @@ const pieceLabel = (form: RepurposeForm, p: Piece) =>
     : p.kind === 'reply'
       ? $t('workshop.pieceReply')
       : p.kind === 'card'
-        ? $t('workshop.pieceCard', { 0: p.index || 1 })
-        : p.kind === 'title'
-          ? $t(
-              form === 'xhs'
-                ? 'workshop.pieceNoteTitle'
-                : 'workshop.pieceTitle',
-            )
-          : $t(
-              form === 'xhs' ? 'workshop.pieceNoteBody' : 'workshop.pieceBody',
-            );
+        ? $t(
+            form === 'linkedin-carousel'
+              ? 'workshop.piecePage'
+              : 'workshop.pieceCard',
+            { 0: p.index || 1 },
+          )
+        : p.kind === 'tags'
+          ? $t('workshop.pieceHashtags')
+          : p.kind === 'title'
+            ? $t(TITLE_KEY[form] || 'workshop.pieceTitle')
+            : $t(BODY_KEY[form] || 'workshop.pieceBody');
+/** What a piece's length is counted in: a hashtag block's hashtags, anything else characters. */
+const unitKey = (p: Piece) =>
+  p.kind === 'tags' ? 'workshop.hashtagsOf' : 'workshop.lengthOf';
+/** A note under a piece's name: where a LinkedIn document title shows. */
+const pieceHint = (form: RepurposeForm, p: Piece) =>
+  form === 'linkedin-carousel' && p.kind === 'title'
+    ? $t('workshop.docTitleHint')
+    : '';
 
 /** A check's sentence: "All 3 posts within 280 characters", "Post 2 is over 280 characters". */
 function checkText(c: RepurposeCheck): string {
@@ -69,7 +95,9 @@ function checkText(c: RepurposeCheck): string {
     c.key === 'workshop.check.overflow'
   )
     params[0] = joinList(String(params[0] || '').split(', '));
-  if (typeof params[0] === 'number') params[0] = formatCount(params[0]);
+  // Numbers read as the interface writes them ("1,300").
+  for (const [k, v] of Object.entries(params))
+    if (typeof v === 'number') params[k] = formatCount(v);
   // A failed check that names what should be there reads as what is missing.
   return $t(!c.ok && MISSING.has(c.key) ? `${c.key}Missing` : c.key, params);
 }
@@ -129,9 +157,10 @@ export function RepurposeResult({
   const parsed = r ? parseRepurpose(r.form, out.content) : null;
   if (!r || !parsed) return fallback;
   const checks = review ? data.repurpose?.checks[out.id] || [] : [];
-  if (r.form === 'xhs')
+  if (isCarouselForm(r.form))
     return (
       <XhsResult
+        form={r.form}
         pieces={parsed.pieces}
         out={out}
         checks={checks}
@@ -192,17 +221,20 @@ export function RepurposeResult({
 }
 
 /**
- * Xiaohongshu cards: on review the checks, the gallery and the note's title and body, each copied on its own; once
- * approved, the gallery and the note, which the done card's own buttons download and copy (XhsDoneTools). A version
- * without images (none should be) lists its cards' text.
+ * A carousel's cards: on review the checks, the gallery and the place's text (the note's title and body, Instagram's
+ * caption and hashtags, LinkedIn's document title and post text), each copied on its own; once approved, the gallery and
+ * the text, which the done card's own buttons download and copy (XhsDoneTools). A version without images (none should
+ * be) lists its cards' text.
  */
 function XhsResult({
+  form,
   pieces,
   out,
   checks,
   review,
   onEditCard,
 }: {
+  form: CarouselForm;
   pieces: Piece[];
   out: Artifact;
   checks: RepurposeCheck[];
@@ -213,11 +245,16 @@ function XhsResult({
     note = pieces.filter((p) => p.kind !== 'card');
   const set = out.cards?.images.length ? out.cards : null;
   return (
-    <div className='flex flex-col gap-4' data-repurpose='xhs'>
+    <div className='flex flex-col gap-4' data-repurpose={form}>
       <RepurposeChecks checks={checks} />
       {set ? (
         <>
-          <CardGallery cards={cards} set={set} onEdit={onEditCard} />
+          <CardGallery
+            form={form}
+            cards={cards}
+            set={set}
+            onEdit={onEditCard}
+          />
           {review && drawnBySkill(set.style) ? (
             <p className='text-sm text-muted-foreground'>
               {$t('workshop.skillDrewCards', { 0: set.style!.skill! })}
@@ -227,13 +264,13 @@ function XhsResult({
       ) : (
         <div className='flex min-w-0 flex-col gap-4'>
           {cards.map((p) => (
-            <PieceBlock key={`card-${p.index}`} form='xhs' piece={p} />
+            <PieceBlock key={`card-${p.index}`} form={form} piece={p} />
           ))}
         </div>
       )}
       <div className='flex min-w-0 flex-col gap-4'>
         {note.map((p) => (
-          <PieceBlock key={p.kind} form='xhs' piece={p} copyable={review} />
+          <PieceBlock key={p.kind} form={form} piece={p} copyable={review} />
         ))}
       </div>
     </div>
@@ -279,20 +316,48 @@ function PieceBlock({
 }) {
   const limit = pieceLimit(form, piece, destination);
   const over = limit ? limit.length > limit.max : false;
+  const hint = pieceHint(form, piece);
+  // An Instagram caption's opening, what shows before "more": counted against 125 and marked in the text.
+  const caption = form === 'instagram' && piece.kind === 'body';
+  const opening = caption ? captionOpening(piece.text) : '';
+  const openingLength = charLength(opening);
+  const copied =
+    piece.kind === 'tags'
+      ? hashtagsOf(piece.text).join(' ')
+      : piece.heading
+        ? `${piece.heading}\n${piece.text}`
+        : piece.text;
   return (
     <div className='flex flex-col gap-1.5' data-piece={piece.kind}>
       <div className='flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground'>
-        <span className='font-medium'>{pieceLabel(form, piece)}</span>
+        <span className='flex flex-wrap items-baseline gap-x-2'>
+          <span className='font-medium'>{pieceLabel(form, piece)}</span>
+          {hint ? <span>{hint}</span> : null}
+        </span>
         <span className='flex items-center gap-3'>
           {piece.sections ? (
             <span>{$t('workshop.fromSections', { 0: piece.sections })}</span>
+          ) : null}
+          {caption ? (
+            <span
+              className={cn(
+                'tabular-nums',
+                openingLength > INSTAGRAM.captionFold && 'text-nr-ink-amber',
+              )}
+              data-caption-opening={openingLength}
+            >
+              {$t('workshop.captionOpening', {
+                0: formatCount(openingLength),
+                1: formatCount(INSTAGRAM.captionFold),
+              })}
+            </span>
           ) : null}
           {limit ? (
             <span
               className={cn('tabular-nums', over && 'text-nr-ink-amber')}
               data-over={over || undefined}
             >
-              {$t('workshop.lengthOf', {
+              {$t(unitKey(piece), {
                 0: formatCount(limit.length),
                 1: formatCount(limit.max),
               })}
@@ -302,13 +367,7 @@ function PieceBlock({
             <Button
               size='xs'
               variant='ghost'
-              onClick={() =>
-                copy(
-                  piece.heading
-                    ? `${piece.heading}\n${piece.text}`
-                    : piece.text,
-                )
-              }
+              onClick={() => copy(copied)}
               aria-label={$t('workshop.copyPiece', {
                 0: pieceLabel(form, piece),
               })}
@@ -328,7 +387,19 @@ function PieceBlock({
         {piece.heading ? (
           <span className='block font-medium'>{piece.heading}</span>
         ) : null}
-        {piece.text}
+        {opening && piece.text.trimStart().startsWith(opening) ? (
+          <>
+            <mark
+              className='rounded-sm bg-nr-tint-violet px-0.5 text-inherit'
+              title={$t('workshop.captionOpeningHint')}
+            >
+              {opening}
+            </mark>
+            {piece.text.trimStart().slice(opening.length)}
+          </>
+        ) : (
+          piece.text
+        )}
       </div>
     </div>
   );

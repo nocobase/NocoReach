@@ -8,8 +8,10 @@ import {
   stagesFor,
 } from '../../../shared/playbook-catalog.js';
 import {
+  CARD_SPECS,
   FORM_PLAYBOOK,
   FORM_RESULT_KIND,
+  isCarouselForm,
   parseRepurpose,
   repurposeBrief,
   sectionNumbers,
@@ -55,6 +57,8 @@ const PLAYBOOK_NAMES: Record<string, string> = {
   'linkedin-post': 'playbooks.linkedinPost',
   'community-post': 'playbooks.communityPost',
   'xhs-cards': 'playbooks.xhsCards',
+  'instagram-carousel': 'playbooks.instagramCarousel',
+  'linkedin-carousel': 'playbooks.linkedinCarousel',
 };
 
 // How a destination reads in a task title, as the workshop names it (server/nocoreach/workshop.ts).
@@ -209,7 +213,7 @@ export async function writeWorkshop(
   const personName = (person: DemoPerson) => content.people[person].name;
   const words = (zh: string, en: string) => (lang === 'en' ? en : zh);
 
-  // Xiaohongshu tasks whose card images are stored once their rows exist, outside the transaction (cardImages).
+  // Carousel tasks whose card images are stored once their rows exist, outside the transaction (cardImages).
   const carded: {
     d: WorkshopDraft;
     taskId: string;
@@ -463,7 +467,7 @@ export async function writeWorkshop(
       const taskId = String(row.id);
       if (d.cards) {
         const cards =
-          parseRepurpose('xhs', draft)?.pieces.filter(
+          parseRepurpose(d.form, draft)?.pieces.filter(
             (piece) => piece.kind === 'card',
           ) ?? [];
         carded.push({
@@ -513,7 +517,7 @@ export async function writeWorkshop(
 }
 
 /**
- * The card images of the demo's Xiaohongshu tasks, rendered from their drafts with the card template
+ * The card images of the demo's carousel tasks, rendered from their drafts with the card template at each place's size
  * (scripts/render-demo-cards.ts), stored as the run's uploads linked to its task and added to the result as the Agent's
  * own would be (TaskService.cardSet): with the colors read from the renders and the style they were drawn in.
  */
@@ -561,6 +565,7 @@ async function cardImages(
       ...(sections ? { sections } : {}),
       ...(render?.colors.length ? { colors: render.colors } : {}),
       overflow: d.cards!.overflow,
+      ...(isCarouselForm(d.form) ? { ratio: CARD_SPECS[d.form].ratio } : {}),
       style: styleBrief(demoCardStyle(lang)),
     };
     const result = { ...artifact, cards };

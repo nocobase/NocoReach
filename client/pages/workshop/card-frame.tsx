@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { cardMessage } from '#lib/card-render';
-import { XHS } from '../../../shared/repurpose.js';
+import { XHS, type CardSize } from '../../../shared/repurpose.js';
 import {
   cardTemplate,
   type CardStyle,
@@ -8,8 +8,9 @@ import {
 } from '../../../shared/xhs-card.js';
 
 /**
- * One card drawn by its style's template, the page the Agent renders, in a sandboxed frame scaled to `width`. With
- * `onOverflow` it says whether the card's text fits, as the template measures it.
+ * One card drawn by its style's template, the page the Agent renders, in a sandboxed frame scaled to `width`, at a
+ * place's size (3:4 unless `size` says 4:5). With `onOverflow` it says whether the card's text fits, as the template
+ * measures it.
  */
 export function CardFrame({
   style,
@@ -17,6 +18,7 @@ export function CardFrame({
   n,
   width,
   title,
+  size = XHS,
   onOverflow,
 }: {
   style: CardStyle;
@@ -25,12 +27,13 @@ export function CardFrame({
   n: number;
   width: number;
   title: string;
+  size?: CardSize;
   onOverflow?: (overflows: boolean) => void;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const page = useMemo(
-    () => cardTemplate(style, { cards, n }),
-    [style, cards, n],
+    () => cardTemplate(style, { cards, n }, size),
+    [style, cards, n, size],
   );
   // The latest callback, read when the frame answers, so a new one does not reload the frame.
   const reportRef = useRef(onOverflow);
@@ -50,11 +53,12 @@ export function CardFrame({
       live = false;
     };
   }, [page, n]);
-  const scale = width / XHS.width;
+  const scale = width / size.width;
   return (
     <div
       className='relative shrink-0 overflow-hidden rounded-md border bg-muted'
-      style={{ width, height: XHS.height * scale }}
+      style={{ width, height: size.height * scale }}
+      data-ratio={`${size.width}x${size.height}`}
     >
       <iframe
         ref={ref}
@@ -64,8 +68,8 @@ export function CardFrame({
         srcDoc={page}
         className='pointer-events-none absolute top-0 left-0 origin-top-left border-0'
         style={{
-          width: XHS.width,
-          height: XHS.height,
+          width: size.width,
+          height: size.height,
           transform: `scale(${scale})`,
         }}
       />

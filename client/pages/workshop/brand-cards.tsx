@@ -1,5 +1,11 @@
 import { useDeferredValue, useRef, useState } from 'react';
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import {
+  PencilIcon,
+  PlusIcon,
+  SparklesIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from 'lucide-react';
 import { $t } from '#i18n';
 import { confirmAction } from '#components/reach/confirm';
 import { Tag } from '#components/reach/tag';
@@ -38,6 +44,8 @@ import {
 import { CardFrame } from './card-frame.js';
 import { CardSkillPicker } from './card-skill-picker.js';
 import { CardStyleMaker } from './card-style-maker.js';
+import { previewCards, useOverflow45 } from './style-fit.js';
+import { CARD_SPECS, type CardSize } from '../../../shared/repurpose.js';
 import {
   brandCardsOf,
   errorText,
@@ -49,10 +57,12 @@ import {
 } from './model.js';
 
 // Brand and templates' card settings (Content workshop PR 2; card styles 2026-11-17, mockup xhs-card-styles.html
-// frames 1 to 4): the card style Xiaohongshu cards are drawn in, chosen from the built-in styles and My styles (styles
+// frames 1 to 4): the card style carousel cards are drawn in, chosen from the built-in styles and My styles (styles
 // made with AI, card-style-maker.tsx), each previewed with the latest set's own cards, or a Skill that draws the cards
 // instead (card-skill-picker.tsx); and the brand basics every style draws with: the logo, the brand color and the closing
-// page. The previews are drawn by the template the Agent renders with (shared/xhs-card.ts).
+// page. The previews are drawn by the template the Agent renders with (shared/xhs-card.ts), the style in use at both of
+// the places' sizes (2026-11-24): 3:4 for Xiaohongshu, 4:5 for Instagram and LinkedIn. One of My styles that does not
+// fit at 4:5 says so, and Adjust with AI saves a new one that does.
 
 const builtInName = (id: CardTemplateId) =>
   ({
@@ -75,39 +85,10 @@ const styleName = (ref: StyleRef, styles: readonly SavedStyle[]) =>
     : (styles.find((s) => s.id === savedStyleId(ref))?.name ??
       builtInName(DEFAULT_TEMPLATE));
 
-export type Sample = WorkshopView['cardSample'];
+type Sample = WorkshopView['cardSample'];
 export type Project = { name?: string; site?: string };
 /** What the brand kit draws the cards with: a style, or a Skill (the style is kept for when the Skill is dropped). */
 type Choice = { template: StyleRef; skill: string | null };
-
-/**
- * The cards a style is previewed with: the latest Xiaohongshu set's, else sample text; the closing page is the one the
- * brand kit now has, or none.
- */
-function previewCards(sample: Sample, fields: CardFields): TemplateCard[] {
-  const body: TemplateCard[] = sample?.cards.length
-    ? sample.cards.filter((c) => c.layout !== 'end')
-    : [
-        {
-          layout: 'cover',
-          heading: $t('workshop.sampleCoverHeading'),
-          text: $t('workshop.sampleCoverText'),
-        },
-        ...[
-          $t('workshop.sampleCardHeading'),
-          $t('workshop.sampleCard2Heading'),
-          $t('workshop.sampleCard3Heading'),
-        ].map((heading) => ({
-          layout: 'text' as const,
-          heading,
-          text: $t('workshop.sampleCardText'),
-        })),
-      ];
-  const heading = fields.endingHeading.trim();
-  return heading
-    ? [...body, { layout: 'end', heading, text: fields.endingText.trim() }]
-    : body;
-}
 
 /** A style's cover, first card of text and closing page, side by side. */
 function StyleTrio({
@@ -118,6 +99,7 @@ function StyleTrio({
   siteIcon,
   project,
   width,
+  size,
 }: {
   fields: CardFields;
   template: StyleRef;
@@ -126,6 +108,7 @@ function StyleTrio({
   siteIcon: string | null;
   project: Project;
   width: number;
+  size?: CardSize;
 }) {
   const style = cardStyle(
     { ...brandCardsOf(fields), template, skill: null },
@@ -146,6 +129,7 @@ function StyleTrio({
             cards={cards}
             n={n}
             width={width}
+            size={size}
             title={cards[n - 1].heading || cards[n - 1].text}
           />
         </li>
@@ -153,6 +137,18 @@ function StyleTrio({
     </ul>
   );
 }
+
+/** The sizes the style in use is previewed at, each named by its places. */
+const previewSizes = () => [
+  {
+    size: CARD_SPECS.xhs,
+    label: $t('workshop.previewXhsSize'),
+  },
+  {
+    size: CARD_SPECS.instagram,
+    label: $t('workshop.previewPortraitSize'),
+  },
+];
 
 /** Card style: the style or Skill in use, previewed, and the picker that changes it. */
 export function CardStyleSection({
@@ -183,9 +179,21 @@ export function CardStyleSection({
   disabled?: boolean;
 }) {
   const [picking, setPicking] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
   const shown = useDeferredValue(fields);
   const cards = previewCards(sample, shown);
   const mine = styles.find((s) => s.id === savedStyleId(fields.template));
+  // One of My styles is checked at 4:5 too; a built-in style is made for both sizes.
+  const overflow45 = useOverflow45(
+    mine && !fields.skill
+      ? cardStyle(
+          { ...brandCardsOf(shown), skill: null },
+          { ...project, icon: siteIcon },
+          styles,
+        )
+      : null,
+    cards,
+  );
   return (
     <section className='space-y-3' aria-labelledby='brand-card-style'>
       <div className='flex items-center justify-between gap-3'>
@@ -207,15 +215,28 @@ export function CardStyleSection({
       </p>
       <div className='flex flex-wrap items-start gap-4 rounded-lg border p-3'>
         {fields.skill ? null : (
-          <StyleTrio
-            fields={shown}
-            template={shown.template}
-            styles={styles}
-            cards={cards}
-            siteIcon={siteIcon}
-            project={project}
-            width={96}
-          />
+          <div
+            className='flex w-full flex-wrap items-end gap-5'
+            data-preview-sizes=''
+          >
+            {previewSizes().map(({ size, label }) => (
+              <figure key={size.height} className='space-y-1.5'>
+                <StyleTrio
+                  fields={shown}
+                  template={shown.template}
+                  styles={styles}
+                  cards={cards}
+                  siteIcon={siteIcon}
+                  project={project}
+                  width={88}
+                  size={size}
+                />
+                <figcaption className='text-xs text-muted-foreground'>
+                  {label}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         )}
         <div className='min-w-48 flex-1 space-y-1'>
           <p className='flex items-center gap-2 text-sm font-medium'>
@@ -239,8 +260,49 @@ export function CardStyleSection({
                       : DEFAULT_TEMPLATE,
                   )}
           </p>
+          {mine && overflow45?.length ? (
+            <div
+              className='flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm text-nr-ink-amber'
+              data-overflow-45=''
+            >
+              <span className='flex items-center gap-1.5'>
+                <TriangleAlertIcon
+                  className='size-3.5 shrink-0'
+                  aria-hidden='true'
+                />
+                {$t('workshop.styleNoFit45')}
+              </span>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                disabled={disabled}
+                onClick={() => setAdjusting(true)}
+              >
+                <SparklesIcon />
+                {$t('workshop.adjustWithAi')}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
+      {adjusting && mine ? (
+        <CardStyleMaker
+          projectId={projectId}
+          fields={shown}
+          cards={cards}
+          siteIcon={siteIcon}
+          project={project}
+          taken={styles.map((s) => s.name)}
+          start={mine}
+          onClose={() => setAdjusting(false)}
+          onSaved={(style) => {
+            onStyles([...styles, style]);
+            onChange({ ...fields, template: savedStyleRef(style.id) });
+            setAdjusting(false);
+          }}
+        />
+      ) : null}
       {picking ? (
         <StylePicker
           projectId={projectId}

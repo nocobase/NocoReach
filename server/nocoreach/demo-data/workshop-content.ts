@@ -538,7 +538,8 @@ export type WorkshopDraftPlace =
 /** One adaptation the demo team made: the form, where it came from, where it goes and the Agent's draft. */
 export interface WorkshopDraft {
   key: string;
-  form: 'xhs' | 'x' | 'linkedin' | 'community';
+  form:
+    'xhs' | 'instagram' | 'linkedin-carousel' | 'x' | 'linkedin' | 'community';
   source: WorkshopDraftSource;
   destination?: WorkshopDraftPlace;
   state: 'review' | 'done';
@@ -550,8 +551,9 @@ export interface WorkshopDraft {
   /** `{date}` is the session's date, `{name}` the owner's name. */
   draft: L;
   /**
-   * Xiaohongshu cards: the cards whose text the Agent found overflowing when it rendered them. Their images are
-   * rendered from the draft by scripts/render-demo-cards.ts into xhs-card-images.json.
+   * A carousel's cards (Xiaohongshu, Instagram, LinkedIn): the cards whose text the Agent found overflowing when it
+   * rendered them. Their images are rendered from the draft at the place's size by scripts/render-demo-cards.ts into
+   * xhs-card-images.json.
    */
   cards?: { overflow: number[] };
 }
@@ -818,6 +820,113 @@ Layout: end
 acme.example`,
     ),
   },
+  // Made into a LinkedIn carousel a few days after the Xiaohongshu cards (2026-11-24): its pages download as one PDF.
+  {
+    key: 'choose-tool-linkedin-carousel',
+    form: 'linkedin-carousel',
+    source: { kind: 'article', path: '/blog/choose-pm-tool' },
+    state: 'done',
+    owner: 'content',
+    created: 6.4,
+    approved: 6.0,
+    cards: { overflow: [] },
+    draft: t(
+      `## Title
+小团队怎么选项目管理工具：电子表格、Acme 还是 Nimbus
+## Body
+Sections: 1–4
+“我们该不该换掉电子表格？”这是小团队问我们最多的问题之一。
+
+我们的回答是：先别比功能，先看团队怎么协作。五个人以内、任务不多、很少跨团队排期，电子表格完全够用。同一个任务改出好几个版本、前置任务延期后下游最后才知道，才值得换工具。
+
+这份文档整理了电子表格、Acme 和 Nimbus 各适合什么团队，以及迁移前要准备的三件事。对比为虚构样例。
+
+你们团队是什么时候决定换工具的？
+## Card 1
+Sections: 1–4
+# 小团队怎么选项目管理工具
+电子表格、Acme、Nimbus 各适合什么团队
+## Card 2
+Sections: 1
+# 先别比功能
+人数、要不要跨团队排期、客户要不要看进度，比功能清单更能决定该用什么。
+## Card 3
+Sections: 2
+# 电子表格够用的时候
+五人以内、任务不多、很少跨团队排期，电子表格完全够用。
+## Card 4
+Sections: 2
+# 该换工具的信号
+同一个任务改出好几个版本；
+前置任务延期，下游最后才知道。
+## Card 5
+Sections: 3
+# Acme 适合客户协作
+客户访客、交付验收、项目周报，都围着客户项目设计。
+## Card 6
+Sections: 3
+# Nimbus 适合内部研发
+两者都有看板和时间线，Nimbus 更贴近内部研发流程。
+（对比为虚构样例）
+## Card 7
+Sections: 4
+# 迁移前先做三件事
+保留原表行号；
+先试导 20 行；
+核对负责人、状态和日期。
+## Card 8
+Layout: end
+# 关注 Acme，看更多交付团队的做法
+acme.example`,
+      `## Title
+Picking a PM tool: spreadsheet, Acme or Nimbus
+## Body
+Sections: 1–4
+"Should we move off spreadsheets?" is one of the questions small teams ask us most.
+
+Our answer: don't start with features, start with how your team works. For five people or fewer, a modest task list and little cross-team scheduling, a spreadsheet is fine. When a task forks into versions and slips reach people downstream last, a dedicated tool earns its keep.
+
+This document compares spreadsheets, Acme and Nimbus, and lists three things to prepare before you move. The comparison is a fictional example.
+
+When did your team decide to switch?
+## Card 1
+Sections: 1–4
+# Picking a PM tool
+Spreadsheet, Acme or Nimbus: which team each one suits
+## Card 2
+Sections: 1
+# Skip the feature list
+Headcount, cross-team schedules and whether clients follow progress decide more than features.
+## Card 3
+Sections: 2
+# A sheet is enough when
+Five people or fewer, a modest task list, little cross-team scheduling.
+## Card 4
+Sections: 2
+# Time to switch
+A task forks into versions.
+A slip reaches people downstream last.
+## Card 5
+Sections: 3
+# Acme fits client work
+Client guests, delivery sign-off and weekly project reports, built around client projects.
+## Card 6
+Sections: 3
+# Nimbus fits engineering
+Both have boards and timelines; Nimbus leans to internal engineering workflows.
+(A fictional comparison.)
+## Card 7
+Sections: 4
+# Before you move
+Keep source row numbers.
+Rehearse with 20 rows.
+Check owners, status and dates.
+## Card 8
+Layout: end
+# Follow Acme for more team setups
+acme.example`,
+    ),
+  },
   {
     key: 'session-community',
     form: 'community',
@@ -1000,6 +1109,112 @@ One decision we went back and forth on: rows with the same title are not treated
 - Use the original title, no editorializing
 - Disclose your affiliation in the text
 - Don't ask for votes`),
+  },
+  // The same article as an Instagram carousel (2026-11-24), waiting for review: 8 cards at 4:5, a caption and 4 hashtags.
+  {
+    key: 'choose-tool-instagram',
+    form: 'instagram',
+    source: { kind: 'article', path: '/blog/choose-pm-tool' },
+    state: 'review',
+    owner: 'content',
+    created: 1.6,
+    cards: { overflow: [] },
+    draft: t(
+      `## Body
+Sections: 1–4
+还在纠结要不要换掉电子表格？先看团队怎么协作，再比功能。
+
+五个人以内、很少跨团队排期，电子表格完全够用。同一个任务改出好几个版本、下游最后才知道延期，才值得换工具。
+
+左滑看电子表格、Acme、Nimbus 各适合什么团队，以及迁移前要准备的三件事。完整对比见主页链接。
+## Hashtags
+#项目管理 #团队协作 #小团队 #效率工具
+## Card 1
+Sections: 1–4
+# 项目管理工具怎么选
+电子表格、Acme、Nimbus 各适合什么团队
+## Card 2
+Sections: 1
+# 先看团队怎么协作
+人数、要不要跨团队排期、客户要不要看进度，比功能清单更能决定该用什么。
+## Card 3
+Sections: 2
+# 电子表格够用的时候
+五人以内；
+任务不多；
+很少跨团队排期。
+## Card 4
+Sections: 2
+# 该换工具的信号
+同一个任务改出好几个版本；
+前置任务延期，下游最后才知道。
+## Card 5
+Sections: 3
+# Acme 适合客户协作
+客户访客、交付验收、项目周报，都围着客户项目设计。
+## Card 6
+Sections: 3
+# Nimbus 适合内部研发
+两者都有看板和时间线，Nimbus 更贴近内部研发流程。
+（对比为虚构样例）
+## Card 7
+Sections: 4
+# 迁移前先做三件事
+保留原表行号；
+先试导 20 行；
+核对负责人、状态和日期。
+## Card 8
+Layout: end
+# 关注 Acme，看更多交付团队的做法
+acme.example`,
+      `## Body
+Sections: 1–4
+Still deciding whether to move off spreadsheets? Start with how your team works, not the feature list.
+
+For five people or fewer and little cross-team scheduling, a spreadsheet is fine. When a task forks into versions and slips reach people downstream last, a dedicated tool earns its keep.
+
+Swipe for which team spreadsheets, Acme and Nimbus each suit, and three things to prepare before you move. The full comparison is at the link in bio.
+## Hashtags
+#projectmanagement #smallteams #productivity #teamwork
+## Card 1
+Sections: 1–4
+# Picking a PM tool
+Spreadsheet, Acme or Nimbus: which team each one suits
+## Card 2
+Sections: 1
+# Start with how you work
+Headcount, cross-team schedules and whether clients follow progress decide more than any feature list.
+## Card 3
+Sections: 2
+# A sheet is enough when
+Five people or fewer.
+A modest task list.
+Little scheduling across teams.
+## Card 4
+Sections: 2
+# Signs it's time to switch
+One task forks into several versions.
+A slip reaches people downstream last.
+## Card 5
+Sections: 3
+# Acme fits client work
+Guest access for clients, delivery sign-off and weekly project reports.
+## Card 6
+Sections: 3
+# Nimbus fits engineering
+Both have boards and timelines; Nimbus leans to internal engineering workflows.
+(A fictional comparison.)
+## Card 7
+Sections: 4
+# Before you move
+Keep source row numbers.
+Rehearse the import with 20 rows.
+Check owners, status and dates.
+## Card 8
+Layout: end
+# Follow Acme for more team setups
+acme.example`,
+    ),
   },
   {
     key: 'release-linkedin',

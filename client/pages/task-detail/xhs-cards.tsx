@@ -18,14 +18,22 @@ import { formatCount, joinList } from '#lib/format';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import { saveBlob, zipStored } from '#lib/zip';
+import { imagesPdf, pdfPageOf } from '#lib/pdf';
 import { FilePreviewDialog } from '#extensions/nocobase-file-component-ui/index';
 import {
+  CARD_SPECS,
+  INSTAGRAM,
+  LINKEDIN_DOC,
   XHS,
-  cardChars,
+  cardLength,
+  cardMax,
+  cardUnit,
   charLength,
+  hashtagsOf,
   parseRepurpose,
-  writeXhs,
+  writeCards,
   type CardSet,
+  type CarouselForm,
   type Piece,
 } from '../../../shared/repurpose.js';
 import {
@@ -43,18 +51,22 @@ import {
   useCardImageUpload,
 } from './task-images-model.js';
 
-// Xiaohongshu cards on the task page (Content workshop PR 2, mockup v2 frame 3 and v3 frame 4): the card images in a
-// gallery, each saying which source sections it comes from; a card over the character limit, or one the Agent found
-// overflowing, is framed in yellow. The done card downloads every image in one ZIP and copies the note's title and
-// body. The images are the Agent's own renders, uploaded with its result, or a person's, drawn again in their browser
-// from the same template when they edit the text (XhsCardEditor, 2026-11-17).
+// Carousel cards on the task page (Content workshop PR 2, mockup v2 frame 3 and v3 frame 4; Instagram and LinkedIn
+// since 2026-11-24): the card images in a gallery, each saying which source sections it comes from; a card over the
+// length limit, or one the Agent found overflowing, is framed in yellow. The done card downloads the set, every image in
+// one ZIP numbered 01 to NN, or for LinkedIn one PDF of its pages, and copies the place's text: Xiaohongshu's note title
+// and body, Instagram's caption and hashtags, LinkedIn's document title and post text. The images are the Agent's own
+// renders, uploaded with its result, or a person's, drawn again in their browser from the same template when they edit
+// the text (XhsCardEditor, 2026-11-17).
 
 /** The gallery of a set: its images in card order, each opening large; on review, `onEdit` edits a card's text. */
 export function CardGallery({
+  form,
   cards,
   set,
   onEdit,
 }: {
+  form: CarouselForm;
   cards: Piece[];
   set: CardSet;
   onEdit?: (n: number) => void;
@@ -63,6 +75,8 @@ export function CardGallery({
   const overflow = new Set(set.overflow || []),
     edited = new Set(set.edited || []);
   const images = set.images.slice(0, cards.length);
+  const unit = cardUnit(cards),
+    max = cardMax(unit);
   return (
     <>
       <ul
@@ -72,8 +86,8 @@ export function CardGallery({
         {images.map((image, i) => {
           const card = cards[i],
             n = i + 1,
-            chars = cardChars(card),
-            over = chars > XHS.cardChars,
+            length = cardLength(card, unit),
+            over = length > max,
             spilled = overflow.has(n);
           const label =
             n === 1
@@ -94,7 +108,8 @@ export function CardGallery({
                 <button
                   type='button'
                   className={cn(
-                    'block aspect-[3/4] w-full overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                    'block w-full overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                    set.ratio === '4:5' ? 'aspect-[4/5]' : 'aspect-[3/4]',
                     (over || spilled) &&
                       'outline-2 outline-offset-2 outline-amber-500',
                   )}
@@ -126,6 +141,12 @@ export function CardGallery({
                 ) : null}
               </div>
               <div className='flex flex-col text-xs leading-5'>
+                {/* A LinkedIn document is read page by page: its page, then where the page comes from. */}
+                {form === 'linkedin-carousel' ? (
+                  <span className='font-medium'>
+                    {$t('workshop.piecePage', { 0: n })}
+                  </span>
+                ) : null}
                 <span className='truncate text-muted-foreground'>
                   {label || ' '}
                 </span>
@@ -136,10 +157,12 @@ export function CardGallery({
                 ) : null}
                 {over ? (
                   <span className='text-nr-ink-amber'>
-                    {$t('workshop.cardCharsOver', {
-                      0: formatCount(chars),
-                      1: XHS.cardChars,
-                    })}
+                    {$t(
+                      unit === 'words'
+                        ? 'workshop.cardWordsOver'
+                        : 'workshop.cardCharsOver',
+                      { 0: formatCount(length), 1: max },
+                    )}
                   </span>
                 ) : null}
                 {spilled ? (
@@ -183,36 +206,66 @@ const copy = (value: string) =>
       : toast.error(() => $t('workshop.copyFailed')),
   );
 
-/** The done card's tools: every image in one ZIP, and the note's title and body to paste. */
+/** The images of a set, fetched in card order. */
+async function fetchImages(set: CardSet) {
+  const out = [];
+  for (const image of set.images) {
+    const response = await fetch(taskImageSrc(image.ref), {
+      credentials: 'same-origin',
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    out.push({
+      ext: taskImageOf(image.ref)?.ext || 'png',
+      blob: await response.blob(),
+    });
+  }
+  return out;
+}
+
+/**
+ * The done card's tools: the set downloaded, every image in one ZIP numbered 01 to NN, or LinkedIn's pages in one PDF;
+ * and the place's two texts to paste.
+ */
 function CardTools({
+  form,
   set,
-  title,
-  body,
+  texts,
   name,
+  pdfTitle,
 }: {
+  form: CarouselForm;
   set: CardSet;
-  title?: string;
-  body?: string;
+  /** The texts copied, each with its button's words. */
+  texts: { label: string; text?: string }[];
   /** The ZIP's and the images' name: the task's number. */
   name: string;
+  /** The PDF's own title: the LinkedIn document title. */
+  pdfTitle?: string;
 }) {
   const [busy, setBusy] = useState(false);
+  const pdf = form === 'linkedin-carousel';
   const download = async () => {
     setBusy(true);
     try {
-      const files = [];
-      for (const [i, image] of set.images.entries()) {
-        const response = await fetch(taskImageSrc(image.ref), {
-          credentials: 'same-origin',
-        });
-        if (!response.ok) throw new Error(String(response.status));
-        const ext = taskImageOf(image.ref)?.ext || 'png';
-        files.push({
-          name: `${name}-${String(i + 1).padStart(2, '0')}.${ext}`,
-          data: new Uint8Array(await response.arrayBuffer()),
-        });
+      const images = await fetchImages(set);
+      if (pdf) {
+        const pages = [];
+        for (const image of images) pages.push(await pdfPageOf(image.blob));
+        saveBlob(
+          new Blob([imagesPdf(pages, pdfTitle) as BlobPart], {
+            type: 'application/pdf',
+          }),
+          `${name}.pdf`,
+        );
+      } else {
+        const files = [];
+        for (const [i, image] of images.entries())
+          files.push({
+            name: `${name}-${String(i + 1).padStart(2, '0')}.${image.ext}`,
+            data: new Uint8Array(await image.blob.arrayBuffer()),
+          });
+        saveBlob(zipStored(files), `${name}.zip`);
       }
-      saveBlob(zipStored(files), `${name}.zip`);
     } catch {
       toast.error(() => $t('workshop.downloadFailed'));
     } finally {
@@ -223,35 +276,72 @@ function CardTools({
     <>
       <Button variant='outline' disabled={busy} onClick={() => void download()}>
         <Download />
-        {$t('workshop.downloadCards', { 0: set.images.length })}
+        {pdf
+          ? $t('workshop.downloadPdf', { 0: set.images.length })
+          : $t('workshop.downloadCards', { 0: set.images.length })}
       </Button>
-      {title ? (
-        <Button variant='outline' onClick={() => copy(title)}>
-          <Copy />
-          {$t('workshop.copyTitle')}
-        </Button>
-      ) : null}
-      {body ? (
-        <Button variant='outline' onClick={() => copy(body)}>
-          <Copy />
-          {$t('workshop.copyBody')}
-        </Button>
-      ) : null}
+      {texts.map(({ label, text }) =>
+        text ? (
+          <Button key={label} variant='outline' onClick={() => copy(text)}>
+            <Copy />
+            {label}
+          </Button>
+        ) : null,
+      )}
     </>
   );
 }
 
+/** What the done card says to do with a set, under its title: Instagram's order, LinkedIn's Add a document. */
+export function carouselDoneNote(form: CarouselForm, images: number) {
+  return form === 'instagram'
+    ? $t('workshop.instagramDoneNote', {
+        0: String(images).padStart(2, '0'),
+      })
+    : form === 'linkedin-carousel'
+      ? $t('workshop.linkedinDoneNote')
+      : '';
+}
+
 /** The done card's tools for an approved set of cards, or nothing for a result without images. */
-export function XhsDoneTools({ out, name }: { out: Artifact; name: string }) {
+export function XhsDoneTools({
+  form,
+  out,
+  name,
+}: {
+  form: CarouselForm;
+  out: Artifact;
+  name: string;
+}) {
   const set = out.cards?.images.length ? out.cards : null;
   if (!set) return null;
-  const pieces = parseRepurpose('xhs', out.content)?.pieces || [];
+  const pieces = parseRepurpose(form, out.content)?.pieces || [];
+  const of = (kind: Piece['kind']) => pieces.find((p) => p.kind === kind)?.text;
+  const texts =
+    form === 'instagram'
+      ? [
+          { label: $t('workshop.copyCaption'), text: of('body') },
+          {
+            label: $t('workshop.copyHashtags'),
+            text: hashtagsOf(of('tags') || '').join(' ') || undefined,
+          },
+        ]
+      : form === 'linkedin-carousel'
+        ? [
+            { label: $t('workshop.copyDocTitle'), text: of('title') },
+            { label: $t('workshop.copyPostText'), text: of('body') },
+          ]
+        : [
+            { label: $t('workshop.copyTitle'), text: of('title') },
+            { label: $t('workshop.copyBody'), text: of('body') },
+          ];
   return (
     <CardTools
+      form={form}
       set={set}
-      title={pieces.find((p) => p.kind === 'title')?.text}
-      body={pieces.find((p) => p.kind === 'body')?.text}
+      texts={texts}
       name={name}
+      pdfTitle={form === 'linkedin-carousel' ? of('title') : undefined}
     />
   );
 }
@@ -261,7 +351,7 @@ export type CardEdit = {
   content: string;
   cards: { images: string[]; overflow: number[] };
 };
-/** The card being edited, from 1, or the note's title and body. */
+/** The card being edited, from 1, or the place's text: the note, the caption and hashtags, or the document's. */
 export type CardSelection = number | 'note';
 
 const templateCards = (pieces: Piece[]): TemplateCard[] =>
@@ -281,19 +371,21 @@ type Stage =
   | { step: 'saving' };
 
 /**
- * Edit directly on a Xiaohongshu version (mockup xhs-edit-cards.html, option B confirmed 2026-11-17): the text of each
- * card and of the note, the card in hand drawn as it is typed by the template the set was drawn with. Saving draws every
- * card again in this browser, uploads the images and saves them with the text as a new version: no Agent runs and no
- * model is called. The layout, the number of cards and the style stay as they are; more than text goes to the Agent with
- * Request changes.
+ * Edit directly on a carousel version (mockup xhs-edit-cards.html, option B confirmed 2026-11-17; every place at its own
+ * size since 2026-11-24): the text of each card and the place's own text, the card in hand drawn as it is typed by the
+ * template the set was drawn with. Saving draws every card again in this browser at the place's size, uploads the images
+ * and saves them with the text as a new version: no Agent runs and no model is called. The layout, the number of cards
+ * and the style stay as they are; more than text goes to the Agent with Request changes.
  */
 export function XhsCardEditor({
+  form,
   out,
   current,
   initial,
   onClose,
   onSave,
 }: {
+  form: CarouselForm;
   out: Artifact;
   /** The brand kit's card style now: the logo, and the style of a set that does not record its own. */
   current: CardStyle;
@@ -303,8 +395,9 @@ export function XhsCardEditor({
 }) {
   const upload = useCardImageUpload();
   const [original] = useState(
-    () => parseRepurpose('xhs', out.content)?.pieces || [],
+    () => parseRepurpose(form, out.content)?.pieces || [],
   );
+  const size = CARD_SPECS[form];
   const [pieces, setPieces] = useState(original);
   const [selected, setSelected] = useState<CardSelection>(initial);
   const [overflows, setOverflows] = useState(false);
@@ -318,11 +411,12 @@ export function XhsCardEditor({
   const changed = cards.flatMap((c, i) =>
     sameCard(c, before[i]) ? [] : [i + 1],
   );
-  const noteOf = (list: Piece[], kind: 'title' | 'body') =>
+  const noteOf = (list: Piece[], kind: NoteKind) =>
     list.find((p) => p.kind === kind)?.text ?? '';
-  const noteChanged =
-    noteOf(pieces, 'title') !== noteOf(original, 'title') ||
-    noteOf(pieces, 'body') !== noteOf(original, 'body');
+  const noteChanged = NOTE_KINDS[form].some(
+    (kind) => noteOf(pieces, kind) !== noteOf(original, kind),
+  );
+  const unit = cardUnit(cards);
   const empty = cards.some((c) => !c.text.trim() && !c.heading?.trim());
   const n = selected === 'note' ? 1 : selected;
   const card = selected === 'note' ? null : cards[selected - 1];
@@ -335,7 +429,7 @@ export function XhsCardEditor({
         p.kind === 'card' && ++k === selected ? { ...p, ...patch } : p,
       );
     });
-  const setNote = (kind: 'title' | 'body', text: string) =>
+  const setNote = (kind: NoteKind, text: string) =>
     setPieces((list) =>
       list.some((p) => p.kind === kind)
         ? list.map((p) => (p.kind === kind ? { ...p, text } : p))
@@ -348,7 +442,7 @@ export function XhsCardEditor({
     let failed: () => string = () => $t('workshop.drawFailed');
     try {
       setStage({ step: 'drawing' });
-      const drawn = await renderCards(style, templateCards(pieces));
+      const drawn = await renderCards(style, templateCards(pieces), size);
       const requestId = createUuid(),
         ids: string[] = [];
       failed = () => $t('workshop.uploadFailed');
@@ -373,7 +467,7 @@ export function XhsCardEditor({
       setStage({ step: 'saving' });
       if (
         await onSave({
-          content: writeXhs(pieces),
+          content: writeCards(pieces),
           cards: { images: ids, overflow: drawn.overflow },
         })
       )
@@ -393,7 +487,8 @@ export function XhsCardEditor({
         : cards[i - 1]?.sections
           ? $t('workshop.fromSections', { 0: cards[i - 1].sections! })
           : '';
-  const chars = card ? cardChars(card) : 0;
+  const length = card ? cardLength(card, unit) : 0,
+    max = cardMax(unit);
   const busy = stage !== null;
   return (
     <Dialog
@@ -422,7 +517,7 @@ export function XhsCardEditor({
                 'outline-2 outline-offset-2 outline-primary',
             )}
           >
-            {$t('workshop.noteTitleAndBody')}
+            {noteTabLabel(form)}
             {noteChanged ? <ChangedDot /> : null}
           </button>
           {cards
@@ -440,7 +535,8 @@ export function XhsCardEditor({
                 aria-label={$t('workshop.pieceCard', { 0: k })}
                 onClick={() => setSelected(k)}
                 className={cn(
-                  'relative h-14 w-[42px] shrink-0 overflow-hidden rounded-md border bg-muted',
+                  'relative h-14 shrink-0 overflow-hidden rounded-md border bg-muted',
+                  size.height < XHS.height ? 'w-[45px]' : 'w-[42px]',
                   selected === k &&
                     'outline-2 outline-offset-2 outline-primary',
                 )}
@@ -464,6 +560,7 @@ export function XhsCardEditor({
             cards={shown}
             n={n}
             width={360}
+            size={size}
             title={$t('workshop.pieceCard', { 0: n })}
             onOverflow={selected === 'note' ? undefined : setOverflows}
           />
@@ -471,9 +568,14 @@ export function XhsCardEditor({
             <div className='min-w-0 space-y-4'>
               <p className='text-sm text-muted-foreground'>
                 {[
-                  $t('workshop.cardOf', { 0: n, 1: cards.length }),
+                  $t(
+                    form === 'linkedin-carousel'
+                      ? 'workshop.pageOf'
+                      : 'workshop.cardOf',
+                    { 0: n, 1: cards.length },
+                  ),
                   label(n),
-                  `${XHS.width}×${XHS.height}`,
+                  `${size.width}×${size.height}`,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -506,15 +608,17 @@ export function XhsCardEditor({
                   <span
                     className={cn(
                       'text-xs',
-                      chars > XHS.cardChars
+                      length > max
                         ? 'text-nr-ink-amber'
                         : 'text-muted-foreground',
                     )}
                   >
-                    {$t('workshop.cardCharsCount', {
-                      0: formatCount(chars),
-                      1: XHS.cardChars,
-                    })}
+                    {$t(
+                      unit === 'words'
+                        ? 'workshop.cardWordsCount'
+                        : 'workshop.cardCharsCount',
+                      { 0: formatCount(length), 1: max },
+                    )}
                   </span>
                 </div>
                 <Textarea
@@ -538,23 +642,22 @@ export function XhsCardEditor({
             </div>
           ) : (
             <div className='min-w-0 space-y-4'>
-              <NoteField
-                id='xhs-note-title'
-                label={$t('workshop.pieceNoteTitle')}
-                value={noteOf(pieces, 'title')}
-                max={XHS.noteTitle}
-                disabled={busy}
-                onChange={(v) => setNote('title', v.replace(/\n/g, ' '))}
-              />
-              <NoteField
-                id='xhs-note-body'
-                label={$t('workshop.pieceNoteBody')}
-                value={noteOf(pieces, 'body')}
-                max={XHS.noteBody}
-                rows={12}
-                disabled={busy}
-                onChange={(v) => setNote('body', v)}
-              />
+              {noteFields(form).map((f) => (
+                <NoteField
+                  key={f.kind}
+                  id={`card-note-${f.kind}`}
+                  label={f.label}
+                  value={noteOf(pieces, f.kind)}
+                  max={f.max}
+                  count={f.count}
+                  fold={f.fold}
+                  rows={f.rows}
+                  disabled={busy}
+                  onChange={(v) =>
+                    setNote(f.kind, f.rows ? v : v.replace(/\n/g, ' '))
+                  }
+                />
+              ))}
             </div>
           )}
         </div>
@@ -614,11 +717,77 @@ const ChangedDot = () => (
   />
 );
 
+type NoteKind = 'title' | 'body' | 'tags';
+/** The place's own text beside its cards, in the order it is edited. */
+const NOTE_KINDS: Record<CarouselForm, NoteKind[]> = {
+  xhs: ['title', 'body'],
+  instagram: ['body', 'tags'],
+  'linkedin-carousel': ['title', 'body'],
+};
+const noteTabLabel = (form: CarouselForm) =>
+  form === 'instagram'
+    ? $t('workshop.captionAndHashtags')
+    : form === 'linkedin-carousel'
+      ? $t('workshop.docTitleAndPost')
+      : $t('workshop.noteTitleAndBody');
+/** Each text's field: its name, its limit and how it is counted. */
+function noteFields(form: CarouselForm): {
+  kind: NoteKind;
+  label: string;
+  max: number;
+  count?: (value: string) => number;
+  fold?: number;
+  rows?: number;
+}[] {
+  if (form === 'instagram')
+    return [
+      {
+        kind: 'body',
+        label: $t('workshop.pieceCaption'),
+        max: INSTAGRAM.caption,
+        fold: INSTAGRAM.captionFold,
+        rows: 10,
+      },
+      {
+        kind: 'tags',
+        label: $t('workshop.pieceHashtags'),
+        max: INSTAGRAM.hashtags,
+        count: (v) => hashtagsOf(v).length,
+        rows: 2,
+      },
+    ];
+  if (form === 'linkedin-carousel')
+    return [
+      {
+        kind: 'title',
+        label: $t('workshop.pieceDocTitle'),
+        max: LINKEDIN_DOC.title,
+      },
+      {
+        kind: 'body',
+        label: $t('workshop.piecePostText'),
+        max: LINKEDIN_DOC.post,
+        rows: 12,
+      },
+    ];
+  return [
+    { kind: 'title', label: $t('workshop.pieceNoteTitle'), max: XHS.noteTitle },
+    {
+      kind: 'body',
+      label: $t('workshop.pieceNoteBody'),
+      max: XHS.noteBody,
+      rows: 12,
+    },
+  ];
+}
+
 function NoteField({
   id,
   label,
   value,
   max,
+  count = charLength,
+  fold,
   rows,
   disabled,
   onChange,
@@ -627,22 +796,40 @@ function NoteField({
   label: string;
   value: string;
   max: number;
+  /** How the text is counted: characters, or a hashtag block's hashtags. */
+  count?: (value: string) => number;
+  /** An Instagram caption's opening shown before "more", counted on its own. */
+  fold?: number;
   rows?: number;
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
-  const length = charLength(value);
+  const length = count(value);
+  const opening = fold ? charLength(value.trim().split('\n')[0] || '') : 0;
   return (
     <div className='space-y-1.5'>
       <div className='flex justify-between gap-3 text-sm'>
         <Label htmlFor={id}>{label}</Label>
-        <span
-          className={cn(
-            'text-xs',
-            length > max ? 'text-nr-ink-amber' : 'text-muted-foreground',
-          )}
-        >
-          {formatCount(length)} / {formatCount(max)}
+        <span className='flex gap-3 text-xs'>
+          {fold ? (
+            <span
+              className={cn(
+                opening > fold ? 'text-nr-ink-amber' : 'text-muted-foreground',
+              )}
+            >
+              {$t('workshop.captionOpening', {
+                0: formatCount(opening),
+                1: formatCount(fold),
+              })}
+            </span>
+          ) : null}
+          <span
+            className={cn(
+              length > max ? 'text-nr-ink-amber' : 'text-muted-foreground',
+            )}
+          >
+            {formatCount(length)} / {formatCount(max)}
+          </span>
         </span>
       </div>
       {rows ? (

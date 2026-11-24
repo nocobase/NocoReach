@@ -1,4 +1,4 @@
-import { XHS } from '../../shared/repurpose.js';
+import { XHS, type CardSize } from '../../shared/repurpose.js';
 import {
   CARD_MESSAGE,
   cardTemplate,
@@ -7,10 +7,10 @@ import {
   type TemplateCard,
 } from '../../shared/xhs-card.js';
 
-// Xiaohongshu cards drawn in the browser (Edit directly, 2026-11-17): the set's own template page runs in a sandboxed
-// frame without access to this page, sizes the text as it does for the Agent, and posts each card as a self-contained
-// SVG (shared/xhs-card.ts CARD_EXPORT), which is drawn here to a PNG of the card size. The fonts are this computer's,
-// so a saved edit draws the whole set again rather than mixing two computers' fonts in one set.
+// Carousel cards drawn in the browser (Edit directly, 2026-11-17; 4:5 since 2026-11-24): the set's own template page
+// runs in a sandboxed frame without access to this page, sizes the text as it does for the Agent, and posts each card as
+// a self-contained SVG (shared/xhs-card.ts CARD_EXPORT), which is drawn here to a PNG of the card size. The fonts are
+// this computer's, so a saved edit draws the whole set again rather than mixing two computers' fonts in one set.
 
 const WAIT = 30_000;
 
@@ -36,13 +36,13 @@ export function cardMessage(frame: HTMLIFrameElement): Promise<CardMessage> {
   });
 }
 
-async function png(svg: string): Promise<Blob> {
+async function png(svg: string, size: CardSize): Promise<Blob> {
   const image = new Image();
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   await image.decode();
   const canvas = document.createElement('canvas');
-  canvas.width = XHS.width;
-  canvas.height = XHS.height;
+  canvas.width = size.width;
+  canvas.height = size.height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('No canvas to draw the cards on.');
   context.drawImage(image, 0, 0);
@@ -55,19 +55,23 @@ async function png(svg: string): Promise<Blob> {
   );
 }
 
-/** Every card of a set drawn with its style, as PNGs in the cards' order, and the cards whose text does not fit. */
+/**
+ * Every card of a set drawn with its style at a place's size (Xiaohongshu's 3:4 by default), as PNGs in the cards'
+ * order, and the cards whose text does not fit.
+ */
 export async function renderCards(
   style: CardStyle,
   cards: TemplateCard[],
+  size: CardSize = XHS,
 ): Promise<{ images: Blob[]; overflow: number[] }> {
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('aria-hidden', 'true');
   frame.tabIndex = -1;
   // Laid out at the card size and kept in view, as a browser may not draw a frame it holds off-screen.
-  frame.style.cssText = `position:fixed;left:0;top:0;width:${XHS.width}px;height:${XHS.height}px;border:0;opacity:0;pointer-events:none;z-index:-1;transform:scale(.01);transform-origin:0 0`;
+  frame.style.cssText = `position:fixed;left:0;top:0;width:${size.width}px;height:${size.height}px;border:0;opacity:0;pointer-events:none;z-index:-1;transform:scale(.01);transform-origin:0 0`;
   const message = cardMessage(frame);
-  frame.srcdoc = cardTemplate(style, { cards, exporting: true });
+  frame.srcdoc = cardTemplate(style, { cards, exporting: true }, size);
   document.body.appendChild(frame);
   try {
     const answer = await message;
@@ -77,7 +81,7 @@ export async function renderCards(
     if (drawn.length !== cards.length)
       throw new Error('The card template drew a different number of cards.');
     const images: Blob[] = [];
-    for (const card of drawn) images.push(await png(card.svg));
+    for (const card of drawn) images.push(await png(card.svg, size));
     return { images, overflow: answer.overflow };
   } finally {
     frame.remove();

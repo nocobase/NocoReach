@@ -10,7 +10,7 @@ import {
   repurposeChecks,
   sectionNumbers,
   sourceSections,
-  writeXhs,
+  writeCards,
 } from '../../shared/repurpose.js';
 import {
   CARD_COLOR,
@@ -83,13 +83,13 @@ describe('Xiaohongshu result text', () => {
       '## Card 3\nLayout: end\n# Follow Acme\nacme.example',
     ]);
     const pieces = parseRepurpose('xhs', text)!.pieces;
-    expect(parseRepurpose('xhs', writeXhs(pieces))!.pieces).toEqual(pieces);
+    expect(parseRepurpose('xhs', writeCards(pieces))!.pieces).toEqual(pieces);
     const edited = pieces.map((p) =>
       p.index === 2
         ? { ...p, heading: ' New owners ', text: '# Not a heading\n## Card 9' }
         : p,
     );
-    const again = parseRepurpose('xhs', writeXhs(edited))!.pieces;
+    const again = parseRepurpose('xhs', writeCards(edited))!.pieces;
     expect(again.filter((p) => p.kind === 'card')).toHaveLength(3);
     expect(again.find((p) => p.index === 2)).toMatchObject({
       heading: 'New owners',
@@ -134,8 +134,8 @@ describe('Xiaohongshu checks', () => {
         overrides[i + 1] ??
         card(
           i + 1,
-          `Step ${i + 1}`,
-          'One owner.',
+          `第${i + 1}步`,
+          '每个请求只交给一个人负责。',
           `Sections: ${Math.min(i + 1, 3)}`,
         ),
     );
@@ -146,7 +146,7 @@ describe('Xiaohongshu checks', () => {
 
   it('passes a set within every limit, and leaves out what NocoReach could not tell', () => {
     expect(keys(result(six()))).toEqual([
-      ['workshop.check.coverWithin', true, { 0: 6, 1: XHS.coverTitle }],
+      ['workshop.check.coverWithin', true, { 0: 3, 1: XHS.coverTitle }],
       ['workshop.check.cardsWithin', true, { 0: 6, 1: 6, 2: 18 }],
       ['workshop.check.cardCharsWithin', true, { 0: XHS.cardChars }],
     ]);

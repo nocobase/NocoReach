@@ -310,6 +310,24 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.xhsCardsInstruction'),
     ['xhs-cards'],
   ),
+  // Carousel's other places (2026-11-24): Instagram's 4:5 cards with a caption and hashtags, and LinkedIn's 4:5 pages
+  // downloaded as one PDF with the document's title and the post.
+  adapt(
+    'instagram-carousel',
+    'instagram',
+    systemMessageText('playbooks.instagramCarousel'),
+    systemMessageText('playbooks.instagramCarouselDescription'),
+    systemMessageText('playbooks.instagramCarouselInstruction'),
+    ['instagram-carousel'],
+  ),
+  adapt(
+    'linkedin-carousel',
+    'linkedin-carousel',
+    systemMessageText('playbooks.linkedinCarousel'),
+    systemMessageText('playbooks.linkedinCarouselDescription'),
+    systemMessageText('playbooks.linkedinCarouselInstruction'),
+    ['linkedin-carousel'],
+  ),
   adapt(
     'x-posts',
     'x',

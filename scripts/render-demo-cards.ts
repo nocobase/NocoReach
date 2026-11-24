@@ -1,8 +1,9 @@
 /**
- * Renders the demo's Xiaohongshu card images (server/nocoreach/demo-data/xhs-card-images.json) from the demo drafts,
- * with the card template the Agent is given (shared/xhs-card.ts) and Acme's brand kit, as the Agent would: one
- * 1080×1440 screenshot per card, kept as WebP, with the colors read from the screenshots as NocoReach reads an Agent's
- * (png-colors.ts). Run it after changing a Xiaohongshu demo draft or the template:
+ * Renders the demo's carousel card images (server/nocoreach/demo-data/xhs-card-images.json) from the demo drafts, with
+ * the card template the Agent is given (shared/xhs-card.ts) and Acme's brand kit, as the Agent would: one screenshot
+ * per card at the place's size (1080×1440 for Xiaohongshu, 1080×1350 for Instagram and LinkedIn), kept as WebP, with
+ * the colors read from the screenshots as NocoReach reads an Agent's (png-colors.ts). Run it after changing a carousel
+ * demo draft or the template:
  *
  *   pnpm exec tsx scripts/render-demo-cards.ts
  *
@@ -18,7 +19,11 @@ import {
   demoCardStyle,
 } from '../server/nocoreach/demo-data/workshop-content.js';
 import { pngInfo, setColors } from '../server/nocoreach/png-colors.js';
-import { XHS, parseRepurpose } from '../shared/repurpose.js';
+import {
+  CARD_SPECS,
+  isCarouselForm,
+  parseRepurpose,
+} from '../shared/repurpose.js';
 import { cardTemplate } from '../shared/xhs-card.js';
 
 const OUT = 'server/nocoreach/demo-data/xhs-card-images.json';
@@ -28,18 +33,19 @@ const browser = await chromium.launch(
     ? { executablePath: process.env.CHROMIUM_PATH }
     : {},
 );
-const page = await browser.newPage({
-  viewport: { width: XHS.width, height: XHS.height },
-  deviceScaleFactor: 1,
-});
 const images: Record<
   string,
   Record<string, { images: string[]; colors: string[] }>
 > = {};
 for (const d of WORKSHOP_DRAFTS) {
-  if (d.form !== 'xhs') continue;
+  if (!isCarouselForm(d.form)) continue;
+  const size = CARD_SPECS[d.form];
+  const page = await browser.newPage({
+    viewport: { width: size.width, height: size.height },
+    deviceScaleFactor: 1,
+  });
   for (const lang of ['zh', 'en'] as const) {
-    const parsed = parseRepurpose('xhs', d.draft[lang]);
+    const parsed = parseRepurpose(d.form, d.draft[lang]);
     if (!parsed) throw new Error(`${d.key} ${lang} does not parse`);
     const cards = parsed.pieces
       .filter((p) => p.kind === 'card')
@@ -47,7 +53,7 @@ for (const d of WORKSHOP_DRAFTS) {
     const dir = mkdtempSync(join(tmpdir(), 'xhs-demo-'));
     writeFileSync(
       join(dir, 'xhs-card.html'),
-      cardTemplate(demoCardStyle(lang)),
+      cardTemplate(demoCardStyle(lang), 'cards.js', size),
     );
     writeFileSync(
       join(dir, 'cards.js'),
@@ -70,6 +76,7 @@ for (const d of WORKSHOP_DRAFTS) {
     }
     (images[d.key] ||= {})[lang] = { images: list, colors: setColors(colors) };
   }
+  await page.close();
 }
 await browser.close();
 writeFileSync(OUT, `${JSON.stringify(images)}\n`);

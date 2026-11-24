@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { FileText, Search } from 'lucide-react';
-import { $t } from '#i18n';
 import { EmptyState } from '#components/reach/states';
 import { InfoTip } from '#components/reach/info-tip';
 import { SourceLogo } from '#components/reach/source-logo';
@@ -25,8 +24,15 @@ import {
 } from '#components/ui/tooltip';
 import { formatCount, formatDate } from '#lib/format';
 import { cn } from '#lib/utils';
-import type { RepurposeForm } from '../../../shared/repurpose.js';
 import {
+  carouselOrder,
+  isCarouselForm,
+  type RepurposeForm,
+} from '../../../shared/repurpose.js';
+import { $t, getCurrentLocale } from '#i18n';
+import { CarouselMark } from './carousel-mark.js';
+import {
+  carouselPlaceName,
   getFormNames,
   libraryFilter,
   librarySearch,
@@ -52,8 +58,16 @@ import {
 
 /** Rows shown before Show more, and how many more each press shows. */
 const PAGE = 20;
-/** The forms a row's icons stand for, in this order. */
-const FORMS: RepurposeForm[] = ['x', 'linkedin', 'xhs', 'community'];
+/**
+ * The forms a row's icons stand for, in this order: Carousel is one icon for all its places (2026-11-24), as Community
+ * post is for its destinations.
+ */
+type Group =
+  | Exclude<RepurposeForm, 'xhs' | 'instagram' | 'linkedin-carousel'>
+  | 'carousel';
+const GROUPS: Group[] = ['x', 'linkedin', 'carousel', 'community'];
+const groupOf = (form: RepurposeForm): Group =>
+  isCarouselForm(form) ? 'carousel' : form;
 
 export function Library({ view }: { view: WorkshopView }) {
   const navigate = useNavigate();
@@ -264,49 +278,78 @@ function Clicks({ article }: { article: Article }) {
 }
 
 /**
- * What an article was made into: X posts, LinkedIn post, Xiaohongshu note and community posts, each lit when a task made
- * it (not closed), with the number of community posts beside it when more than one. Hovering one lists its tasks.
+ * What an article was made into: X posts, LinkedIn post, Carousel (any of its places) and community posts, each lit when a
+ * task made it (not closed), with the number of carousels or community posts beside it when more than one. Hovering one
+ * lists its tasks, Carousel's after the places it went to.
  */
 function MadeIcons({ made }: { made: Made[] }) {
   const names = getFormNames();
   return (
     <span className='inline-flex items-center gap-1.5' data-made-icons=''>
-      {FORMS.map((form) => {
+      {GROUPS.map((group) => {
         const mine = made
-          .filter((m) => m.form === form)
+          .filter((m) => groupOf(m.form) === group)
           .sort((a, b) => (a.no ?? 0) - (b.no ?? 0));
+        const name =
+          group === 'carousel' ? $t('workshop.formCarousel') : names[group];
+        // Carousel says the places made first: "Carousel: Xiaohongshu, Instagram".
+        const places =
+          group === 'carousel' && mine.length
+            ? [
+                $t('workshop.carouselMade', {
+                  0: carouselOrder(getCurrentLocale())
+                    .filter((form) => mine.some((m) => m.form === form))
+                    .map(carouselPlaceName)
+                    .join($t('workshop.listSeparator')),
+                }),
+              ]
+            : [];
         const tip = mine.length
-          ? mine.map((m) =>
-              [
-                [taskNo(m.no), resultName(m.form, m.destination)]
-                  .filter(Boolean)
-                  .join(' '),
-                standingText(m.standing),
-              ].join(' · '),
-            )
-          : [`${names[form]} · ${$t('workshop.libraryNotMade')}`];
+          ? [
+              ...places,
+              ...mine.map((m) =>
+                [
+                  [taskNo(m.no), resultName(m.form, m.destination)]
+                    .filter(Boolean)
+                    .join(' '),
+                  standingText(m.standing),
+                ].join(' · '),
+              ),
+            ]
+          : [`${name} · ${$t('workshop.libraryNotMade')}`];
         return (
-          <Tooltip key={form}>
+          <Tooltip key={group}>
             <TooltipTrigger
               render={
                 <span
                   tabIndex={0}
                   className='inline-flex items-center gap-0.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   aria-label={tip.join('; ')}
-                  data-form={form}
+                  data-form={group}
                   data-lit={mine.length ? '' : undefined}
                 />
               }
             >
-              {/* Lit in the mark's own colour (the community icon in the text colour), grey when nothing was made. */}
-              <SourceLogo
-                source={logoOf(form)}
-                size='xs'
-                className={cn(
-                  mine.length ? 'text-foreground' : 'opacity-30 grayscale',
-                )}
-              />
-              {form === 'community' && mine.length > 1 ? (
+              {/* Lit in the mark's own colour (the community and carousel icons in the text colour), grey when nothing
+                  was made. */}
+              {group === 'carousel' ? (
+                <CarouselMark
+                  className={cn(
+                    'size-3.5 border-0 bg-transparent [&_svg]:size-3.5',
+                    mine.length ? 'text-foreground' : 'opacity-30',
+                  )}
+                />
+              ) : (
+                <SourceLogo
+                  source={logoOf(group)}
+                  size='xs'
+                  className={cn(
+                    mine.length ? 'text-foreground' : 'opacity-30 grayscale',
+                  )}
+                />
+              )}
+              {(group === 'community' || group === 'carousel') &&
+              mine.length > 1 ? (
                 <span className='text-xs text-muted-foreground tabular-nums'>
                   {mine.length}
                 </span>
