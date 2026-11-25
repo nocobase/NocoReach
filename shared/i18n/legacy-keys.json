@@ -1054,7 +1054,6 @@
   "共 {0} 个{1}，这里列出点击最多的 {2} 个。": "searchPerformance.totalMostClicksListedHere",
   "共 {0} 个关键词": "common.keywordsTotal",
   "共 {0} 个页面": "messages.pagesTotal",
-  "共 {0} 个，这里列出估算流量最多的 {1} 个": "domainOverview.totalMostEstimatedTrafficListed",
   "共 {0} 条，这里列出前 {1} 条。": "strategy.firstListedHere",
   "关掉终端、重启电脑后会自动连上。": "messages.reconnectsItselfAfterTerminalCloses",
   "关注 {0}": "dataHealth.following",
