@@ -286,3 +286,38 @@ test('every row names its ways, for one way and when another way failed, in the 
     $t('keyword.containsTerm'),
   ]);
 });
+
+test('switching country resets the language to the new country’s default, also after another language was chosen', async () => {
+  const user = userEvent.setup();
+  mount();
+  const country = await screen.findByRole('combobox', {
+    name: $t('keywordMarket.country'),
+  });
+  const language = () =>
+    screen.getByRole('combobox', { name: $t('keywordMarket.language') });
+  const pick = async (code: number) => {
+    await user.clear(country);
+    await user.type(country, countryLabel(code));
+    await user.click(
+      await screen.findByRole('option', { name: countryLabel(code) }),
+    );
+  };
+  await pick(2702);
+  await user.click(language());
+  await user.click(
+    await screen.findByRole('option', { name: languageLabel('zh-CN') }),
+  );
+  expect(language()).toHaveTextContent(languageLabel('zh-CN'));
+  await pick(2458);
+  expect(language()).toHaveTextContent(languageLabel('ms'));
+  await user.type(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+    'crm',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await waitFor(() => expect(runCalls()).toHaveLength(1));
+  expect([runCalls()[0].locationCode, runCalls()[0].language]).toEqual([
+    2458,
+    'ms',
+  ]);
+});

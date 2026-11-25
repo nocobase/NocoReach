@@ -80,7 +80,10 @@ export function MarketPicker({
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
+      {/* One language menu per country: a menu kept across countries reported a change back after the country
+          changed, turning Malaysia's default Malay into English when Simplified Chinese had been chosen for Singapore. */}
       <Select
+        key={value.locationCode}
         value={value.language}
         disabled={disabled || languages.length < 2}
         onValueChange={(language) => {

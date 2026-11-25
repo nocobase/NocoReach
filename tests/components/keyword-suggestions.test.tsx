@@ -14,7 +14,7 @@ import { OnlineChatProvider } from '../../client/online-agent/context.js';
 import { OnlineChatView } from '../../client/online-agent/chat.js';
 import { notifyPageChange } from '../../client/online-agent/page-changes.js';
 import { KeywordSuggestions } from '../../client/pages/keyword-suggestions';
-import { countryLabel } from '../../client/pages/keyword-api';
+import { countryLabel, languageLabel } from '../../client/pages/keyword-api';
 
 const { api, action, panel } = vi.hoisted(() => ({
   api: vi.fn(),
@@ -944,4 +944,33 @@ test('group tabs stay on one line: those that do not fit go under More, and the 
     width.mockRestore();
     room.mockRestore();
   }
+});
+
+test('the market menu resets the language to the new country’s default after another language was chosen', async () => {
+  const user = userEvent.setup();
+  mount();
+  await screen.findByText('open source low code platform');
+  const bar = document.querySelector('[data-query-bar]') as HTMLElement;
+  await user.click(
+    within(bar).getByRole('button', { name: $t('common.unitedStatesEnglish') }),
+  );
+  const country = await screen.findByRole('combobox', {
+    name: $t('keywordMarket.country'),
+  });
+  const language = () =>
+    screen.getByRole('combobox', { name: $t('keywordMarket.language') });
+  const pick = async (code: number) => {
+    await user.clear(country);
+    await user.type(country, countryLabel(code));
+    await user.click(
+      await screen.findByRole('option', { name: countryLabel(code) }),
+    );
+  };
+  await pick(2702);
+  await user.click(language());
+  await user.click(
+    await screen.findByRole('option', { name: languageLabel('zh-CN') }),
+  );
+  await pick(2458);
+  expect(language()).toHaveTextContent(languageLabel('ms'));
 });
