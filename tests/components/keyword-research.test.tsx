@@ -38,11 +38,18 @@ const ITEMS: Record<string, ReturnType<typeof item>[]> = {
   related: [item('0', '低代码平台', 900), item('1', '无代码工具', 500)],
 };
 let runs: Record<string, unknown>[] = [];
+// Runs answered as reused (an earlier result, no new charge), and ways the server refuses.
+let reuse = false;
+let refuse: string[] = [];
+const { csv } = vi.hoisted(() => ({ csv: vi.fn(() => true) }));
+vi.mock('#components/seo/csv', () => ({ downloadCsv: csv }));
 
 beforeEach(() => {
   setDictionary(null);
   vi.clearAllMocks();
   runs = [];
+  reuse = false;
+  refuse = [];
   action.mockImplementation(
     async (
       _resource: string,
@@ -60,6 +67,7 @@ beforeEach(() => {
       if (name === 'ranks') return { connected: false, ranks: {} };
       if (name === 'run') {
         const view = String(body.view);
+        if (refuse.includes(view)) throw new Error('Monthly budget used up');
         const run = {
           id: String(runs.length + 1),
           status: 'completed',
@@ -76,6 +84,7 @@ beforeEach(() => {
           costUsd: 0.024,
           createdAt: '2026-11-25T08:00:00Z',
           completedAt: '2026-11-25T08:00:01Z',
+          ...(reuse && !body.forceRefresh ? { reused: true } : {}),
         };
         runs.push(run);
         return run;
@@ -168,4 +177,112 @@ test('Singapore in Simplified Chinese with two methods: two queries, shown befor
       .querySelector('[data-found-by]')
       ?.getAttribute('data-found-by'),
   ).toBe('related');
+});
+
+const runCalls = () =>
+  action.mock.calls
+    .filter((c) => c[1] === 'run')
+    .map((c) => (c[2] as { body: Record<string, unknown> }).body);
+const mount = (url = '/keywords?tab=research') =>
+  render(
+    <MemoryRouter initialEntries={[url]}>
+      <KeywordResearch embedded />
+    </MemoryRouter>,
+  );
+const pickMethod = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) => {
+  await user.click(
+    screen
+      .getAllByRole('button', { name: $t('keywordResearch.method') })
+      .find((b) => b.getAttribute('aria-haspopup') === 'menu')!,
+  );
+  await user.click(await screen.findByRole('menuitemcheckbox', { name }));
+  await user.keyboard('{Escape}');
+};
+
+test('Query again on a reused result looks up that result again, as many queries as it says, whatever the form says now', async () => {
+  const user = userEvent.setup();
+  reuse = true;
+  mount();
+  await pickMethod(user, $t('keyword.relatedSearches'));
+  await user.type(
+    await screen.findByRole('textbox', { name: $t('common.keywords') }),
+    '低代码',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await screen.findByText($t('common.queryAgain'));
+  // The form changes to one way and another keyword; the shown result still had two.
+  await pickMethod(user, $t('keyword.relatedSearches'));
+  await user.clear(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+    'crm',
+  );
+  expect(document.querySelector('[data-query-plan]')?.textContent).toContain(
+    $t('keywordResearch.queryPlan', { 0: 1, 1: '0.03' }),
+  );
+  expect(document.querySelector('[data-refresh-plan]')?.textContent).toBe(
+    $t('keywordResearch.queryPlan', { 0: 2, 1: '0.05' }),
+  );
+  action.mockClear();
+  await user.click(screen.getByText($t('common.queryAgain')));
+  await waitFor(() => expect(runCalls()).toHaveLength(2));
+  expect(
+    runCalls().map((b) => [
+      b.view,
+      b.target,
+      b.locationCode,
+      b.language,
+      b.forceRefresh,
+    ]),
+  ).toEqual([
+    ['suggestions', '低代码', 2840, 'en', true],
+    ['related', '低代码', 2840, 'en', true],
+  ]);
+});
+
+test('every row names its ways, for one way and when another way failed, in the table and the CSV', async () => {
+  const user = userEvent.setup();
+  mount();
+  await user.type(
+    await screen.findByRole('textbox', { name: $t('common.keywords') }),
+    '低代码',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await waitFor(() =>
+    expect(
+      [...document.querySelectorAll('[data-found-by]')].map((e) =>
+        e.getAttribute('data-found-by'),
+      ),
+    ).toEqual(['suggestions', 'suggestions']),
+  );
+
+  refuse = ['related'];
+  await pickMethod(user, $t('keyword.relatedSearches'));
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    $t('keyword.relatedSearches'),
+  );
+  expect(
+    [...document.querySelectorAll('[data-found-by]')].map((e) =>
+      e.getAttribute('data-found-by'),
+    ),
+  ).toEqual(['suggestions', 'suggestions']);
+  await user.click(
+    screen.getByRole('button', { name: $t('common.exportCsv') }),
+  );
+  const [, header, rows] = csv.mock.calls.at(-1) as unknown as [
+    string,
+    string[],
+    unknown[][],
+  ];
+  expect(header.at(-1)).toBe($t('keywordResearch.foundBy'));
+  expect(rows.map((r) => r.at(-1))).toEqual([
+    $t('keyword.containsTerm'),
+    $t('keyword.containsTerm'),
+  ]);
 });

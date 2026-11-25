@@ -14,6 +14,9 @@ test('the market list: each country once with its main language first, only the 
   expect(defaultLanguage(2702)).toBe('en');
   expect(countryLanguages(2702)).toEqual(['en', 'zh-CN']);
   expect(defaultLanguage(2158)).toBe('zh-TW');
+  // A country's own main language, not the one with the most keywords.
+  expect(countryLanguages(2458)).toEqual(['ms', 'en']);
+  expect(defaultLanguage(2458)).toBe('ms');
   expect(isKeywordMarket(2702, 'zh-CN')).toBe(true);
   expect(isKeywordMarket('2702', 'zh-CN')).toBe(true);
   expect(isKeywordMarket(2702, 'ja')).toBe(false);

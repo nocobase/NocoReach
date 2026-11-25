@@ -1,9 +1,11 @@
 /**
  * Every market DataForSEO's Google keyword data covers: a country (its DataForSEO location code and ISO code) and the
  * languages it has keyword data in, from DataForSEO Labs' locations_and_languages list of 2026-11-02 (Google rows
- * only). Each country's first language is its default, the one most of its keywords are in (Arabic first where the
- * list gives no count for it). Keywords › Find keywords and AI suggestions pick from this list, and the server accepts
- * only its pairs; names come from the reader's Intl data, see marketName.
+ * only). Each country's first language is its default: its national or main official language among those DataForSEO
+ * supports (Malay for Malaysia, Urdu for Pakistan, Filipino for the Philippines, Hindi for India, Arabic for Algeria),
+ * English where English is the main language of government and business (Singapore, Canada). Keywords › Find keywords
+ * and AI suggestions pick from this list, and the server accepts only its pairs; names come from the reader's Intl
+ * data, see marketName.
  */
 export const KEYWORD_COUNTRIES: readonly (readonly [
   locationCode: number,
@@ -11,7 +13,7 @@ export const KEYWORD_COUNTRIES: readonly (readonly [
   languages: readonly string[],
 ])[] = [
   [2008, 'AL', ['sq']], // Albania
-  [2012, 'DZ', ['fr', 'ar']], // Algeria
+  [2012, 'DZ', ['ar', 'fr']], // Algeria
   [2024, 'AO', ['pt']], // Angola
   [2031, 'AZ', ['az']], // Azerbaijan
   [2032, 'AR', ['es']], // Argentina
@@ -49,7 +51,7 @@ export const KEYWORD_COUNTRIES: readonly (readonly [
   [2320, 'GT', ['es']], // Guatemala
   [2344, 'HK', ['zh-TW', 'en']], // Hong Kong
   [2348, 'HU', ['hu']], // Hungary
-  [2356, 'IN', ['en', 'hi']], // India
+  [2356, 'IN', ['hi', 'en']], // India
   [2360, 'ID', ['id', 'en']], // Indonesia
   [2372, 'IE', ['en']], // Ireland
   [2376, 'IL', ['he', 'ar']], // Israel
@@ -62,7 +64,7 @@ export const KEYWORD_COUNTRIES: readonly (readonly [
   [2410, 'KR', ['ko']], // South Korea
   [2428, 'LV', ['lv']], // Latvia
   [2440, 'LT', ['lt']], // Lithuania
-  [2458, 'MY', ['en', 'ms']], // Malaysia
+  [2458, 'MY', ['ms', 'en']], // Malaysia
   [2470, 'MT', ['en']], // Malta
   [2484, 'MX', ['es']], // Mexico
   [2492, 'MC', ['fr']], // Monaco
@@ -73,11 +75,11 @@ export const KEYWORD_COUNTRIES: readonly (readonly [
   [2558, 'NI', ['es']], // Nicaragua
   [2566, 'NG', ['en']], // Nigeria
   [2578, 'NO', ['nb']], // Norway
-  [2586, 'PK', ['en', 'ur']], // Pakistan
+  [2586, 'PK', ['ur', 'en']], // Pakistan
   [2591, 'PA', ['es']], // Panama
   [2600, 'PY', ['es']], // Paraguay
   [2604, 'PE', ['es']], // Peru
-  [2608, 'PH', ['en', 'tl']], // Philippines
+  [2608, 'PH', ['tl', 'en']], // Philippines
   [2616, 'PL', ['pl']], // Poland
   [2620, 'PT', ['pt']], // Portugal
   [2642, 'RO', ['ro']], // Romania

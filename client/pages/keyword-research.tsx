@@ -55,6 +55,10 @@ export const getMonths = () => ([$t('keywordResearch.jan'), $t('keywordResearch.
 const fmtTime = (v?: string | null) => formatDateTime(v);
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const viewName = (v: string) => getResearchViews()[v as View] ?? v;
+/** What one search looks up: the keyword, the market and the ways, one query each. */
+type Plan = { target: string; market: { locationCode: number; language: string }; views: View[] };
+/** "Queries this time: 2 · up to $0.05" for a plan's ways, on the same list price the server stores. */
+const planText = (views: View[]) => $t('keywordResearch.queryPlan', { 0: views.length, 1: usdUpTo(views.reduce((n, v) => n + researchQueryUsd(v, RESEARCH_LIMIT), 0)) });
 /** The ways in the URL's view (one or several, comma separated), in the page's order; Contains the term when none. */
 const viewsOf = (value: string | null) => { const want = (value ?? "").split(","); const views = VIEWS.filter((v) => want.includes(v)); return views.length ? views : (["suggestions"] as View[]); };
 
@@ -141,13 +145,14 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
     p.set("run", list.map((r) => String(r.id)).join(",")); p.set("q", spec.target); p.set("view", list.map((r) => r.spec.view).join(",")); p.set("loc", String(spec.locationCode)); p.set("lang", spec.language);
     setParams(p, { replace: true });
   };
-  // One query for each way chosen, each billed and reused (30 days) on its own; only this click starts them.
-  const search = async (forceRefresh = false, views = form.views) => {
-    const target = form.target.trim();
+  // One query for each way of the plan, each billed and reused (30 days) on its own; only a click starts them. The
+  // plan is the form for Query and the shown result for Query again, so what is sent is what the button said.
+  const search = async (plan: Plan, forceRefresh = false) => {
+    const target = plan.target.trim(), { market: m, views } = plan;
     if (target.length < 2) { setError(() => ($t('keywordResearch.enterKeywordLeast2Characters'))); return; }
     setBusy(true); setError("");
     try {
-      const settled = await Promise.allSettled(views.map((view) => keywordRequest<ResearchRun>("run", { target, view, locationCode: form.market.locationCode, language: form.market.language, limit: RESEARCH_LIMIT, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
+      const settled = await Promise.allSettled(views.map((view) => keywordRequest<ResearchRun>("run", { target, view, locationCode: m.locationCode, language: m.language, limit: RESEARCH_LIMIT, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
       const done = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       const failed = settled.flatMap((r, i) => (r.status === "rejected" ? [{ view: views[i], reason: r.reason as unknown }] : []));
       const message = (e: unknown) => (e instanceof Error ? $legacyText(e.message) : $t('common.lookupNotCompleteTryAgain'));
@@ -167,7 +172,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
         <EmptyState icon={<Search />} title={$t('common.connectDataforseoFirst')} description={$t('keywordResearch.findKeywordsUsesDataforseoData')} action={<Button onClick={() => navigate("/connections?source=keywords")}>{$t('common.goDataSources')}</Button>} />
       ) : (
         <Card className="px-4">
-          <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void search(); }}>
+          <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void search(form); }}>
             <div className="relative min-w-0 flex-1 lg:max-w-md">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="pl-8" aria-label={$t('common.keywords')} placeholder={$t('keywordResearch.enterKeywordExampleOpenSource')} maxLength={100} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
@@ -178,7 +183,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
             </div>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t('common.querying') : $t('common.query')}</Button>
             <span className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground" data-query-plan>
-              {$t('keywordResearch.queryPlan', { 0: form.views.length, 1: usdUpTo(form.views.reduce((n, v) => n + researchQueryUsd(v, RESEARCH_LIMIT), 0)) })}
+              {planText(form.views)}
               <InfoTip label={$t('keywordResearch.method')}>{$t('keywordResearch.searchModesHelp')} {$t('keywordResearch.queryCostHelp', { 0: usdUpTo(researchQueryUsd("suggestions", RESEARCH_LIMIT)), 1: RESEARCH_LIMIT })}</InfoTip>
             </span>
           </form>
@@ -186,7 +191,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
         </Card>
       )}
       {runs ? (
-        <Results runs={runs} ranks={ranks} reused={reused} busy={busy} onRefresh={() => void search(true, runs.map((r) => r.spec.view as View))} projectId={project?.id} />
+        <Results runs={runs} ranks={ranks} reused={reused} busy={busy} onRefresh={(plan) => void search(plan, true)} projectId={project?.id} />
       ) : !notConnected ? (
         <RecentList recent={recent} onOpen={(id) => { const p = new URLSearchParams(params); p.set("run", id); setParams(p, { replace: true }); }} />
       ) : null}
@@ -245,9 +250,11 @@ function MethodPicker({ value, onChange }: { value: View[]; onChange: (views: Vi
 }
 
 const helper = createColumnHelper<Row>();
-function Results({ runs, ranks, reused, busy, onRefresh, projectId }: { runs: ResearchRun[]; ranks?: Ranks; reused: boolean; busy: boolean; onRefresh: () => void; projectId?: number }) {
+function Results({ runs, ranks, reused, busy, onRefresh, projectId }: { runs: ResearchRun[]; ranks?: Ranks; reused: boolean; busy: boolean; onRefresh: (plan: Plan) => void; projectId?: number }) {
   const done = runs.filter((r) => r.status === "completed"), unfinished = runs.filter((r) => r.status !== "completed");
-  const run = done[0] ?? runs[0], merged = runs.length > 1;
+  const run = done[0] ?? runs[0];
+  // Query again looks up exactly the result shown: its keyword, market and ways, whatever the form says now.
+  const again: Plan = { target: run.spec.target, market: { locationCode: run.spec.locationCode, language: run.spec.language }, views: runs.map((r) => r.spec.view as View) };
   const items = useMemo(() => mergeRuns(runs), [runs]);
   const views = joinList(runs.map((r) => viewName(r.spec.view)));
   const latest = done.map((r) => r.completedAt || r.createdAt).sort().at(-1);
@@ -272,10 +279,10 @@ function Results({ runs, ranks, reused, busy, onRefresh, projectId }: { runs: Re
       helper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<Row>,
       helper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<Row>,
       helper.display({ id: "rank", header: () => <span title={$t('keywordResearch.averageGooglePositionOverLast')}>{$t('common.sitePosition')}</span>, cell: ({ row }) => { const r = rankOf(ranks, row.original.keyword); return r ? r.position.toFixed(1) : "—"; }, meta: right }) as ColumnDef<Row>,
-      // Which ways found the keyword, when the search used more than one.
-      ...(merged ? [helper.display({ id: "views", header: () => $t('keywordResearch.foundBy'), cell: ({ row }) => <span className="flex flex-wrap gap-1" data-found-by={row.original.views.join(",")}>{row.original.views.map((v) => <span key={v} className="rounded-md bg-muted px-1.5 py-0.5 text-xs whitespace-nowrap text-muted-foreground">{viewName(v)}</span>)}</span> }) as ColumnDef<Row>] : []),
+      // Which ways found the keyword, for one way as for several.
+      helper.display({ id: "views", header: () => $t('keywordResearch.foundBy'), cell: ({ row }) => <span className="flex flex-wrap gap-1" data-found-by={row.original.views.join(",")}>{row.original.views.map((v) => <span key={v} className="rounded-md bg-muted px-1.5 py-0.5 text-xs whitespace-nowrap text-muted-foreground">{viewName(v)}</span>)}</span> }) as ColumnDef<Row>,
     ],
-    [anchorRef, ranks, merged],
+    [anchorRef, ranks],
   );
   const table = useDataTable({
     data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true,
@@ -289,7 +296,7 @@ function Results({ runs, ranks, reused, busy, onRefresh, projectId }: { runs: Re
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (items: Row[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
   const csv = (list: Row[]) =>
-    downloadCsv($t('keywordResearch.keywordResearch',{0:run.spec.target,1:marketLabel(run.spec)}), [$t('common.keywords'), $t('common.monthlyVolume'), "CPC", $t('keywordResearch.competition'), $t('common.difficulty'), $t('common.intent'), $t('common.sitePosition'), ...(merged ? [$t('keywordResearch.foundBy')] : [])], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, getIntentLabels()[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? "", ...(merged ? [joinList(r.views.map(viewName))] : [])])) || toast.error(() => ($t('common.noKeywordsExport')));
+    downloadCsv($t('keywordResearch.keywordResearch',{0:run.spec.target,1:marketLabel(run.spec)}), [$t('common.keywords'), $t('common.monthlyVolume'), "CPC", $t('keywordResearch.competition'), $t('common.difficulty'), $t('common.intent'), $t('common.sitePosition'), $t('keywordResearch.foundBy')], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, getIntentLabels()[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? "", joinList(r.views.map(viewName))])) || toast.error(() => ($t('common.noKeywordsExport')));
   // Each keyword is saved from the first run that found it, one request per run.
   const save = async () => {
     try {
@@ -308,7 +315,7 @@ function Results({ runs, ranks, reused, busy, onRefresh, projectId }: { runs: Re
   return (
     <div className="space-y-4">
       {reused ? (
-        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$tj('keywordResearch.resultNoNewCharge',{0:fmtTime(latest)})}<InfoTip>{$t('keywordResearch.sameCriteriaCheckedLast30')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={onRefresh}>{$t('common.queryAgain')}</Button></p>
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$tj('keywordResearch.resultNoNewCharge',{0:fmtTime(latest)})}<InfoTip>{$t('keywordResearch.sameCriteriaCheckedLast30')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => onRefresh(again)}>{$t('common.queryAgain')}</Button><span data-refresh-plan>{planText(again.views)}</span></p>
       ) : null}
       {unfinished.map((r) => <p key={r.id} role="status" className="text-xs text-muted-foreground" data-unfinished={r.spec.view}>{$t('keywordResearch.methodNotComplete', { 0: viewName(r.spec.view), 1: getStatusText()[r.status] ?? researchRunError(r.errorCode) })}</p>)}
       {seed ? <OverviewStats item={seed} rank={rankOf(ranks, seed.keyword)} /> : null}
