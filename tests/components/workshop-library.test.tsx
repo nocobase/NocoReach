@@ -95,7 +95,7 @@ it('lists every article with its date, clicks and the forms made from it, lit or
   expect(within(first).getByText('release-notes')).toBeInTheDocument();
   expect(within(first).getByText('/blog/release-notes')).toBeInTheDocument();
   expect(within(first).getByText('40')).toBeInTheDocument();
-  // X and community posts lit, the community icon counting two; LinkedIn and Xiaohongshu grey.
+  // X and community posts lit, the community icon counting two; LinkedIn and Carousel grey.
   const lit = (row: HTMLElement) =>
     [...row.querySelectorAll('[data-form]')].map((el) => [
       el.getAttribute('data-form'),
@@ -104,7 +104,7 @@ it('lists every article with its date, clicks and the forms made from it, lit or
   expect(lit(first)).toEqual([
     ['x', true],
     ['linkedin', false],
-    ['xhs', false],
+    ['carousel', false],
     ['community', true],
   ]);
   expect(first.querySelector('[data-form="community"]')).toHaveTextContent('2');
@@ -113,7 +113,12 @@ it('lists every article with its date, clicks and the forms made from it, lit or
     row.querySelector(`[data-form="${form}"] [data-slot="source-logo"]`);
   expect(mark(first, 'community')).toHaveClass('text-foreground');
   expect(mark(first, 'linkedin')).toHaveClass('opacity-30');
-  expect(mark(first, 'xhs')).toHaveClass('opacity-30', 'rounded-[3px]');
+  expect(
+    first.querySelector('[data-form="carousel"] > [aria-hidden]'),
+  ).toHaveClass('opacity-30');
+  expect(
+    first.querySelector('[data-form="carousel"]')?.getAttribute('aria-label'),
+  ).toBe('Carousel · Not adapted');
   // What each icon stands for, with its tasks and where they stand.
   expect(
     first.querySelector('[data-form="x"]')?.getAttribute('aria-label'),
@@ -130,6 +135,34 @@ it('lists every article with its date, clicks and the forms made from it, lit or
   // Read-only: no checkboxes, one Adapt per row.
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.getAllByRole('button', { name: 'Adapt' })).toHaveLength(2);
+});
+
+it('lights one Carousel icon for every place a carousel went, naming the places first', () => {
+  const made = article('/blog/choose-pm-tool', {
+    made: [
+      { form: 'xhs', taskId: '41', no: 41, standing: 'done' },
+      { form: 'linkedin-carousel', taskId: '52', no: 52, standing: 'done' },
+      { form: 'instagram', taskId: '53', no: 53, standing: 'review' },
+    ],
+  });
+  const { unmount } = render(
+    <MemoryRouter>
+      <Library view={view([made])} />
+    </MemoryRouter>,
+  );
+  const icon = () =>
+    screen.getAllByRole('row')[1].querySelector('[data-form="carousel"]')!;
+  expect(icon()).toHaveAttribute('data-lit');
+  expect(icon()).toHaveTextContent('3');
+  expect(icon().querySelector('[aria-hidden]')).toHaveClass('text-foreground');
+  // Places in the reader's order: Xiaohongshu last outside Chinese.
+  expect(icon().getAttribute('aria-label')).toBe(
+    'Carousel: Instagram, LinkedIn, Xiaohongshu; T-41 Xiaohongshu carousel · Done; T-52 LinkedIn carousel · Done; T-53 Instagram carousel · Needs you',
+  );
+  expect(
+    screen.getAllByRole('row')[1].querySelectorAll('[data-form]'),
+  ).toHaveLength(4);
+  unmount();
 });
 
 it('filters by whether anything was made, searches titles and links, and shows more after 20', async () => {

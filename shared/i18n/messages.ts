@@ -92,6 +92,14 @@ const currentSystemText = new Map<string, MessageKey>(
     'workshop.pickDestination',
     'workshop.loadFailed',
     'workshop.playbookMismatch',
+    // Carousel (2026-11-24): the Instagram and LinkedIn places' playbooks and the refusal of a carousel with no place.
+    'playbooks.instagramCarousel',
+    'playbooks.instagramCarouselDescription',
+    'playbooks.instagramCarouselInstruction',
+    'playbooks.linkedinCarousel',
+    'playbooks.linkedinCarouselDescription',
+    'playbooks.linkedinCarouselInstruction',
+    'workshop.pickCarouselPlace',
     // Analysis rules named by the Opportunities type they find (2026-11-17, analysis-rules.ts) and the Skills in the
     // daily analysis (skill-analysis.ts): rule labels, a full scheme's refusal and what a Skill's finding says.
     'growth.kind.topicRise',

@@ -1,4 +1,5 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { CARD_RESULT_KINDS } from '../../../shared/repurpose.js';
 import type {
   Agents,
   CallerIdentity,
@@ -281,14 +282,14 @@ export class TaskBusiness {
     });
   }
   /**
-   * An image for the run's result (`task file`, 2026-11-16): only a Xiaohongshu cards run uploads, a PNG of the card
-   * size each, at most AGENT_FILES per run. The colors NocoReach counted on it are kept with the run, for the checks
-   * the review card shows once the result links the images.
+   * An image for the run's result (`task file`, 2026-11-16): only a run making cards (Xiaohongshu, Instagram, LinkedIn)
+   * uploads, a PNG of a card size each (3:4 or 4:5), at most AGENT_FILES per run. The colors NocoReach counted on it and
+   * its height are kept with the run, for the checks the review card shows once the result links the images.
    */
   async file(identity: CallerIdentity, file: File): Promise<AgentImage> {
     const run = await this.current(identity);
     const input = JSON.parse(run.input) as TaskInput;
-    if (input.resultKind !== 'xhsCards')
+    if (!CARD_RESULT_KINDS.includes(String(input.resultKind)))
       return fail(systemMessageText('agentResult.fileUnavailable'), 409);
     const attachments = this.tasks.p.taskAttachments;
     if (!attachments)
@@ -297,11 +298,13 @@ export class TaskBusiness {
     await this.tasks.lock(run.projectId, run.taskId, async (tx) => {
       const key = this.tasks.key('files', run.projectId, run.taskId, run.id);
       const kept =
-        (await this.tasks.snapshot<Record<string, { colors?: string[] }>>(
-          key,
-          tx,
-        )) || {};
-      kept[image.id] = image.colors ? { colors: image.colors } : {};
+        (await this.tasks.snapshot<
+          Record<string, { colors?: string[]; height?: number }>
+        >(key, tx)) || {};
+      kept[image.id] = {
+        ...(image.colors ? { colors: image.colors } : {}),
+        height: image.height,
+      };
       await this.tasks.put(key, kept, tx);
     });
     return image;

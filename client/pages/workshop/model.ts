@@ -16,8 +16,11 @@ import type {
   HotDiscussion,
 } from '../../../shared/workshop-recommend.js';
 import {
+  CARD_SPECS,
   destinationLabel,
   destinationName,
+  isCarouselForm,
+  type CarouselForm,
   type Destination,
   type Repurpose,
   type RepurposeForm,
@@ -123,7 +126,7 @@ export type WorkshopRecord = {
   standing: Standing;
   failed?: boolean;
   restart?: boolean;
-  /** A Xiaohongshu set's number of cards. */
+  /** A carousel's number of cards, or a LinkedIn document's pages. */
   cards?: number;
 };
 export type Community = { name: string; url: string; sections: string[] };
@@ -143,7 +146,7 @@ export type WorkshopView = {
   brand: Brand;
   /** The website's icon, which signs the cards when the brand kit has no logo. */
   siteIcon: string | null;
-  /** The latest Xiaohongshu set's cards, which the card styles are previewed with, and what it was made from. */
+  /** The latest carousel's cards, which the card styles are previewed with, and what it was made from. */
   cardSample: { subject: string; cards: TemplateCard[] } | null;
   /** My styles: card styles made with AI and saved to the project. */
   styles: SavedStyle[];
@@ -227,24 +230,50 @@ export const workshopRequest = <T>(
     signal,
   });
 
-/** Each form's name, in the interface language. */
+/**
+ * Each form's name, in the interface language. A carousel is named by its place ("Instagram carousel"), as its task's
+ * title names it; Carousel itself is `workshop.formCarousel`.
+ */
 export const getFormNames = (): Record<RepurposeForm, string> => ({
   xhs: $t('workshop.formXhs'),
+  instagram: $t('workshop.formInstagram'),
+  'linkedin-carousel': $t('workshop.formLinkedinCarousel'),
   x: $t('workshop.formX'),
   linkedin: $t('workshop.formLinkedin'),
   community: $t('workshop.formCommunity'),
 });
 
-/** What a task makes: "LinkedIn post", "Community post · Hacker News", "Xiaohongshu note · 8 cards". */
+/** A carousel's place, as step 2 lists it: Xiaohongshu, Instagram, LinkedIn. */
+export const carouselPlaceName = (form: CarouselForm) =>
+  form === 'xhs'
+    ? $t('workshop.placeXhs')
+    : form === 'instagram'
+      ? 'Instagram'
+      : 'LinkedIn';
+
+/** A carousel's count: "8 cards", or a LinkedIn document's "8 pages". */
+export const cardCountText = (form: RepurposeForm, n: number) =>
+  $t(
+    form === 'linkedin-carousel' ? 'workshop.pageCount' : 'workshop.cardCount',
+    {
+      0: n,
+    },
+  );
+
+/**
+ * What a task makes: "LinkedIn post", "Community post · Hacker News", "Carousel · Instagram · 8 cards". A carousel
+ * reads like a community post, its place after the form, so an older Xiaohongshu task reads Carousel · Xiaohongshu.
+ */
 export const outputLabel = (
   form: RepurposeForm,
   destination?: Destination,
   cards?: number,
 ) =>
   [
-    getFormNames()[form],
+    isCarouselForm(form) ? $t('workshop.formCarousel') : getFormNames()[form],
+    isCarouselForm(form) ? carouselPlaceName(form) : '',
     destination ? destinationLabel(destination) : '',
-    cards ? $t('workshop.cardCount', { 0: cards }) : '',
+    cards ? cardCountText(form, cards) : '',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -253,15 +282,33 @@ export const outputLabel = (
 export const logoOf = (form: RepurposeForm, destination?: Destination) =>
   form === 'x'
     ? 'x'
-    : form === 'linkedin'
+    : form === 'linkedin' || form === 'linkedin-carousel'
       ? 'linkedin'
       : form === 'xhs'
         ? 'xiaohongshu'
-        : destination?.kind === 'reddit'
-          ? 'reddit'
-          : destination?.kind === 'hn'
-            ? 'hackernews'
-            : 'community';
+        : form === 'instagram'
+          ? 'instagram'
+          : destination?.kind === 'reddit'
+            ? 'reddit'
+            : destination?.kind === 'hn'
+              ? 'hackernews'
+              : 'community';
+
+/** A carousel's size as step 2 and the review card name it: "3:4 · 1080×1440". */
+export const cardSizeText = (form: CarouselForm) =>
+  `${CARD_SPECS[form].ratio} · ${CARD_SPECS[form].width}×${CARD_SPECS[form].height}`;
+
+/**
+ * Whether an article is in Chinese, simplified or traditional: WeChat layout is only offered for one. The version's
+ * language when the site says it, else its title: Han characters and no kana or Hangul.
+ */
+export function isChineseSource(lang: string | undefined, title: string) {
+  if (lang) return /^zh\b/i.test(lang);
+  return (
+    /\p{Script=Han}/u.test(title) &&
+    !/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(title)
+  );
+}
 
 /** A task's status in the words of the task page header and the board: Needs you, In progress, Done. */
 export const standingText = (s: Standing): string =>

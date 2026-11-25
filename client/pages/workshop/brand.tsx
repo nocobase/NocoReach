@@ -29,9 +29,9 @@ import {
 type Fields = { name: string; url: string; sections: string };
 
 /**
- * Brand and templates (Content workshop): the card style Xiaohongshu cards are drawn in and the brand basics every style
- * uses (PR 2), the voice adaptations are written in, which lives in Memory and is changed there, and the project's own
- * community, its sections the destinations a community post can go to (PR 1).
+ * Brand and templates (Content workshop): the card style carousels are drawn in, at 3:4 and 4:5, and the brand basics
+ * every style uses (PR 2), the voice adaptations are written in, which lives in Memory and is changed there, and the
+ * project's own community, its sections the destinations a community post can go to (PR 1).
  */
 export default function WorkshopBrand() {
   useNocoReachLocale();

@@ -237,7 +237,7 @@ test('imports the demo through the API and clears all business data while preser
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [
-    [main, 'Acme', 'acme.example', 63],
+    [main, 'Acme', 'acme.example', 65],
     [second, 'Acme CRM', 'crm.acme.example', 39],
   ] as const) {
     const project = await runtime.plugin.projects.get(id);
@@ -265,6 +265,27 @@ test('imports the demo through the API and clears all business data while preser
         expect(work.images).toEqual(cards.images.map((image) => image.id));
         expect(cards).toMatchObject({ sections: 4, colors: expect.any(Array) });
       }
+      // Carousel (2026-11-24): an Instagram set awaiting review and a LinkedIn one done, both drawn at 4:5.
+      const portrait = rows
+        .map((row) => projectWork(row.toJSON()))
+        .filter((work) =>
+          ['instagram', 'linkedin-carousel'].includes(
+            String(work.repurpose?.form),
+          ),
+        );
+      expect(
+        portrait.map((work) => [
+          work.repurpose?.form,
+          work.results[0]?.cards?.images.length,
+          work.results[0]?.cards?.ratio,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ['instagram', 8, '4:5'],
+          ['linkedin-carousel', 8, '4:5'],
+        ]),
+      );
+      expect(portrait).toHaveLength(2);
       const image = carded[1].results[0]!.cards!.images[0];
       const read = await admin.fetch(
         `http://localhost${testApp.publicBasePath}${image.ref}`,

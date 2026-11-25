@@ -9,6 +9,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { $t } from '#i18n';
+import { Segmented } from '#components/reach/segmented';
 import { Button } from '#components/ui/button';
 import {
   Dialog,
@@ -22,7 +23,6 @@ import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
 import { Spinner } from '#components/ui/spinner';
 import { Textarea } from '#components/ui/textarea';
-import { renderCards } from '#lib/card-render';
 import { cn } from '#lib/utils';
 import { pixelColors, setColors } from '../../../shared/card-colors.js';
 import {
@@ -36,13 +36,19 @@ import {
   type DesignFont,
   type SavedStyle,
 } from '../../../shared/card-design.js';
-import { XHS, cardChars } from '../../../shared/repurpose.js';
+import { CARD, cardChars } from '../../../shared/repurpose.js';
 import {
   cardStyle,
   type CardStyle,
   type TemplateCard,
 } from '../../../shared/xhs-card.js';
 import { CardFrame } from './card-frame.js';
+import {
+  drawCheck,
+  fitChecks,
+  type FitResult,
+  type Ratio,
+} from './style-fit.js';
 import {
   brandCardsOf,
   errorText,
@@ -52,16 +58,17 @@ import {
 
 // Card style › New style (2026-11-17 user decision; mockup xhs-card-styles.html frame 3): the person describes the look
 // in a sentence, with a card they like if they want; the model on Editing and suggestions writes a whole style
-// (card-styles.ts), which is drawn here with the cards' real text in sandboxed frames and checked: every card's text fits,
-// the latest set's longest and shortest cards and a card of the most text a card may hold among them, in at most three
-// colors and the fonts NocoReach allows. They can ask for changes or a new one, and save it to My styles when it fits.
+// (card-styles.ts), which is drawn here with the cards' real text in sandboxed frames and checked: every card's text fits
+// at 3:4 and at 4:5 (2026-11-24; style-fit.ts), with the full cards a card may hold among them, in at most three colors
+// and the fonts NocoReach allows. They can ask for changes or a new one, and save it to My styles when it fits. Adjust
+// with AI opens it on one of My styles that does not fit at 4:5, and saves the change as a new style.
 
 type Draft = { name: string; summary: string; design: CardDesign };
 type ModelInfo = { configured: boolean; images: boolean };
 type Checked =
   | { state: 'measuring' }
   | { state: 'failed' }
-  | { state: 'done'; overflow: number[]; colors: string[] };
+  | { state: 'done'; sizes: FitResult[]; colors: string[] };
 
 const IMAGE_SIDE = 1024;
 const IMAGE_FILE_MAX = 20 * 1024 * 1024;
@@ -96,31 +103,6 @@ async function colorsOf(image: Blob): Promise<string[]> {
   );
 }
 
-/** The card with the most text a card may hold: the longest card of text, its text repeated up to the limit. */
-function fullestCard(cards: TemplateCard[]): TemplateCard {
-  const base = [...cards]
-    .filter((c) => c.layout === 'text')
-    .sort((a, b) => cardChars(b) - cardChars(a))[0] || {
-    layout: 'text' as const,
-    heading: $t('workshop.sampleCardHeading'),
-    text: $t('workshop.sampleCardText'),
-  };
-  let text = base.text;
-  while (cardChars({ heading: base.heading, text }) < XHS.cardChars)
-    text += `\n${base.text}`;
-  let room = XHS.cardChars - cardChars({ heading: base.heading, text: '' });
-  let end = 0;
-  for (const ch of text) {
-    if (!/\s/.test(ch) && room-- <= 0) break;
-    end += ch.length;
-  }
-  return {
-    layout: 'text',
-    heading: base.heading,
-    text: text.slice(0, end).trim(),
-  };
-}
-
 /** The model's name for a style, numbered (" 2", " 3") when My styles already has one so called. */
 function freeName(name: string, taken: string[]): string {
   if (!taken.includes(name)) return name;
@@ -145,6 +127,7 @@ export function CardStyleMaker({
   siteIcon,
   project,
   taken,
+  start,
   onClose,
   onSaved,
 }: {
@@ -156,6 +139,8 @@ export function CardStyleMaker({
   project: { name?: string; site?: string };
   /** My styles' names, which a new one may not take. */
   taken: string[];
+  /** One of My styles to adjust (Adjust with AI): shown as the draft, and saved as a new style. */
+  start?: SavedStyle;
   onClose: () => void;
   onSaved: (style: SavedStyle) => void;
 }) {
@@ -164,10 +149,18 @@ export function CardStyleMaker({
     null,
   );
   const [model, setModel] = useState<ModelInfo | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(() =>
+    start
+      ? { name: start.name, summary: start.summary, design: start.design }
+      : null,
+  );
   const [made, setMade] = useState(0);
   const [change, setChange] = useState('');
-  const [name, setName] = useState('');
+  // The size the cards are previewed at; both are checked.
+  const [ratio, setRatio] = useState<Ratio>('3:4');
+  const [name, setName] = useState(() =>
+    start ? freeName(start.name, taken) : '',
+  );
   const [busy, setBusy] = useState<'draft' | 'change' | 'save' | null>(null);
   const [failure, setFailure] = useState('');
   // The checks of the style they were made on; a style not checked yet is being measured.
@@ -192,8 +185,8 @@ export function CardStyleMaker({
     };
   }, [projectId]);
 
-  // The cards checked: the latest set's (or the sample's) and the fullest a card may be; four are shown.
-  const checks = useMemo(() => [...cards, fullestCard(cards)], [cards]);
+  // The cards checked at each size: the latest set's (or the sample's) and the full cards; four are shown.
+  const checks = useMemo(() => fitChecks(cards), [cards]);
   const shown = useMemo(() => {
     const texts = cards
       .map((c, i) => ({ c, n: i + 1 }))
@@ -227,21 +220,27 @@ export function CardStyleMaker({
       ? result.checked
       : { state: 'measuring' };
 
-  // Every check card drawn as the Agent would draw it; the colors are counted on the cards shown and the fullest one.
+  // Every check card drawn as the Agent would draw it, at both sizes; the colors are counted on the 3:4 cards shown and
+  // the full one.
   useEffect(() => {
     if (!style) return;
     let live = true;
-    renderCards(style, checks)
-      .then(async ({ images, overflow }) => {
+    Promise.all(checks.map((check) => drawCheck(style, check)))
+      .then(async (drawn) => {
+        const first = drawn[0];
         const counted = await Promise.all(
-          [...shown.map((n) => n - 1), checks.length - 1].map((i) =>
-            colorsOf(images[i]),
+          [...shown.map((n) => n - 1), checks[0].fullChars - 1].map((i) =>
+            colorsOf(first.images[i]),
           ),
         );
         if (live)
           setResult({
             style,
-            checked: { state: 'done', overflow, colors: setColors(counted) },
+            checked: {
+              state: 'done',
+              sizes: drawn.map(({ ratio, overflow }) => ({ ratio, overflow })),
+              colors: setColors(counted),
+            },
           });
       })
       .catch(() => {
@@ -320,7 +319,9 @@ export function CardStyleMaker({
     }
   };
 
-  const fits = checked?.state === 'done' && checked.overflow.length === 0;
+  const fits =
+    checked?.state === 'done' &&
+    checked.sizes.every((size) => size.overflow.length === 0);
   const trimmed = name.trim();
   const nameProblem = !trimmed
     ? ''
@@ -361,9 +362,15 @@ export function CardStyleMaker({
     >
       <DialogContent className='max-h-[94vh] overflow-y-auto sm:max-w-[1040px]'>
         <DialogHeader>
-          <DialogTitle>{$t('workshop.newStyleTitle')}</DialogTitle>
+          <DialogTitle>
+            {start
+              ? $t('workshop.adjustStyleTitle', { 0: start.name })
+              : $t('workshop.newStyleTitle')}
+          </DialogTitle>
           <DialogDescription>
-            {$t('workshop.newStyleDescription')}
+            {start
+              ? $t('workshop.adjustStyleDescription')
+              : $t('workshop.newStyleDescription')}
           </DialogDescription>
         </DialogHeader>
         {model && !model.configured ? <NoModel /> : null}
@@ -475,6 +482,13 @@ export function CardStyleMaker({
           <div className='min-w-0 space-y-3'>
             {style ? (
               <>
+                <Segmented
+                  size='sm'
+                  label={$t('workshop.previewSize')}
+                  options={checks.map((c) => ({ id: c.ratio, label: c.ratio }))}
+                  value={ratio}
+                  onChange={(id) => setRatio(id as Ratio)}
+                />
                 <ul className='flex flex-wrap gap-2' aria-label={draft?.name}>
                   {shown.map((n) => (
                     <li key={n}>
@@ -483,6 +497,7 @@ export function CardStyleMaker({
                         cards={cards}
                         n={n}
                         width={148}
+                        size={checks.find((c) => c.ratio === ratio)!.size}
                         title={cards[n - 1].heading || cards[n - 1].text}
                       />
                     </li>
@@ -503,33 +518,22 @@ export function CardStyleMaker({
                     <Check ok={false}>{$t('workshop.styleCheckFailed')}</Check>
                   ) : checked?.state === 'done' ? (
                     <>
-                      <Check ok={fits}>
-                        {fits
-                          ? $t('workshop.styleFits', {
-                              0: checks.length,
-                              1: XHS.cardChars,
-                            })
-                          : $t('workshop.styleOverflow', {
-                              0: checked.overflow
-                                .map((n) =>
-                                  n === checks.length
-                                    ? $t('workshop.styleFullestCard', {
-                                        0: XHS.cardChars,
-                                      })
-                                    : $t('workshop.pieceCard', { 0: n }),
-                                )
-                                .join($t('workshop.listSeparator')),
-                            })}
-                      </Check>
-                      <Check ok={checked.colors.length <= XHS.colors} warn>
-                        {checked.colors.length <= XHS.colors
+                      {checked.sizes.map((size, i) => (
+                        <SizeCheck
+                          key={size.ratio}
+                          result={size}
+                          check={checks[i]}
+                        />
+                      ))}
+                      <Check ok={checked.colors.length <= CARD.colors} warn>
+                        {checked.colors.length <= CARD.colors
                           ? $t('workshop.styleColors', {
                               0: checked.colors.length,
-                              1: XHS.colors,
+                              1: CARD.colors,
                             })
                           : $t('workshop.styleColorsOver', {
                               0: checked.colors.length,
-                              1: XHS.colors,
+                              1: CARD.colors,
                             })}
                       </Check>
                       <Check ok={usesLogo} warn>
@@ -671,6 +675,44 @@ function Check({
       <Icon className='size-3.5 shrink-0' aria-hidden='true' />
       {children}
     </li>
+  );
+}
+
+/** Whether every card's text fits at one size: "All 9 cards fit at 4:5 (including …)", or the cards that do not. */
+function SizeCheck({
+  result,
+  check,
+}: {
+  result: FitResult;
+  check: ReturnType<typeof fitChecks>[number];
+}) {
+  const label = (n: number) =>
+    n === check.fullChars
+      ? $t('workshop.styleFullestCard', { 0: CARD.cardChars })
+      : n === check.fullWords
+        ? $t('workshop.styleFullEnglishCard', { 0: CARD.cardWords })
+        : $t('workshop.pieceCard', { 0: n });
+  const ok = result.overflow.length === 0;
+  return (
+    <Check ok={ok}>
+      {ok
+        ? check.fullWords
+          ? $t('workshop.styleFitsBoth', {
+              0: result.ratio,
+              1: check.cards.length,
+              2: CARD.cardChars,
+              3: CARD.cardWords,
+            })
+          : $t('workshop.styleFitsAt', {
+              0: result.ratio,
+              1: check.cards.length,
+              2: CARD.cardChars,
+            })
+        : $t('workshop.styleOverflowAt', {
+            0: result.ratio,
+            1: result.overflow.map(label).join($t('workshop.listSeparator')),
+          })}
+    </Check>
   );
 }
 

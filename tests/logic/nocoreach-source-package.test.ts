@@ -94,7 +94,7 @@ console.log(JSON.stringify({
   );
   expect(JSON.parse(stdout)).toEqual({
     sameCatalog: true,
-    count: 17,
+    count: 19,
     stages: true,
   });
 });

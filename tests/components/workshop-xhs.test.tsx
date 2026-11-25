@@ -84,7 +84,7 @@ afterEach(() => {
 });
 
 const LONG =
-  'A card sat in Waiting on client for nine days and nobody noticed; the client thought we had forgotten. Now a card waiting over three days reminds its owner.';
+  'A card sat in Waiting on client for nine days and nobody noticed; the client thought we had forgotten. Now a card waiting over three days reminds its owner, and the account lead hears about it the next morning, so nothing sits quietly again.';
 const content = [
   '## Title',
   'Inbox to one board',
@@ -155,14 +155,14 @@ const taskData = (out: Artifact) =>
     reviews: [],
   }) as unknown as TaskData;
 
-it('frames on review a card over the character limit or one the Agent found overflowing, and labels each card', () => {
+it('frames on review a card over the word limit or one the Agent found overflowing, and labels each card', () => {
   const out = artifact();
   render(
     <RepurposeResult data={taskData(out)} out={out} review fallback={null} />,
   );
   const checks = screen.getByRole('list', { name: 'Automatic checks' });
   expect(
-    within(checks).getByText('Card 3 is 144 characters, over 110'),
+    within(checks).getByText('Card 3 is 48 words, over 40'),
   ).toHaveAttribute('data-check', 'warn');
   expect(
     within(checks).getByText(
@@ -183,7 +183,7 @@ it('frames on review a card over the character limit or one the Agent found over
   ]);
   expect(cards[0]).toHaveTextContent('Cover');
   expect(cards[1]).toHaveTextContent('Source sections: 1');
-  expect(cards[2]).toHaveTextContent('144 characters, over 110');
+  expect(cards[2]).toHaveTextContent('48 words, over 40');
   expect(cards[3]).toHaveTextContent('Text does not fit');
   expect(cards[4]).toHaveTextContent('Closing page');
   expect(
@@ -261,7 +261,7 @@ it('downloads every image in one ZIP named after the task, and copies the note�
     saved = this.download;
   });
 
-  render(<XhsDoneTools out={artifact()} name='T-45' />);
+  render(<XhsDoneTools form='xhs' out={artifact()} name='T-45' />);
   await user.click(screen.getByRole('button', { name: 'Download 5 images' }));
   await vi.waitFor(() => expect(saved).toBe('T-45.zip'));
   expect(fetched.map((u) => u.slice(u.indexOf('/uploads/')))).toEqual(
@@ -286,7 +286,11 @@ it('downloads every image in one ZIP named after the task, and copies the note�
 
 it('shows no done-card tools for a result without images', () => {
   const { container } = render(
-    <XhsDoneTools out={artifact({ cards: { images: [] } })} name='T-45' />,
+    <XhsDoneTools
+      form='xhs'
+      out={artifact({ cards: { images: [] } })}
+      name='T-45'
+    />,
   );
   expect(container).toBeEmptyDOMElement();
 });
@@ -353,7 +357,17 @@ it('previews the style in use with the latest set’s cards and the brand kit’
       'Not set; the cards show the first letter of the project name',
     ),
   ).toBeInTheDocument();
-  const preview = screen.getByRole('list', { name: 'Editorial' });
+  // Both sizes are previewed: Xiaohongshu's 3:4 and Instagram's and LinkedIn's 4:5.
+  const [preview, portrait] = screen.getAllByRole('list', {
+    name: 'Editorial',
+  });
+  expect(screen.getByText('Xiaohongshu · 3:4 · 1080×1440')).toBeInTheDocument();
+  expect(
+    screen.getByText('Instagram, LinkedIn · 4:5 · 1080×1350'),
+  ).toBeInTheDocument();
+  expect(
+    within(portrait).getByTitle('Follow Acme').getAttribute('srcdoc'),
+  ).toContain('<meta name="card-size" content="1080x1350">');
   expect(frameTitles(preview)).toEqual([
     'Inbox to one board',
     'No one owned an email',
@@ -376,7 +390,7 @@ it('changes the card style in a picker that previews every built-in style with t
   await user.click(screen.getByRole('button', { name: 'Change style' }));
   const dialog = screen.getByRole('dialog', { name: 'Card style' });
   expect(dialog).toHaveTextContent(
-    'Previewed with sample text until a Xiaohongshu set has been made.',
+    'Previewed with sample text until a carousel has been made.',
   );
   const styles = within(dialog).getAllByRole('radio');
   expect(styles.map((r) => r.getAttribute('aria-checked'))).toEqual([
@@ -398,7 +412,7 @@ it('changes the card style in a picker that previews every built-in style with t
   await user.click(within(dialog).getByRole('radio', { name: /^Memo/ }));
   await user.click(within(dialog).getByRole('button', { name: 'Use Memo' }));
   expect(screen.queryByRole('dialog')).toBeNull();
-  expect(screen.getByRole('list', { name: 'Memo' })).toBeInTheDocument();
+  expect(screen.getAllByRole('list', { name: 'Memo' })).toHaveLength(2);
   expect(
     screen.getByText(/A notes app page with check marks/),
   ).toBeInTheDocument();
@@ -453,6 +467,7 @@ describe('Edit card text', () => {
     const out = artifact({ cards: { ...set, style: styleBrief(drawnWith) } });
     render(
       <XhsCardEditor
+        form='xhs'
         out={out}
         current={current}
         initial={3}
@@ -478,9 +493,7 @@ describe('Edit card text', () => {
       'Week one: nine days',
     );
     expect(within(dialog).getByLabelText('Card text')).toHaveValue(LONG);
-    expect(dialog).toHaveTextContent(
-      /Heading and text: 1\d\d \/ 110 characters/,
-    );
+    expect(dialog).toHaveTextContent('Heading and text: 48 / 40 words');
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'The text of card 3 does not fit',
     );

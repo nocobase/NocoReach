@@ -19,7 +19,7 @@ import type {
   MaterialAttachment,
 } from './execution/task-materials.js';
 import { pngInfo, pngSize } from './png-colors.js';
-import { XHS } from '../../shared/repurpose.js';
+import { isCardSize } from '../../shared/repurpose.js';
 import { roleOf } from './policy.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import { download } from './public-sources.js';
@@ -364,7 +364,8 @@ export class ManualTasks {
   }
 
   /**
-   * A card image the Agent uploads during its run (`task file`): a PNG of exactly the card size, checked by its bytes,
+   * A card image the Agent uploads during its run (`task file`): a PNG of exactly a card size (1080×1440 or 1080×1350;
+   * which one the set needed is checked when its result links them), checked by its bytes,
    * kept unlinked under the run as its owner, and read for its colors (png-colors.ts). The run's result links the ones
    * it uses (TaskService.finish); the others expire like any unlinked upload.
    */
@@ -380,10 +381,10 @@ export class ManualTasks {
         'INVALID_ARGUMENT',
       );
     const info = pngInfo(Buffer.from(await stored.arrayBuffer()));
-    if (!info || info.width !== XHS.width || info.height !== XHS.height)
+    if (!info || !isCardSize(info))
       denied(
         'TASK_FILE_SIZE',
-        `Card images must be ${XHS.width}×${XHS.height} pixels; this one is ${info ? `${info.width}×${info.height}` : 'unreadable'}.`,
+        `Card images must be 1080×1440 or 1080×1350 pixels; this one is ${info ? `${info.width}×${info.height}` : 'unreadable'}.`,
         'INVALID_ARGUMENT',
       );
     return this.serial(`upload:${runOwner(run.id)}`, async () => {
@@ -430,7 +431,8 @@ export class ManualTasks {
   }
 
   /**
-   * A card image drawn in the reviewer's browser with Edit directly (2026-11-17): a PNG of exactly the card size,
+   * A card image drawn in the reviewer's browser with Edit directly (2026-11-17): a PNG of exactly a card size (the
+   * set's own is checked when the edit is saved),
    * checked by its bytes and kept unlinked until the edit is saved (cardImages), at most AGENT_FILES at a time. Like any
    * upload it is kept under the request it came with (`draftId`, a UUID column): never the task's ID.
    */
@@ -447,10 +449,10 @@ export class ManualTasks {
       stored.type === 'image/png'
         ? pngSize(Buffer.from(await stored.slice(0, 64).arrayBuffer()))
         : null;
-    if (!size || size.width !== XHS.width || size.height !== XHS.height)
+    if (!size || !isCardSize(size))
       denied(
         'TASK_FILE_SIZE',
-        `Card images must be ${XHS.width}×${XHS.height} PNG images.`,
+        'Card images must be 1080×1440 or 1080×1350 PNG images.',
         'INVALID_ARGUMENT',
       );
     const owner = cardOwner(actor.id);
@@ -497,7 +499,7 @@ export class ManualTasks {
   /**
    * Link the card images an edit is saved with, in its transaction (Edit directly, TaskService), as linkImages links
    * images: each the actor's own card image of this project, unlinked or already this task's. Answers each with the
-   * colors read from its pixels (png-colors.ts).
+   * colors read from its pixels (png-colors.ts) and its height.
    */
   async cardImages(
     connection: DatabaseConnection,
@@ -505,7 +507,7 @@ export class ManualTasks {
     projectId: string,
     taskId: string,
     ids: readonly string[],
-  ): Promise<(MessageImage & { colors?: string[] })[]> {
+  ): Promise<(MessageImage & { colors?: string[]; height?: number })[]> {
     const files = await this.link(
       connection,
       { actorId: cardOwner(actorId), projectId, taskId, ids },
@@ -515,12 +517,13 @@ export class ManualTasks {
         'An image is no longer available. Add it again.',
       ],
     );
-    const out: (MessageImage & { colors?: string[] })[] = [];
+    const out: (MessageImage & { colors?: string[]; height?: number })[] = [];
     for (const file of files) {
       const info = pngInfo(await this.bytes(file));
       out.push({
         ...this.messageImage(file),
         ...(info?.colors ? { colors: info.colors } : {}),
+        ...(info ? { height: info.height } : {}),
       });
     }
     return out;

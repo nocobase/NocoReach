@@ -27,6 +27,7 @@ import {
   articleTitle,
   destinationKey,
   isBlogArticle,
+  isCarouselForm,
   isRepurposeForm,
   parseRepurpose,
   repurposeBrief,
@@ -58,7 +59,7 @@ import { memoryOf } from './execution/memory.js';
 // destination, each started with the chosen Agent. A task made from an opportunity keeps it on its source, which is how
 // Opportunities lists it among the opportunity's tasks; the opportunity itself stays as it was, and so does Skip. The
 // brand kit holds what the adaptations need about the brand beyond Memory: the project's own community and its sections,
-// and what Xiaohongshu cards are drawn with (card style, logo, brand color, closing page).
+// and what a Carousel's cards are drawn with (card style, logo, brand color, closing page).
 
 const DAY = 86400000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -88,7 +89,7 @@ function cleanCommunity(c: any) {
   return { name, url, sections };
 }
 
-// The brand kit's Xiaohongshu card settings (2026-11-16; card styles 2026-11-17): the card style, an uploaded logo (a PNG,
+// The brand kit's card settings (2026-11-16; card styles 2026-11-17): the card style, an uploaded logo (a PNG,
 // JPEG or WebP data URL whose bytes are that image), the brand color and the closing page. A missing value is its default
 // (shared/xhs-card.ts); the style draws its own type, text and background colors.
 function cleanCards(c: any) {
@@ -124,10 +125,11 @@ function cleanCards(c: any) {
 // the template.
 const CARD_SKILL = /(?:卡片|cards?)[^。.\n]{0,30}(?:图片|出图|生图|配图|images?|png)|(?:图片|出图|生图|配图|images?|png)[^。.\n]{0,30}(?:卡片|cards?)|social[ -]?cards?/i;
 
+// The latest set of cards of any place, which the card styles are previewed with.
 function cardSample(records: any[]) {
   for (const r of records) {
-    if (r.form !== 'xhs' || !r.internal?.draft?.text) continue;
-    const cards = (parseRepurpose('xhs', r.internal.draft.text)?.pieces || []).filter(p => p.kind === 'card').slice(0, 18).map(({ layout, heading, text }) => ({ layout, ...(heading ? { heading } : {}), text }));
+    if (!isCarouselForm(r.form) || !r.internal?.draft?.text) continue;
+    const cards = (parseRepurpose(r.form, r.internal.draft.text)?.pieces || []).filter(p => p.kind === 'card').slice(0, 18).map(({ layout, heading, text }) => ({ layout, ...(heading ? { heading } : {}), text }));
     if (cards.length >= 2) return { subject: sourceSubject(r.source), cards };
   }
   return null;
@@ -159,13 +161,15 @@ function cleanSource(s: any) {
   return fail(systemMessageText('workshop.pickSource'));
 }
 
-// The chosen forms, each at most once, a community post once per destination; the own community's sections are the
-// brand kit's, a subreddit is a valid name.
+// The chosen forms, each at most once, a community post once per destination and a carousel once per place; the own
+// community's sections are the brand kit's, a subreddit is a valid name.
 function cleanItems(items: any, brand: any) {
   if (!Array.isArray(items) || !items.length) return fail(systemMessageText('workshop.pickForm'));
   if (items.length > 10) return fail(systemMessageText('workshop.tooManyItems', { 0: 10 }));
   const seen = new Set<string>(), out = [];
   for (const it of items) {
+    // Carousel without a place, the way a community post without one is refused: each place is a form of its own.
+    if (it?.form === 'carousel') return fail(systemMessageText('workshop.pickCarouselPlace'));
     if (!isRepurposeForm(it?.form) || !READY_FORMS.includes(it.form)) return fail(systemMessageText('workshop.formUnavailable'));
     let destination;
     if (it.form === 'community') {
@@ -374,7 +378,7 @@ class WorkshopService {
         records.push({
           taskId: String(t.id), no: t.evidence?.no ?? null, title: t.title, createdAt: t.createdAt, updatedAt: t.updatedAt,
           form: w.repurpose.form, ...(w.repurpose.destination ? { destination: w.repurpose.destination } : {}), source: w.repurpose.source,
-          // A Xiaohongshu set's number of cards, which the record names ("Xiaohongshu note · 8 cards").
+          // A set's number of cards, which the record names ("Instagram carousel · 8 cards", a LinkedIn document's pages).
           ...(draft?.cards?.images?.length ? { cards: draft.cards.images.length } : {}),
           standing, ...(agentStep && w.latestRun?.status === 'failed' ? { failed: true } : {}), ...(agentStep && awaitingRestart(w) ? { restart: true } : {}),
           // For the server only: the page is sent the records without them (shown()).

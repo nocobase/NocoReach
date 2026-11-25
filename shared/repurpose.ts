@@ -7,10 +7,35 @@ import { systemMessageText } from './i18n/messages.js';
  * workshop and the task's review and done cards).
  */
 
-/** Every form, in the order the workshop shows them. */
 import type { CardStyleBrief } from './xhs-card.js';
 
-export const REPURPOSE_FORMS = ['xhs', 'x', 'linkedin', 'community'] as const;
+/**
+ * The places a Carousel goes (2026-11-24 user decision, formerly the Xiaohongshu note): each is a form of its own, so
+ * each has its own playbook, card size, text and checks, and the workshop lists them together as Carousel, one task
+ * per place, as it lists a community post's places. Xiaohongshu keeps the form id it had (`xhs`), so its earlier tasks,
+ * records and demo data are Carousel › Xiaohongshu as they are.
+ */
+export const CAROUSEL_FORMS = [
+  'xhs',
+  'instagram',
+  'linkedin-carousel',
+] as const;
+export type CarouselForm = (typeof CAROUSEL_FORMS)[number];
+export const isCarouselForm = (value: unknown): value is CarouselForm =>
+  (CAROUSEL_FORMS as readonly unknown[]).includes(value);
+/** The places in the order the interface language lists them: Xiaohongshu first in Chinese, last in other languages. */
+export const carouselOrder = (locale: string): CarouselForm[] =>
+  /^zh/i.test(locale)
+    ? ['xhs', 'instagram', 'linkedin-carousel']
+    : ['instagram', 'linkedin-carousel', 'xhs'];
+
+/** Every form, in the order the workshop shows them. */
+export const REPURPOSE_FORMS = [
+  'x',
+  'linkedin',
+  ...CAROUSEL_FORMS,
+  'community',
+] as const;
 export type RepurposeForm = (typeof REPURPOSE_FORMS)[number];
 /** The forms that can be chosen now: all of them since Xiaohongshu cards (2026-11-16, PR 2). */
 export const READY_FORMS: readonly RepurposeForm[] = REPURPOSE_FORMS;
@@ -21,6 +46,8 @@ export const isRepurposeForm = (value: unknown): value is RepurposeForm =>
 /** The built-in playbook of each form; a copy keeps its form, which is what decides how its result is read. */
 export const FORM_PLAYBOOK: Readonly<Record<RepurposeForm, string>> = {
   xhs: 'xhs-cards',
+  instagram: 'instagram-carousel',
+  'linkedin-carousel': 'linkedin-carousel',
   x: 'x-posts',
   linkedin: 'linkedin-post',
   community: 'community-post',
@@ -30,11 +57,20 @@ export const REPURPOSE_CATEGORY = 'repurpose';
 /** The result kind the Agent reports for each form (agent-result.ts). */
 export const FORM_RESULT_KIND: Readonly<Record<RepurposeForm, string>> = {
   xhs: 'xhsCards',
+  instagram: 'instagramCards',
+  'linkedin-carousel': 'linkedinCards',
   x: 'xPosts',
   linkedin: 'linkedinPost',
   community: 'communityPost',
 };
 export const RESULT_KINDS = Object.values(FORM_RESULT_KIND);
+/** The result kinds of a set of cards, which come with one uploaded image per card. */
+export const CARD_RESULT_KINDS: readonly string[] = CAROUSEL_FORMS.map(
+  (f) => FORM_RESULT_KIND[f],
+);
+/** The form a set of cards' result kind makes. */
+export const cardFormOf = (resultKind: unknown): CarouselForm | undefined =>
+  CAROUSEL_FORMS.find((f) => FORM_RESULT_KIND[f] === resultKind);
 
 export type ArticleSource = {
   kind: 'article';
@@ -162,7 +198,7 @@ export const charLength = (text: string) => [...text].length;
 /**
  * Xiaohongshu image cards (2026-11-16, Content workshop PR 2): 6 to 18 cards of 1080×1440, at most 110 characters on
  * a card, a cover title of at most 20, at most 3 colors and body text of at least 36px; the note's own title and body
- * stop where Xiaohongshu stops them (20 and 1,000 characters).
+ * stop where Xiaohongshu stops them (20 and 1,000 characters). The limits on a card's text are every place's (CARD).
  */
 export const XHS = {
   minCards: 6,
@@ -176,6 +212,92 @@ export const XHS = {
   noteTitle: 20,
   noteBody: 1000,
 } as const;
+/** A card image's size in pixels. */
+export type CardSize = { width: number; height: number };
+
+/**
+ * What a card holds wherever it goes (2026-11-24): text in Chinese, Japanese or Korean is counted in characters, 110 on
+ * a card and 20 in the cover's title, as Xiaohongshu's always were; other text in words, 40 and 8. The word limits come
+ * from setting English in the four built-in styles at 3:4 and 4:5: at 40 words every style still sets the body at 40px
+ * or more without overflowing, the least a full Chinese card gets; from about 44 words a list drops to 36px. Whether
+ * a card's text fits is still decided by the overflow measured when the cards are drawn.
+ */
+export const CARD = {
+  cardChars: XHS.cardChars,
+  coverTitle: XHS.coverTitle,
+  cardWords: 40,
+  coverWords: 8,
+  colors: XHS.colors,
+} as const;
+
+/**
+ * What a card style's full cards are filled with when the cards it is previewed with are in the other script: a style
+ * is checked with a full Chinese card and a full English one (2026-11-24), whatever the project writes in.
+ */
+export const FULL_CARD_SAMPLE = {
+  chars: {
+    heading: '第一步：先写结果',
+    text: '第一句写这周有什么变化。读的人几秒内就决定看不看下去，所以先放数字，再讲原因。',
+  },
+  words: {
+    heading: 'Step 1: lead with the result',
+    text: 'Say what changed this week in one sentence. Readers decide within seconds whether to read on, so put the number first and the reason after it.',
+  },
+} as const;
+
+/** Each place's card size and number of cards (2026-11-24 user decision): Instagram allows 20, a LinkedIn PDF 18 pages here. */
+export const CARD_SPECS: Readonly<
+  Record<
+    CarouselForm,
+    CardSize & { ratio: '3:4' | '4:5'; minCards: number; maxCards: number }
+  >
+> = {
+  xhs: { ratio: '3:4', width: 1080, height: 1440, minCards: 6, maxCards: 18 },
+  instagram: {
+    ratio: '4:5',
+    width: 1080,
+    height: 1350,
+    minCards: 6,
+    maxCards: 20,
+  },
+  'linkedin-carousel': {
+    ratio: '4:5',
+    width: 1080,
+    height: 1350,
+    minCards: 6,
+    maxCards: 18,
+  },
+};
+/** The card sizes NocoReach takes, 3:4 and 4:5. */
+export const CARD_SIZES: readonly CardSize[] = [
+  { width: 1080, height: 1440 },
+  { width: 1080, height: 1350 },
+];
+export const isCardSize = (size: { width?: number; height?: number } | null) =>
+  Boolean(
+    size &&
+    CARD_SIZES.some((c) => c.width === size.width && c.height === size.height),
+  );
+/** A card size's ratio: 4:5 when it is shorter than 3:4. */
+export const ratioOf = (height: number): '3:4' | '4:5' =>
+  height < 1440 ? '4:5' : '3:4';
+/** The card size of a place, or Xiaohongshu's for a form without cards. */
+export const cardSizeOf = (form?: unknown): CardSize => {
+  const spec = isCarouselForm(form) ? CARD_SPECS[form] : CARD_SPECS.xhs;
+  return { width: spec.width, height: spec.height };
+};
+
+/**
+ * An Instagram carousel's caption and hashtags: the caption at most 2,200 characters, its first 125 shown before
+ * "more", at most 5 hashtags (Instagram's limit since December 2025), and no link, as a caption's links cannot be opened.
+ */
+export const INSTAGRAM = {
+  caption: 2200,
+  captionFold: 125,
+  hashtags: 5,
+} as const;
+/** A LinkedIn document's title (LinkedIn stops it at 58 characters) and the post it goes with, as a LinkedIn post's. */
+export const LINKEDIN_DOC = { title: 58, post: 1300 } as const;
 /** A card's layout: the cover, a card of text, or the brand kit's closing page. */
 export type CardLayout = 'cover' | 'text' | 'end';
 /** The characters on a card as its reader counts them: heading and text, without spaces and line breaks. */
@@ -184,6 +306,53 @@ export const cardChars = (card: { heading?: string; text: string }) =>
 /** A cover's title: its heading, else the first line of its text. */
 export const coverTitle = (card: { heading?: string; text: string }) =>
   (card.heading || card.text.split('\n')[0] || '').trim();
+
+const CJK =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
+/** Words as a reader counts them: the runs between spaces that hold a letter or a digit ("41%", "follow-up" are one). */
+export const wordCount = (text: string) =>
+  text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+/** How a set's text is counted: in characters when written mostly in Chinese, Japanese or Korean, else in words. */
+export type CardUnit = 'chars' | 'words';
+export function cardUnit(
+  cards: readonly { heading?: string; text: string }[],
+): CardUnit {
+  const all = cards.map((c) => `${c.heading || ''} ${c.text}`).join(' ');
+  const cjk = all.match(CJK)?.length || 0;
+  return cjk >= wordCount(all.replace(CJK, ' ')) ? 'chars' : 'words';
+}
+/** A card's length in its set's unit: its heading and text together. */
+export const cardLength = (
+  card: { heading?: string; text: string },
+  unit: CardUnit,
+) =>
+  unit === 'words'
+    ? wordCount(`${card.heading || ''} ${card.text}`)
+    : cardChars(card);
+/** A cover title's length in the set's unit. */
+export const coverLength = (
+  card: { heading?: string; text: string },
+  unit: CardUnit,
+) =>
+  unit === 'words' ? wordCount(coverTitle(card)) : charLength(coverTitle(card));
+/** The most a card, and a cover title, may hold in a unit. */
+export const cardMax = (unit: CardUnit) =>
+  unit === 'words' ? CARD.cardWords : CARD.cardChars;
+export const coverMax = (unit: CardUnit) =>
+  unit === 'words' ? CARD.coverWords : CARD.coverTitle;
+
+/** The hashtags of an Instagram result's Hashtags, each once, as written ("#projectmanagement"). */
+export const hashtagsOf = (text: string) => [
+  ...new Set(text.match(/#[\p{L}\p{N}_]+/gu) || []),
+];
+/** Whether a caption holds a link: an address, a www. host or a bare domain such as acme.com/blog. */
+export const hasLink = (text: string) =>
+  /https?:\/\/|\bwww\.|\b[\w-]+\.(?:com|net|org|io|ai|co|dev|app|cn|so|me)\b/i.test(
+    text,
+  );
+/** An Instagram caption's first line: what shows before "more", when it is within the fold. */
+export const captionOpening = (caption: string) =>
+  caption.trim().split('\n')[0] || '';
 
 /** The source section numbers a `Sections:` label names ("1–3, 5" is 1, 2, 3 and 5); ranges stop at 200. */
 export function sectionNumbers(label?: string): number[] {
@@ -228,12 +397,14 @@ export function sourceSections(source: {
 }
 
 /**
- * What NocoReach keeps of a Xiaohongshu version besides its text (`Artifact.cards`): the images in card order, how many
+ * What NocoReach keeps of a set of cards besides its text (`Artifact.cards`): the images in card order, how many
  * sections the source had (none when they were not known), the colors it counted on the images, and the cards whose
  * text the Agent found overflowing when it rendered them (none when it did not report).
  */
 export type CardSet = {
   images: { id: string; ref: string; name: string }[];
+  /** The images' ratio (kept since 2026-11-24; a set without it is Xiaohongshu's 3:4). */
+  ratio?: '3:4' | '4:5';
   sections?: number;
   colors?: string[];
   overflow?: number[];
@@ -244,8 +415,12 @@ export type CardSet = {
 };
 
 export type Piece = {
-  /** `post` (X has three, numbered from 1), `reply`, `title`, `body`, or a Xiaohongshu `card` (numbered from 1). */
-  kind: 'post' | 'reply' | 'title' | 'body' | 'card';
+  /**
+   * `post` (X has three, numbered from 1), `reply`, `title`, `body`, a carousel's `card` (numbered from 1), or an
+   * Instagram carousel's hashtags (`tags`). A carousel's title and body are Xiaohongshu's note title and body, an
+   * Instagram caption (body only) or a LinkedIn document's title and the post's text.
+   */
+  kind: 'post' | 'reply' | 'title' | 'body' | 'card' | 'tags';
   index?: number;
   text: string;
   /** The source's sections the piece comes from, as the Agent wrote them ("1-4"). */
@@ -260,11 +435,12 @@ export type RepurposeResult = { pieces: Piece[]; rules: string[] };
 // The markers the result is written with. The playbook instruction names them in English in every language, so they stay
 // the same when the instruction is translated; the Chinese ones are read too.
 const HEADINGS: [RegExp, Piece['kind'] | 'rules'][] = [
-  [/^(?:card|卡片)\s*(\d+)?$/i, 'card'],
+  [/^(?:card|page|卡片)\s*(\d+)?$/i, 'card'],
   [/^(?:post|帖子|正文帖)\s*(\d+)?$/i, 'post'],
   [/^(?:reply|first reply|回复|第一条回复)$/i, 'reply'],
-  [/^(?:title|标题)$/i, 'title'],
-  [/^(?:body|正文)$/i, 'body'],
+  [/^(?:title|document title|note title|标题|文档标题|笔记标题)$/i, 'title'],
+  [/^(?:body|caption|post text|正文|配文|帖子正文|笔记正文)$/i, 'body'],
+  [/^(?:hashtags?|tags|话题标签)$/i, 'tags'],
   [/^(?:rules|版规|规矩)$/i, 'rules'],
 ];
 const SECTIONS =
@@ -340,7 +516,7 @@ export function parseRepurpose(
   if (form === 'x' && !has('post')) return null;
   if (form === 'linkedin' && !has('post')) return null;
   if (form === 'community' && !(has('title') && has('body'))) return null;
-  if (form === 'xhs') {
+  if (isCarouselForm(form)) {
     if (!has('card')) return null;
     // Cards in their order, numbered from 1 whatever the Agent wrote; the first is the cover.
     const cards = pieces.filter((p) => p.kind === 'card');
@@ -360,22 +536,19 @@ export function parseRepurpose(
 }
 
 /**
- * A Xiaohongshu result written back in the workshop's format from its pieces, as Edit directly saves it: the note's
- * title and body, then every card with its labels, its heading and its text.
+ * A set of cards written back in the workshop's format from its pieces, as Edit directly saves it: the title, body and
+ * hashtags that go with it, then every card with its labels, its heading and its text.
  */
-export function writeXhs(pieces: readonly Piece[]): string {
+export function writeCards(pieces: readonly Piece[]): string {
   const out: string[] = [];
   const labels = (p: Piece) => [
     ...(p.sections ? [`Sections: ${p.sections}`] : []),
     ...(p.kind === 'card' && p.layout === 'end' ? ['Layout: end'] : []),
   ];
-  for (const kind of ['title', 'body'] as const)
+  const MARKER = { title: '## Title', body: '## Body', tags: '## Hashtags' };
+  for (const kind of ['title', 'body', 'tags'] as const)
     for (const p of pieces.filter((x) => x.kind === kind))
-      out.push(
-        kind === 'title' ? '## Title' : '## Body',
-        ...labels(p),
-        p.text.trim(),
-      );
+      out.push(MARKER[kind], ...labels(p), p.text.trim());
   pieces
     .filter((p) => p.kind === 'card')
     .forEach((p, i) =>
@@ -390,7 +563,7 @@ export function writeXhs(pieces: readonly Piece[]): string {
   return out.filter((line, i) => line || out[i - 1] !== '').join('\n');
 }
 
-/** The card a reviewer edits first, from 1: the first over the character limit or overflowing, else the cover. */
+/** The card a reviewer edits first, from 1: the first over the length limit or overflowing, else the cover. */
 export function cardToEdit(
   content: string,
   overflow: readonly number[] = [],
@@ -398,8 +571,9 @@ export function cardToEdit(
   const cards = (parseRepurpose('xhs', content)?.pieces || []).filter(
     (p) => p.kind === 'card',
   );
+  const unit = cardUnit(cards);
   const i = cards.findIndex(
-    (c, k) => cardChars(c) > XHS.cardChars || overflow.includes(k + 1),
+    (c, k) => cardLength(c, unit) > cardMax(unit) || overflow.includes(k + 1),
   );
   return i < 0 ? 1 : i + 1;
 }
@@ -423,6 +597,14 @@ export function pieceLimit(
     return { length: charLength(piece.text), max: XHS.noteTitle };
   if (form === 'xhs' && piece.kind === 'body')
     return { length: charLength(piece.text), max: XHS.noteBody };
+  if (form === 'instagram' && piece.kind === 'body')
+    return { length: charLength(piece.text), max: INSTAGRAM.caption };
+  if (form === 'instagram' && piece.kind === 'tags')
+    return { length: hashtagsOf(piece.text).length, max: INSTAGRAM.hashtags };
+  if (form === 'linkedin-carousel' && piece.kind === 'title')
+    return { length: charLength(piece.text), max: LINKEDIN_DOC.title };
+  if (form === 'linkedin-carousel' && piece.kind === 'body')
+    return { length: charLength(piece.text), max: LINKEDIN_DOC.post };
   return null;
 }
 
@@ -462,7 +644,7 @@ export function repurposeChecks(
     cards,
   }: { destination?: Destination; brand?: string; cards?: CardSet } = {},
 ): RepurposeCheck[] {
-  if (form === 'xhs') return cardChecks(result, cards);
+  if (isCarouselForm(form)) return cardChecks(form, result, cards);
   const posts = result.pieces.filter(
     (p) => p.kind === 'post' || p.kind === 'reply',
   );
@@ -520,12 +702,21 @@ export function repurposeChecks(
 }
 
 /**
- * A Xiaohongshu version's checks, in the order the review card lists them: every source section used, the cover title,
- * the number of cards, the colors counted on the images, overflowing text as the Agent reported it, and the cards over
- * the character limit, each by its number.
+ * A set of cards' checks, in the order the review card lists them: every source section used, the cover title, the
+ * number of cards (a LinkedIn document's pages), the colors counted on the images, images of another place's size,
+ * overflowing text as the Agent reported it, and the cards over the length limit, each by its number; then the place's
+ * own: an Instagram caption's hashtags and links, a LinkedIn document's title and post. Lengths on cards are counted in
+ * characters or words by the set's text (cardUnit).
  */
-function cardChecks(result: RepurposeResult, set?: CardSet): RepurposeCheck[] {
+function cardChecks(
+  form: CarouselForm,
+  result: RepurposeResult,
+  set?: CardSet,
+): RepurposeCheck[] {
+  const spec = CARD_SPECS[form];
   const cards = result.pieces.filter((p) => p.kind === 'card');
+  const unit = cardUnit(cards),
+    words = unit === 'words' ? 'Words' : '';
   const checks: RepurposeCheck[] = [];
   if (set?.sections) {
     const used = new Set(cards.flatMap((c) => sectionNumbers(c.sections)));
@@ -545,30 +736,36 @@ function cardChecks(result: RepurposeResult, set?: CardSet): RepurposeCheck[] {
           },
     );
   }
-  const cover = cards[0] ? charLength(coverTitle(cards[0])) : 0;
+  const cover = cards[0] ? coverLength(cards[0], unit) : 0,
+    coverOk = cover <= coverMax(unit);
   checks.push({
-    key:
-      cover > XHS.coverTitle
-        ? 'workshop.check.coverOver'
-        : 'workshop.check.coverWithin',
-    ok: cover <= XHS.coverTitle,
-    params: { 0: cover, 1: XHS.coverTitle },
+    key: `workshop.check.cover${coverOk ? 'Within' : 'Over'}${words}`,
+    ok: coverOk,
+    params: { 0: cover, 1: coverMax(unit) },
   });
   const count = cards.length,
-    countOk = count >= XHS.minCards && count <= XHS.maxCards;
+    countOk = count >= spec.minCards && count <= spec.maxCards,
+    pages = form === 'linkedin-carousel' ? 'pages' : 'cards';
   checks.push({
-    key: countOk ? 'workshop.check.cardsWithin' : 'workshop.check.cardsOut',
+    key: `workshop.check.${pages}${countOk ? 'Within' : 'Out'}`,
     ok: countOk,
-    params: { 0: count, 1: XHS.minCards, 2: XHS.maxCards },
+    params: { 0: count, 1: spec.minCards, 2: spec.maxCards },
   });
   if (set?.colors?.length)
     checks.push({
       key:
-        set.colors.length > XHS.colors
+        set.colors.length > CARD.colors
           ? 'workshop.check.colorsOver'
           : 'workshop.check.colorsWithin',
-      ok: set.colors.length <= XHS.colors,
-      params: { 0: set.colors.length, 1: XHS.colors },
+      ok: set.colors.length <= CARD.colors,
+      params: { 0: set.colors.length, 1: CARD.colors },
+    });
+  // A Skill that cannot draw this place's size uploads its own (2026-11-24): the review says so.
+  if ((set?.ratio || (set ? '3:4' : spec.ratio)) !== spec.ratio)
+    checks.push({
+      key: 'workshop.check.ratioOther',
+      ok: false,
+      params: { 0: set?.ratio || '3:4', 1: spec.ratio },
     });
   if (set?.overflow)
     checks.push(
@@ -580,19 +777,50 @@ function cardChecks(result: RepurposeResult, set?: CardSet): RepurposeCheck[] {
           }
         : { key: 'workshop.check.noOverflow', ok: true },
     );
-  const over = cards.filter((c) => cardChars(c) > XHS.cardChars);
+  const max = cardMax(unit),
+    over = cards.filter((c) => cardLength(c, unit) > max);
   if (!over.length)
     checks.push({
-      key: 'workshop.check.cardCharsWithin',
+      key: `workshop.check.card${words || 'Chars'}Within`,
       ok: true,
-      params: { 0: XHS.cardChars },
+      params: { 0: max },
     });
   for (const c of over)
     checks.push({
-      key: 'workshop.check.cardCharsOver',
+      key: `workshop.check.card${words || 'Chars'}Over`,
       ok: false,
-      params: { 0: c.index || 0, 1: cardChars(c), 2: XHS.cardChars },
+      params: { 0: c.index || 0, 1: cardLength(c, unit), 2: max },
     });
+  const piece = (kind: Piece['kind']) =>
+    result.pieces.find((p) => p.kind === kind)?.text || '';
+  if (form === 'instagram') {
+    const tags = hashtagsOf(piece('tags')).length,
+      tagsOk = tags <= INSTAGRAM.hashtags;
+    checks.push(
+      {
+        key: tagsOk
+          ? 'workshop.check.hashtagsWithin'
+          : 'workshop.check.hashtagsOver',
+        ok: tagsOk,
+        params: { 0: tags, 1: INSTAGRAM.hashtags },
+      },
+      hasLink(piece('body'))
+        ? { key: 'workshop.check.captionLink', ok: false }
+        : { key: 'workshop.check.captionNoLink', ok: true },
+    );
+  }
+  if (form === 'linkedin-carousel')
+    for (const [kind, key, most] of [
+      ['title', 'docTitle', LINKEDIN_DOC.title],
+      ['body', 'postText', LINKEDIN_DOC.post],
+    ] as const) {
+      const length = charLength(piece(kind));
+      checks.push({
+        key: `workshop.check.${key}${length <= most ? 'Within' : 'Over'}`,
+        ok: length <= most,
+        params: { 0: length, 1: most },
+      });
+    }
   return checks;
 }
 
@@ -685,7 +913,9 @@ export function repurposeBrief(r: Repurpose, locale?: string): string {
           ? text('workshop.briefCommunity', {
               0: destinationLabel(r.destination),
             })
-          : text(`workshop.form${r.form === 'xhs' ? 'Xhs' : 'Community'}`);
+          : isCarouselForm(r.form)
+            ? text(`workshop.brief${FORM_KEY[r.form]}`)
+            : text('workshop.formCommunity');
   const s = r.source;
   const lead =
     s.kind === 'article'
@@ -724,8 +954,11 @@ export function repurposeBrief(r: Repurpose, locale?: string): string {
     .filter(Boolean)
     .join('\n\n');
 }
-const FORM_KEY: Record<RepurposeForm, string> = {
+/** A form's part of its i18n keys: `workshop.form<Key>`, `workshop.brief<Key>` for a carousel's place. */
+export const FORM_KEY: Record<RepurposeForm, string> = {
   xhs: 'Xhs',
+  instagram: 'Instagram',
+  'linkedin-carousel': 'LinkedinCarousel',
   x: 'X',
   linkedin: 'Linkedin',
   community: 'Community',

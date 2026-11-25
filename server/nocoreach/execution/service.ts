@@ -29,7 +29,7 @@ import { ActiveRuns, type SnapshotRows } from './active-runs.js';
 import { pagesById, tasksInOrder } from './task-scan.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { RESTART_ACTION, attemptField, attemptOf, playbookChangeBlock, sameAttempt, type PlaybookChangeBlock, type ReplacedPlaybook } from '../../../shared/playbook-change.js';
-import { FORM_RESULT_KIND, articleTitle, isBlogListing, parseRepurpose, repurposeChecks, sourceSections, type CardSet } from '../../../shared/repurpose.js';
+import { CARD_SPECS, FORM_RESULT_KIND, articleTitle, isBlogListing, isCarouselForm, parseRepurpose, ratioOf, repurposeChecks, sourceSections, type CardSet } from '../../../shared/repurpose.js';
 import { cardStyle, cardTemplate, styleBrief } from '../../../shared/xhs-card.js';
 import { setColors } from '../png-colors.js';
 import { datesBetween } from '../search-history.js';
@@ -235,7 +235,7 @@ export class TaskService {
     return { ...data, language, ...(data.work.repurpose ? { repurpose: await this.repurposeView(project, data, context) } : {}), agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
   }
   // A Content workshop task's automatic checks, worked out from each version's text by NocoReach (shared/repurpose.ts),
-  // never taken from what the Agent says of it; the identity check looks for the project's name. Xiaohongshu cards add the
+  // never taken from what the Agent says of it; the identity check looks for the project's name. A set of cards adds the
   // brand kit's card style as it is now, logo included, which Edit directly draws a set in again (shared/xhs-card.ts styleOf).
   private async repurposeView(projectId: string, data: any, project: any) {
     const r = data.work.repurpose, checks: Record<string, unknown[]> = {};
@@ -243,7 +243,7 @@ export class TaskService {
       const parsed = a?.content ? parseRepurpose(r.form, a.content) : null;
       if (parsed) checks[a.id] = repurposeChecks(r.form, parsed, { destination: r.destination, brand: project?.name, cards: a.cards });
     }
-    return { checks, ...(r.form === 'xhs' ? { cardStyle: await this.cardStyleNow(projectId) } : {}) };
+    return { checks, ...(isCarouselForm(r.form) ? { cardStyle: await this.cardStyleNow(projectId) } : {}) };
   }
   /** The brand kit's card style as it is now: its settings, the project's name and site, and its logo or the site's icon. */
   private async cardStyleNow(project: string, tx?: any) {
@@ -255,19 +255,21 @@ export class TaskService {
   // (WorkshopService), where a community post goes, the angle asked for, and the drafts of earlier adaptations of the
   // same article or opportunity (approved, or waiting for review), kept when the task was created, for the Agent to take
   // another angle.
-  // Xiaohongshu cards (2026-11-16) are also given the source's numbered sections the cards say they come from (a topic's
-  // key points), and the brand kit's card style; the template drawn in that style, logo included, goes as a material
-  // file (cardTemplate, task-materials.ts).
+  // A set of cards (Xiaohongshu 2026-11-16, Instagram and LinkedIn 2026-11-24) is also given the source's numbered
+  // sections the cards say they come from (a topic's key points), its place's card size and number of cards, and the
+  // brand kit's card style; the template drawn in that style at that size, logo included, goes as a material file
+  // (cardTemplate, task-materials.ts).
   private async repurposeInput(project: string, taskId: string, w: Work, tx: any) {
     const stored = await this.snapshot(this.key('source', project, taskId), tx);
     const r = w.repurpose!, base = { ...r, ...(stored?.body ? { body: stored.body, bodyLocale: stored.locale } : {}), ...(stored?.earlier?.length ? { earlier: stored.earlier } : {}) };
-    if (r.form !== 'xhs') return { repurpose: base };
+    if (!isCarouselForm(r.form)) return { repurpose: base };
     const sections = sourceSections({ body: stored?.body, points: r.source.kind === 'topic' ? r.source.points : undefined });
-    const style = await this.cardStyleNow(project, tx), repurpose = { ...base, ...(sections.length ? { sections: sections.map((heading, i) => ({ no: i + 1, heading })) } : {}), style: styleBrief(style) };
+    const { ratio: _ratio, ...card } = CARD_SPECS[r.form];
+    const style = await this.cardStyleNow(project, tx), repurpose = { ...base, ...(sections.length ? { sections: sections.map((heading, i) => ({ no: i + 1, heading })) } : {}), card, style: styleBrief(style) };
     // Cards a Skill draws (Draw with a Skill, 2026-11-17) get no template: the Skill makes the images, with the brand
     // kit's logo beside it.
     if (style.skill) return { repurpose, ...(style.logo ? { cardLogo: style.logo } : {}) };
-    return { repurpose, cardTemplate: cardTemplate(style) };
+    return { repurpose, cardTemplate: cardTemplate(style, 'cards.js', CARD_SPECS[r.form]) };
   }
   // Every task of a project, read in pages by id (task-scan.ts) outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
@@ -998,10 +1000,11 @@ export class TaskService {
       } else if (v.command === 'editStageOutput') {
         const { index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeSaving'), 409);
-        const content = text(v.content), edit = w.repurpose?.form === 'xhs' ? await this.editedCards(project, taskId, w, output, content, v.cards, actor, tx) : null;
+        const content = text(v.content), edit = isCarouselForm(w.repurpose?.form) ? await this.editedCards(project, taskId, w, output, content, v.cards, actor, tx) : null;
         const artifact = await this.flowArtifact(project, taskId, w, producer.key, content, actor, at, tx, undefined, edit ? { cards: edit.cards } : {});
         w.results[index - 1] = artifact; event.artifactId = artifact.id;
-        if (edit?.changed.length) event.cards = edit.changed;
+        // A LinkedIn document's cards are its pages, which Activity names them by.
+        if (edit?.changed.length) { event.cards = edit.changed; if (w.repurpose?.form === 'linkedin-carousel') event.pages = true; }
       } else if (v.command === 'recordManual') {
         // Until the local Agent is connected, a person can make the repository change and record what was done.
         const { stage, index } = this.flowStage(w, v.stageKey, ['agent']);
@@ -1256,9 +1259,10 @@ export class TaskService {
     });
   }
   /**
-   * A Xiaohongshu version's images, linked to the task in the finishing transaction (and kept on `w.images`, which lets
-   * the task's readers open them), with what NocoReach knows besides the text: how many sections the source had, the
-   * colors it counted on the images when they were uploaded, and the cards the Agent found overflowing.
+   * A set of cards' images, linked to the task in the finishing transaction (and kept on `w.images`, which lets the
+   * task's readers open them), with what NocoReach knows besides the text: how many sections the source had, the
+   * colors it counted on the images when they were uploaded, their ratio (one for the whole set: a Skill that cannot
+   * draw the place's size may send the other, which the review names), and the cards the Agent found overflowing.
    */
   private async cardSet(run: Run, w: Work, cards: { images: string[]; overflow?: number[] }, tx: any): Promise<CardSet> {
     const reader = this.p.taskAttachments;
@@ -1272,32 +1276,39 @@ export class TaskService {
     }
     w.images = [...new Set([...(w.images || []), ...images.map((i) => i.id)])];
     const input = JSON.parse(run.input || '{}'), sections = Array.isArray(input.repurpose?.sections) ? input.repurpose.sections.length : 0;
-    const files = (await this.snapshot(this.key('files', run.projectId, run.taskId, run.id), tx)) as Record<string, { colors?: string[] }> | null;
+    const files = (await this.snapshot(this.key('files', run.projectId, run.taskId, run.id), tx)) as Record<string, { colors?: string[]; height?: number }> | null;
     const colors = files && cards.images.every((id) => files[id]?.colors?.length) ? setColors(cards.images.map((id) => files[id].colors!)) : [];
+    // Images uploaded before their height was kept are 3:4, the only size taken then.
+    const heights = new Set(cards.images.map((id) => files?.[id]?.height || 1440));
+    if (heights.size > 1) return fail(systemMessageText('agentResult.cardSizesMixed'), 409);
     // The style the run was given, which Edit directly draws the set in again.
     const style = input.repurpose?.style && typeof input.repurpose.style === 'object' ? input.repurpose.style : null;
-    return { images: images.map(({ id, name, ref }) => ({ id, name, ref })), ...(sections ? { sections } : {}), ...(colors.length ? { colors } : {}), ...(cards.overflow ? { overflow: [...new Set(cards.overflow)].sort((a, b) => a - b) } : {}), ...(style ? { style } : {}) };
+    return { images: images.map(({ id, name, ref }) => ({ id, name, ref })), ratio: ratioOf([...heights][0]), ...(sections ? { sections } : {}), ...(colors.length ? { colors } : {}), ...(cards.overflow ? { overflow: [...new Set(cards.overflow)].sort((a, b) => a - b) } : {}), ...(style ? { style } : {}) };
   }
   /**
-   * Edit directly on a Xiaohongshu version (2026-11-17): the text of its cards and its note change, never the number of
-   * cards or their layouts, and the whole set comes drawn again in the reviewer's browser from the template it was drawn
-   * with. The images are linked and their colors read as an Agent's are; the overflow is what the browser measured, and
-   * the cards whose text a person changed, in this version or one before it, are kept as `edited`.
+   * Edit directly on a set of cards (2026-11-17; every place since 2026-11-24): the text of its cards and what goes with
+   * them change, never the number of cards or their layouts, and the whole set comes drawn again in the reviewer's
+   * browser from the template it was drawn with, at the place's size. The images are linked and their colors read as an
+   * Agent's are; the overflow is what the browser measured, and the cards whose text a person changed, in this version
+   * or one before it, are kept as `edited`.
    */
   private async editedCards(project: string, taskId: string, w: Work, output: Artifact, content: string, cards: any, actor: string, tx: any): Promise<{ cards: CardSet; changed: number[] }> {
-    const was = parseRepurpose('xhs', output.content)?.pieces.filter(p => p.kind === 'card') || [], after = parseRepurpose('xhs', content), now = after?.pieces.filter(p => p.kind === 'card') || [];
+    const form = w.repurpose!.form;
+    const was = parseRepurpose(form, output.content)?.pieces.filter(p => p.kind === 'card') || [], after = parseRepurpose(form, content), now = after?.pieces.filter(p => p.kind === 'card') || [];
     const ids: string[] = Array.isArray(cards?.images) ? cards.images.filter((x: unknown) => typeof x === 'string') : [];
     if (!after || !now.length || now.length !== was.length || now.some((p, i) => p.layout !== was[i].layout) || ids.length !== now.length || new Set(ids).size !== ids.length)
       return fail(systemMessageText('workshop.cardsEditInvalid'), 409);
     const reader = this.p.taskAttachments;
     if (!reader) return fail(systemMessageText('taskExecution.imageUnavailable'), 409);
     const images = await reader.cardImages(tx.connection, actor, project, taskId, ids);
+    const height = isCarouselForm(form) ? CARD_SPECS[form].height : 1440;
+    if (images.some(i => i.height !== height)) return fail(systemMessageText('workshop.cardsEditInvalid'), 409);
     w.images = [...new Set([...(w.images || []), ...images.map(i => i.id)])];
     const colors = images.every(i => i.colors?.length) ? setColors(images.map(i => i.colors!)) : [];
     const overflow = Array.isArray(cards?.overflow) ? [...new Set<number>(cards.overflow.filter((n: unknown) => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= now.length))].sort((a, b) => a - b) : undefined;
     const changed = now.flatMap((p, i) => (p.heading || '') !== (was[i].heading || '') || p.text !== was[i].text ? [i + 1] : []);
     const edited = [...new Set([...(output.cards?.edited || []), ...changed])].sort((a, b) => a - b);
-    const set: CardSet = { images: images.map(({ id, name, ref }) => ({ id, name, ref })), ...(output.cards?.sections ? { sections: output.cards.sections } : {}), ...(colors.length ? { colors } : {}), ...(overflow ? { overflow } : {}), ...(output.cards?.style ? { style: output.cards.style } : {}), ...(edited.length ? { edited } : {}) };
+    const set: CardSet = { images: images.map(({ id, name, ref }) => ({ id, name, ref })), ratio: ratioOf(height), ...(output.cards?.sections ? { sections: output.cards.sections } : {}), ...(colors.length ? { colors } : {}), ...(overflow ? { overflow } : {}), ...(output.cards?.style ? { style: output.cards.style } : {}), ...(edited.length ? { edited } : {}) };
     return { cards: set, changed };
   }
   async tick() {
@@ -1371,7 +1382,7 @@ export class TaskService {
   async validateAgentResult(r: Run, v: AgentResult) {
     // `task result` checks an article against its target before saving, so the Agent can correct it.
     if (v.ok && r.mode === 'article') { await this.articleFlow.proposal(r.projectId, JSON.parse(r.input), v.article); return; }
-    // Xiaohongshu cards: every image is one this run uploaded and still has.
+    // A set of cards: every image is one this run uploaded and still has.
     if (v.ok && v.cards) {
       const reader = this.p.taskAttachments;
       if (!reader || !(await reader.runImages(r, v.cards.images))) return fail(systemMessageText('agentResult.xhsImagesUnknown'), 422);

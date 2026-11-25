@@ -41,6 +41,7 @@ const BRAND: Record<string, BrandLogoKey> = {
   wechat: 'wechat',
   youtube: 'youtube',
   linkedin: 'linkedin',
+  instagram: 'instagram',
   discord: 'discord',
   slack: 'slack',
 };

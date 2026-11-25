@@ -7,8 +7,8 @@ import {
   useSearchParams,
 } from 'react-router';
 import { createUuid } from '@nocobase/app-client';
-import { Check } from 'lucide-react';
-import { $t, useNocoReachLocale } from '#i18n';
+import { Check, TriangleAlert } from 'lucide-react';
+import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { RouteDialog } from '#components/route-dialog';
 import { useRouteOverlay } from '#components/use-route-overlay';
 import { Segmented } from '#components/reach/segmented';
@@ -27,6 +27,7 @@ import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import {
   ANGLE_MAX,
+  carouselOrder,
   destinationKey,
   destinationName,
   LINKS_MAX,
@@ -34,10 +35,15 @@ import {
   POINTS_MAX,
   subredditName,
   TOPIC_MAX,
+  type CarouselForm,
   type Destination,
   type RepurposeForm,
   type RepurposeSource,
 } from '../../../shared/repurpose.js';
+import { savedStyleId } from '../../../shared/card-design.js';
+import { cardStyle } from '../../../shared/xhs-card.js';
+import { previewCards, useOverflow45 } from './style-fit.js';
+import { CarouselMark } from './carousel-mark.js';
 import { useProject } from '../reach-data.js';
 import { AgentMenu } from '../task-detail/agent-menu.js';
 import { taskAgentOf, type AgentStatus } from '../task-agents.js';
@@ -45,9 +51,11 @@ import type { TaskData } from '../task-execution-types.js';
 import type { WorkshopOutlet } from './index.js';
 import { CategoryTag } from '../strategy/growth';
 import {
+  carouselPlaceName,
   cardFieldsOf,
   errorText,
   getFormNames,
+  isChineseSource,
   hotHeadlineText,
   opportunityNo,
   pathOf,
@@ -718,17 +726,7 @@ function Step2({
             ) : null}
           </div>
         ) : null}
-        <div className='grid gap-3 sm:grid-cols-3'>
-          <FormCard
-            form='xhs'
-            name={names.xhs}
-            spec={$t('workshop.specXhs')}
-            checked={isOn({ form: 'xhs' })}
-            onCheckedChange={(on) => toggle({ form: 'xhs' }, on)}
-            status={status({ form: 'xhs' })}
-            locked={locked({ form: 'xhs' })}
-            preview={<CardsPreview />}
-          />
+        <div className='grid gap-3 sm:grid-cols-2'>
           <FormCard
             form='x'
             name={names.x}
@@ -757,8 +755,40 @@ function Step2({
             locked={locked({ form: 'linkedin' })}
             preview={<PostsPreview lines={[[95, 88, 92]]} />}
           />
+          {/* Carousel (2026-11-24): one task per place, like a community post; Chinese interfaces list Xiaohongshu first. */}
           <div
-            className='rounded-xl border bg-card p-4 sm:col-span-3'
+            className='rounded-xl border bg-card p-4 sm:col-span-2'
+            data-form='carousel'
+          >
+            <div className='flex items-center gap-2 text-sm font-semibold'>
+              <CarouselMark />
+              {$t('workshop.formCarousel')}
+            </div>
+            <p className='mt-1 text-xs text-muted-foreground'>
+              {$t('workshop.specCarousel')}
+            </p>
+            <div className='mt-3 space-y-1.5 text-sm'>
+              {carouselOrder(getCurrentLocale()).map((form) => (
+                <Destination
+                  key={form}
+                  logo={logoOfPlace(form)}
+                  name={carouselPlaceName(form)}
+                  note={placeSpec(form)}
+                  checked={isOn({ form })}
+                  onCheckedChange={(on) => toggle({ form }, on)}
+                  status={status({ form })}
+                  locked={locked({ form })}
+                  data={{ 'data-place': form }}
+                />
+              ))}
+              {isOn({ form: 'instagram' }) ||
+              isOn({ form: 'linkedin-carousel' }) ? (
+                <StyleFit45 view={view} />
+              ) : null}
+            </div>
+          </div>
+          <div
+            className='rounded-xl border bg-card p-4 sm:col-span-2'
             data-form='community'
           >
             <div className='flex items-center gap-2 text-sm font-semibold'>
@@ -884,8 +914,10 @@ function Step2({
             </div>
           </div>
         </div>
-        {/* WeChat layout makes no task: an article's body, laid out and copied (a topic or trending item has none). */}
-        {source.kind === 'article' ? (
+        {/* WeChat layout makes no task: an article's body, laid out and copied (a topic or trending item has none), and
+            only a Chinese one (2026-11-24): WeChat Official Accounts are read in Chinese. */}
+        {source.kind === 'article' &&
+        isChineseSource(version?.lang, source.title) ? (
           <WechatRow
             projectId={projectId}
             url={source.url}
@@ -1046,7 +1078,7 @@ function FormCard({
           !disabled && !locked && 'cursor-pointer',
         )}
       >
-        <SourceLogo source={form === 'xhs' ? 'xiaohongshu' : form} size='sm' />
+        <SourceLogo source={form} size='sm' />
         {name}
         {disabled ? (
           <Tag tone='grey' className='ml-1'>
@@ -1071,19 +1103,7 @@ function FormCard({
   );
 }
 
-// A form's shape at a glance: the cards of an image note, the posts of a text form.
-function CardsPreview() {
-  return (
-    <>
-      <span className='h-11 w-8 rounded bg-primary/80' />
-      <span className='h-11 w-8 rounded bg-muted' />
-      <span className='h-11 w-8 rounded bg-muted' />
-      <span className='h-11 w-8 rounded bg-muted' />
-      <span className='self-center text-xs text-muted-foreground'>…</span>
-    </>
-  );
-}
-
+// A text form's shape at a glance: its posts.
 function PostsPreview({ lines }: { lines: number[][] }) {
   return (
     <>
@@ -1105,6 +1125,60 @@ function PostsPreview({ lines }: { lines: number[][] }) {
   );
 }
 
+const logoOfPlace = (form: CarouselForm) =>
+  form === 'xhs'
+    ? 'xiaohongshu'
+    : form === 'instagram'
+      ? 'instagram'
+      : 'linkedin';
+
+/** What a carousel place makes: "4:5 portrait, 6–20 cards, with a caption and up to 5 hashtags". */
+const placeSpec = (form: CarouselForm) =>
+  form === 'xhs'
+    ? $t('workshop.placeSpecXhs')
+    : form === 'instagram'
+      ? $t('workshop.placeSpecInstagram')
+      : $t('workshop.placeSpecLinkedinCarousel');
+
+/**
+ * One of My styles saved before 4:5 was checked, used for Instagram or LinkedIn for the first time: checked at 4:5, and
+ * when it does not fit, sent to Brand and templates to adjust it with AI (2026-11-24).
+ */
+function StyleFit45({ view }: { view: WorkshopView }) {
+  const { project } = useProject();
+  const fields = cardFieldsOf(view.brand.cards);
+  const mine = !fields.skill && savedStyleId(fields.template);
+  const overflow = useOverflow45(
+    mine
+      ? cardStyle(
+          { ...(view.brand.cards || {}), skill: null },
+          {
+            name: project?.name,
+            site: String(project?.domains?.[0] || '')
+              .replace(/^https?:\/\//, '')
+              .replace(/\/.*$/, ''),
+            icon: view.siteIcon,
+          },
+          view.styles,
+        )
+      : null,
+    previewCards(view.cardSample, fields),
+  );
+  if (!overflow?.length) return null;
+  return (
+    <p
+      className='flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs text-nr-ink-amber'
+      data-overflow-45=''
+    >
+      <TriangleAlert className='size-3.5 shrink-0' aria-hidden='true' />
+      {$t('workshop.styleNoFit45')}
+      <Link className='nr-link' to='/workshop/brand'>
+        {$t('workshop.adjustInBrand')}
+      </Link>
+    </p>
+  );
+}
+
 function Destination({
   logo,
   name,
@@ -1113,6 +1187,7 @@ function Destination({
   onCheckedChange,
   status,
   locked = false,
+  data,
 }: {
   logo: string;
   name: string;
@@ -1121,11 +1196,14 @@ function Destination({
   onCheckedChange: (on: boolean) => void;
   status?: ReactNode;
   locked?: boolean;
+  /** Data attributes for the row, such as a carousel's place. */
+  data?: Record<`data-${string}`, string>;
 }) {
   return (
     <div
       className='flex flex-wrap items-center gap-2 py-0.5'
       data-destination=''
+      {...data}
     >
       <label
         className={cn('flex items-center gap-2', !locked && 'cursor-pointer')}

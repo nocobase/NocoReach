@@ -22,7 +22,6 @@ import {
 import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { TASK_MEDIA_LIMIT } from '../../shared/manual-task.js';
-import { XHS } from '../../shared/repurpose.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import type { TaskService } from '../nocoreach/execution/service.js';
 import { TASK_DRAFT, TASK_READ } from '../nocoreach/execution/task-business.js';
@@ -208,7 +207,7 @@ export const taskAgentRoutes: AppApiRouteContribution<Application> =
         tags: ['NocoReach Tasks'],
         summary: 'Upload an image for the current task result',
         operationId: 'uploadCurrentTaskFile',
-        description: `For a Xiaohongshu cards run: one ${XHS.width}×${XHS.height} PNG per call, at most 20 MiB. Put the returned id in the result's cards.images, in the cards' order. An image the result does not use expires after a day.`,
+        description: `For a run making cards (Xiaohongshu, Instagram or LinkedIn): one PNG of the run's card size (1080×1440 for Xiaohongshu, 1080×1350 for Instagram and LinkedIn) per call, at most 20 MiB. Put the returned id in the result's cards.images, in the cards' order. An image the result does not use expires after a day.`,
         security: [{ runToken: [] }],
         // One file as `file`; the CLI sends the local path given as --file.
         requestBody: {
@@ -222,7 +221,7 @@ export const taskAgentRoutes: AppApiRouteContribution<Application> =
                   file: {
                     type: 'string',
                     format: 'binary',
-                    description: `A ${XHS.width}×${XHS.height} PNG card image.`,
+                    description: 'A 1080×1440 or 1080×1350 PNG card image.',
                   },
                 },
               },

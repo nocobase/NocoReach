@@ -53,7 +53,7 @@ export interface TaskAttachmentReader {
     ids: readonly string[],
   ): Promise<import('../../../shared/task-images.js').MessageDocument[]>;
   /**
-   * Keep an image an Agent uploaded during its run (`task file`, Xiaohongshu cards): a PNG of the card size, unlinked
+   * Keep an image an Agent uploaded during its run (`task file`, a set of cards): a PNG of a card size, unlinked
    * until the run's result links it. Answers what NocoReach read of it (manual-tasks.ts agentImage).
    */
   agentImage(
@@ -62,7 +62,7 @@ export interface TaskAttachmentReader {
   ): Promise<AgentImage>;
   /**
    * Link the card images a person drew with Edit directly to the task in the caller's transaction, each with the colors
-   * read from it (manual-tasks.ts cardImages).
+   * read from it and its height (manual-tasks.ts cardImages).
    */
   cardImages(
     connection: import('@nocobase/db').DatabaseConnection,
@@ -73,6 +73,7 @@ export interface TaskAttachmentReader {
   ): Promise<
     (import('../../../shared/task-images.js').MessageImage & {
       colors?: string[];
+      height?: number;
     })[]
   >;
   /** Whether each of `ids` is an image this run uploaded and still has (unlinked, or linked to its task). */
@@ -205,7 +206,7 @@ export function serializeTaskInput(input: TaskInput): string {
   // An article step's source holds complete bodies; it goes to the Runner as a material file, not in the prompt.
   if (article !== undefined && JSON.stringify(article).length > 1500000)
     return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
-  // The Xiaohongshu card template carries the brand kit's logo; it too is a material file (xhs-card.html).
+  // The card template carries the brand kit's logo; it too is a material file (xhs-card.html, its name since Xiaohongshu).
   if (typeof cardTemplate === 'string' && cardTemplate.length > 600000)
     return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
   // Cards a Skill draws have no template; the brand kit's logo goes on its own, for the Skill to use if it can.
@@ -247,6 +248,13 @@ export function taskMaterials(
     };
   };
   const previous = article?.previous;
+  // The card size the template draws at, which it names in its page (shared/xhs-card.ts cardTemplate).
+  const cardSize =
+    typeof cardTemplate === 'string'
+      ? /name="card-size" content="(\d+x\d+)"/
+          .exec(cardTemplate)?.[1]
+          ?.replace('x', '×') || '1080×1440'
+      : '';
   const files = [
     { path: 'knowledge.json', content: JSON.stringify(knowledge) },
     { path: 'skills.json', content: JSON.stringify(skills) },
@@ -348,7 +356,7 @@ export function taskMaterials(
     offer: {
       hash,
       target: TARGET,
-      note: `读取 knowledge.json、skills.json 和 sources.json（文章任务另有 article.json 源稿）的任务资料快照；omitted 表示未提供正文，不得猜测。${typeof cardTemplate === 'string' ? '小红书卡片模板是 xhs-card.html：复制到工作目录，在旁边写 cards.js（window.CARDS = [{layout, heading, text}]），用无头浏览器按 1080×1440 打开 xhs-card.html?n=序号 逐张截图；页面标题 overflow:none 表示没有溢出，overflow:3,7 列出溢出的卡片。' : ''}${typeof cardLogo === 'string' ? '品牌 Logo 在 xhs-logo.txt：内容是图片的 data URL（data:类型;base64,数据），把逗号后的 base64 解码成图片文件再用。' : ''}${plan.length ? '任务附件列在 attachments.json：base64 字段指向原件的 base64 文本，先解码再打开（如 base64 -d 文件.base64 > 原文件名）；带 omitted 的附件（video 或 size）未提供，需要时请任务负责人在任务页下载。' : ''}${shown.length ? '留言和审核意见里的图片列在 images.json：ref 与 notes、feedback 中图片的 ref 相同，base64 字段指向原图的 base64 文本，先解码再查看；带 omitted 的图片未提供。' : ''}${read.length ? '留言和审核意见里的文档列在 documents.json：ref 与 notes、feedback 中文档的 ref 相同，base64 字段指向原件的 base64 文本，先按 name 的文件名解码再打开；带 omitted 的文档未提供，需要时请任务负责人在任务页下载。' : ''}资料不应提交到仓库。`,
+      note: `读取 knowledge.json、skills.json 和 sources.json（文章任务另有 article.json 源稿）的任务资料快照；omitted 表示未提供正文，不得猜测。${typeof cardTemplate === 'string' ? `卡片模板是 xhs-card.html：复制到工作目录，在旁边写 cards.js（window.CARDS = [{layout, heading, text}]），用无头浏览器按 ${cardSize} 打开 xhs-card.html?n=序号 逐张截图；页面标题 overflow:none 表示没有溢出，overflow:3,7 列出溢出的卡片。` : ''}${typeof cardLogo === 'string' ? '品牌 Logo 在 xhs-logo.txt：内容是图片的 data URL（data:类型;base64,数据），把逗号后的 base64 解码成图片文件再用。' : ''}${plan.length ? '任务附件列在 attachments.json：base64 字段指向原件的 base64 文本，先解码再打开（如 base64 -d 文件.base64 > 原文件名）；带 omitted 的附件（video 或 size）未提供，需要时请任务负责人在任务页下载。' : ''}${shown.length ? '留言和审核意见里的图片列在 images.json：ref 与 notes、feedback 中图片的 ref 相同，base64 字段指向原图的 base64 文本，先解码再查看；带 omitted 的图片未提供。' : ''}${read.length ? '留言和审核意见里的文档列在 documents.json：ref 与 notes、feedback 中文档的 ref 相同，base64 字段指向原件的 base64 文本，先按 name 的文件名解码再打开；带 omitted 的文档未提供，需要时请任务负责人在任务页下载。' : ''}资料不应提交到仓库。`,
     },
     bundle: { name: TASK_MATERIALS_MOUNT, hash, files },
   };

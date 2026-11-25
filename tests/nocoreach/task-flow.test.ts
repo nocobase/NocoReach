@@ -140,7 +140,7 @@ for (const unavailable of ['missing', 'database-error']) {
 }
 
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
- assert.equal(SYSTEM_PLAYBOOKS.length,17);
+ assert.equal(SYSTEM_PLAYBOOKS.length,19);
  // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.
  {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### Reply/);assert.match(r.steps[0].instruction,/不发帖/);
   assert.equal(defaultPlaybookId({evidence:{insight:{signalIds:['community-unanswered']},context:{signals:{items:[{key:'community-unanswered',action:'reply'}]}}}}),'community-reply');}
@@ -148,10 +148,10 @@ test('built-in playbooks: every step is the Agent or you, grouped by work; custo
   assert.equal(st.some(s=>s.kind==='release'),p.kind==='build',`${p.id}: only repository changes are released`);}
  assert.deepEqual(SYSTEM_PLAYBOOKS.filter(p=>p.category==='research').map(p=>p.id),['change-research','competitor-compare','keyword-research','community-summary']);
  // Content workshop (2026-11-13): one playbook per form, the Agent adapts and you approve, which completes the task;
- // nothing follows and nothing is saved to the knowledge base.
- for(const [id,form,skill] of [['xhs-cards','xhs','xhs-cards'],['x-posts','x','x-posts'],['linkedin-post','linkedin','linkedin-post'],['community-post','community','community-post']]){const p=SYSTEM_PLAYBOOKS.find(x=>x.id===id);
+ // nothing follows and nothing is saved to the knowledge base. Carousel (2026-11-24) adds Instagram's and LinkedIn's places.
+ for(const [id,form,skill] of [['xhs-cards','xhs','xhs-cards'],['instagram-carousel','instagram','instagram-carousel'],['linkedin-carousel','linkedin-carousel','linkedin-carousel'],['x-posts','x','x-posts'],['linkedin-post','linkedin','linkedin-post'],['community-post','community','community-post']]){const p=SYSTEM_PLAYBOOKS.find(x=>x.id===id);
   assert.equal(p.category,'repurpose');assert.equal(p.form,form);assert.equal(p.kind,'plan');assert.deepEqual(p.next,[]);assert.deepEqual(stagesFor(p).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(p.steps[0].skills,[skill]);
-  for(const marker of form==='xhs'?['## Card 1','## Title','## Body','Layout: end','Sections:','task file','cards.images']:form==='x'?['## Post 1','## Reply','Sections:']:form==='linkedin'?['## Post','Sections:']:['## Title','## Body','## Rules','Sections:'])assert.ok(p.steps[0].instruction.includes(marker),`${id} names ${marker}`);}
+  for(const marker of form==='xhs'?['## Card 1','## Title','## Body','Layout: end','Sections:','task file','cards.images']:form==='instagram'?['## Card 1','## Body','## Hashtags','Layout: end','Sections:','1080×1350','task file','cards.images']:form==='linkedin-carousel'?['## Card 1','## Title','## Body','Layout: end','Sections:','1080×1350','PDF','cards.images']:form==='x'?['## Post 1','## Reply','Sections:']:form==='linkedin'?['## Post','Sections:']:['## Title','## Body','## Rules','Sections:'])assert.ok(p.steps[0].instruction.includes(marker),`${id} names ${marker}`);}
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='competitor-compare')).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]],'research is an analysis by the Agent');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')).map(s=>s.key),['build','review','release','observe'],'page work goes straight to a change you look at');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='tech-fix')).map(s=>s.key),['plan','approve-plan','build','review','release','observe'],'technical fixes show a plan first');
@@ -322,10 +322,10 @@ test('a review whose stage snapshot still requires checklist items is accepted w
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
  const f=fixture();await connectAgent(f);
- let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,17);
+ let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,19);
  // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
- assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,17);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
+ assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,19);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
  await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
  r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建一个文档页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
@@ -1289,15 +1289,15 @@ test('repositories: a check asks GitHub for the repository and branch and says w
 // style and the template drawn in it; the Agent uploads each card with `task file` (manual-tasks.ts agentImage, faked
 // here), lists the images in its result, and NocoReach keeps them with the result and checks the set: sections used,
 // cover heading, number of cards, colors read from the images, overflow as the Agent reported it, length of each card.
-function fakeCardImages(){
+function fakeCardImages(height=1440){
  const files=new Map();
  return {files,
-  agentImage:async(run,file)=>{const id=randomUUID(),n=files.size+1;files.set(id,{run:run.id,taskId:null,name:file.name,colors:n===1?['#1e40af','#f8fafc']:['#f8fafc','#0f172a','#1e40af']});return {id,filename:file.name,size:file.size,width:1080,height:1440,colors:files.get(id).colors};},
+  agentImage:async(run,file)=>{const id=randomUUID(),n=files.size+1;files.set(id,{run:run.id,taskId:null,name:file.name,colors:n===1?['#1e40af','#f8fafc']:['#f8fafc','#0f172a','#1e40af']});return {id,filename:file.name,size:file.size,width:1080,height:/@3x4\./.test(file.name)?1440:height,colors:files.get(id).colors};},
   runImages:async(run,ids)=>ids.every(id=>files.get(id)?.run===run.id&&[null,run.taskId].includes(files.get(id).taskId)),
   linkImages:async(_conn,actor,_project,taskId,ids)=>ids.map(id=>{const file=files.get(id);if(!file||`run:${file.run}`!==actor||(file.taskId&&file.taskId!==taskId))throw Object.assign(Error('unavailable'),{reason:'TASK_IMAGE_UNAVAILABLE'});file.taskId=taskId;return {id,name:file.name,ref:`/uploads/task-media/${id}.png`};}),
   // A person's card images, drawn by Edit directly in their browser and uploaded as theirs (manual-tasks.ts cardImage).
-  personImage:(actor,name)=>{const id=randomUUID();files.set(id,{owner:`cards:${actor}`,taskId:null,name,colors:['#f8fafc','#0f172a']});return id;},
-  cardImages:async(_conn,actor,_project,taskId,ids)=>ids.map(id=>{const file=files.get(id);if(!file||file.owner!==`cards:${actor}`||(file.taskId&&file.taskId!==taskId))throw Object.assign(Error('unavailable'),{status:409,reason:'TASK_IMAGE_UNAVAILABLE'});file.taskId=taskId;return {id,name:file.name,ref:`/uploads/task-media/${id}.png`,colors:file.colors};}),
+  personImage:(actor,name,height=1440)=>{const id=randomUUID();files.set(id,{owner:`cards:${actor}`,taskId:null,name,height,colors:['#f8fafc','#0f172a']});return id;},
+  cardImages:async(_conn,actor,_project,taskId,ids)=>ids.map(id=>{const file=files.get(id);if(!file||file.owner!==`cards:${actor}`||(file.taskId&&file.taskId!==taskId))throw Object.assign(Error('unavailable'),{status:409,reason:'TASK_IMAGE_UNAVAILABLE'});file.taskId=taskId;return {id,name:file.name,ref:`/uploads/task-media/${id}.png`,colors:file.colors,height:file.height};}),
   forAgent:async()=>[]};
 }
 const xhsResult=(cards=7)=>['## Title','Tickets in an afternoon','## Body','Sections: 1–4','We moved support to two tables. #support',
@@ -1326,7 +1326,8 @@ test('Xiaohongshu cards: sections, style and template in the run; images uploade
  let d=await f.view();const out=output(d);
  assert.deepEqual(out.cards.images.map(x=>x.id),ids);assert.equal(out.cards.sections,4);assert.deepEqual(out.cards.colors,['#1e40af','#f8fafc','#0f172a']);assert.deepEqual(out.cards.overflow,[]);
  assert.deepEqual(d.work.images,ids);assert.ok([...media.files.values()].every(x=>x.taskId==='1'),'linked to the task');
- assert.deepEqual(d.repurpose.checks[out.id].map(x=>[x.key,x.ok]),[['workshop.check.sectionsAll',true],['workshop.check.coverWithin',true],['workshop.check.cardsWithin',true],['workshop.check.colorsWithin',true],['workshop.check.noOverflow',true],['workshop.check.cardCharsWithin',true]]);
+ // The set is in English, so its cards are counted in words (2026-11-24).
+ assert.deepEqual(d.repurpose.checks[out.id].map(x=>[x.key,x.ok]),[['workshop.check.sectionsAll',true],['workshop.check.coverWithinWords',true],['workshop.check.cardsWithin',true],['workshop.check.colorsWithin',true],['workshop.check.noOverflow',true],['workshop.check.cardWordsWithin',true]]);
  // The set keeps the style it was drawn in; the task page gets the brand kit's style now, with its logo, to draw edits.
  assert.deepEqual([out.cards.style.template,out.cards.style.color,out.cards.style.logo],['checklist','#1e40af',false]);
  assert.deepEqual([d.repurpose.cardStyle.template,d.repurpose.cardStyle.color],['checklist','#1e40af']);
@@ -1338,6 +1339,7 @@ test('Xiaohongshu cards: sections, style and template in the run; images uploade
  await assert.rejects(edit({content:editedText,cards:{images:drawn.slice(1)}}),e=>e.status===409,'an image short');
  await assert.rejects(edit({content:editedText,cards:{images:ids}}),e=>e.status===409,'the Agent’s images');
  await assert.rejects(edit({content:editedText}),e=>e.status===409,'no images');
+ await assert.rejects(edit({content:editedText,cards:{images:Array.from({length:7},(_,i)=>media.personImage('1',`card-4-5-0${i+1}.png`,1350))}}),e=>e.status===409,'drawn at 4:5 for a Xiaohongshu set');
  d=await edit({content:editedText,cards:{images:drawn,overflow:[2,9]}});
  const second=output(d);assert.notEqual(second.id,out.id);
  assert.deepEqual(second.cards.images.map(x=>x.id),drawn);assert.deepEqual(second.cards.edited,[2]);assert.deepEqual(second.cards.overflow,[2]);
@@ -1350,6 +1352,41 @@ test('Xiaohongshu cards: sections, style and template in the run; images uploade
  const g=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose:{...repurpose,form:'x'}}});await connectAgent(g);g.s.p.taskAttachments=fakeCardImages();
  await g.command('startTask',{playbookId:'x-posts'});const gc=await claim(g);
  await assert.rejects(g.s.business.file({...identity,run:{run:{id:gc.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${gc.run.id}`}}},new File([Buffer.from('png')],'card.png',{type:'image/png'})),e=>e.status===409);
+});
+
+// Carousel (2026-11-24): Instagram's and LinkedIn's places run their own playbook with the template drawn at 4:5, keep
+// the set's ratio from the images' height, turn down a set of two sizes, check the place's own text, and Edit directly
+// takes only 4:5 images for them.
+test('Carousel places: Instagram and LinkedIn draw at 4:5, keep the ratio, check their own text and edit at 4:5',async()=>{
+ const caption='Five people or fewer? Start with how your team works.\n\nThe full comparison is at the link in bio.';
+ const cards=n=>Array.from({length:n},(_,i)=>i===n-1?[`## Card ${n}`,'Layout: end','# Follow Acme','acme.example']:[`## Card ${i+1}`,`Sections: ${Math.min(i+1,2)}`,`# Step ${i+1}`,'One owner for every request.']).flat();
+ for(const [form,playbookId,kind,content,n] of [['instagram','instagram-carousel','instagramCards',['## Body',caption,'## Hashtags','#projectmanagement #smallteams #acme',...cards(8)].join('\n'),8],['linkedin-carousel','linkedin-carousel','linkedinCards',['## Title','Picking a PM tool','## Body','Most small teams pick a tool by its feature list.',...cards(6)].join('\n'),6]]){
+  const repurpose={form,source:{kind:'article',url:'https://example.com/blog/tools',title:'Picking a PM tool'}},createdBy={id:'1',name:'Tester'};
+  const f=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose}});await connectAgent(f);
+  f.state.nrSnapshots.push({id:9001,key:f.s.key('source','1','1'),payload:{body:'## Why\nOne inbox.\n\n## How\nTwo tables.',locale:'en-US',readAt:'2026-11-24T00:00:00Z'}});
+  f.s.p.workshop={brand:async()=>({revision:1,community:null,cards:{template:'editorial',color:'#1e40af'}})};
+  const media=fakeCardImages(1350);f.s.p.taskAttachments=media;
+  await assert.rejects(f.command('startTask',{playbookId:'xhs-cards'}),e=>e.status===409,`${form}: another place's playbook`);
+  await f.command('startTask',{playbookId});
+  const c=await claim(f),input=c.run.input;
+  assert.equal(input.resultKind,kind);assert.match(input.cardTemplate,/<meta name="card-size" content="1080x1350">/);
+  const identity={kind:'run',userId:'1',displayName:'Team Agent',agent:f.s.p.agents.agent,run:{run:{id:c.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${c.run.id}`}}};
+  const upload=name=>f.s.business.file(identity,new File([Buffer.from('png')],name,{type:'image/png'})).then(x=>x.id);
+  const ids=[];for(let i=1;i<=n;i++)ids.push(await upload(`card-${i}.png`));
+  // One image drawn at 3:4 among 4:5 ones: the set has two sizes.
+  await assert.rejects(f.s.acceptAgentResult('1',c.run.pluginRunId,{taskId:'1',runId:c.run.id,ok:true,content,cards:{images:[await upload('card-1@3x4.png'),...ids.slice(1)]}}),e=>e.status===409&&/1080×1350/.test(e.message),`${form}: two sizes`);
+  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content,cards:{images:ids,overflow:[]}});
+  const d=await f.view(),out=output(d);
+  assert.equal(out.cards.ratio,'4:5');assert.equal(out.cards.images.length,n);
+  const checks=d.repurpose.checks[out.id].map(x=>[x.key,x.ok]);
+  assert.ok(checks.every(([,ok])=>ok),`${form}: ${JSON.stringify(checks)}`);
+  assert.deepEqual(checks.map(([k])=>k).filter(k=>/hashtags|caption|docTitle|postText|pages|cards(Within|Out)/.test(k)),form==='instagram'?['workshop.check.cardsWithin','workshop.check.hashtagsWithin','workshop.check.captionNoLink']:['workshop.check.pagesWithin','workshop.check.docTitleWithin','workshop.check.postTextWithin']);
+  // Edit directly: drawn again at 4:5, never at 3:4.
+  const edit=images=>f.command('editStageOutput',{stageKey:'accept',artifactId:out.id,content:content.replace('# Step 1\n','# Step one\n'),cards:{images}});
+  await assert.rejects(edit(Array.from({length:n},(_,i)=>media.personImage('1',`card-0${i+1}.png`,1440))),e=>e.status===409,`${form}: 3:4 images`);
+  const second=output(await edit(Array.from({length:n},(_,i)=>media.personImage('1',`card-0${i+1}.png`,1350))));
+  assert.deepEqual([second.cards.ratio,second.cards.edited],['4:5',[1]]);
+ }
 });
 
 // Content workshop (2026-11-13): a task made from an article runs its form's playbook only, the Agent gets the source

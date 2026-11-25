@@ -32,9 +32,9 @@ import { againstPrevious, canRebase, cmsLink, conflictHeading, defaultDelivery, 
 import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { RepurposeResult } from './task-detail/repurpose-result.js';
-import { XhsCardEditor, XhsDoneTools, type CardSelection } from './task-detail/xhs-cards.js';
+import { XhsCardEditor, XhsDoneTools, carouselDoneNote, type CardSelection } from './task-detail/xhs-cards.js';
 import { drawnBySkill } from '../../shared/xhs-card.js';
-import { cardToEdit } from '../../shared/repurpose.js';
+import { cardToEdit, isCarouselForm } from '../../shared/repurpose.js';
 import { repurposeReviewTitle } from './workshop/model.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -584,15 +584,16 @@ function CurrentCard({data,update,busy,list,members}:{data:Data;update:Update;bu
   const label=w.repurpose?$t('workshop.approve'):nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
   const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
-  // Xiaohongshu cards are edited card by card and drawn again in this browser (XhsCardEditor), with the brand kit's style
-  // for the logo and for a set that does not record its own; a version without images, or whose cards a Skill drew, is
-  // edited by asking the Agent.
-  const cardStyle=w.repurpose?.form==='xhs'&&out.cards?.images.length&&!drawnBySkill(out.cards.style)?data.repurpose?.cardStyle:undefined;
+  // Carousel cards are edited card by card and drawn again in this browser at the place's size (XhsCardEditor), with the
+  // brand kit's style for the logo and for a set that does not record its own; a version without images, or whose cards a
+  // Skill drew, is edited by asking the Agent.
+  const carousel=w.repurpose&&isCarouselForm(w.repurpose.form)?w.repurpose.form:null;
+  const cardStyle=carousel&&out.cards?.images.length&&!drawnBySkill(out.cards.style)?data.repurpose?.cardStyle:undefined;
   return <StageCard title={w.repurpose?repurposeReviewTitle(w.repurpose):$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}{(w.repurpose?.form!=='xhs'||cardStyle)&&<Button variant="ghost" disabled={busy} onClick={()=>{if(cardStyle)setCardEdit(cardToEdit(out.content,out.cards?.overflow));else{setDraft(out.content);setEditing(true);}}}><Pencil/>{$t('taskDetail.editDirectly')}</Button>}</>}>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}{(!carousel||cardStyle)&&<Button variant="ghost" disabled={busy} onClick={()=>{if(cardStyle)setCardEdit(cardToEdit(out.content,out.cards?.overflow));else{setDraft(out.content);setEditing(true);}}}><Pencil/>{$t('taskDetail.editDirectly')}</Button>}</>}>
    <LastFeedback w={w} stage={stage} out={out}/>
-   {cardEdit!==null&&cardStyle&&<XhsCardEditor out={out} current={cardStyle} initial={cardEdit} onClose={()=>setCardEdit(null)} onSave={edit=>act('editStageOutput',{artifactId:out.id,...edit}).then(Boolean)}/>}
+   {cardEdit!==null&&cardStyle&&carousel&&<XhsCardEditor form={carousel} out={out} current={cardStyle} initial={cardEdit} onClose={()=>setCardEdit(null)} onSave={edit=>act('editStageOutput',{artifactId:out.id,...edit}).then(Boolean)}/>}
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
     {out.pr?<PageChange pr={out.pr} content={out.content}/>:w.repurpose?<RepurposeResult data={data} out={out} review onEditCard={cardStyle&&!busy?setCardEdit:undefined} fallback={<Reading><Markdown content={out.content}/></Reading>}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
     <ScopeConfirm pr={out.pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
@@ -721,7 +722,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
  // A Content workshop result (2026-11-13 user decision): approving completes it; the pieces stay to copy, and Reopen
  // in the ··· menu takes it back to review.
- if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})} actions={w.repurpose.form==='xhs'?<XhsDoneTools out={accepted} name={`T-${(data.task.evidence as {no?:number}|undefined)?.no??data.task.id}`}/>:undefined} open><RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
+ if(w.repurpose&&accepted)return <StageCard label={done} title={done} sub={$t('workshop.doneSub',{0:when(accepted.approvedAt)})} actions={isCarouselForm(w.repurpose.form)?<XhsDoneTools form={w.repurpose.form} out={accepted} name={`T-${(data.task.evidence as {no?:number}|undefined)?.no??data.task.id}`}/>:undefined} open>{isCarouselForm(w.repurpose.form)&&accepted.cards?.images.length&&carouselDoneNote(w.repurpose.form,accepted.cards.images.length)?<p className='text-sm text-muted-foreground' data-done-note=''>{carouselDoneNote(w.repurpose.form,accepted.cards.images.length)}</p>:null}<RepurposeResult data={data} out={accepted} fallback={<Reading><Markdown content={accepted.content}/></Reading>}/></StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}>{handed}<ReplyDrafts items={replies}/></StageCard>;
  return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>
