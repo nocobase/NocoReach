@@ -140,10 +140,12 @@ const normalize = (s?: string) =>
     .trim();
 /** Text compared apart from its numbers ("Turn 7,534 impressions…" and "Turn 7,470 impressions…" read the same). */
 export const wording = (s?: string) => normalize(s).replace(/\d+/g, '');
-// A Skill's finding is keyed `skill:<skillId>:<kind>:<digest of the keywords it cited>` (server/nocoreach/
-// skill-analysis.ts). The Skill cites other keywords from one day to the next, so the same finding comes back under
-// another key (2026-11-21: O-93 came back as O-108, O-91 as O-111, O-95 as O-109). Only the changes the server
-// computes itself keep their key, so only those decide whether two cards cite the same changes.
+// A Skill's finding is keyed `skill:<skillId>:<kind>:<digest>` (server/nocoreach/skill-analysis.ts). Until
+// 2026-11-25 the digest was of everything the Skill cited, which changed from one day to the next, so the same finding
+// came back under another key (2026-11-21: O-93 came back as O-108, O-91 as O-111, O-95 as O-109). It is now of the
+// page or largest keyword or question the growth rests on, but cards saved before keep the old keys, and a Skill may
+// still name another largest row for one opportunity. Only the changes the server computes itself are sure to keep
+// their key, so only those decide whether two cards cite the same changes.
 const isSkillSignal = (key: string) => key.startsWith('skill:');
 /** The changes a card cites that keep their key from one analysis to the next: all but its Skills' findings. */
 export const stableSignals = (c: Pick<Opportunity, 'signalIds'>) =>

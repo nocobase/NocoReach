@@ -27,6 +27,7 @@ import {
   ruleCategoryOf,
 } from '../../shared/analysis-rule-categories';
 import chinese from '../../shared/i18n/zh.json' with { type: 'json' };
+import { applyVerdicts, endMissing } from '../../server/nocoreach/watch';
 
 const LIBRARY = [
   'content-strategy',
@@ -409,5 +410,221 @@ describe('the daily Skill calls', () => {
     });
     expect(signals).toEqual([]);
     expect(runs[0]).toMatchObject({ status: 'error', error: 'output' });
+  });
+});
+
+// A Skill cites other rows from one day to the next for the same finding (2026-11-21: O-93 came back as O-108). The
+// key follows what the growth rests on, so Ignore, Watching and hand-offs keyed by it hold the next day.
+describe("a Skill's finding keeps its key from day to day", () => {
+  const day = {
+    ...inputs,
+    ks: {
+      ...inputs.ks,
+      items: [
+        ...inputs.ks.items,
+        // Ranked in the top 3 already: no keyword growth, so a candidate citing it rests on its page.
+        {
+          keyword: 'gantt chart template',
+          group: 'g1',
+          metrics: { volume: 880, difficulty: 30, monthlySearches: [] },
+          site: { position: 2.1 },
+        },
+      ],
+    },
+    cr: {
+      market: { locationCode: 2840, language: 'en' },
+      domains: {
+        'nimbus.example': {
+          market: '2840|en',
+          gap: [
+            ['approval process template', 720, 6],
+            ['approval form template', 480, 4],
+            ['purchase order approval', 390, 9],
+          ].map(([keyword, volume, position]) => ({
+            keyword,
+            volume,
+            difficulty: 25,
+            position,
+            url: 'https://nimbus.example/templates/approval',
+          })),
+          pages: [
+            { url: 'https://nimbus.example/templates/approval', traffic: 2100 },
+          ],
+        },
+      },
+    },
+    cw: { list: [{ name: 'Nimbus', site: 'https://nimbus.example' }] },
+    aq: [
+      ['What is the best approval workflow tool?', 300],
+      ['Which tools automate purchase approvals?', 90],
+      ['How do I route an approval to a manager?', 50],
+    ].map(([question, volume]) => ({
+      question,
+      volume,
+      platform: 'chat_gpt',
+      status: 'gap',
+      rivals: ['Nimbus'],
+      brands: [],
+      topics: ['approval workflow'],
+    })),
+    td: {
+      questions: [
+        {
+          theme: 'How do I add an approval step?',
+          query: 'approval step',
+          ids: ['a', 'b', 'c', 'd', 'e'],
+        },
+        {
+          theme: 'Approval email notifications',
+          query: 'approval email',
+          ids: ['f', 'g'],
+        },
+      ],
+    },
+  };
+  const skill = { id: 'sk-52174b9c', name: 'comparison-pages' };
+  const p = {
+    skills: { content: async () => ({ body: '# Method', files: [] }) },
+  };
+  /** The keys one daily call of the Skill gives, the model replying with these candidates. */
+  const keysOf = async (...candidates: Record<string, unknown>[]) =>
+    (
+      await runSkills(p, {
+        skills: [skill],
+        inputs: day,
+        V,
+        language: 'en-US',
+        complete: async () => JSON.stringify({ candidates }),
+      })
+    ).signals.map((s: { key: string }) => s.key);
+
+  test('other keywords for the same demand keep the key; the format is unchanged', async () => {
+    const [monday] = await keysOf({
+      title: 'Cover approval workflows',
+      keywords: ['approval workflow', 'approval workflow software'],
+    });
+    const [tuesday] = await keysOf({
+      title: 'Write an approval workflow guide',
+      keywords: ['approval process template', 'Approval Workflow'],
+    });
+    expect(monday).toMatch(/^skill:sk-52174b9c:demand-gap:[0-9a-f]{12}$/);
+    expect(tuesday).toBe(monday);
+    // What `sameSignals` compares for cards resting on Skill findings alone.
+    expect(monday.slice(0, monday.lastIndexOf(':'))).toBe(
+      'skill:sk-52174b9c:demand-gap',
+    );
+  });
+
+  test('a competitor page and the keywords it ranks for are one demand', async () => {
+    const [monday] = await keysOf({
+      title: 'Answer the competitor template page',
+      pages: ['https://nimbus.example/templates/approval'],
+    });
+    const [tuesday] = await keysOf({
+      title: 'Approval templates',
+      keywords: ['approval form template', 'approval process template'],
+    });
+    expect(monday).toMatch(/^skill:sk-52174b9c:competitor-gap:/);
+    expect(tuesday).toBe(monday);
+  });
+
+  test("the site's page keeps the key whatever else is cited and however its address is written", async () => {
+    const [monday] = await keysOf({ pages: ['acme.example/templates/gantt/'] });
+    const [tuesday] = await keysOf({
+      keywords: ['gantt chart template'],
+      pages: ['https://www.acme.example/templates/gantt'],
+    });
+    expect(monday).toMatch(/^skill:sk-52174b9c:near-first:/);
+    expect(tuesday).toBe(monday);
+  });
+
+  test('questions keep the key by the one asked most', async () => {
+    const ai = await keysOf(
+      {
+        questions: [
+          'What is the best approval workflow tool?',
+          'Which tools automate purchase approvals?',
+        ],
+      },
+      {
+        questions: [
+          'How do I add an approval step?',
+          'Approval email notifications',
+        ],
+      },
+    );
+    const next = await keysOf(
+      {
+        questions: [
+          'How do I route an approval to a manager?',
+          'what is the best approval workflow tool?',
+        ],
+      },
+      { questions: ['How do I add an approval step?'] },
+    );
+    expect(ai[0]).toMatch(/^skill:sk-52174b9c:not-mentioned:/);
+    expect(ai[1]).toMatch(/^skill:sk-52174b9c:asked-often:/);
+    expect(next).toEqual(ai);
+  });
+
+  test('different demands get different keys; one demand cited twice is one finding', async () => {
+    const keys = await keysOf(
+      {
+        title: 'Approval workflows',
+        keywords: ['approval workflow', 'approval workflow software'],
+      },
+      { title: 'Approval templates', keywords: ['approval process template'] },
+      // The same largest keyword: the same search, so the same finding.
+      {
+        title: 'Approval guide',
+        keywords: ['approval process template', 'approval workflow'],
+      },
+    );
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+    const questions = await keysOf(
+      { questions: ['What is the best approval workflow tool?'] },
+      { questions: ['Which tools automate purchase approvals?'] },
+    );
+    expect(new Set(questions).size).toBe(2);
+    const pages = await keysOf(
+      { pages: ['https://nimbus.example/templates/approval'] },
+      { keywords: ['purchase order approval'] },
+    );
+    expect(new Set(pages).size).toBe(2);
+  });
+
+  test('a change being watched is still watched the next day', async () => {
+    const run = async (keywords: string[]) =>
+      (
+        await runSkills(p, {
+          skills: [skill],
+          inputs: day,
+          V,
+          language: 'en-US',
+          complete: async () => JSON.stringify({ candidates: [{ keywords }] }),
+        })
+      ).signals;
+    const state: { watch?: Record<string, { ended?: unknown }> } = {};
+    const monday = await run([
+      'approval workflow',
+      'approval workflow software',
+    ]);
+    applyVerdicts(state, {
+      signals: monday,
+      reviews: {
+        [monday[0].key]: {
+          verdict: 'watch',
+          waitingFor: 'Searches keep rising',
+        },
+      },
+      now: '2026-11-23T00:04:00.000Z',
+    });
+    endMissing(state, {
+      signals: await run(['approval workflow', 'approval process template']),
+      now: '2026-11-24T00:04:00.000Z',
+    });
+    expect(state.watch?.[monday[0].key]).toBeDefined();
+    expect(state.watch?.[monday[0].key]?.ended).toBeUndefined();
   });
 });
