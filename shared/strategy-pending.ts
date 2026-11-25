@@ -138,17 +138,47 @@ const normalize = (s?: string) =>
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
-const signalSet = (c: Opportunity) =>
-  (c.signalIds || []).slice().sort().join('|');
-const wording = (s?: string) => normalize(s).replace(/\d+/g, '');
+/** Text compared apart from its numbers ("Turn 7,534 impressions…" and "Turn 7,470 impressions…" read the same). */
+export const wording = (s?: string) => normalize(s).replace(/\d+/g, '');
+// A Skill's finding is keyed `skill:<skillId>:<kind>:<digest of the keywords it cited>` (server/nocoreach/
+// skill-analysis.ts). The Skill cites other keywords from one day to the next, so the same finding comes back under
+// another key (2026-11-21: O-93 came back as O-108, O-91 as O-111, O-95 as O-109). Only the changes the server
+// computes itself keep their key, so only those decide whether two cards cite the same changes.
+const isSkillSignal = (key: string) => key.startsWith('skill:');
+/** The changes a card cites that keep their key from one analysis to the next: all but its Skills' findings. */
+export const stableSignals = (c: Pick<Opportunity, 'signalIds'>) =>
+  (c.signalIds || [])
+    .filter((k) => !isSkillSignal(k))
+    .sort()
+    .join('|');
+/** Which Skill found what kind of growth, for each Skill finding a card cites: its key without the daily digest. */
+const skillFindings = (c: Pick<Opportunity, 'signalIds'>) =>
+  new Set(
+    (c.signalIds || [])
+      .filter(isSkillSignal)
+      .map((k) => k.slice(0, k.lastIndexOf(':'))),
+  );
+/**
+ * Two cards cite the same changes: the same changes the server computed, whatever their Skills found. Cards resting
+ * on Skill findings alone cite the same when one Skill found the same kind of growth for both; that alone is no
+ * evidence of one opportunity (a Skill finds many gaps of one kind), so callers also compare the page or the title.
+ */
+export function sameSignals(
+  a: Pick<Opportunity, 'signalIds'>,
+  b: Pick<Opportunity, 'signalIds'>,
+) {
+  const stable = stableSignals(a);
+  if (stable || stableSignals(b)) return stable === stableSignals(b);
+  const found = skillFindings(b);
+  return [...skillFindings(a)].some((k) => found.has(k));
+}
 // The same opportunity raised again in other words (2026-10-19, O-2 and O-9 were one): the same changes cited, and
 // the same page, or the same title apart from its numbers ("回复 3 个…" / "回复 4 个…"). One change can back several
 // different actions (a community digest), so the changes alone never decide it. Daily analysis keeps its card.
 export function sameOpportunity(a: Opportunity, b: Opportunity) {
   const target = normalize(a.target);
   return (
-    Boolean(signalSet(a)) &&
-    signalSet(a) === signalSet(b) &&
+    sameSignals(a, b) &&
     ((Boolean(target) && target === normalize(b.target)) ||
       wording(a.title) === wording(b.title))
   );
