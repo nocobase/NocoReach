@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createHash } from 'node:crypto';
+import { topicKey } from '../../shared/followed-topics.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { SKILL_ANALYSIS, approxTokens } from '../../shared/skill-analysis.js';
 import { OnlineProvider } from './execution/provider.js';
@@ -43,6 +44,33 @@ const urlKey = (u) => {
 const mean = (list) =>
   list.length ? list.reduce((a, b) => a + b, 0) / list.length : null;
 const round1 = (v) => Math.round(v * 10) / 10;
+
+// What a finding is about, for its key (2026-11-25). The Skill cites other keywords from one day to the next, so a key
+// built from everything it cited changed daily, and an ignored change came back, a watch read as back to normal and a
+// handed-off change was not recognized. A finding is keyed instead by what its growth is computed from, as the rules
+// key theirs by their subject: the site's page for a page's growth, otherwise the largest row the growth counts (the
+// keyword with the most searches, the question with the most searches or posts). The model reads the rows largest
+// first, so that is the row it is likeliest to cite again for the same demand. Two findings with the same largest
+// keyword or page are one opportunity: two pages for one search compete with each other.
+/**
+ * What a growth counted from `rows` is about: its largest row by `size`, spelled so that case, width, spaces, hyphens
+ * and underscores do not matter, the first spelling on a tie, whatever order the rows come in.
+ */
+function about(subject, rows, size, name) {
+  const named = rows.map((r) => ({
+    size: size(r) || 0,
+    name: topicKey(
+      String(name(r) || '')
+        .normalize('NFKC')
+        .trim(),
+    ),
+  }));
+  named.sort(
+    (a, b) =>
+      b.size - a.size || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+  return `${subject}|${named[0]?.name || ''}`;
+}
 
 // --- The day's material ----------------------------------------------------------------------------------------------
 
@@ -290,6 +318,12 @@ function keywordGrowth(list, V) {
     const kind = rivalsAll ? 'competitor-gap' : 'demand-gap';
     return {
       gain: gainUnranked,
+      about: about(
+        'keyword',
+        unranked,
+        (r) => r.volume,
+        (r) => r.keyword,
+      ),
       source: rivalsAll ? 'competitors' : 'keywords',
       chip: systemMessageText('growthSignals.searchesChip', {
         0: kit.n(volume),
@@ -321,6 +355,12 @@ function keywordGrowth(list, V) {
     position = sum(near, (r) => r.ourPosition * r.volume) / (volume || 1);
   return {
     gain: gainNear,
+    about: about(
+      'keyword',
+      near,
+      (r) => r.volume,
+      (r) => r.keyword,
+    ),
     source: 'keywords',
     chip: systemMessageText('growthSignals.searchesChip', { 0: kit.n(volume) }),
     growth: growth(
@@ -353,6 +393,7 @@ function ownPageGrowth(p, queries, V) {
   return best
     ? {
         gain: best.gain,
+        about: `page|${urlKey(p.url)}`,
         source: 'gsc',
         url: p.url,
         chip: systemMessageText('analysisSkills.impressionsChip', {
@@ -370,6 +411,12 @@ function aiQuestionGrowth(list) {
     volume = sum(gap, (q) => q.volume);
   return {
     gain: volume || gap.length * 20,
+    about: about(
+      'question',
+      gap,
+      (q) => q.volume,
+      (q) => q.question,
+    ),
     source: 'ai-search',
     chip: systemMessageText('growthSignals.questionsChip', { 0: gap.length }),
     growth: growth(
@@ -404,6 +451,12 @@ function communityGrowth(list) {
   if (!posts) return null;
   return {
     gain: posts * 30,
+    about: about(
+      'question',
+      open,
+      (q) => q.posts,
+      (q) => q.question,
+    ),
     source: 'topics',
     chip: systemMessageText('growthSignals.questionsChip', { 0: posts }),
     growth: growth(
@@ -519,8 +572,8 @@ const failureOf = (e) =>
     : e?.name === 'TimeoutError' || e?.code === 'aborted'
       ? 'timeout'
       : 'call';
-const digest = (parts) =>
-  createHash('sha1').update(parts.map(lower).sort().join('\u001f')).digest('hex').slice(0, 12);
+const digest = (subject) =>
+  createHash('sha1').update(subject).digest('hex').slice(0, 12);
 async function mapLimit(items, limit, fn) {
   let next = 0;
   await Promise.all(
@@ -576,7 +629,7 @@ async function runSkills(p, { skills, inputs, V, language, complete }) {
     for (const c of candidates) {
       const v = verify(c, material, V, inputs.queries);
       if (!v.found) continue;
-      const key = `skill:${skill.id}:${v.found.growth.kind}:${digest(v.cited)}`;
+      const key = `skill:${skill.id}:${v.found.growth.kind}:${digest(v.found.about)}`;
       if (keys.has(key)) continue;
       keys.add(key);
       kept++;
