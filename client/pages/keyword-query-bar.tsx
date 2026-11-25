@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, ChevronDown, Pencil } from 'lucide-react';
+import { ChevronDown, Pencil } from 'lucide-react';
 import { $t } from '#i18n';
 import { joinList } from '#lib/format';
 import { cn } from '#lib/utils';
@@ -10,14 +10,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '#components/ui/popover';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '#components/ui/dropdown-menu';
 import { PageAiEntry } from '../online-agent/page-entry';
-import { getMarkets, marketLabel } from './keyword-api';
+import { marketLabel } from './keyword-api';
+import { MarketPicker } from './keyword-market-picker';
 
 type Market = { locationCode: number; language: string };
 /** A seed's keywords, each keyword counted for one seed only; found is unknown for lists from before that. */
@@ -105,32 +100,11 @@ export function KeywordQueryBar({
           ))}
         </ul>
         <div className='flex shrink-0 flex-wrap items-center gap-2'>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={!canEdit || running}
-              render={<Button variant='outline' size='sm' />}
-            >
-              {$t(marketLabel(market))}
-              <ChevronDown data-icon='inline-end' />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end' className='w-auto min-w-48'>
-              {getMarkets().map((m) => (
-                <DropdownMenuItem
-                  key={`${m.locationCode}:${m.language}`}
-                  onClick={() => {
-                    if (!sameMarket(m, market))
-                      onMarket({
-                        locationCode: m.locationCode,
-                        language: m.language,
-                      });
-                  }}
-                >
-                  <span className='flex-1'>{m.label}</span>
-                  {sameMarket(m, market) ? <Check className='size-4' /> : null}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <MarketMenu
+            market={market}
+            disabled={!canEdit || running}
+            onMarket={onMarket}
+          />
           {canEdit ? (
             <Button
               variant='outline'
@@ -271,6 +245,55 @@ function SeedChip({
             </Button>
           </div>
         ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * The market of the list, changed from the same list as Find keywords: a country and one of its languages, then Use
+ * this market opens Edit seed words to find the list again there (nothing is looked up before that confirms).
+ */
+function MarketMenu({
+  market,
+  disabled,
+  onMarket,
+}: {
+  market: Market;
+  disabled: boolean;
+  onMarket: (market: Market) => void;
+}) {
+  const [open, setOpen] = useState(false),
+    [pick, setPick] = useState(market);
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setPick(market);
+      }}
+    >
+      <PopoverTrigger
+        disabled={disabled}
+        render={<Button variant='outline' size='sm' data-market-menu />}
+      >
+        {marketLabel(market)}
+        <ChevronDown data-icon='inline-end' />
+      </PopoverTrigger>
+      <PopoverContent align='end' className='w-80 gap-3 p-3'>
+        <MarketPicker value={pick} onChange={setPick} />
+        <div className='flex justify-end'>
+          <Button
+            size='sm'
+            disabled={sameMarket(pick, market)}
+            onClick={() => {
+              setOpen(false);
+              onMarket(pick);
+            }}
+          >
+            {$t('keywordMarket.useMarket')}
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );

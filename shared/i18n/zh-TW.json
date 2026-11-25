@@ -9085,5 +9085,16 @@
   "playbooks.linkedinCarousel": "LinkedIn 輪播圖",
   "playbooks.linkedinCarouselDescription": "把文章或話題做成 6–18 頁 4:5 的 LinkedIn 文件輪播，下載成一個 PDF，加上文件標題和貼文內文。審核通過就完成。",
   "playbooks.instagramCarouselInstruction": "把任務說明裡的文章或話題做成一組 Instagram 輪播圖，按 instagram-carousel Skill 做。有原文時先通讀原文（輸入裡的內文，沒有就開啟文章連結）；新話題按說明裡的要點和參考連結寫，不編造事實。按這個固定格式輸出：每張卡片寫在「## Card 1」「## Card 2」……下，最後在「## Body」下寫說明文字、「## Hashtags」下寫主題標籤。每個卡片小標題下第一行寫「Sections: 」加這張出自原文的第幾節（repurpose.sections 裡的編號）；結尾頁再加一行「Layout: end」；下一行用「# 標題」寫卡片標題，之後是卡片內文。小標題 Card、Body、Hashtags 和 Sections、Layout 必須保持原樣。一共 6–20 張；中文、日文、韓文封面標題不超過 20 個字、每張不超過 110 個字，其他語言封面標題不超過 8 個詞、每張不超過 40 個詞。說明文字不超過 2,200 字元，開頭 125 字元內講清看點；說明文字裡不放連結，需要時寫「link in bio」；主題標籤最多 5 個。用材料裡的範本把每張卡片渲染成 1080×1350 的 PNG，按卡片順序用 task file 逐張上傳，把回傳的 id 寫進 cards.images。只做草稿，不發布。",
-  "playbooks.linkedinCarouselInstruction": "把任務說明裡的文章或話題做成一份 LinkedIn 輪播圖（文件），按 linkedin-carousel Skill 做。有原文時先通讀原文（輸入裡的內文，沒有就開啟文章連結）；新話題按說明裡的要點和參考連結寫，不編造事實。按這個固定格式輸出：每頁寫在「## Card 1」「## Card 2」……下，最後在「## Title」下寫文件標題、「## Body」下寫貼文內文。每頁小標題下第一行寫「Sections: 」加這頁出自原文的第幾節（repurpose.sections 裡的編號）；結尾頁再加一行「Layout: end」；下一行用「# 標題」寫這頁的標題，之後是內文。小標題 Card、Title、Body 和 Sections、Layout 必須保持原樣。一共 6–18 頁；中文、日文、韓文封面標題不超過 20 個字、每頁不超過 110 個字，其他語言封面標題不超過 8 個詞、每頁不超過 40 個詞。文件標題不超過 58 字元，貼文內文不超過 1,300 字元。用材料裡的範本把每頁渲染成 1080×1350 的 PNG，按順序用 task file 逐張上傳，把回傳的 id 寫進 cards.images；NocoReach 會把它們合成一個 PDF。只做草稿，不發布。"
+  "playbooks.linkedinCarouselInstruction": "把任務說明裡的文章或話題做成一份 LinkedIn 輪播圖（文件），按 linkedin-carousel Skill 做。有原文時先通讀原文（輸入裡的內文，沒有就開啟文章連結）；新話題按說明裡的要點和參考連結寫，不編造事實。按這個固定格式輸出：每頁寫在「## Card 1」「## Card 2」……下，最後在「## Title」下寫文件標題、「## Body」下寫貼文內文。每頁小標題下第一行寫「Sections: 」加這頁出自原文的第幾節（repurpose.sections 裡的編號）；結尾頁再加一行「Layout: end」；下一行用「# 標題」寫這頁的標題，之後是內文。小標題 Card、Title、Body 和 Sections、Layout 必須保持原樣。一共 6–18 頁；中文、日文、韓文封面標題不超過 20 個字、每頁不超過 110 個字，其他語言封面標題不超過 8 個詞、每頁不超過 40 個詞。文件標題不超過 58 字元，貼文內文不超過 1,300 字元。用材料裡的範本把每頁渲染成 1080×1350 的 PNG，按順序用 task file 逐張上傳，把回傳的 id 寫進 cards.images；NocoReach 會把它們合成一個 PDF。只做草稿，不發布。",
+  "keywordMarket.taiwan": "中國臺灣",
+  "keywordMarket.hongKong": "中國香港",
+  "keywordMarket.country": "國家或地區",
+  "keywordMarket.searchCountry": "搜尋國家或地區",
+  "keywordMarket.noCountry": "沒有符合的國家或地區",
+  "keywordMarket.language": "語言",
+  "keywordMarket.useMarket": "使用這個市場",
+  "keywordResearch.queryPlan": "本次查詢：{0} 次 · 最多 ${1}",
+  "keywordResearch.queryCostHelp": "每選一種方式就是一次 DataForSEO 查詢，每次約 ${0}，最多 {1} 個關鍵字，只在點「查詢」時收費；結果合併去重，每列標出是哪些方式找到的。",
+  "keywordResearch.methodNotComplete": "「{0}」沒有查完：{1}",
+  "keywordResearch.foundBy": "來源"
 }

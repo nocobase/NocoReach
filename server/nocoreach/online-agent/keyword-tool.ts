@@ -3,6 +3,11 @@ import type { OnlineTool } from '../../online-agent/executor.js';
 import { toolInput } from '../../online-agent/errors.js';
 import { keywordsFocus } from '../../../shared/keyword-subject.js';
 import type { KeywordRunProposal } from '../../../shared/keyword-run.js';
+import {
+  KEYWORD_COUNTRIES,
+  countryName,
+  marketName as keywordMarketName,
+} from '../../../shared/keyword-markets.js';
 
 const market = z.strictObject({
   locationCode: z.number().int(),
@@ -28,29 +33,14 @@ interface Item {
 export interface KeywordRunSource {
   propose(id: string, v: object): Promise<KeywordRunProposal>;
 }
-const PLACES: Record<number, string> = {
-  2840: 'United States',
-  2826: 'United Kingdom',
-  2124: 'Canada',
-  2036: 'Australia',
-  2702: 'Singapore',
-  2276: 'Germany',
-  2250: 'France',
-  2392: 'Japan',
-  2158: 'Taiwan',
-  2344: 'Hong Kong',
-};
-const LANGUAGES: Record<string, string> = {
-  en: 'English',
-  de: 'German',
-  fr: 'French',
-  ja: 'Japanese',
-  'zh-TW': 'Traditional Chinese',
-  'zh-CN': 'Simplified Chinese',
-};
 /** A market as people name it ("Japan · Japanese"), so the AI never speaks in location codes. */
 export const marketName = (m: { locationCode: number; language: string }) =>
-  `${PLACES[m.locationCode] ?? m.locationCode} · ${LANGUAGES[m.language] ?? m.language}`;
+  keywordMarketName(m);
+/** Every market AI suggestions can look in, for the tool's description: code, country, its languages (default first). */
+const MARKET_CODES = KEYWORD_COUNTRIES.map(
+  ([code, , languages]) =>
+    `${code} ${countryName(code)} ${languages.join('/')}`,
+).join('; ');
 
 /**
  * Keywords › AI suggestions from the online agent (2026-10-28 user decision: changing seed words is a conversation,
@@ -67,8 +57,7 @@ export function keywordRunTool(
 ): OnlineTool {
   return {
     name: 'propose_keyword_run',
-    description:
-      "Propose a keyword lookup for Keywords › AI suggestions; it looks nothing up and saves nothing. mode list (default) finds the whole list again: give seeds as the complete new list of seed words (for an edit: the current seeds with some added or removed), or leave seeds out to have the AI choose new ones (with direction to lean them, e.g. toward use cases), and give market only to switch markets (locationCode and language: 2840 en United States, 2826 en United Kingdom, 2124 en Canada, 2036 en Australia, 2702 en Singapore, 2276 de Germany, 2250 fr France, 2392 ja Japan, 2158 zh-TW Taiwan, 2344 zh-TW Hong Kong). mode group expands the keywords in a direction and adds a group (seeds optional); give name, a short name for the group in the user's language of at most 16 characters (such as 自托管与开源 or Self-hosting), and a direction already expanded adds to that group. Keywords the user removed stay out of every lookup; pass restore with the ones the user asks to have back. Returns the seed words before and after with why the AI chose each new one, whether they are the same as now, and the most the lookup may cost: seeds looked up in the last 30 days are free, and the month's spending against the budget. The user sees this in the conversation and confirms it there.",
+    description: `Propose a keyword lookup for Keywords › AI suggestions; it looks nothing up and saves nothing. mode list (default) finds the whole list again: give seeds as the complete new list of seed words (for an edit: the current seeds with some added or removed), or leave seeds out to have the AI choose new ones (with direction to lean them, e.g. toward use cases), and give market only to switch markets (locationCode and language, one of a country's languages, the first unless the user asks for another: ${MARKET_CODES}). mode group expands the keywords in a direction and adds a group (seeds optional); give name, a short name for the group in the user's language of at most 16 characters (such as 自托管与开源 or Self-hosting), and a direction already expanded adds to that group. Keywords the user removed stay out of every lookup; pass restore with the ones the user asks to have back. Returns the seed words before and after with why the AI chose each new one, whether they are the same as now, and the most the lookup may cost: seeds looked up in the last 30 days are free, and the month's spending against the budget. The user sees this in the conversation and confirms it there.`,
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();

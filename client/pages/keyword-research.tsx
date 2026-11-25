@@ -4,21 +4,22 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // per search (no search tabs, cities, clickstream or grouping), the blended "auto" mode left out, results and search
 // results from NocoReach's DataForSEO layer (runs kept as 最近的研究, the same query reused for 30 days, no per-query
 // cost prompt), a 本站排名 column from the synced Search Console data, details in a drawer instead of a side panel,
-// Chinese copy and CSV export only.
+// Chinese copy and CSV export only. Since 2026-11-25 a search may use several ways at once, one query each, merged into
+// one list whose rows say which ways found them, in any market DataForSEO has keyword data for.
 import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Download, History, Save, Search } from "lucide-react";
+import { ChevronDown, Download, History, Save, Search } from "lucide-react";
 import { toast } from "#lib/toast";
 import { PageContainer, PageHeader } from "#components/reach/page";
 import { EmptyState, ListSkeleton } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "#components/ui/dropdown-menu";
 import { Toggle } from "#components/ui/toggle";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
 import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "#components/seo/data-table-toolbar";
@@ -32,14 +33,17 @@ import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { useProject } from "./reach-data";
 import {
-  keywordRequest, getMarkets, marketLabel, metric, monthVolume, rankOf, rankRequest, getResearchViews, useOpenKeyword, researchRunError,
-  type KeywordConnectionState, type KeywordItem, type Ranks, type RecentRun, type ResearchRun,
+  keywordRequest, marketLabel, metric, monthVolume, rankOf, rankRequest, getResearchViews, useOpenKeyword, researchRunError, usdUpTo, mergeRuns,
+  type KeywordConnectionState, type KeywordItem, type Ranks, type RecentRun, type ResearchRun, type ResearchRow as Row,
 } from "./keyword-api";
 import "./reach-workspace.css";
 import "./data-views.css";
 import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, joinList } from '#lib/format';
+import { MarketPicker } from "./keyword-market-picker";
+import { isKeywordMarket } from "../../shared/keyword-markets.js";
+import { RESEARCH_LIMIT, researchQueryUsd } from "../../shared/keyword-research.js";
 import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type View = keyof ReturnType<typeof getResearchViews>;
@@ -50,6 +54,9 @@ const getStatusText = (): Record<string, string> => ({ running: $t('keywordResea
 export const getMonths = () => ([$t('keywordResearch.jan'), $t('keywordResearch.feb'), $t('keywordResearch.mar'), $t('keywordResearch.apr'), $t('keywordResearch.may'), $t('keywordResearch.jun'), $t('keywordResearch.jul'), $t('keywordResearch.aug'), $t('keywordResearch.sep'), $t('keywordResearch.oct'), $t('keywordResearch.nov'), $t('keywordResearch.dec')]);
 const fmtTime = (v?: string | null) => formatDateTime(v);
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
+const viewName = (v: string) => getResearchViews()[v as View] ?? v;
+/** The ways in the URL's view (one or several, comma separated), in the page's order; Contains the term when none. */
+const viewsOf = (value: string | null) => { const want = (value ?? "").split(","); const views = VIEWS.filter((v) => want.includes(v)); return views.length ? views : (["suggestions"] as View[]); };
 
 /** The last 12 months of search volume, oldest first. */
 export function lastTwelve(trend: KeywordItem["monthlySearches"]) {
@@ -76,7 +83,7 @@ export function AreaTrendChart({ trend, height = 180 }: { trend: KeywordItem["mo
 type Filters = { include: string; exclude: string; minVol: string; maxVol: string; minKd: string; maxKd: string; intents: KeywordIntent[] };
 const EMPTY: Filters = { include: "", exclude: "", minVol: "", maxVol: "", minKd: "", maxKd: "", intents: [] };
 const activeCount = (f: Filters) => [f.include, f.exclude, f.minVol || f.maxVol, f.minKd || f.maxKd, f.intents.length ? "x" : ""].filter(Boolean).length;
-function applyFilters(rows: KeywordItem[], f: Filters) {
+function applyFilters<T extends KeywordItem>(rows: T[], f: Filters) {
   const terms = (s: string) => s.split(/[,，]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
   const inc = terms(f.include), exc = terms(f.exclude), num = (s: string) => (s.trim() === "" ? null : Number(s));
   const [minV, maxV, minK, maxK] = [num(f.minVol), num(f.maxVol), num(f.minKd), num(f.maxKd)];
@@ -100,55 +107,59 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
   const [params, setParams] = useSearchParams();
   const [connection, setConnection] = useState<KeywordConnectionState>();
   const [recent, setRecent] = useState<RecentRun[]>();
-  const [run, setRun] = useState<ResearchRun>();
+  const [runs, setRuns] = useState<ResearchRun[]>();
   const [ranks, setRanks] = useState<Ranks>();
   const [reused, setReused] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useMessageState("");
-  const market = getMarkets().find((m) => String(m.locationCode) === params.get("loc") && m.language === params.get("lang")) ?? getMarkets()[0];
-  const [form, setForm] = useState({ target: params.get("q") ?? "", view: (VIEWS.find((v) => v === params.get("view")) ?? "suggestions") as View, market });
+  const market = isKeywordMarket(params.get("loc"), params.get("lang")) ? { locationCode: Number(params.get("loc")), language: String(params.get("lang")) } : { locationCode: 2840, language: "en" };
+  const [form, setForm] = useState({ target: params.get("q") ?? "", views: viewsOf(params.get("view")), market });
   const runId = params.get("run");
+  const openIds = runs?.map((r) => String(r.id)).join(",");
 
   const loadRecent = () => keywordRequest<RecentRun[]>("list").then(setRecent).catch(() => setRecent([]));
   useEffect(() => {
     void keywordRequest<KeywordConnectionState>("status").then(setConnection).catch(() => setConnection({ configured: false, verifiedAt: null, monthlyBudgetUsd: 5 }));
     void loadRecent();
   }, []);
-  // The open run lives in the URL, so a reload or a link reopens it without a new query.
+  // The open runs live in the URL (one id per way), so a reload or a link reopens them without a new query.
   useEffect(() => {
-    if (!runId) { setRun(undefined); return; }
-    if (String(run?.id) === runId) return;
-    void keywordRequest<ResearchRun>("getRun", { runId }).then(setRun).catch((e) => setError(() => (e instanceof Error ? $legacyText(e.message) : $t('keywordResearch.notLoadResearchHistory'))));
+    if (!runId) { setRuns(undefined); return; }
+    if (openIds === runId) return;
+    void Promise.all(runId.split(",").map((id) => keywordRequest<ResearchRun>("getRun", { runId: id }))).then((list) => { setRuns(list); setReused(false); }).catch((e) => setError(() => (e instanceof Error ? $legacyText(e.message) : $t('keywordResearch.notLoadResearchHistory'))));
   }, [runId]);
   useEffect(() => {
     setRanks(undefined);
-    const items = run?.result?.items;
-    if (project && items?.length) void rankRequest(project.id, items.map((i) => i.keyword)).then(setRanks).catch(() => undefined);
-  }, [run?.id, project?.id]);
+    const keywords = runs ? mergeRuns(runs).map((i) => i.keyword) : [];
+    if (project && keywords.length) void rankRequest(project.id, keywords).then(setRanks).catch(() => undefined);
+  }, [openIds, project?.id]);
 
-  const open = (r: ResearchRun, wasReused = false) => {
-    setRun(r);
-    setReused(wasReused);
-    const p = new URLSearchParams(params);
-    p.set("run", String(r.id)); p.set("q", r.spec.target); p.set("view", String(r.spec.view)); p.set("loc", String(r.spec.locationCode)); p.set("lang", r.spec.language);
+  const open = (list: ResearchRun[]) => {
+    setRuns(list);
+    setReused(list.every((r) => r.reused));
+    const p = new URLSearchParams(params), spec = list[0].spec;
+    p.set("run", list.map((r) => String(r.id)).join(",")); p.set("q", spec.target); p.set("view", list.map((r) => r.spec.view).join(",")); p.set("loc", String(spec.locationCode)); p.set("lang", spec.language);
     setParams(p, { replace: true });
   };
-  const search = async (forceRefresh = false) => {
+  // One query for each way chosen, each billed and reused (30 days) on its own; only this click starts them.
+  const search = async (forceRefresh = false, views = form.views) => {
     const target = form.target.trim();
     if (target.length < 2) { setError(() => ($t('keywordResearch.enterKeywordLeast2Characters'))); return; }
     setBusy(true); setError("");
     try {
-      const r = await keywordRequest<ResearchRun>("run", { target, view: form.view, locationCode: form.market.locationCode, language: form.market.language, limit: 100, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) });
-      open(r, Boolean(r.reused));
+      const settled = await Promise.allSettled(views.map((view) => keywordRequest<ResearchRun>("run", { target, view, locationCode: form.market.locationCode, language: form.market.language, limit: RESEARCH_LIMIT, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
+      const done = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      const failed = settled.flatMap((r, i) => (r.status === "rejected" ? [{ view: views[i], reason: r.reason as unknown }] : []));
+      const message = (e: unknown) => (e instanceof Error ? $legacyText(e.message) : $t('common.lookupNotCompleteTryAgain'));
+      if (done.length) open(done);
+      if (failed.length) setError(() => (done.length ? $t('keywordResearch.methodNotComplete', { 0: joinList(failed.map((f) => viewName(f.view))), 1: message(failed[0].reason) }) : message(failed[0].reason)));
       void loadRecent();
-    } catch (e) {
-      setError(() => (e instanceof Error ? $legacyText(e.message) : $t('common.lookupNotCompleteTryAgain')));
     } finally { setBusy(false); }
   };
   const showRecent = () => { const p = new URLSearchParams(params); p.delete("run"); setParams(p, { replace: true }); };
 
   const notConnected = connection && !connection.verifiedAt;
-  const recentButton = run ? <Button variant="outline" size="sm" onClick={showRecent}><History data-icon="inline-start" />{$t('keywordResearch.recentResearch')}</Button> : undefined;
+  const recentButton = runs ? <Button variant="outline" size="sm" onClick={showRecent}><History data-icon="inline-start" />{$t('keywordResearch.recentResearch')}</Button> : undefined;
   const body = (
     <>
       {embedded && recentButton ? <div className="flex justify-end">{recentButton}</div> : null}
@@ -161,24 +172,21 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="pl-8" aria-label={$t('common.keywords')} placeholder={$t('keywordResearch.enterKeywordExampleOpenSource')} maxLength={100} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
             </div>
-            <div className="grid grid-cols-2 gap-2 lg:flex">
-              <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
-                <SelectTrigger className="w-full lg:w-44" aria-label={$t('common.market')}><SelectValue>{(v: string) => getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label}</SelectValue></SelectTrigger>
-                <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{m.label}</SelectItem>)}</SelectContent>
-              </Select>
-              <Select value={form.view} onValueChange={(v) => v && setForm((f) => ({ ...f, view: v as View }))}>
-                <SelectTrigger className="w-full lg:w-36" aria-label={$t('keywordResearch.method')}><SelectValue>{(v: string) => getResearchViews()[v as View]}</SelectValue></SelectTrigger>
-                <SelectContent>{VIEWS.map((v) => <SelectItem key={v} value={v}>{getResearchViews()[v]}</SelectItem>)}</SelectContent>
-              </Select>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] lg:flex">
+              <MarketPicker className="lg:w-80" value={form.market} onChange={(m) => setForm((f) => ({ ...f, market: m }))} />
+              <MethodPicker value={form.views} onChange={(views) => setForm((f) => ({ ...f, views }))} />
             </div>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t('common.querying') : $t('common.query')}</Button>
-            <InfoTip label={$t('keywordResearch.method')} className="self-center">{$t('keywordResearch.searchModesHelp')}</InfoTip>
+            <span className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground" data-query-plan>
+              {$t('keywordResearch.queryPlan', { 0: form.views.length, 1: usdUpTo(form.views.reduce((n, v) => n + researchQueryUsd(v, RESEARCH_LIMIT), 0)) })}
+              <InfoTip label={$t('keywordResearch.method')}>{$t('keywordResearch.searchModesHelp')} {$t('keywordResearch.queryCostHelp', { 0: usdUpTo(researchQueryUsd("suggestions", RESEARCH_LIMIT)), 1: RESEARCH_LIMIT })}</InfoTip>
+            </span>
           </form>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </Card>
       )}
-      {run ? (
-        <Results run={run} ranks={ranks} reused={reused} busy={busy} onRefresh={() => void search(true)} projectId={project?.id} />
+      {runs ? (
+        <Results runs={runs} ranks={ranks} reused={reused} busy={busy} onRefresh={() => void search(true, runs.map((r) => r.spec.view as View))} projectId={project?.id} />
       ) : !notConnected ? (
         <RecentList recent={recent} onOpen={(id) => { const p = new URLSearchParams(params); p.set("run", id); setParams(p, { replace: true }); }} />
       ) : null}
@@ -205,7 +213,7 @@ function RecentList({ recent, onOpen }: { recent?: RecentRun[]; onOpen: (id: str
         {research.map((r) => (
           <button key={r.id} type="button" className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2.5 text-left text-sm last:border-0 hover:bg-muted/50" onClick={() => onOpen(r.id)}>
             <span className="min-w-0 flex-1 truncate font-medium">{r.spec.target}</span>
-            <span className="text-xs text-muted-foreground">{getResearchViews()[r.spec.view as View] ?? r.spec.view} · {marketLabel(r.spec)}</span>
+            <span className="text-xs text-muted-foreground">{viewName(r.spec.view)} · {marketLabel(r.spec)}</span>
             <span className="w-24 text-xs text-muted-foreground tabular-nums">{r.status === "completed" ? $t('keywordResearch.keywords',{0:r.count ?? 0}) : getStatusText()[r.status] ?? r.status}</span>
             <span className="w-24 text-right text-xs text-muted-foreground tabular-nums">{fmtTime(r.completedAt || r.createdAt)}</span>
           </button>
@@ -215,9 +223,34 @@ function RecentList({ recent, onOpen }: { recent?: RecentRun[]; onOpen: (id: str
   );
 }
 
-const helper = createColumnHelper<KeywordItem>();
-function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: ResearchRun; ranks?: Ranks; reused: boolean; busy: boolean; onRefresh: () => void; projectId?: number }) {
-  const items = run.result?.items ?? [];
+/** The ways a search used, as the page lists them ("Contains the term, Related searches"). */
+function MethodPicker({ value, onChange }: { value: View[]; onChange: (views: View[]) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" className="w-full justify-between font-normal lg:w-auto lg:max-w-72" aria-label={$t('keywordResearch.method')} />}>
+        <span className="truncate">{joinList(value.map(viewName))}</span>
+        <ChevronDown data-icon="inline-end" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-auto min-w-48">
+        {VIEWS.map((v) => (
+          // At least one way stays chosen.
+          <DropdownMenuCheckboxItem key={v} checked={value.includes(v)} disabled={value.length === 1 && value.includes(v)} closeOnClick={false}
+            onCheckedChange={(on) => onChange(VIEWS.filter((x) => (x === v ? on : value.includes(x))))}>
+            {viewName(v)}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+const helper = createColumnHelper<Row>();
+function Results({ runs, ranks, reused, busy, onRefresh, projectId }: { runs: ResearchRun[]; ranks?: Ranks; reused: boolean; busy: boolean; onRefresh: () => void; projectId?: number }) {
+  const done = runs.filter((r) => r.status === "completed"), unfinished = runs.filter((r) => r.status !== "completed");
+  const run = done[0] ?? runs[0], merged = runs.length > 1;
+  const items = useMemo(() => mergeRuns(runs), [runs]);
+  const views = joinList(runs.map((r) => viewName(r.spec.view)));
+  const latest = done.map((r) => r.completedAt || r.createdAt).sort().at(-1);
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [showFilters, setShowFilters] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: "volume", desc: true }]);
@@ -226,20 +259,23 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const openKeyword = useOpenKeyword();
   const anchorRef = useSelectionAnchor();
   const rows = useMemo(() => applyFilters(items, filters), [items, filters]);
-  useEffect(() => { setRowSelection({}); setPagination((p) => ({ ...p, pageIndex: 0 })); }, [run.id, filters]);
+  const runIds = runs.map((r) => String(r.id)).join(",");
+  useEffect(() => { setRowSelection({}); setPagination((p) => ({ ...p, pageIndex: 0 })); }, [runIds, filters]);
   const seed = items.find((i) => i.keyword.toLowerCase() === run.spec.target.toLowerCase());
-  const columns = useMemo<ColumnDef<KeywordItem>[]>(
+  const columns = useMemo<ColumnDef<Row>[]>(
     () => [
-      makeSelectionColumn<KeywordItem>(anchorRef),
-      helper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className="block max-w-sm truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<KeywordItem>,
-      helper.accessor("volume", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("cpc", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : `$${getValue()!.toFixed(2)}`), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("competition", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('keywordResearch.competition')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toFixed(2)), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<KeywordItem>,
-      helper.display({ id: "rank", header: () => <span title={$t('keywordResearch.averageGooglePositionOverLast')}>{$t('common.sitePosition')}</span>, cell: ({ row }) => { const r = rankOf(ranks, row.original.keyword); return r ? r.position.toFixed(1) : "—"; }, meta: right }) as ColumnDef<KeywordItem>,
+      makeSelectionColumn<Row>(anchorRef),
+      helper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className="block max-w-sm truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Row>,
+      helper.accessor("volume", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
+      helper.accessor("cpc", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : `$${getValue()!.toFixed(2)}`), meta: right }) as ColumnDef<Row>,
+      helper.accessor("competition", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('keywordResearch.competition')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toFixed(2)), meta: right }) as ColumnDef<Row>,
+      helper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<Row>,
+      helper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<Row>,
+      helper.display({ id: "rank", header: () => <span title={$t('keywordResearch.averageGooglePositionOverLast')}>{$t('common.sitePosition')}</span>, cell: ({ row }) => { const r = rankOf(ranks, row.original.keyword); return r ? r.position.toFixed(1) : "—"; }, meta: right }) as ColumnDef<Row>,
+      // Which ways found the keyword, when the search used more than one.
+      ...(merged ? [helper.display({ id: "views", header: () => $t('keywordResearch.foundBy'), cell: ({ row }) => <span className="flex flex-wrap gap-1" data-found-by={row.original.views.join(",")}>{row.original.views.map((v) => <span key={v} className="rounded-md bg-muted px-1.5 py-0.5 text-xs whitespace-nowrap text-muted-foreground">{viewName(v)}</span>)}</span> }) as ColumnDef<Row>] : []),
     ],
-    [anchorRef, ranks],
+    [anchorRef, ranks, merged],
   );
   const table = useDataTable({
     data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true,
@@ -251,25 +287,30 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const [handing, setHanding] = useState<HandOffKeyword[]>();
   useHandOffSource("keyword-research", projectId ? { count: table.getSelectedRowModel().rows.length, open: () => setHanding(handOffRows(table.getSelectedRowModel().rows.map((r) => r.original))), noun: $t('common.keywordsSelected'), actions: <> <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t('common.saveKeywords')}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t('common.export')}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
-  const handOffRows = (items: KeywordItem[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
-  const csv = (list: KeywordItem[]) =>
-    downloadCsv($t('keywordResearch.keywordResearch',{0:run.spec.target,1:marketLabel(run.spec)}), [$t('common.keywords'), $t('common.monthlyVolume'), "CPC", $t('keywordResearch.competition'), $t('common.difficulty'), $t('common.intent'), $t('common.sitePosition')], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, getIntentLabels()[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? ""])) || toast.error(() => ($t('common.noKeywordsExport')));
+  const handOffRows = (items: Row[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
+  const csv = (list: Row[]) =>
+    downloadCsv($t('keywordResearch.keywordResearch',{0:run.spec.target,1:marketLabel(run.spec)}), [$t('common.keywords'), $t('common.monthlyVolume'), "CPC", $t('keywordResearch.competition'), $t('common.difficulty'), $t('common.intent'), $t('common.sitePosition'), ...(merged ? [$t('keywordResearch.foundBy')] : [])], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, getIntentLabels()[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? "", ...(merged ? [joinList(r.views.map(viewName))] : [])])) || toast.error(() => ($t('common.noKeywordsExport')));
+  // Each keyword is saved from the first run that found it, one request per run.
   const save = async () => {
     try {
-      const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) });
+      const byRun = new Map<string, string[]>();
+      for (const row of selected) byRun.set(row.refs[0].runId, [...(byRun.get(row.refs[0].runId) ?? []), row.refs[0].itemId]);
+      const results = await Promise.all([...byRun].map(([runId, itemIds]) => keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId, itemIds })));
+      const r = results.reduce((n, x) => ({ saved: n.saved + x.saved, skipped: n.skipped + x.skipped }), { saved: 0, skipped: 0 });
       toast.success(() => ($t('common.keywordsSaved',{0:r.saved,1:r.skipped ? $t('common.alreadySaved',{0:r.skipped}) : ""})));
       refreshNavSources();
       setRowSelection({});
     } catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'))); }
   };
-  if (run.status !== "completed") {
+  if (!done.length) {
     return <EmptyState icon={<Search />} title={getStatusText()[run.status] ?? $t('common.lookupNotComplete')} description={researchRunError(run.errorCode)} />;
   }
   return (
     <div className="space-y-4">
       {reused ? (
-        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$tj('keywordResearch.resultNoNewCharge',{0:fmtTime(run.completedAt || run.createdAt)})}<InfoTip>{$t('keywordResearch.sameCriteriaCheckedLast30')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={onRefresh}>{$t('common.queryAgain')}</Button></p>
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$tj('keywordResearch.resultNoNewCharge',{0:fmtTime(latest)})}<InfoTip>{$t('keywordResearch.sameCriteriaCheckedLast30')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={onRefresh}>{$t('common.queryAgain')}</Button></p>
       ) : null}
+      {unfinished.map((r) => <p key={r.id} role="status" className="text-xs text-muted-foreground" data-unfinished={r.spec.view}>{$t('keywordResearch.methodNotComplete', { 0: viewName(r.spec.view), 1: getStatusText()[r.status] ?? researchRunError(r.errorCode) })}</p>)}
       {seed ? <OverviewStats item={seed} rank={rankOf(ranks, seed.keyword)} /> : null}
       <Card className="gap-0 py-0">
         <DataTable
@@ -283,7 +324,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
               <DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t('common.exportCsv')}</Button>}>
                 <DataTableFilterToggle open={showFilters} activeCount={activeCount(filters)} onToggle={() => setShowFilters((v) => !v)} />
                 <span className="text-xs text-muted-foreground">
-                  {activeCount(filters) ? $t('common.showing',{0:rows.length,1:items.length}) : $t('common.keywordsTotal',{0:items.length})} · {getResearchViews()[run.spec.view as View] ?? run.spec.view} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}
+                  {activeCount(filters) ? $t('common.showing',{0:rows.length,1:items.length}) : $t('common.keywordsTotal',{0:items.length})} · {views} · {marketLabel(run.spec)} · {fmtTime(latest)}
                 </span>
               </DataTableToolbar>
               {showFilters ? <KeywordFilters value={filters} onChange={setFilters} /> : null}

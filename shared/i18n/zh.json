@@ -9085,5 +9085,16 @@
   "playbooks.instagramCarouselInstruction": "把任务说明里的文章或话题做成一组 Instagram 轮播图，按 instagram-carousel Skill 做。有原文时先通读原文（输入里的正文，没有就打开文章链接）；新话题按说明里的要点和参考链接写，不编造事实。按这个固定格式输出：每张卡片写在“## Card 1”“## Card 2”……下，最后在“## Body”下写配文、“## Hashtags”下写话题标签。每个卡片小标题下第一行写“Sections: ”加这张出自原文的第几节（repurpose.sections 里的编号）；结尾页再加一行“Layout: end”；下一行用“# 标题”写卡片标题，之后是卡片正文。小标题 Card、Body、Hashtags 和 Sections、Layout 必须保持原样。一共 6–20 张；中文、日文、韩文封面标题不超过 20 个字、每张不超过 110 个字，其他语言封面标题不超过 8 个词、每张不超过 40 个词。配文不超过 2,200 字符，开头 125 字符内讲清看点；配文里不放链接，需要时写“link in bio”；话题标签最多 5 个。用材料里的模板把每张卡片渲染成 1080×1350 的 PNG，按卡片顺序用 task file 逐张上传，把返回的 id 写进 cards.images。只做草稿，不发布。",
   "playbooks.linkedinCarouselInstruction": "把任务说明里的文章或话题做成一份 LinkedIn 轮播图（文档），按 linkedin-carousel Skill 做。有原文时先通读原文（输入里的正文，没有就打开文章链接）；新话题按说明里的要点和参考链接写，不编造事实。按这个固定格式输出：每页写在“## Card 1”“## Card 2”……下，最后在“## Title”下写文档标题、“## Body”下写帖子正文。每页小标题下第一行写“Sections: ”加这页出自原文的第几节（repurpose.sections 里的编号）；结尾页再加一行“Layout: end”；下一行用“# 标题”写这页的标题，之后是正文。小标题 Card、Title、Body 和 Sections、Layout 必须保持原样。一共 6–18 页；中文、日文、韩文封面标题不超过 20 个字、每页不超过 110 个字，其他语言封面标题不超过 8 个词、每页不超过 40 个词。文档标题不超过 58 字符，帖子正文不超过 1,300 字符。用材料里的模板把每页渲染成 1080×1350 的 PNG，按顺序用 task file 逐张上传，把返回的 id 写进 cards.images；NocoReach 会把它们合成一个 PDF。只做草稿，不发布。",
   "skillsBuiltin.useWhenMakingInstagramCarousel": "把文章或话题做成 Instagram 轮播图时使用：怎么分 4:5 的卡片、配文和话题标签怎么写，以及怎么渲染和上传图片。",
-  "skillsBuiltin.useWhenMakingLinkedinCarousel": "把文章或话题做成 LinkedIn 轮播图时使用：怎么分 4:5 的页、文档标题和帖子正文怎么写，以及怎么渲染和上传图片。"
+  "skillsBuiltin.useWhenMakingLinkedinCarousel": "把文章或话题做成 LinkedIn 轮播图时使用：怎么分 4:5 的页、文档标题和帖子正文怎么写，以及怎么渲染和上传图片。",
+  "keywordMarket.taiwan": "中国台湾",
+  "keywordMarket.hongKong": "中国香港",
+  "keywordMarket.country": "国家或地区",
+  "keywordMarket.searchCountry": "搜索国家或地区",
+  "keywordMarket.noCountry": "没有匹配的国家或地区",
+  "keywordMarket.language": "语言",
+  "keywordMarket.useMarket": "使用这个市场",
+  "keywordResearch.queryPlan": "本次查询：{0} 次 · 最多 ${1}",
+  "keywordResearch.queryCostHelp": "每选一种方式就是一次 DataForSEO 查询，每次约 ${0}，最多 {1} 个关键词，只在点“查询”时收费；结果合并去重，每行标出是哪些方式找到的。",
+  "keywordResearch.methodNotComplete": "“{0}”没有查完：{1}",
+  "keywordResearch.foundBy": "来源"
 }

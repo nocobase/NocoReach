@@ -42,6 +42,7 @@ import {
   SavedReportNote,
 } from '#components/reach/states';
 import { savedCopyNote, type SavedCopy } from '../../shared/google-cache.js';
+import { isKeywordMarket } from '../../shared/keyword-markets.js';
 import { InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -255,13 +256,13 @@ export default function KeywordDetailPage() {
   const [params] = useSearchParams();
   const { project } = useProject();
   const keyword = (params.get('kw') || '').trim();
-  const fallback = getMarkets()[0];
-  const market =
-    getMarkets().find(
-      (m) =>
-        m.locationCode === Number(params.get('kwLoc')) &&
-        m.language === params.get('kwLang'),
-    ) ?? fallback;
+  // Any market DataForSEO has keyword data for, as Find keywords and AI suggestions open it.
+  const market = isKeywordMarket(params.get('kwLoc'), params.get('kwLang'))
+    ? {
+        locationCode: Number(params.get('kwLoc')),
+        language: String(params.get('kwLang')),
+      }
+    : getMarkets()[0];
   const { t } = useTranslation();
   // The trail's Keywords goes to the tab it came from with that tab's query, without the detail's own parameters; the
   // header carries the only way back (L6), so the page has no BackButton.
@@ -363,8 +364,15 @@ function Detail({
       page: best.url,
     };
   }, [gsc]);
+  // The usual ten, and the market opened when it is not one of them.
+  const markets = getMarkets().some(
+    (m) =>
+      m.locationCode === market.locationCode && m.language === market.language,
+  )
+    ? getMarkets()
+    : [{ ...market, label: marketLabel(market) }, ...getMarkets()];
   const setMarket = (v: string) => {
-    const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v);
+    const m = markets.find((x) => `${x.locationCode}:${x.language}` === v);
     if (!m) return;
     const p = new URLSearchParams(params);
     p.set('kwLoc', String(m.locationCode));
@@ -406,7 +414,7 @@ function Detail({
         >
           <SelectValue>
             {(v: string) =>
-              getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)
+              markets.find((x) => `${x.locationCode}:${x.language}` === v)
                 ?.label ?? ''
             }
           </SelectValue>
@@ -415,7 +423,7 @@ function Detail({
           align='end'
           className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'
         >
-          {getMarkets().map((m) => (
+          {markets.map((m) => (
             <SelectItem
               key={`${m.locationCode}:${m.language}`}
               value={`${m.locationCode}:${m.language}`}

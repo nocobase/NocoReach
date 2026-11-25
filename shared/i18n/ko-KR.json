@@ -9087,5 +9087,16 @@
   "playbooks.linkedinCarousel": "LinkedIn 캐러셀",
   "playbooks.linkedinCarouselDescription": "글이나 주제를 4:5, 6–18페이지의 LinkedIn 문서 캐러셀로 만들어 PDF 하나로 다운로드하고, 문서 제목과 게시물 본문을 붙입니다. 승인하면 작업이 완료됩니다.",
   "playbooks.instagramCarouselInstruction": "작업 설명에 있는 글이나 주제를 instagram-carousel 스킬에 따라 Instagram 캐러셀로 재가공하세요. 글이 있으면 먼저 전체를 읽으세요(입력에 있는 본문, 없으면 글 링크를 여세요). 새 주제라면 핵심 내용과 참고 링크를 바탕으로 쓰고 사실을 지어내지 마세요. 다음 고정 형식을 사용하세요. 각 카드를 \"## Card 1\", \"## Card 2\" 등의 아래에 쓰고, 마지막으로 \"## Body\" 아래에 캡션을, \"## Hashtags\" 아래에 해시태그를 쓰세요. 각 카드 소제목 아래 첫 줄에는 \"Sections: \" 뒤에 해당 카드의 출처인 원문 섹션 번호(repurpose.sections의 번호)를 쓰고, 마무리 페이지에는 \"Layout: end\" 줄을 추가하세요. 그다음 줄에는 카드 제목을 \"# 제목\" 형식으로 쓰고, 이어서 카드 본문을 쓰세요. 소제목 Card, Body, Hashtags와 레이블 Sections, Layout은 표기 그대로 유지하세요. 카드는 6–20장으로 만드세요. 중국어, 일본어, 한국어는 표지 제목 20자 이내, 각 카드 110자 이내, 그 밖의 언어는 표지 제목 8단어 이내, 각 카드 40단어 이내로 하세요. 캡션은 2,200자 이내로 쓰고 처음 125자 안에 핵심을 전하세요. 캡션에는 링크를 넣지 말고, 필요하면 \"link in bio\"라고 쓰세요. 해시태그는 최대 5개입니다. 작업 자료에 있는 템플릿으로 각 카드를 1080×1350 PNG로 렌더링하고, 카드 순서대로 task file로 이미지를 업로드한 뒤 반환된 id를 cards.images에 쓰세요. 초안만 작성하고 아무것도 게시하지 마세요.",
-  "playbooks.linkedinCarouselInstruction": "작업 설명에 있는 글이나 주제를 linkedin-carousel 스킬에 따라 LinkedIn 캐러셀(문서)로 재가공하세요. 글이 있으면 먼저 전체를 읽으세요(입력에 있는 본문, 없으면 글 링크를 여세요). 새 주제라면 핵심 내용과 참고 링크를 바탕으로 쓰고 사실을 지어내지 마세요. 다음 고정 형식을 사용하세요. 각 페이지를 \"## Card 1\", \"## Card 2\" 등의 아래에 쓰고, 마지막으로 \"## Title\" 아래에 문서 제목을, \"## Body\" 아래에 게시물 본문을 쓰세요. 각 페이지 소제목 아래 첫 줄에는 \"Sections: \" 뒤에 해당 페이지의 출처인 원문 섹션 번호(repurpose.sections의 번호)를 쓰고, 마무리 페이지에는 \"Layout: end\" 줄을 추가하세요. 그다음 줄에는 페이지 제목을 \"# 제목\" 형식으로 쓰고, 이어서 본문을 쓰세요. 소제목 Card, Title, Body와 레이블 Sections, Layout은 표기 그대로 유지하세요. 페이지는 6–18페이지로 만드세요. 중국어, 일본어, 한국어는 표지 제목 20자 이내, 각 페이지 110자 이내, 그 밖의 언어는 표지 제목 8단어 이내, 각 페이지 40단어 이내로 하세요. 문서 제목은 58자 이내, 게시물 본문은 1,300자 이내입니다. 작업 자료에 있는 템플릿으로 각 페이지를 1080×1350 PNG로 렌더링하고, 순서대로 task file로 이미지를 업로드한 뒤 반환된 id를 cards.images에 쓰세요. NocoReach가 이를 PDF 하나로 합칩니다. 초안만 작성하고 아무것도 게시하지 마세요."
+  "playbooks.linkedinCarouselInstruction": "작업 설명에 있는 글이나 주제를 linkedin-carousel 스킬에 따라 LinkedIn 캐러셀(문서)로 재가공하세요. 글이 있으면 먼저 전체를 읽으세요(입력에 있는 본문, 없으면 글 링크를 여세요). 새 주제라면 핵심 내용과 참고 링크를 바탕으로 쓰고 사실을 지어내지 마세요. 다음 고정 형식을 사용하세요. 각 페이지를 \"## Card 1\", \"## Card 2\" 등의 아래에 쓰고, 마지막으로 \"## Title\" 아래에 문서 제목을, \"## Body\" 아래에 게시물 본문을 쓰세요. 각 페이지 소제목 아래 첫 줄에는 \"Sections: \" 뒤에 해당 페이지의 출처인 원문 섹션 번호(repurpose.sections의 번호)를 쓰고, 마무리 페이지에는 \"Layout: end\" 줄을 추가하세요. 그다음 줄에는 페이지 제목을 \"# 제목\" 형식으로 쓰고, 이어서 본문을 쓰세요. 소제목 Card, Title, Body와 레이블 Sections, Layout은 표기 그대로 유지하세요. 페이지는 6–18페이지로 만드세요. 중국어, 일본어, 한국어는 표지 제목 20자 이내, 각 페이지 110자 이내, 그 밖의 언어는 표지 제목 8단어 이내, 각 페이지 40단어 이내로 하세요. 문서 제목은 58자 이내, 게시물 본문은 1,300자 이내입니다. 작업 자료에 있는 템플릿으로 각 페이지를 1080×1350 PNG로 렌더링하고, 순서대로 task file로 이미지를 업로드한 뒤 반환된 id를 cards.images에 쓰세요. NocoReach가 이를 PDF 하나로 합칩니다. 초안만 작성하고 아무것도 게시하지 마세요.",
+  "keywordMarket.taiwan": "대만",
+  "keywordMarket.hongKong": "홍콩",
+  "keywordMarket.country": "국가 또는 지역",
+  "keywordMarket.searchCountry": "국가 검색",
+  "keywordMarket.noCountry": "일치하는 국가 또는 지역이 없습니다",
+  "keywordMarket.language": "언어",
+  "keywordMarket.useMarket": "이 시장 사용",
+  "keywordResearch.queryPlan": "이번 조회 수: {0} · 최대 ${1}",
+  "keywordResearch.queryCostHelp": "선택한 방식마다 DataForSEO 조회 1회이며, 1회에 약 ${0}, 키워드 최대 {1}개입니다. 쿼리를 클릭할 때만 요금이 부과되며, 결과는 합쳐지고 각 행에 해당 키워드를 찾은 방식이 표시됩니다.",
+  "keywordResearch.methodNotComplete": "{0}이(가) 완료되지 않았습니다: {1}",
+  "keywordResearch.foundBy": "찾은 방식"
 }
