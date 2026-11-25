@@ -134,7 +134,10 @@ it('classifies every literal snapshot prefix and the task/report namespace facto
         : ts.isTemplateExpression(node)
           ? node.head.text
           : '';
-      const prefix = /^([a-z][a-z0-9-]*):/.exec(text)?.[1];
+      // A sort value ("traffic:desc", Domain overview's keyword sorts) is not a storage namespace.
+      const prefix = /^[a-z][a-z0-9-]*:(?:asc|desc)$/.test(text)
+        ? undefined
+        : /^([a-z][a-z0-9-]*):/.exec(text)?.[1];
       if (prefix) check(prefix, file);
       // TaskService.key(kind, project, task, id) constructs nr-task-${kind}:... dynamically.
       if (

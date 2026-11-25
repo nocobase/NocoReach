@@ -275,6 +275,31 @@ function organic(world: World, target: string, months = 0) {
   };
 }
 
+// DataForSEO Labs' `order_by` ("<field path>,<asc|desc>"; the first rule only), empty values last, as Domain
+// overview's keyword sorts ask for it; ties keep the given order.
+function orderBy<T>(rows: T[], rules: unknown): T[] {
+  const [path, dir] = String(Array.isArray(rules) ? rules[0] : '').split(',');
+  if (!path || !['asc', 'desc'].includes(dir)) return rows;
+  const value = (row: T) => {
+    const v = path
+      .split('.')
+      .reduce<unknown>(
+        (o, k) =>
+          o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : null,
+        row,
+      );
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  };
+  return rows
+    .map((row, i) => ({ row, i, v: value(row) }))
+    .sort((a, b) =>
+      a.v === null || b.v === null
+        ? (a.v === null ? 1 : 0) - (b.v === null ? 1 : 0) || a.i - b.i
+        : (dir === 'asc' ? a.v - b.v : b.v - a.v) || a.i - b.i,
+    )
+    .map((x) => x.row);
+}
+
 function serpItem(
   domain: string,
   path: string,
@@ -1264,7 +1289,7 @@ export function dataforseo(
             a.ranked_serp_element.serp_item.etv,
         );
       return page(
-        rows,
+        op === 'ranked_keywords' ? orderBy(rows, b.order_by) : rows,
         op === 'ranked_keywords'
           ? { target, metrics: { organic: organic(world, target) } }
           : {},

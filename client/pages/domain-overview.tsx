@@ -7,7 +7,7 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // saving keywords to 关键词, Chinese copy, CSV export only.
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { HandOffBar } from "./hand-off-bar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
@@ -30,6 +30,7 @@ import { ScoreBadge } from "#components/seo/score-badge";
 import { IntentBadge, getIntentLabels, toIntent } from "#components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "#components/seo/csv";
 import { useProject } from "./reach-data";
+import { rankBatches } from "./domain-rank-batches";
 import { currentProjectId } from "./current-project";
 import { safeLink } from "./analytics";
 import { keywordRequest, getMarkets, marketLabel, metric, rankOf, rankRequest, type KeywordConnectionState, type Ranks } from "./keyword-api";
@@ -44,9 +45,9 @@ import { formatCount, formatDateTime } from '#lib/format';
 import { refreshNavSources } from '#components/app-shell/nav-badges';
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };
-type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
+type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string; offset?: number; sort?: string };
 // reused: a query returned the saved lookup of the last 30 days instead of asking DataForSEO again.
-type Run = { id: number | string; status: string; spec: Spec; result?: { items: Item[]; totalCount: number | null; summary?: { traffic: number; keywords: number; top3: number; top10: number } | null }; errorCode?: string; createdAt: string; completedAt?: string; reused?: boolean };
+type Run = { id: number | string; status: string; spec: Spec; result?: { items: Item[]; totalCount: number | null; summary?: { traffic: number; keywords: number; top3: number; top10: number } | null }; errorCode?: string; createdAt: string; completedAt?: string; reused?: boolean; pages?: Run[] };
 type Recent = { id: string; status: string; spec: Spec; createdAt: string; completedAt: string | null; count: number | null; summary: Run["result"] extends infer R ? R extends { summary?: infer S } ? S : null : null };
 const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
@@ -117,7 +118,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
               <SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={Boolean(busy) || !form.target.trim()} className="lg:px-6">{busy === "keywords" ? $t('common.querying') : $t('common.query')}</Button>
-            <InfoTip label={$t('common.info')}><p>{$t('domainOverview.organicRankingsDomainIncludingSubdomains')}</p><p>{$t('competitorsPage.lookupBilling')}</p></InfoTip>
+            <InfoTip label={$t('common.info')}><p>{$t('domainOverview.organicRankingsDomainIncludingSubdomains')}</p><p>{$t('domainOverview.keywordsBilling')}</p></InfoTip>
           </form>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </Card>
@@ -131,10 +132,10 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
             <Summary run={shown} onBacklinks={() => navigate(`/backlinks?t=${encodeURIComponent(shown.spec.target)}`)} />
             <Card className="gap-0 py-0">
               <DataTableTabs value={tab} onValueChange={setTab}>
-                <TabsTrigger value="keywords">{$tj('domainOverview.keywords',{0:shown.result?.items.length ?? 0})}</TabsTrigger>
+                <TabsTrigger value="keywords">{$tj('domainOverview.keywords',{0:shown.result?.totalCount ?? shown.result?.items.length ?? 0})}</TabsTrigger>
                 <TabsTrigger value="pages">{$tj('domainOverview.pages',{0:runs.pages?.result ? ` ${runs.pages.result.items.length}` : ""})}</TabsTrigger>
               </DataTableTabs>
-              {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
+              {tab === "keywords" ? <KeywordsTable key={shown.id} run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
                 <div className="space-y-2 p-6 text-sm">
                   <p className="text-muted-foreground">{$tj('domainOverview.seeWhichPagesBringMost',{0:shown.spec.target})}</p>
                   <Button variant="outline" disabled={Boolean(busy)} onClick={() => void query("pages", shown.spec.target, marketOf(shown.spec))}>{busy === "pages" ? $t('common.querying') : $t('domainOverview.lookUpTopPages')}</Button>
@@ -177,35 +178,95 @@ function Summary({ run, onBacklinks }: { run: Run; onBacklinks?: () => void }) {
   );
 }
 
-type Row = Item & { siteClicks?: number };
+type Row = Item & { siteClicks?: number; runId: string; rowId: string };
 const kHelper = createColumnHelper<Row>();
+// Keyword pages: DataForSEO is asked for one page of PAGE keywords at a time, when the person opens it, in the sort the
+// table shows; each page is a lookup of its own, so one opened again within 30 days is not charged again.
+const PAGE = 100;
+const DEFAULT_SORT = "traffic:desc";
+// The furthest page DataForSEO Labs reads (offset 10,000); the count below the table still says how many there are.
+const MAX_OFFSET = 10000;
+const SORTABLE = ["traffic", "volume", "position", "difficulty"];
+// A sort's pages by offset: the first page and the later ones the server found already read.
+type Book = Record<number, Run>;
+const bookOf = (r: Run): Book => Object.fromEntries<Run>([[0, r], ...(r.pages ?? []).filter((p) => p.spec.offset).map((p): [number, Run] => [p.spec.offset ?? 0, p])]);
+const toRows = (r: Run): Row[] => (r.result?.items ?? []).map((i) => ({ ...i, runId: String(r.id), rowId: `${r.id}:${i.id}` }));
 function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
   const { project } = useProject();
-  const items = run.result?.items ?? [];
+  const [sort, setSort] = useState(DEFAULT_SORT);
+  const [books, setBooks] = useState<Record<string, Book>>(() => ({ [DEFAULT_SORT]: bookOf(run) }));
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useMessageState("");
+  const latestRef = useRef(0);
+  const book = useMemo(() => books[sort] ?? {}, [books, sort]);
+  const total = book[0]?.result?.totalCount ?? run.result?.totalCount ?? run.result?.items.length ?? 0;
+  const loaded = useMemo(() => Object.keys(book).map(Number).sort((a, b) => a - b).map((o) => book[o]).filter((r) => r.status === "completed"), [book]);
+  const allItems = useMemo(() => loaded.flatMap(toRows), [loaded]);
+  const current = book[page * PAGE];
   const [ranks, setRanks] = useState<Ranks>();
+  const rankedRef = useRef(new Set<string>());
   const [filter, setFilter] = useState({ include: "", exclude: "" });
   const [showFilters, setShowFilters] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([{ id: "traffic", desc: true }]);
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
-  const [rowSelection, setRowSelection] = useState({});
+  const [filterPage, setFilterPage] = useState(0);
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const anchorRef = useSelectionAnchor();
-  useEffect(() => { if (project && items.length) void rankRequest(project.id, items.map((i) => i.keyword)).then(setRanks).catch(() => undefined); }, [run.id, project?.id]);
+  // Your site's Search Console clicks on the loaded keywords: on your own site for the clicks column, on a competitor's
+  // for the hand-off (ownClicks). Pages not asked about yet go in batches the server reads whole (up to 1,000 keywords);
+  // a page counts as asked once its batch answered, so a failed batch is asked again when another page loads.
+  useEffect(() => {
+    if (!project) return;
+    const fresh = loaded.filter((r) => !rankedRef.current.has(String(r.id)));
+    for (const batch of rankBatches(fresh)) {
+      batch.forEach((r) => rankedRef.current.add(String(r.id)));
+      void rankRequest(project.id, batch.flatMap((r) => (r.result?.items ?? []).map((i) => i.keyword)))
+        .then((r) => setRanks((s) => ({ ...r, ranks: { ...s?.ranks, ...r.ranks } })))
+        .catch(() => batch.forEach((r) => rankedRef.current.delete(String(r.id))));
+    }
+  }, [loaded, project]);
+  // Reads one page in one sort (the person opened it or changed the sort); only the latest request is shown.
+  const load = async (offset: number, by: string) => {
+    const seq = ++latestRef.current;
+    setLoading(true); setLoadError("");
+    try {
+      const r = await call<Run>("run", { view: "keywords", target: run.spec.target, locationCode: run.spec.locationCode, language: run.spec.language, requestKey: requestKey(), ...(offset ? { offset } : {}), ...(by === DEFAULT_SORT ? {} : { sort: by }) });
+      setBooks((b) => ({ ...b, [by]: offset ? { ...b[by], [offset]: r } : bookOf(r) }));
+    } catch (e) { if (seq === latestRef.current) setLoadError(() => (e instanceof Error ? $legacyText(e.message) : $t('common.lookupNotCompleteTryAgain'))); }
+    finally { if (seq === latestRef.current) setLoading(false); }
+  };
+  const openPage = (p: number) => { setPage(p); setLoadError(""); if (!book[p * PAGE]) void load(p * PAGE, sort); };
+  const sorting = useMemo<SortingState>(() => { const [id, dir] = sort.split(":"); return [{ id, desc: dir === "desc" }]; }, [sort]);
+  // A new sort starts again from its first page, read from DataForSEO unless it was read in this view already.
+  const onSortingChange = (u: SortingState | ((s: SortingState) => SortingState)) => {
+    const next = (typeof u === "function" ? u(sorting) : u)[0];
+    const by = next && SORTABLE.includes(next.id) ? `${next.id}:${next.desc ? "desc" : "asc"}` : DEFAULT_SORT;
+    if (by === sort) return;
+    setSort(by); setPage(0); setFilterPage(0); setLoadError("");
+    if (!books[by]?.[0]) void load(0, by);
+  };
   const terms = (s: string) => s.split(/[,，]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
-  const rows = useMemo(() => { const inc = terms(filter.include), exc = terms(filter.exclude); return items.filter((r) => { const k = r.keyword.toLowerCase(); return inc.every((t) => k.includes(t)) && !exc.some((t) => k.includes(t)); }).map((r) => ({ ...r, siteClicks: rankOf(ranks, r.keyword)?.clicks })); }, [items, filter, ranks]);
   const active = Number(Boolean(filter.include)) + Number(Boolean(filter.exclude));
+  // Filters look through every page loaded so far; without them the table shows the page opened.
+  const rows = useMemo(() => {
+    const inc = terms(filter.include), exc = terms(filter.exclude);
+    const list = active ? allItems.filter((r) => { const k = r.keyword.toLowerCase(); return inc.every((t) => k.includes(t)) && !exc.some((t) => k.includes(t)); }) : current?.status === "completed" ? toRows(current) : [];
+    return list.map((r) => ({ ...r, siteClicks: rankOf(ranks, r.keyword)?.clicks }));
+  }, [allItems, current, filter, ranks, active]);
   const columns = useMemo<ColumnDef<Row>[]>(() => [
     makeSelectionColumn<Row>(anchorRef),
-    kHelper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className="block max-w-xs truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Row>,
-    kHelper.accessor("position", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
-    kHelper.accessor("volume", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
-    kHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('domainOverview.estimatedTraffic')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Row>,
+    kHelper.accessor("keyword", { enableSorting: false, header: () => $t('common.keywords'), cell: ({ getValue }) => <span className="block max-w-xs truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Row>,
+    kHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
+    kHelper.accessor("volume", { header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
+    kHelper.accessor("traffic", { header: ({ column }) => <SortableHeader column={column} label={$t('domainOverview.estimatedTraffic')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Row>,
     kHelper.accessor("url", { enableSorting: false, header: () => $t('common.rankingPage'), cell: ({ getValue }) => (safeLink(getValue()) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(getValue())} target="_blank" rel="noreferrer" title={getValue()}>{pathOf(getValue())}</a> : <span className="block max-w-56 truncate">{getValue()}</span>) }) as ColumnDef<Row>,
-    kHelper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<Row>,
+    kHelper.accessor("difficulty", { header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<Row>,
     kHelper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<Row>,
-    ...(own ? [kHelper.accessor("siteClicks", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('domainOverview.clicks')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Row>] : []),
+    ...(own ? [kHelper.accessor("siteClicks", { enableSorting: false, header: () => <span className="block text-right">{$t('domainOverview.clicks')}</span>, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Row>] : []),
   ], [anchorRef, own]);
-  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination, sorting }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
-  const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  // DataForSEO sorts; the table only shows which sort it asked for. Pages come from the server unless filters are on.
+  const table = useDataTable({ data: rows, columns, manualSorting: true, enableSortingRemoval: false, withPagination: active > 0, enableRowSelection: true, state: { rowSelection, sorting, ...(active ? { pagination: { pageIndex: filterPage, pageSize: PAGE } } : {}) }, onRowSelectionChange: setRowSelection, onSortingChange, getRowId: (r) => r.rowId });
+  // Selected rows on every loaded page, not only the one on screen.
+  const selected = allItems.filter((r) => rowSelection[r.rowId]).map((r) => ({ ...r, siteClicks: rankOf(ranks, r.keyword)?.clicks }));
   // 交给 Agent: on your own site the words go to the keyword hand-off; a competitor's become “catch up on these words”.
   const [handing, setHanding] = useState<{ own: HandOffKeyword[] } | { draft: TaskDraft }>();
   const [handed, setHanded] = useState<HandOffResult>();
@@ -214,22 +275,35 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
     ? { own: selected.map((r) => ({ keyword: r.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: r.volume, difficulty: r.difficulty, intent: r.intent, rank: rankOf(ranks, r.keyword) })) }
     : { draft: competitorKeywordsDraft(run.spec.target, market, selected.map((r) => ({ keyword: r.keyword, position: r.position, volume: r.volume, traffic: r.traffic, url: r.url, difficulty: r.difficulty, intent: r.intent, ownClicks: rankOf(ranks, r.keyword)?.clicks ?? null }))) });
   useHandOffSource("domain-keywords", project ? { count: selected.length, open: handOff, noun: $t('common.keywordsSelected'), actions: <> <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t('common.saveKeywords')}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t('common.export')}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
-  const csv = (list: (Row)[]) => downloadCsv($t('domainOverview.competitorKeywords',{0:run.spec.target}), [$t('common.keywords'), $t('common.position'), $t('common.monthlyVolume'), $t('domainOverview.estimatedTraffic'), $t('common.rankingPage'), $t('common.difficulty'), $t('common.intent'), ...(own ? [$t('domainOverview.clicks')] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, getIntentLabels()[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error(() => ($t('common.noKeywordsExport')));
+  const csv = (list: Row[]) => downloadCsv($t('domainOverview.competitorKeywords',{0:run.spec.target}), [$t('common.keywords'), $t('common.position'), $t('common.monthlyVolume'), $t('domainOverview.estimatedTraffic'), $t('common.rankingPage'), $t('common.difficulty'), $t('common.intent'), ...(own ? [$t('domainOverview.clicks')] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, getIntentLabels()[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error(() => ($t('common.noKeywordsExport')));
+  // Saved from the lookup each keyword came from: one request per page.
   const save = async () => {
-    try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success(() => ($t('common.keywordsSaved',{0:r.saved,1:r.skipped ? $t('common.alreadySaved',{0:r.skipped}) : ""}))); refreshNavSources(); setRowSelection({}); }
+    try {
+      const byRun = new Map<string, string[]>();
+      for (const s of selected) byRun.set(s.runId, [...(byRun.get(s.runId) ?? []), s.id]);
+      let saved = 0, skipped = 0;
+      for (const [runId, itemIds] of byRun) { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId, itemIds }); saved += r.saved; skipped += r.skipped; }
+      toast.success(() => ($t('common.keywordsSaved',{0:saved,1:skipped ? $t('common.alreadySaved',{0:skipped}) : ""}))); refreshNavSources(); setRowSelection({});
+    }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'))); }
   };
+  const failed = !loading && (loadError || (current && current.status !== "completed" ? current.errorCode || $t('common.notRunSameLookupAgain') : undefined));
+  const loadedCount = allItems.length;
   return (
     <>
-      <DataTable table={table} isFiltered={active > 0} onClearFilters={() => setFilter({ include: "", exclude: "" })} empty={{ title: $t('domainOverview.noRankingKeywordsFound'), description: $t('domainOverview.websiteMayNoOrganicRankings') }}
+      <DataTable table={table} isLoading={loading && !active} isFiltered={active > 0} onClearFilters={() => setFilter({ include: "", exclude: "" })}
+        empty={failed ? { title: $t('common.lookupNotComplete'), description: failed, action: <Button variant="outline" size="sm" onClick={() => void load(page * PAGE, sort)}>{$t('common.queryAgain')}</Button> } : { title: $t('domainOverview.noRankingKeywordsFound'), description: $t('domainOverview.websiteMayNoOrganicRankings') }}
         toolbar={<>
           <DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t('common.exportCsv')}</Button>}>
             <DataTableFilterToggle open={showFilters} activeCount={active} onToggle={() => setShowFilters((v) => !v)} />
-            <span className="text-xs text-muted-foreground">{run.result?.totalCount ? $t('domainOverview.totalMostEstimatedTrafficListed',{0:run.result.totalCount.toLocaleString(getCurrentLocale()),1:items.length}) : $t('common.total',{0:items.length})}</span>
           </DataTableToolbar>
-          {showFilters ? <DataTableFilterPanel activeCount={active} onReset={() => setFilter({ include: "", exclude: "" })}><div className="grid gap-2 sm:grid-cols-2"><DataTableFilterGroup label={$t('common.include')}><Input aria-label={$t('common.include')} className="h-7" placeholder={$t('common.containCommaSeparated')} value={filter.include} onChange={(e) => setFilter((f) => ({ ...f, include: e.target.value }))} /></DataTableFilterGroup><DataTableFilterGroup label={$t('common.exclude')}><Input aria-label={$t('common.exclude')} className="h-7" placeholder={$t('common.excludeAny')} value={filter.exclude} onChange={(e) => setFilter((f) => ({ ...f, exclude: e.target.value }))} /></DataTableFilterGroup></div></DataTableFilterPanel> : null}
+          {showFilters ? <DataTableFilterPanel activeCount={active} onReset={() => setFilter({ include: "", exclude: "" })}><div className="grid gap-2 sm:grid-cols-2"><DataTableFilterGroup label={$t('common.include')}><Input aria-label={$t('common.include')} className="h-7" placeholder={$t('common.containCommaSeparated')} value={filter.include} onChange={(e) => { setFilterPage(0); setFilter((f) => ({ ...f, include: e.target.value })); }} /></DataTableFilterGroup><DataTableFilterGroup label={$t('common.exclude')}><Input aria-label={$t('common.exclude')} className="h-7" placeholder={$t('common.excludeAny')} value={filter.exclude} onChange={(e) => { setFilterPage(0); setFilter((f) => ({ ...f, exclude: e.target.value })); }} /></DataTableFilterGroup></div></DataTableFilterPanel> : null}
         </>}
-        footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={[50, 100] as const} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />
+        footer={<>
+          {active ? (rows.length > 0 ? <TablePagination page={filterPage + 1} pageSize={PAGE} totalCount={rows.length} onPageChange={(p) => setFilterPage(p - 1)} /> : null)
+            : <TablePagination page={page + 1} pageSize={PAGE} totalCount={Math.min(total, MAX_OFFSET + PAGE)} onPageChange={(p) => { if (!loading) openPage(p - 1); }} />}
+          <p className="flex items-center gap-1 border-t border-border px-4 py-2 text-xs text-muted-foreground tabular-nums" data-domain-loaded="">{$t('domainOverview.loadedOfTotal',{0:loadedCount.toLocaleString(getCurrentLocale()),1:Math.max(total, loadedCount).toLocaleString(getCurrentLocale())})}<InfoTip label={$t('common.info')}>{$t('domainOverview.keywordsBilling')}</InfoTip></p>
+        </>} />
       {own ? <p className="px-4 pb-3 text-xs text-muted-foreground">{$t('domainOverview.siteClicksActualSearchConsole')}</p> : null}
       <HandOffNotice result={handed} />
       {handing && project ? ("own" in handing
