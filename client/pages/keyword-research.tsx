@@ -172,7 +172,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="pl-8" aria-label={$t('common.keywords')} placeholder={$t('keywordResearch.enterKeywordExampleOpenSource')} maxLength={100} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
             </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] lg:flex">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_auto] lg:flex">
               <MarketPicker className="lg:w-80" value={form.market} onChange={(m) => setForm((f) => ({ ...f, market: m }))} />
               <MethodPicker value={form.views} onChange={(views) => setForm((f) => ({ ...f, views }))} />
             </div>
