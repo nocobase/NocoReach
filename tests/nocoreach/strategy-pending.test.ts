@@ -7,7 +7,9 @@ import {
   rowsFor,
   sameOpportunity,
   sameSignals,
+  sameWork,
   signalDisposition,
+  targetKey,
   todaySuggestions,
 } from '../../shared/strategy-pending';
 import { taskOwner, taskState } from '../../shared/task-pending';
@@ -463,4 +465,178 @@ it('cards resting on Skill findings alone are one opportunity only for the same 
   ).toBe(false);
   // No changes cited at all decides nothing, as before.
   expect(sameOpportunity(card('a'), card('b', { title: 'a' }))).toBe(false);
+});
+
+it('a page target is the page it names, whatever its scheme, www., trailing slash, query or fragment', () => {
+  const page = 'nocobase.com/blog/workflow-automation-tools';
+  for (const t of [
+    'https://www.nocobase.com/blog/workflow-automation-tools',
+    'https://www.nocobase.com/blog/workflow-automation-tools/',
+    'http://nocobase.com/blog/workflow-automation-tools?utm=x#top',
+    'www.nocobase.com/blog/workflow-automation-tools/',
+  ])
+    expect(targetKey(t)).toBe(page);
+  expect(targetKey('/blog/x/?a=1')).toBe('/blog/x');
+  // Anything else is its text; two pages in one target are not a page.
+  expect(targetKey('  英文站新增 Lovable 替代对比页 ')).toBe(
+    '英文站新增 lovable 替代对比页',
+  );
+  expect(targetKey('/cn/commercial 与 /cn/solutions/all-in-one')).toBe(
+    '/cn/commercial 与 /cn/solutions/all-in-one',
+  );
+  expect(targetKey(undefined)).toBe('');
+});
+
+// nocoreach.nocobase.ai, project 1, 2026-11-26: five pending opportunities were earlier copies of later ones, raised
+// again in other words after the analysis stopped seeing them.
+const at = (generatedAt: string, items: Opportunity[]) => ({
+  ...batch(items),
+  generatedAt,
+});
+const pairs: [Opportunity, Opportunity][] = [
+  [
+    card('o98', {
+      title: '让低代码榜单补上 NocoBase',
+      signalIds: [
+        'ai-cited:low code',
+        'ai-cited:no code',
+        'ai-cited:ai no code',
+      ],
+    }),
+    card('o114', {
+      title: '联系低代码榜单收录 NocoBase',
+      signalIds: [
+        'ai-cited:ai no code',
+        'ai-cited:low code',
+        'ai-cited:no code',
+      ],
+    }),
+  ],
+  [
+    card('o99', {
+      title: '写在线表单构建器选型指南',
+      signalIds: ['competitor-gap:budibase.com/blog/open-source-form-builder'],
+    }),
+    card('o117', {
+      title: '写开源表单搭建指南',
+      signalIds: ['competitor-gap:budibase.com/blog/open-source-form-builder'],
+    }),
+  ],
+  [
+    card('o89', { title: '写 IT 资产管理选型指南', signalIds: ['itam'] }),
+    card('o112', {
+      title: '写 IT 资产管理指南',
+      signalIds: ['itam', 'skill:sk-1:demand-gap:a'],
+    }),
+  ],
+  [
+    card('o104', {
+      title: '41 个网站链接了至少 2 个竞品，没有链接我们',
+      signalIds: ['link-gap'],
+    }),
+    card('o105', {
+      title: '外联 41 个只链竞品的网站',
+      signalIds: ['link-gap'],
+    }),
+  ],
+  [
+    card('o110', {
+      title: '重写工作流工具页并补审批页',
+      target: 'https://www.nocobase.com/blog/workflow-automation-tools',
+      signalIds: ['gsc-near-first:/blog/workflow-automation-tools'],
+    }),
+    card('o113', {
+      title: '重写工作流自动化页找回 880 次点击',
+      target: 'https://www.nocobase.com/blog/workflow-automation-tools/',
+      signalIds: ['gsc-near-first:/blog/workflow-automation-tools'],
+    }),
+  ],
+];
+it('an earlier card raised again in other words reads as replaced (O-98, O-99, O-89, O-104, O-110)', () => {
+  for (const [earlier, later] of pairs)
+    expect(sameWork(later, earlier)).toBe(true);
+  // O-110 and O-113 name one page, whatever its trailing slash.
+  expect(sameOpportunity(pairs[4][1], pairs[4][0])).toBe(true);
+  const s = state(pairs.map(([, later]) => later));
+  s.insights!.generatedAt = '2026-11-26';
+  s.insightHistory = [
+    at('2026-11-21', [pairs[4][0]]),
+    at(
+      '2026-11-20',
+      pairs.slice(0, 4).map(([earlier]) => earlier),
+    ),
+  ];
+  const states = Object.fromEntries(
+    rowsFor(s).map((r) => [r.card.id, opportunityState(r, s)]),
+  );
+  for (const [earlier, later] of pairs) {
+    expect(states[earlier.id]).toEqual({
+      state: 'archived',
+      reason: 'replaced',
+    });
+    expect(states[later.id]).toEqual({ state: 'pending' });
+  }
+});
+
+it('one broad change backing different work, or two cards of one analysis, stay apart', () => {
+  // O-81 and O-63 rest on one competitor's pages, O-21 and O-1 on one community digest: nothing in common but generic
+  // words ("comparison").
+  const o63 = card('o63', {
+      title: '写表列行权限策略对比文章',
+      signalIds: ['competitor-pages:dad1793a'],
+    }),
+    o81 = card('o81', {
+      title: '给 Lovable 替代补一页对比',
+      signalIds: ['competitor-pages:dad1793a'],
+    }),
+    o1 = card('o1', {
+      title: '把插件分享主题做成文档专栏',
+      target: '社区插件分享类主题',
+      signalIds: ['community-digest'],
+    }),
+    o21 = card('o21', {
+      title: '为 AI Portal 建发布进度说明页',
+      target: 'AI Portal 主题（新页面）',
+      signalIds: ['community-digest'],
+    }),
+    o8 = card('o8', {
+      title: '把插件分享主题做成文档专题页',
+      target: '插件主题',
+      signalIds: ['community-digest'],
+    });
+  expect(sameWork(o81, o63)).toBe(false);
+  expect(sameWork(o21, o1)).toBe(false);
+  // Without the same changes the server computes, titles alone decide nothing.
+  expect(
+    sameWork(
+      card('a', { title: 'RBAC guide' }),
+      card('b', { title: 'RBAC guide' }),
+    ),
+  ).toBe(false);
+  // Two cards one analysis raised with the same changes and a shared term are two opportunities (O-8 and O-21 on 10-11
+  // shared the community digest): a later copy of one never replaces the other.
+  const sameDay = card('o80', {
+    title: '给工作流自动化页补对比与内链',
+    signalIds: ['gsc-near-first:/blog/workflow'],
+  });
+  const other = card('o66', {
+    title: '给工作流自动化页改标题摘要',
+    signalIds: ['gsc-near-first:/blog/workflow'],
+  });
+  expect(sameWork(sameDay, other)).toBe(true);
+  const s = state([o81, sameDay, o21]);
+  s.insights!.generatedAt = '2026-11-26';
+  s.insightHistory = [
+    at('2026-11-20', [o63, sameDay, other]),
+    at('2026-10-11', [o8, o21]),
+    at('2026-10-09', [o1]),
+  ];
+  const states = Object.fromEntries(
+    rowsFor(s).map((r) => [r.card.id, opportunityState(r, s)]),
+  );
+  expect(states.o63.state).toBe('pending');
+  expect(states.o66.state).toBe('pending');
+  // O-1 is replaced by O-8, the same work in other words, never by O-21.
+  expect(states.o1).toEqual({ state: 'archived', reason: 'replaced' });
+  expect(sameWork(o8, o1)).toBe(true);
 });

@@ -344,3 +344,25 @@ test('manual analysis reserves its gate while preparing the persisted run',async
  assert.ok(result.result.all.skipped);assert.equal(h.calls.length,0);
  release();await manual;await h.a.running;assert.equal(h.calls.length,1);
 });
+test('every undecided opportunity reaches the model, however large the evidence',()=>{
+ // 2026-11-22 to 11-25 the input ran over budget and only the latest 15 cards went: one missing from the latest analysis
+ // was no longer seen and came back under a new number (O-98 as O-114, O-89 as O-112, O-99 as O-117).
+ const card=(id,extra={})=>({id,title:`card ${id}`,objective:'o',target:'',audience:'',signalIds:[`s-${id}`],...extra});
+ const day=n=>`2026-11-${String(n).padStart(2,'0')}T00:02:00.000Z`;
+ const history=[];for(let d=24;d>=12;d--)history.push({generatedAt:day(d),items:[card(`p${d}a`),card(`p${d}b`)]});
+ for(let d=11;d>=1;d--)history.push({generatedAt:day(d),items:[card(`old${d}a`),card(`old${d}b`)]});
+ const ignored=Object.fromEntries(Array.from({length:5},(_,i)=>[`p${20+i}b`,{status:'ignored'}]));
+ const state={proposals:[{taskId:7,insight:{id:'p23a'}}],opportunityMeta:ignored,insights:{generatedAt:day(25),items:[card('today')],evidence:{}},insightHistory:history};
+ const pending=['today',...history.slice(0,13).flatMap(b=>b.items.map(c=>c.id)).filter(id=>!ignored[id]&&id!=='p23a')];
+ const facts=Array.from({length:40},(_,i)=>({key:`k${i}`,title:'t',facts:['f'.repeat(2500)]}));
+ const big={project:{name:'p'},evidence:{searchQueries:Array(500).fill({keyword:'q'.repeat(40)}),pages:[],signals:{items:facts}}};
+ const input=buildInput(big,state,day(25));
+ assert.ok(input.length<=90000);assert.ok(input.indexOf('"existingOpportunities"')<input.indexOf('"evidence"'),'the list goes before the evidence');
+ const listed=JSON.parse(input.slice(input.indexOf('"existingOpportunities":')+24,input.indexOf(',"evidence"'))).map(c=>c.id);
+ assert.deepEqual(listed.slice().sort(),pending.slice().sort(),'every undecided card, and over budget nothing else');
+ assert.equal(pending.length,21);
+ // Within budget, decided and older cards fill the list up to 40, the undecided first.
+ const small=JSON.parse(buildInput({project:{},evidence:{signals:{items:[]}}},state,day(25)));
+ assert.equal(small.existingOpportunities.length,40);assert.deepEqual(small.existingOpportunities.slice(0,21).map(c=>c.id).sort(),pending.slice().sort());
+ assert.equal(small.existingOpportunities.find(c=>c.id==='p23a').hasTask,true);
+});

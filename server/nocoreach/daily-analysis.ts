@@ -8,6 +8,7 @@ import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
 import { record, lastSuccess } from './sync-policy.js';
 import * as watch from './watch.js';
+import { opportunityState, rowsFor } from '../../shared/strategy-pending.js';
 import { growthForModel } from './growth-signals.js';
 import { languageOf, forLanguage, LANGUAGE_NAMES } from './language.js';
 import zhTW from '../../shared/i18n/zh-TW.json' with { type: 'json' };
@@ -134,9 +135,19 @@ const withWatch=(signals,state,now)=>signals.map(s=>{const w=watch.watchInput(st
 // stay with the page, which shows them under the opportunity.
 function buildInput(context,state,now=new Date().toISOString(),asOf=now){const ev={...context.evidence,publicSources:(context.evidence.publicSources||[]).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt}))};
  if(ev.signals)ev.signals={...ev.signals,items:withWatch((ev.signals.items||[]).map(s=>s.growth?{...s,growth:growthForModel(s.growth)}:s),state,now)};
- const existing=[state.insights,...(state.insightHistory||[])].flatMap(b=>b?.items||[]).filter((c,i,all)=>all.findIndex(x=>x.id===c.id)===i).slice(0,40).map(c=>({id:c.id,title:c.title,objective:c.objective,target:c.target,audience:c.audience,review:state.opportunityMeta?.[c.id],hasTask:(state.proposals||[]).some(p=>p.taskId&&p.insight?.id===c.id)}));
- const today=asOf.slice(0,10);let input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing});
- if(input.length>MAX_INPUT){ev.searchQueries=[];ev.pages=[];input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing.slice(0,15)});}
+ // The model names the earlier card of an opportunity it raises again (existingId), so it sees every one still undecided
+ // (pending on Opportunities, shared/strategy-pending.ts opportunityState), whatever the budget: 2026-11-22 to 11-25 the
+ // input ran over it, only the latest 15 cards went, and a card missing for a day came back under a new number (O-98 as
+ // O-114, O-89 as O-112, O-99 as O-117). Decided and older cards fill up to 40 and are the first thing trimmed after
+ // the search queries and pages. The list goes before the evidence, so the final cut can only shorten the evidence.
+ const compact=c=>({id:c.id,title:c.title,objective:c.objective,target:c.target,audience:c.audience,review:state.opportunityMeta?.[c.id],hasTask:(state.proposals||[]).some(p=>p.taskId&&p.insight?.id===c.id)});
+ const listed=state.insights?{...state,proposals:state.proposals||[]}:null,rows=listed?rowsFor(listed).filter(r=>!r.card.resultSource):[],undecided=new Set(rows.filter(r=>opportunityState(r,listed).state==='pending').map(r=>r.card.id));
+ const cards=[state.insights,...(state.insightHistory||[])].flatMap(b=>b?.items||[]).filter((c,i,all)=>all.findIndex(x=>x.id===c.id)===i);
+ const open=cards.filter(c=>undecided.has(c.id)).map(compact),rest=cards.filter(c=>!undecided.has(c.id)).map(compact);
+ const today=asOf.slice(0,10),build=n=>JSON.stringify({today,project:context.project,existingOpportunities:[...open,...rest.slice(0,Math.max(0,n-open.length))],evidence:ev});
+ let input=build(40);
+ if(input.length>MAX_INPUT){ev.searchQueries=[];ev.pages=[];input=build(15);}
+ if(input.length>MAX_INPUT)input=build(0);
  return input.slice(0,MAX_INPUT*1.5);}
 // What the AI gets besides the changes (2026-10-08 user decision): a line of numbers for every connected source this
 // analysis passes no change from, so it can tell “steady” from “not connected” and read one source against another;
