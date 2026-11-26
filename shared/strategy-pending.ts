@@ -1,5 +1,6 @@
 import type { TaskPart } from './opportunity-parts.js';
 import { categoryOf } from './growth.js';
+import { pageKey } from './page-identity.js';
 import type {
   StrategyState,
   InsightBatch,
@@ -140,6 +141,31 @@ const normalize = (s?: string) =>
     .trim();
 /** Text compared apart from its numbers ("Turn 7,534 impressions…" and "Turn 7,470 impressions…" read the same). */
 export const wording = (s?: string) => normalize(s).replace(/\d+/g, '');
+/**
+ * What a card's target names, for every comparison of two cards' targets: a page whatever its scheme, `www.`, trailing
+ * slash, query or fragment (shared/page-identity.ts; 2026-11-22 O-113 named .../workflow-automation-tools/ where O-110
+ * had no slash), a site path likewise, and any other target as its text.
+ */
+export function targetKey(target?: string) {
+  const t = String(target || '').trim();
+  if (t && !/\s/.test(t)) {
+    if (t.startsWith('/'))
+      return t.replace(/[?#].*$/, '').replace(/\/+$/, '') || '/';
+    const page = pageKey(
+      /^https?:\/\//i.test(t)
+        ? t
+        : /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(t)
+          ? `https://${t}`
+          : '',
+    );
+    if (page) return page;
+  }
+  return normalize(t);
+}
+const sameTarget = (a: Opportunity, b: Opportunity) => {
+  const target = targetKey(a.target);
+  return Boolean(target) && target === targetKey(b.target);
+};
 // A Skill's finding is keyed `skill:<skillId>:<kind>:<digest>` (server/nocoreach/skill-analysis.ts). Until
 // 2026-11-25 the digest was of everything the Skill cited, which changed from one day to the next, so the same finding
 // came back under another key (2026-11-21: O-93 came back as O-108, O-91 as O-111, O-95 as O-109). It is now of the
@@ -178,18 +204,117 @@ export function sameSignals(
 // the same page, or the same title apart from its numbers ("回复 3 个…" / "回复 4 个…"). One change can back several
 // different actions (a community digest), so the changes alone never decide it. Daily analysis keeps its card.
 export function sameOpportunity(a: Opportunity, b: Opportunity) {
-  const target = normalize(a.target);
   return (
     sameSignals(a, b) &&
-    ((Boolean(target) && target === normalize(b.target)) ||
-      wording(a.title) === wording(b.title))
+    (sameTarget(a, b) || wording(a.title) === wording(b.title))
   );
 }
-// A later card about the same thing, or the same page, replaces an earlier one, whatever was decided on it.
-const replaces = (later: Opportunity, earlier: Opportunity) =>
+// Words that name the kind of work or page rather than what it is about, so different opportunities share them
+// ("Add a comparison page for Lovable alternatives" and "Write a table, column and row permissions comparison" share
+// only "comparison"), and the words that only join others. Longer ones first, so a word is never cut by a shorter one.
+const GENERIC_TERMS = [
+  '重写',
+  '改写',
+  '找回',
+  '新建',
+  '补上',
+  '补齐',
+  '补充',
+  '做成',
+  '联系',
+  '合并',
+  '优化',
+  '提升',
+  '更新',
+  '选型',
+  '对比',
+  '指南',
+  '页面',
+  '文章',
+  '内容',
+  '文档',
+  '博客',
+  '一页',
+  '点击',
+  '曝光',
+  '流量',
+  '每月',
+  '我们',
+  '写',
+  '补',
+  '建',
+  '改',
+  '加',
+  '给',
+  '为',
+  '把',
+  '让',
+  '做',
+  '查',
+  '页',
+  '的',
+  '了',
+  '个',
+  '次',
+  '与',
+  '和',
+  '及',
+  '并',
+  '在',
+].sort((a, b) => b.length - a.length);
+const GENERIC_WORDS = new Set(
+  `a an the to for of and or with in on at by from into our us we your new more page pages guide guides article
+  articles post posts doc docs comparison compare vs write rewrite add update fix improve create build recover get
+  make turn clicks impressions traffic monthly`.split(/\s+/),
+);
+/**
+ * The terms a title is about, apart from its numbers and generic words: each pair of adjacent Han characters (Chinese
+ * and Japanese titles have no spaces) and each other word of two or more letters.
+ */
+export function titleTerms(title?: string) {
+  let t = normalize(title).replace(/\d+/g, ' ');
+  for (const w of GENERIC_TERMS) t = t.split(w).join(' ');
+  const terms = new Set<string>();
+  for (const run of t.match(/\p{Script=Han}+/gu) || [])
+    for (let i = 0; i + 1 < run.length; i++) terms.add(run.slice(i, i + 2));
+  for (const w of t.match(/[\p{L}\p{N}]+/gu) || [])
+    if (!/\p{Script=Han}/u.test(w) && w.length > 1 && !GENERIC_WORDS.has(w))
+      terms.add(w);
+  return terms;
+}
+/**
+ * The same work raised again under a reworded title, when the analysis no longer saw the earlier card (2026-11-22 to
+ * 11-25: O-98 came back as O-114, O-99 as O-117, O-89 as O-112, O-104 as O-105, O-110 as O-113, each a title in other
+ * words): the same changes the server computes, and titles about one thing, sharing a term once generic words are left
+ * out. A broad change backs different work under titles sharing nothing (O-81 and O-63 on one competitor's pages, O-21
+ * and O-1 on a community digest); in 53 analyses of project 1 every pair with the same changes shared a term exactly
+ * when it was one piece of work. Callers also require that the two were never raised by one analysis, which would
+ * have made them two (O-8 and O-21 on 10-11). Never used to keep an opportunity ignored (opportunity-board.ts
+ * withoutIgnored): a wrong match there would hide a new one.
+ */
+export function sameWork(a: Opportunity, b: Opportunity) {
+  const stable = stableSignals(a);
+  if (!stable || stable !== stableSignals(b)) return false;
+  const terms = titleTerms(b.title);
+  return [...titleTerms(a.title)].some((t) => terms.has(t));
+}
+/** Whether one analysis raised both cards. */
+const together = (state: StrategyState, a: string, b: string) =>
+  [state.insights, ...(state.insightHistory || [])].some(
+    (batch) =>
+      batch?.items?.some((c) => c.id === a) &&
+      batch.items.some((c) => c.id === b),
+  );
+// A later card about the same thing, the same page or the same work in other words replaces an earlier one, whatever
+// was decided on it.
+const replaces = (
+  later: Opportunity,
+  earlier: Opportunity,
+  state: StrategyState,
+) =>
   sameOpportunity(later, earlier) ||
-  (Boolean(normalize(later.target)) &&
-    normalize(later.target) === normalize(earlier.target));
+  sameTarget(later, earlier) ||
+  (sameWork(later, earlier) && !together(state, later.id, earlier.id));
 // An undecided opportunity waits this many days after the last analysis that raised it (2026-10-19: one quiet day no
 // longer expires it). Days count from the latest analysis, not the clock, as watching does.
 export const opportunityKeepDays = 14;
@@ -211,7 +336,7 @@ export function opportunityState(
         r.card.id !== row.card.id &&
         !r.card.resultSource &&
         r.batch.generatedAt > row.batch.generatedAt &&
-        replaces(r.card, row.card),
+        replaces(r.card, row.card, state),
     )
   )
     return { state: 'archived', reason: 'replaced' };
