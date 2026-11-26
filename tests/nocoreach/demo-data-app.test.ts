@@ -237,7 +237,7 @@ test('imports the demo through the API and clears all business data while preser
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [
-    [main, 'Acme', 'acme.example', 47],
+    [main, 'Acme', 'acme.example', 65],
     [second, 'Acme CRM', 'crm.acme.example', 39],
   ] as const) {
     const project = await runtime.plugin.projects.get(id);
@@ -251,6 +251,48 @@ test('imports the demo through the API and clears all business data while preser
         rows.map((row) => projectWork(row.toJSON()).boardState).filter(Boolean),
       ),
     ).toEqual(new Set(['todo', 'doing', 'review', 'done']));
+    // Xiaohongshu tasks (Content workshop PR 2) keep their card images as their run's uploads, linked to the task and
+    // readable through it.
+    if (id === main) {
+      const carded = rows
+        .map((row) => projectWork(row.toJSON()))
+        .filter((work) => work.repurpose?.form === 'xhs');
+      expect(
+        carded.map((work) => work.results[0]?.cards?.images.length),
+      ).toEqual([7, 8]);
+      for (const work of carded) {
+        const cards = work.results[0]!.cards!;
+        expect(work.images).toEqual(cards.images.map((image) => image.id));
+        expect(cards).toMatchObject({ sections: 4, colors: expect.any(Array) });
+      }
+      // Carousel (2026-11-24): an Instagram set awaiting review and a LinkedIn one done, both drawn at 4:5.
+      const portrait = rows
+        .map((row) => projectWork(row.toJSON()))
+        .filter((work) =>
+          ['instagram', 'linkedin-carousel'].includes(
+            String(work.repurpose?.form),
+          ),
+        );
+      expect(
+        portrait.map((work) => [
+          work.repurpose?.form,
+          work.results[0]?.cards?.images.length,
+          work.results[0]?.cards?.ratio,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ['instagram', 8, '4:5'],
+          ['linkedin-carousel', 8, '4:5'],
+        ]),
+      );
+      expect(portrait).toHaveLength(2);
+      const image = carded[1].results[0]!.cards!.images[0];
+      const read = await admin.fetch(
+        `http://localhost${testApp.publicBasePath}${image.ref}`,
+      );
+      expect(read.status).toBe(200);
+      expect(read.headers.get('content-type')).toBe('image/webp');
+    }
     const adminUser = await connection
       .repository('user')
       .findOne({ filter: { username: DEFAULT_ADMIN_CREDENTIALS.username } });
@@ -367,13 +409,38 @@ test('imports the demo through the API and clears all business data while preser
       );
     expect((await read('knowledge')).items).toHaveLength(8);
     const strategy = await read('strategy');
-    expect(strategy.insights.items).toHaveLength(id === main ? 22 : 14);
+    expect(strategy.insights.items).toHaveLength(id === main ? 29 : 18);
+    // The last analysis's rule and Skill counts belong to the latest batch, for Analysis rules (2026-11-17).
+    const run = await read('signals');
+    expect(run).toMatchObject({
+      schemeId: 'default',
+      schemeVersion: 1,
+      analysisRunId: strategy.insights.evidence.signals.analysisRunId,
+    });
+    expect(
+      run.skillRuns.map((r: { skillId: string }) => r.skillId),
+    ).toEqual(['content-strategy', 'competitors', 'ai-seo']);
+    if (id === main)
+      expect(
+        strategy.insights.items.find(
+          (c: { id: string }) =>
+            c.id === 'editorial-opportunity-acme-growth-approvals',
+        )?.skill,
+      ).toEqual({ id: 'content-strategy', name: 'content-strategy' });
+    // A Skill the team wrote, beside the built-in ones (Skill definitions are shared by every project).
+    const team = (
+      await snapshots.findOne({ filter: { key: 'nr-skills' } })
+    )?.get('payload').skills.find(
+      (x: { name: string }) => x.name === 'comparison-pages',
+    );
+    expect(team?.id).toMatch(/^sk-/);
     expect(strategy.proposals).toHaveLength(14);
     const timeline = strategy as StrategyState;
     const watches = Object.values(timeline.watch!).filter(
       (watch) => !watch.ended,
     );
-    expect(watches).toHaveLength(6);
+    // ACME also watches a followed topic rising on Reddit alone (step 2b).
+    expect(watches).toHaveLength(id === main ? 7 : 6);
     expect(
       new Set(watches.map((watch) => watch.decideBy)).size,
     ).toBeGreaterThanOrEqual(5);

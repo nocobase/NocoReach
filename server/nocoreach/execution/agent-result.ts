@@ -1,9 +1,21 @@
 import { z } from 'zod';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { taskResultMaterials } from '../../../shared/task-result.js';
+import {
+  CARD,
+  CARD_RESULT_KINDS,
+  CARD_SPECS,
+  INSTAGRAM,
+  LINKEDIN_DOC,
+  cardFormOf,
+  parseRepurpose,
+  type CarouselForm,
+} from '../../../shared/repurpose.js';
 import { fail, type Run } from './model';
 
 const REPORT_AS_OF_MAX_LENGTH = 1000;
+/** The most card images a set of cards may hold: past the 20 the checks allow, so a longer set is still shown. */
+export const CARD_IMAGES_MAX = 24;
 
 // This contract is shared by the Runner instructions and the result boundary. Business checks
 // (the registered repository, reviewed commit and allowed paths) still belong to TaskService.
@@ -67,9 +79,32 @@ const envelope = z.object({
   article: z.record(z.string(), z.unknown()).optional(),
   error: z.string().optional(),
   message: z.string().optional(),
+  // A set of cards (Xiaohongshu 2026-11-16, Instagram and LinkedIn 2026-11-24): the images uploaded with `task file`, one per card in the cards' order, and the
+  // cards whose text overflowed when the Agent rendered them ([] when it checked and none did; omitted when it could
+  // not check). TaskService checks the images belong to this run.
+  cards: z
+    .object({
+      images: z.array(z.uuid()).min(1).max(CARD_IMAGES_MAX),
+      overflow: z
+        .array(z.number().int().min(1).max(CARD_IMAGES_MAX))
+        .max(CARD_IMAGES_MAX)
+        .optional(),
+    })
+    .optional(),
   report: z
     .object({
-      kind: z.enum(['communityReply', 'research', 'content']),
+      kind: z.enum([
+        'communityReply',
+        'research',
+        'content',
+        // Content workshop forms (shared/repurpose.ts FORM_RESULT_KIND).
+        'xhsCards',
+        'instagramCards',
+        'linkedinCards',
+        'xPosts',
+        'linkedinPost',
+        'communityPost',
+      ]),
       sources: z.array(source).max(30),
       asOf: z.string().max(REPORT_AS_OF_MAX_LENGTH),
       uncertainties: z.array(z.string().max(1000)).max(20),
@@ -77,7 +112,32 @@ const envelope = z.object({
     .optional(),
 });
 
-export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
+// What goes with each place's cards in the result, and the card size it is drawn at (shared/repurpose.ts CARD_SPECS).
+const CARD_TEXT: Record<CarouselForm, string> = {
+  xhs: '## Title、## Body 是笔记的标题和正文',
+  instagram: `## Body 是配文（不超过 ${INSTAGRAM.caption} 个字符，开头 ${INSTAGRAM.captionFold} 个字符内讲清看点，不放链接，需要时写 link in bio），## Hashtags 是话题标签（最多 ${INSTAGRAM.hashtags} 个，空格分开）`,
+  'linkedin-carousel': `## Title 是 PDF 的文档标题（不超过 ${LINKEDIN_DOC.title} 个字符），## Body 是帖子正文（不超过 ${LINKEDIN_DOC.post} 个字符）`,
+};
+const CARD_PLACE: Record<CarouselForm, string> = {
+  xhs: '小红书图文',
+  instagram: 'Instagram 轮播图',
+  'linkedin-carousel': 'LinkedIn 轮播图',
+};
+function cardRules(form: CarouselForm, skill: string) {
+  const { width, height } = CARD_SPECS[form];
+  const head = `${CARD_PLACE[form]}：content 里每张卡片写在 ## Card N 下（N 从 1 起），第一行 Sections:，结尾页另加一行 Layout: end，再一行“# 卡片标题”，之后是卡片正文；${CARD_TEXT[form]}。卡片字数按原文的语言算：中文、日文、韩文每张不超过 ${CARD.cardChars} 个字、封面标题不超过 ${CARD.coverTitle} 个字；其他语言每张不超过 ${CARD.cardWords} 个词、封面标题不超过 ${CARD.coverWords} 个词。`;
+  return skill
+    ? `${head}这次没有卡片模板：卡片图片用 Skill ${skill} 出图（在 skills.json 里），关于模板和渲染的说明不适用，分卡片、字数和配的文字的要求照旧。每张图片 ${width}×${height}，这个 Skill 出不了这个尺寸时用它能出的 1080×1440 或 1080×1350，审核卡会写明尺寸不对；图上的文字和 content 里那张卡片一致；repurpose.style 里的品牌名（brand）、网站（site）、主色（color）和结尾页（ending）按这个 Skill 的做法用上，Logo 在 materials.cardLogo（有的话）。图片用 PNG，每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。Skill 能检查文字溢出时，把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`
+    : `${head}卡片图片按 materials.cardTemplate 渲染成 ${width}×${height} 的 PNG（样式、颜色、字体和 Logo 都由模板决定，不改模板、不另加），每张用 task file --file 图片路径 上传，按卡片顺序把返回的 id 写进 cards.images（一张卡片一个 id，数量和卡片相同）。渲染时检查文字有没有溢出：把溢出的卡片序号写进 cards.overflow，都没有溢出写 []，没法检查就不写这个字段。`;
+}
+
+export function resultRules(
+  mode: Run['mode'],
+  resultKind?: unknown,
+  // The Skill that draws the cards instead of the template (Brand and templates › Draw with a Skill).
+  cardSkill?: unknown,
+): string[] {
+  const skill = typeof cardSkill === 'string' && cardSkill ? cardSkill : '';
   return [
     '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:object,merged?:{sha:string},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
     // The codes say whose problem a failure is (shared/run-failure.ts); the task page turns them into what to do.
@@ -88,6 +148,20 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           `report.asOf 最多 ${REPORT_AS_OF_MAX_LENGTH} 字符，简要写数据截止时间和抓取时间；不同来源的详细时间说明放 content 正文，不确定事项放 uncertainties。`,
           '网页来源使用完整 HTTP/HTTPS url（不含凭据）；任务材料使用 material: context|sources|knowledge|skills，不使用文件路径、file:// 或 nocoreach:// URL。正文 content 最多 30000 字符，sources 最多 30 项，title 最多 300 字符，uncertainties 最多 20 项且每项最多 1000 字符。',
           '研究给出依据、建议和理由；社区回复逐帖给出可供审核的草稿并引用原帖；内容草稿区分事实与建议。没有仓库的研究或草稿无需创建 PR。',
+          // Content workshop results are read by their markers (shared/repurpose.ts parseRepurpose).
+          ...([
+            'xPosts',
+            'linkedinPost',
+            'communityPost',
+            ...CARD_RESULT_KINDS,
+          ].includes(String(resultKind))
+            ? [
+                '内容加工：content 严格按步骤说明里的固定格式写，标记 ## Post、## Reply、## Title、## Body、## Hashtags、## Rules 和 Sections: 保持英文原样；只写稿，不发帖、不评论、不修改仓库或文章。sources 列实际读过的文章和版规页面。',
+              ]
+            : []),
+          ...(cardFormOf(resultKind)
+            ? [cardRules(cardFormOf(resultKind)!, skill)]
+            : []),
         ]
       : []),
     ...(mode === 'build'
@@ -292,6 +366,31 @@ export function resultOf(
   }
   if (result.ok && mode === 'article' && !result.article)
     return invalid('field', { 0: 'article' });
+  // A set of cards comes with one uploaded image per card, in the cards' order, and the text its place needs: a
+  // Xiaohongshu note's title and body, an Instagram caption, a LinkedIn document's title and post.
+  const cardForm = result.ok ? cardFormOf(resultKind) : undefined;
+  if (cardForm) {
+    const parsed = parseRepurpose(cardForm, result.content || '');
+    const cards = parsed?.pieces.filter((p) => p.kind === 'card').length || 0;
+    const needs: ('title' | 'body')[] =
+      cardForm === 'instagram' ? ['body'] : ['title', 'body'];
+    if (
+      !parsed ||
+      needs.some((kind) => !parsed.pieces.some((p) => p.kind === kind))
+    )
+      return invalid(
+        cardForm === 'xhs'
+          ? 'xhsFormat'
+          : cardForm === 'instagram'
+            ? 'instagramFormat'
+            : 'linkedinCardsFormat',
+      );
+    const images = result.cards?.images || [];
+    if (cards !== images.length || new Set(images).size !== images.length)
+      return invalid('xhsImages', { 0: cards, 1: images.length });
+    if (result.cards?.overflow?.some((n) => n > cards))
+      return invalid('field', { 0: 'cards.overflow' });
+  }
   if (
     result.ok &&
     mode === 'merge' &&

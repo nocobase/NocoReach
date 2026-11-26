@@ -4,6 +4,7 @@ import {
   CalendarClock,
   FolderGit2,
   Globe,
+  MessagesSquare,
   Newspaper,
   Plug,
   Search,
@@ -12,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '#lib/utils';
-import { BRAND_LOGOS, type BrandLogoKey } from './brand-logos';
+import { BRAND_LOGOS, type BrandLogo, type BrandLogoKey } from './brand-logos';
 
 // One mark per data source, wherever a source is named in a list (Settings › Data sources cards and drawers, Data
 // health, the discovery results, Settings › Analysis rules). Sources are named by several ids — the catalog's, Data
@@ -37,7 +38,10 @@ const BRAND: Record<string, BrandLogoKey> = {
   x: 'x',
   bilibili: 'bilibili',
   xiaohongshu: 'xiaohongshu',
+  wechat: 'wechat',
   youtube: 'youtube',
+  linkedin: 'linkedin',
+  instagram: 'instagram',
   discord: 'discord',
   slack: 'slack',
 };
@@ -50,16 +54,23 @@ const ICON: Record<string, LucideIcon> = {
   'ai-search': Sparkles,
   competitors: Binoculars,
   rank: TrendingUp,
+  topics: MessagesSquare,
   'daily-analysis': CalendarClock,
+  // A community of the project's own (Content workshop's brand kit), whatever software it runs on.
+  community: MessagesSquare,
 };
-// `xs` is the bare mark, for a source named inside a button.
+// `xs` is the bare mark, for a source named inside a button or a row of marks. Bare, a wordmark (Xiaohongshu's
+// lettering) sits on a square of its colour, as its app icon does, so it reads at the size of the other marks.
 const SIZE = {
   md: { tile: 'size-8 rounded-md border bg-background', mark: 'size-5' },
   sm: { tile: 'size-6 rounded border bg-background', mark: 'size-4' },
   xs: { tile: 'size-3.5', mark: 'size-3.5' },
 } as const;
 
-/** The source's mark on a small tile; decorative, since the source's name always sits beside it. */
+/**
+ * The source's mark on a small tile; decorative, since the source's name always sits beside it. An icon mark takes
+ * the text colour of `className` (muted by default), so a row of marks can show one as active.
+ */
 export function SourceLogo({
   source,
   size = 'md',
@@ -69,8 +80,32 @@ export function SourceLogo({
   size?: keyof typeof SIZE;
   className?: string;
 }): ReactElement {
-  const brand = BRAND[source] ? BRAND_LOGOS[BRAND[source]] : null;
+  const brand: BrandLogo | null = BRAND[source]
+    ? BRAND_LOGOS[BRAND[source]]
+    : null;
   const Icon = ICON[source] ?? Plug;
+  if (brand?.wordmark && brand.color && size === 'xs')
+    return (
+      <span
+        aria-hidden='true'
+        data-slot='source-logo'
+        data-source={source}
+        data-mark='brand'
+        className={cn(
+          'inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] bg-(--brand-color)',
+          className,
+        )}
+        style={{ '--brand-color': brand.color } as CSSProperties}
+      >
+        <svg
+          viewBox='0 0 24 24'
+          fill='currentColor'
+          className='size-3 text-white'
+        >
+          <path d={brand.path} />
+        </svg>
+      </span>
+    );
   return (
     <span
       aria-hidden='true'
@@ -78,7 +113,7 @@ export function SourceLogo({
       data-source={source}
       data-mark={brand ? 'brand' : ICON[source] ? 'icon' : 'fallback'}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center',
+        'inline-flex shrink-0 items-center justify-center text-muted-foreground',
         SIZE[size].tile,
         className,
       )}
@@ -101,7 +136,7 @@ export function SourceLogo({
           <path d={brand.path} />
         </svg>
       ) : (
-        <Icon className={cn(SIZE[size].mark, 'text-muted-foreground')} />
+        <Icon className={SIZE[size].mark} />
       )}
     </span>
   );

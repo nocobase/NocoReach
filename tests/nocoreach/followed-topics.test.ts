@@ -40,11 +40,11 @@ test('a topic is a short phrase without quotes; spellings that differ in case, s
 
 test('what one topic costs a month: the paid sources at their list prices, Hacker News and GitHub free', () => {
   const c = topicMonthlyCost();
-  assert.equal(c.reddit.toFixed(3), '0.086');
+  assert.equal(c.reddit.toFixed(3), '0.026');
   assert.equal(c.youtube.toFixed(3), '0.086');
   assert.equal(c.trends.toFixed(3), '0.047');
   assert.equal(c.aiQuestions.toFixed(2), '0.40');
-  assert.equal(c.total.toFixed(2), '0.62');
+  assert.equal(c.total.toFixed(2), '0.56');
 });
 
 test('saving topics: each checked, repeats dropped, no more than ten unless the longer list was already saved', () => {

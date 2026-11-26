@@ -40,8 +40,13 @@ export function canRecheckConfiguration(
   );
 }
 
+// A search queued at DataForSEO's Standard queue is read again from QUEUE_READ after it was posted or last read.
+const QUEUE_READ = 5 * 60000;
+
 export function termNextAt(entry: RedditPlanEntry): string | null {
   if (entry.status === 'pending') return entry.at;
+  if (entry.status === 'queued')
+    return new Date(Date.parse(entry.at) + QUEUE_READ).toISOString();
   if (entry.status === 'budget') return entry.at;
   if (
     entry.status === 'failed' &&
@@ -63,7 +68,9 @@ export function redditSchedule(
       kind: next
         ? plan.entries.some((e) => e.status === 'budget')
           ? 'budget'
-          : 'retry'
+          : plan.entries.some((e) => e.status === 'queued')
+            ? 'queued'
+            : 'retry'
         : 'attention',
       nextAt: next || null,
       due: Boolean(next && Date.parse(next) <= now),

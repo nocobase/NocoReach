@@ -17,6 +17,7 @@ export const ACTIVITY_EVENTS: ReadonlySet<string> = new Set([
   'startTask',
   'retitle',
   'selectPlaybook',
+  'restartWithPlaybook',
   'snoozeTask',
   'snoozeChanged',
   'unsnoozeTask',
@@ -30,12 +31,14 @@ export const ACTIVITY_EVENTS: ReadonlySet<string> = new Set([
   'editStageOutput',
   'recordManual',
   'retryStage',
+  'cancelRun',
   'confirmPublish',
   'comment',
   'linkContent',
   'cancelTask',
   'archiveTask',
   'unarchiveTask',
+  'reopenReview',
   'prClosed',
   'merged',
   'revertRelease',
@@ -64,6 +67,12 @@ export const ACTIVITY_EVENTS: ReadonlySet<string> = new Set([
   'articleExported',
   'articleExportLate',
   'articleDrift',
+  // A new article pushed to the CMS as a draft and published there (2026-11-12).
+  'articleDrafted',
+  'articleCmsLive',
+  'articleCmsPublished',
+  'articleDraftMissing',
+  'repushDraft',
 ]);
 
 export type ActivityEvent = { at?: string; action: string };

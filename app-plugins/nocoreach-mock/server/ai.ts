@@ -9,6 +9,7 @@ export const MOCK_AI_OPERATIONS = [
   'analysis-rule-draft',
   'analysis-rule-evaluate',
   'daily-report',
+  'daily-skill',
   'daily-judge',
   'daily-judge-many',
   'daily-rewrite',
@@ -22,6 +23,10 @@ export const MOCK_AI_OPERATIONS = [
   'competitor-suggest',
   'task-draft',
   'article-rewrite',
+  'topic-discovery',
+  'market-suggest',
+  'market-keywords',
+  'card-style',
 ] as const;
 export type MockAiOperation = (typeof MOCK_AI_OPERATIONS)[number];
 export const MOCK_AI_MODEL = {
@@ -138,6 +143,9 @@ function fixture(
       };
     case 'daily-report':
       return report(input, ctx, stamp);
+    // A Skill in the daily analysis proposes nothing in the fixture: no cited data, no growth to compute.
+    case 'daily-skill':
+      return { candidates: [] };
     case 'daily-judge':
       return review(object(input.signal));
     case 'daily-judge-many':
@@ -228,6 +236,68 @@ function fixture(
               },
             ],
       };
+    // Growth sources (2026-11-10 step 2b): a phrase from the first discussion title as a new topic, the first three
+    // forum topics as one question group, the first markets offered, and each keyword kept as it is.
+    case 'topic-discovery': {
+      if (empty) return { newTopics: [], questions: [] };
+      const followed = new Set(
+        (Array.isArray(input.followedTopics) ? input.followedTopics : []).map(
+          (t) => str(t, 60).toLowerCase(),
+        ),
+      );
+      const title = str(list(input.discussions)[0]?.title, 200).toLowerCase();
+      const term = (title.match(/[a-z][a-z0-9-]{3,}/g) ?? []).find(
+        (w) => !followed.has(w),
+      );
+      const forum = list(input.forum).slice(0, 3);
+      return {
+        newTopics: term
+          ? [
+              {
+                phrase: term,
+                from: str(
+                  (Array.isArray(input.followedTopics)
+                    ? input.followedTopics
+                    : [])[0],
+                  60,
+                ),
+                terms: [term],
+                reason: `${LABEL}固定测试短语 ${stamp}`,
+              },
+            ]
+          : [],
+        questions:
+          forum.length >= 3
+            ? [
+                {
+                  theme: `${LABEL}${str(forum[0].title, 80)}`,
+                  query: str(forum[0].title, 80),
+                  ids: forum.map((f) => str(f.id, 80)),
+                },
+              ]
+            : [],
+      };
+    }
+    case 'market-suggest':
+      return {
+        markets: empty
+          ? []
+          : list(input.markets)
+              .slice(0, 2)
+              .map((m) => ({
+                id: str(m.id, 10),
+                reason: `${LABEL}固定测试市场`,
+              })),
+      };
+    case 'market-keywords':
+      return {
+        keywords: empty
+          ? []
+          : (Array.isArray(input.keywords) ? input.keywords : []).map((k) => ({
+              source: str(k, 100),
+              local: str(k, 80),
+            })),
+      };
     case 'competitor-suggest':
       return {
         competitors: empty
@@ -261,6 +331,24 @@ function fixture(
         text: han
           ? `${short}（已按“${asked.slice(0, 30)}”改写）`
           : `${short} (rewritten: ${asked.slice(0, 60)})`,
+      };
+    }
+    // Card style › New style: one plain style, whatever was asked, named as simulated.
+    case 'card-style': {
+      const english = !/[\u4e00-\u9fff]/.test(str(input.look, 500));
+      const slot = (name: string, css = '') =>
+        `<div class="${name}" data-slot="${name}"${css ? ` style="${css}"` : ''}></div>`;
+      const frame = (inner: string) =>
+        `<div class="card"><div class="top"><span data-slot="brand"></span><span data-slot="page"></span></div>${inner}<div class="foot"><span data-slot="site"></span></div></div>`;
+      return {
+        name: english ? 'Simulated plain' : '模拟·素色',
+        summary: english
+          ? '[Simulated] White page, black text, brand-color headings.'
+          : `${LABEL}白底黑字，标题用品牌色。`,
+        css: '.card{display:flex;flex-direction:column;height:100%;padding:88px;background:#ffffff;color:#1f2328;font-family:var(--font-sans)}.top,.foot{display:flex;justify-content:space-between;font-size:28px}.heading{color:var(--brand-deep);font-weight:800;line-height:1.25;margin:64px 0 40px}.body{flex:1 1 0;min-height:0;line-height:1.6}.point{display:flex;gap:.5em;margin-bottom:.4em}.marker{color:var(--brand-deep);font-weight:700}',
+        cover: frame(slot('heading') + slot('body')),
+        text: frame(slot('heading') + slot('body')),
+        end: frame(slot('heading') + slot('body')),
       };
     }
     // New task › Organize with AI: the idea restated, citing only the figures of the first page it was given.

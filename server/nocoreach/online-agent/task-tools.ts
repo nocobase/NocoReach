@@ -10,6 +10,11 @@ import { changesRepo, type Stage } from '../execution/flow.js';
 import { roleOf } from '../policy.js';
 import { startedRepo } from '../../../shared/repo-routing.js';
 import { pageUrlsOf, startedPageUrls } from '../../../shared/task-start.js';
+import {
+  TOOL_NAMES,
+  TOOL_SIGN_IN,
+  type AgentBlocker,
+} from '../../../shared/agent-readiness.js';
 import { toolInput } from '../../online-agent/errors.js';
 import type { ListedPlaybook, TaskNames } from './task-names.js';
 
@@ -220,6 +225,14 @@ export function taskTools(
                     : needsRepo && !repo
                       ? 'repository_choice_required'
                       : null;
+    // Why the chosen agent cannot start, as the Agent page says it (shared/agent-readiness.ts), with the tool's name
+    // and the command that signs it in on that computer (2026-11-10).
+    const chosen = agent.options.find((option) => option.id === agent.agentId);
+    const blocker =
+      reason === 'runner_unavailable'
+        ? (chosen as { blocker?: AgentBlocker } | undefined)?.blocker
+        : undefined;
+    const tool = blocker && 'tool' in blocker ? blocker.tool : null;
     return {
       agent,
       item: {
@@ -256,6 +269,17 @@ export function taskTools(
         latestRun: work.latestRun,
         executable: reason === null,
         blockedReason: reason,
+        ...(blocker
+          ? {
+              runnerBlocker: {
+                ...blocker,
+                ...(tool ? { toolName: TOOL_NAMES[tool] || tool } : {}),
+                ...(blocker.kind === 'signIn' && tool && TOOL_SIGN_IN[tool]
+                  ? { signInCommand: TOOL_SIGN_IN[tool] }
+                  : {}),
+              },
+            }
+          : {}),
         command: reason === null ? command : null,
       },
     };
@@ -403,7 +427,7 @@ export function taskTools(
     ),
     tool(
       'task_get',
-      "Read task status and current revision before triggering a Runner. Includes eligible Runner choices, the website repository its change goes to (repository) and a task page URL. Human reviews, publication confirmations and choosing a repository (blockedReason repository_choice_required) require that page. playbook, stageName and stateName are the names the task page shows, in the user's language: name the playbook, step and state by them, never by playbookId, stageKey or state, and say what a blockedReason means instead of quoting it.",
+      "Read task status and current revision before triggering a Runner. Includes eligible Runner choices, the website repository its change goes to (repository) and a task page URL. Human reviews, publication confirmations and choosing a repository (blockedReason repository_choice_required) require that page. playbook, stageName and stateName are the names the task page shows, in the user's language: name the playbook, step and state by them, never by playbookId, stageKey or state, and say what a blockedReason means instead of quoting it. With runner_unavailable, runnerBlocker says why the agent cannot start now: no runtime (noRuntime), only other people's personal runtimes (othersPersonal), none online (offline, with when one was last seen), or on an online runtime its coding tool (toolName) needs sign-in (signIn: give signInCommand, run in a terminal on that computer, then Detect again on that runtime in Agent › Runtimes, or restart the Runner), is out of quota until resetsAt (quota), lacks the agent's model (model), is not installed (missingTool), is turned off there (toolOff), is still being detected (checking) or failed detection (toolFailed); other means the runtime does not take this agent's work now. runtime names the computer when the user may see it.",
       selection,
       async (args) => {
         const input = toolInput(selection, args);

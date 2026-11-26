@@ -33,6 +33,8 @@ function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.au
 // also says what it waits for and the day to decide by (2026-10-08, see watch.js).
 function reviewsOf(list,signals,cards){const keys=new Map(signals.map(s=>[s.key,s])),cited=new Set(cards.flatMap(c=>c.signalIds||[])),out={};
  for(const r of Array.isArray(list)?list:[]){const s=keys.get(r?.key);if(!s||!['do','watch','skip'].includes(r.verdict))continue;const verdict=r.verdict==='do'&&!s.actionable?'watch':r.verdict;out[s.key]={verdict,reason:typeof r.reason==='string'?r.reason.trim().slice(0,200):'',...(verdict==='watch'&&typeof r.waitingFor==='string'&&r.waitingFor.trim()?{waitingFor:r.waitingFor.trim().slice(0,120)}:{}),...(verdict==='watch'&&typeof r.decideBy==='string'?{decideBy:r.decideBy.slice(0,10)}:{})};}
+ // A rise on one source alone (topic-signals.ts, watchOnly) is watched until another source follows, unless skipped.
+ for(const s of signals)if(s.watchOnly&&!cited.has(s.key)&&out[s.key]?.verdict!=='skip')out[s.key]={verdict:'watch',reason:out[s.key]?.reason||'',...(s.waitingFor?{waitingFor:String(s.waitingFor).slice(0,120)}:{}),...(out[s.key]?.decideBy?{decideBy:out[s.key].decideBy}:{})};
  for(const k of cited)if(keys.has(k))out[k]={verdict:'do',reason:out[k]?.verdict==='do'?out[k].reason:''};
  return out;}
 // The page a hand-off is about (an http(s) address), kept on the task so its article can be found before it starts.
@@ -76,7 +78,8 @@ class StrategyService{
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async row(id,transaction){return this.repo().findOne({filter:{key:`strategy:${id}`},transaction});}
  async state(id){return (await this.row(id))?.get('payload')||initial();}
- async context(id,requestedDays=28){
+ // `opts.skills`: the daily analysis runs the analysis scheme's Skills too (signals.ts current).
+ async context(id,requestedDays=28,opts={}){
   const days=periods.periodDays(requestedDays);
   const project=await this.p.project(id);let snapshots=[],candidates=[],warnings=[];
   try{snapshots=await this.p.sync.snapshots(id);}catch{warnings.push(systemMessageText('strategy.syncedDataNotAvailableRight'));}
@@ -84,7 +87,7 @@ class StrategyService{
   const evidence=evidenceFrom(snapshots,candidates,new Date().toISOString(),days);evidence.limitations.push(...warnings);
   // Signals (SPEC §9) are the basis of analysis version 3; every suggestion must cite at least one of them.
   // Changes being watched are always passed on, whatever their size (watch.js).
-  try{if(this.p.signals){const keep=new Set(watch.activeKeys(await this.state(id)));evidence.signals=await this.p.signals.current(id,keep);evidence.analysisVersion=3;}}catch{evidence.limitations.push(systemMessageText('strategy.signalCalculationNotAvailableRight'));}
+  try{if(this.p.signals){const keep=new Set(watch.activeKeys(await this.state(id)));evidence.signals=await this.p.signals.current(id,keep,opts);evidence.analysisVersion=3;}}catch{evidence.limitations.push(systemMessageText('strategy.signalCalculationNotAvailableRight'));}
   try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push(systemMessageText('strategy.readingPublicSourcesNotAvailable'));}
   // Only when GitHub Traffic is really missing (it used to be said even with a token).
   const gh=await this.p.github?.state(id).catch(()=>null);if(gh?.repo&&!gh.token)evidence.limitations.push(systemMessageText('strategy.githubRepositoryViewsNotAuthorized'));
@@ -122,8 +125,9 @@ class StrategyService{
   for(const c of cards)c.sources=c.sources.filter(s=>available.has(s));
   // An opportunity is a growth point (2026-11-10): it must cite a growth change, and carries the growth of the first one
   // it cites, as the server computed it (shared/growth.ts); the model's own figures are never stored as growth.
-  if(context.evidence.signals){const growthBy=new Map((context.evidence.signals.items||[]).filter(s=>s.actionable&&s.growth).map(s=>[s.key,s.growth]));
-   for(const c of cards){c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));const first=c.signalIds.find(k=>growthBy.has(k));if(first)c.growth=growthBy.get(first);}
+  if(context.evidence.signals){const growthBy=new Map((context.evidence.signals.items||[]).filter(s=>s.actionable&&s.growth).map(s=>[s.key,s.growth])),skillBy=new Map((context.evidence.signals.items||[]).filter(s=>s.skill?.id).map(s=>[s.key,{id:String(s.skill.id),name:String(s.skill.name||'')}]));
+   // One a Skill found names it (skill-analysis.ts): its detail links to the Skill, and the Skill goes to the Agent with it.
+   for(const c of cards){c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));const first=c.signalIds.find(k=>growthBy.has(k));if(first){c.growth=growthBy.get(first);if(skillBy.has(first))c.skill=skillBy.get(first);}}
    cards.splice(0,cards.length,...cards.filter(c=>c.growth));}
   const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,5).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));

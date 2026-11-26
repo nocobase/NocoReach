@@ -87,9 +87,13 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'backlinks/history',
       'serp/google/organic/live/advanced',
       'serp/google/organic/live/regular',
+      'serp/google/organic/task_post',
+      'serp/google/organic/task_get/advanced/{id}',
       'serp/youtube/organic/live/advanced',
       'serp/youtube/video_info/live/advanced',
       'keywords_data/google_ads/keywords_for_keywords/live',
+      'keywords_data/google_ads/search_volume/task_post',
+      'keywords_data/google_ads/search_volume/task_get/{id}',
       'keywords_data/google_trends/explore/live',
       'ai_optimization/llm_mentions/aggregated_metrics',
       'ai_optimization/llm_mentions/cross_aggregated_metrics',
@@ -474,8 +478,11 @@ function google(
       refresh_token: `mock-refresh-${fixtureHash(c, 'google').slice(0, 16)}`,
       token_type: 'Bearer',
       expires_in: 3600,
+      // `simulated-partial-consent` stands for a consent page left with the Search Console box unticked.
       scope:
-        'openid email https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
+        b.code === 'simulated-partial-consent'
+          ? 'openid email https://www.googleapis.com/auth/analytics.readonly'
+          : 'openid email https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
     });
   if (u.hostname === 'openidconnect.googleapis.com' && p === '/v1/userinfo')
     return json({
@@ -855,12 +862,44 @@ const GA4_METRICS = [
   'bounceRate',
   'sessionKeyEventRate',
 ];
+// What visitors searched on the site (Opportunities › Site search with no results): searchTerm with its searches and
+// searchers, the only report that asks for it; the empty scenario has site search off and answers no rows.
+const SITE_SEARCH_TERMS: [term: string, searches: number, people: number][] = [
+  ['import from airtable', 64, 41],
+  ['audit log', 38, 26],
+  ['sso setup', 27, 19],
+  ['custom domain', 21, 15],
+  ['webhook retry', 9, 6],
+];
+function siteSearchReport(
+  dim: string[],
+  met: string[],
+  b: ObjectValue,
+  c: FixtureContext,
+): ObjectValue {
+  if (
+    dim.some((d) => d !== 'searchTerm') ||
+    met.some((m) => m !== 'eventCount' && m !== 'totalUsers')
+  )
+    throw new MockUnsupportedOperationError('GA4 site search report');
+  const rows: Fact[] = empty(c)
+    ? []
+    : SITE_SEARCH_TERMS.map(([term, searches, people]) => ({
+        dimensions: { searchTerm: term },
+        metrics: {
+          eventCount: searches + (added(c) ? 5 : 0),
+          totalUsers: people,
+        },
+      }));
+  return ga4Response(dim, met, rows, b, 'analyticsData#runReport');
+}
 // One GA4 report: every requested date range (named ones add the dateRange dimension, as GA4 does when there are
 // several), dimension filters, metric or dimension ordering, and offset/limit.
 function ga4Report(b: ObjectValue, c: FixtureContext): ObjectValue {
   const dim = names(b.dimensions),
     met = names(b.metrics),
     ranges = list(b.dateRanges).map(object);
+  if (dim.includes('searchTerm')) return siteSearchReport(dim, met, b, c);
   if (
     dim.some((d) => !GA4_DIMENSIONS.includes(d)) ||
     met.some((m) => !GA4_METRICS.includes(m))
@@ -1455,6 +1494,122 @@ function youtubeVideo(
 }
 const seoTarget = (b: ObjectValue, c: FixtureContext): string =>
   string(b.target, string(b.target1, fixtureProduct(c).domain));
+// DataForSEO's Standard queue (NocoReach's rank checks and Reddit searches): a posted task is done at once and its id
+// carries the request, so reading it answers what the live endpoint answers.
+const SERP_QUEUE =
+  /^serp\/google\/organic\/(?:task_post|task_get\/advanced\/([A-Za-z0-9_-]+))$/;
+function queuedSerp(
+  c: FixtureContext,
+  operation: string,
+  b: ObjectValue,
+  id: string,
+): Response | undefined {
+  if (id) {
+    const [keyword, location_code, language_code, depth, search_param] =
+      JSON.parse(Buffer.from(id, 'base64url').toString('utf8')) as unknown[];
+    return dataforseo(
+      new URL(
+        'https://api.dataforseo.com/v3/serp/google/organic/live/advanced',
+      ),
+      {
+        method: 'POST',
+        body: JSON.stringify([
+          {
+            keyword,
+            location_code,
+            language_code,
+            depth,
+            ...(search_param ? { search_param } : {}),
+          },
+        ]),
+      },
+      c,
+    );
+  }
+  return json({
+    version: '0.1.20261012',
+    status_code: 20000,
+    status_message: 'Ok. (fictional mock data)',
+    time: '0 sec.',
+    cost: 0,
+    tasks_count: 1,
+    tasks_error: 0,
+    tasks: [
+      {
+        id: Buffer.from(
+          JSON.stringify([
+            b.keyword,
+            b.location_code,
+            b.language_code,
+            b.depth,
+            b.search_param ?? null,
+          ]),
+        ).toString('base64url'),
+        status_code: 20100,
+        status_message: 'Task Created.',
+        time: '0 sec.',
+        cost: 0,
+        result_count: 0,
+        path: ['v3', ...operation.split('/')],
+        data: b,
+        result: null,
+      },
+    ],
+  });
+}
+// Google Ads search volume on the Standard queue (Opportunities › Other-language markets): the posted task's id
+// carries its keywords, and reading it gives each a year of monthly searches.
+const ADS_QUEUE =
+  /^keywords_data\/google_ads\/search_volume\/(?:task_post|task_get\/([A-Za-z0-9_-]+))$/;
+function queuedAdsVolume(
+  c: FixtureContext,
+  operation: string,
+  b: ObjectValue,
+  id: string,
+): Response {
+  if (id)
+    return seoEnvelope(
+      c,
+      operation,
+      keywordRows(
+        c,
+        JSON.parse(Buffer.from(id, 'base64url').toString('utf8')) as string[],
+      ).map((k) => {
+        const info = object(k.keyword_info);
+        return {
+          keyword: k.keyword,
+          search_volume: info.search_volume,
+          competition: 'LOW',
+          cpc: info.cpc,
+          monthly_searches: list(info.monthly_searches).reverse(),
+        };
+      }),
+    );
+  return json({
+    version: '0.1.20261012',
+    status_code: 20000,
+    status_message: 'Ok. (fictional mock data)',
+    time: '0 sec.',
+    cost: 0,
+    tasks_count: 1,
+    tasks_error: 0,
+    tasks: [
+      {
+        id: Buffer.from(JSON.stringify(names(b.keywords))).toString(
+          'base64url',
+        ),
+        status_code: 20100,
+        status_message: 'Task Created.',
+        time: '0 sec.',
+        cost: 0,
+        result_count: 0,
+        path: ['v3', ...operation.split('/')],
+        data: b,
+        result: null,
+      },
+    ],
+  });
+}
 function dataforseo(
   u: URL,
   init: RequestInit,
@@ -1463,6 +1618,10 @@ function dataforseo(
   if (u.hostname !== 'api.dataforseo.com') return undefined;
   const operation = u.pathname.replace(/^\/v3\//, '').replace(/\/$/, ''),
     b = taskInput(init);
+  const queued = operation.match(SERP_QUEUE);
+  if (queued) return queuedSerp(c, operation, b, queued[1] ?? '');
+  const ads = operation.match(ADS_QUEUE);
+  if (ads) return queuedAdsVolume(c, operation, b, ads[1] ?? '');
   const wrap = (result: unknown[]): Response =>
     seoEnvelope(c, operation, result);
   const result = (rows: ObjectValue[], extra: ObjectValue = {}): Response =>

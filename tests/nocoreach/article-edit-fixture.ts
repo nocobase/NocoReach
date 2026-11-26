@@ -118,7 +118,7 @@ export async function articleFixture() {
   const p = {
     agents: fakeAgents(),
     articleTargets,
-    articles: new ArticleDelivery(articleTargets),
+    articles: new ArticleDelivery(articleTargets, cms.checkImage),
     project: async (id) => {
       if (id !== '1') throw Object.assign(Error('project'), { status: 404 });
       return {

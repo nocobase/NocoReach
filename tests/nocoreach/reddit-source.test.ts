@@ -8,16 +8,22 @@ import { DataHealth } from '../../server/nocoreach/data-health.js';
 import { redditSignals } from '../../server/nocoreach/signals.js';
 import { windowFor } from '../../server/nocoreach/data-views.js';
 import { redditSchedule } from '../../server/nocoreach/reddit-schedule.js';
+import fixture from '../fixtures/dataforseo/goto-serp.json' with { type: 'json' };
 const test=__vitest_test;
 const DAY=86400000;
 // In-memory repositories by name (nrKeywordRuns for the DataForSEO runs, nrSnapshots for the Reddit state).
-function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
+function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):k==='id'?String(r[k])===String(v):r[k]===v);
  const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};
  return {rows,findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),
   create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)};}
 function service({verified=true,reply}={}){const repos={};const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget:5,verifiedAt:verified?'t':null})},calls=[];
  const p={env:k=>env[k],projectIds:async()=>['1'],app:{logger:{warn(){}}},sync:{snapshots:async()=>[{key:'history-reddit-referral',payload:[{date:new Date(Date.now()-2*DAY).toISOString().slice(0,10),sessions:30,views:50,conversions:2}]}]},db:{getRepository:n=>repos[n] ||= memory(),sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
- global.fetch=async(url,init)=>{const body=JSON.parse(init.body)[0];calls.push(body);return {ok:true,json:async()=>reply(body)};};
+ // DataForSEO's Standard queue: a post that the reply accepts creates a task, read back with task_get; an error reply is
+ // the post's own answer. `calls` holds the posted (paid) requests.
+ const tasks=new Map();global.fetch=async(url,init)=>{const get=String(url).match(/task_get\/advanced\/(.+)$/);if(get)return {ok:true,json:async()=>tasks.get(get[1])};
+  const body=JSON.parse(init.body)[0];calls.push(body);const r=reply(body),code=r?.tasks?.[0]?.status_code;
+  if(r?.status_code===20000&&r.tasks?.length===1&&(code===20000||code===40102)){const id=`task-${calls.length}`;tasks.set(id,r);return {ok:true,json:async()=>({status_code:20000,cost:r.cost??0,tasks:[{id,status_code:20100}]})};}
+  return {ok:true,json:async()=>r};};
  return {s:new RedditSource(p),repos,calls};}
 const serp=items=>({status_code:20000,cost:0.002,tasks:[{status_code:20000,result:[{items}]}]});
 
@@ -135,7 +141,8 @@ test('Reddit page counts threads first seen in the range, subreddits and visits 
 // 发帖日期 (2026-10-09 user feedback: only “found on” was shown): advanced results carry Google's date; threads found
 // before dates were read get them from one search without the past-month limit; the page counts by post date.
 test('post dates: advanced results, one backfill search for threads found earlier, counted by the day posted',async()=>{
- const spec=specification({term:'NocoBase'});assert.equal(spec.path,'serp/google/organic/live/advanced');assert.equal(spec.estimatedUsd,0.1);
+ // Since 2026-11-11 on the Standard queue: 10 pages at $0.0006, ×5 for site: (it waits for the links Google hides).
+ const spec=specification({term:'NocoBase'});assert.equal(spec.queue,'serp/google/organic');assert.equal(spec.path,'serp/google/organic/task_post');assert.equal(spec.estimatedUsd,0.03);
  const {s,calls,repos}=service({reply:()=>serp([{type:'organic',url:'https://www.reddit.com/r/nocode/comments/old1/x/',title:'Old one',timestamp:'2023-05-02 10:00:00 +00:00'}])});
  const now=Date.now(),at=n=>new Date(now-n*DAY).toISOString();
  await s.mutate('1',()=>({terms:['NocoBase'],status:'active',retainedFrom:at(10).slice(0,10),lastRun:{at:at(8),ok:true},posts:{old1:{id:'old1',subreddit:'nocode',title:'Old one',url:'https://www.reddit.com/r/nocode/comments/old1/x/',firstSeenAt:at(10),lastSeenAt:at(10),postedAt:null}}}));
@@ -202,5 +209,30 @@ test('followed topics: one search a week each for the past week’s threads, kep
   topics=['team collaboration','sprint planning'];s.d4s.run=async()=>{throw Object.assign(new Error('budget'),{safeCode:'budget_exceeded'});};
   await s.checkTopics('1');state=await s.state('1');assert.equal(state.topicRun.budgetUntil,'2026-11-01T00:00:00.000Z');
   let asks=0;s.d4s.run=async()=>{asks++;throw new Error('no');};await s.checkTopics('1');assert.equal(asks,0);
+ }finally{vi.useRealTimers();}
+});
+
+// Google hides result links behind google.com/goto (2026-11): a thread needs its real address (its id), so a hidden
+// result counts only as a thread already known by subreddit and title, and the others are counted as skipped.
+test('hidden result links: threads only from real addresses, hidden ones matched to known threads or counted as skipped',async()=>{
+ const spec=specification({term:'NocoBase'}),r=result(fixture.reddit,spec);
+ assert.deepEqual(r.result.posts.map(p=>p.id),['1abc9x']);assert.equal(r.result.diagnostic.unresolved,3);
+ assert.deepEqual(r.result.hidden.map(h=>[h.subreddit,h.title]),[['nocode','Anyone running NocoBase in production?'],['opensource','Open source Airtable alternatives with plugins and ...'],['selfhosted','Self hosted no-code with permissions?']]);
+ const {s}=service({reply:()=>fixture.reddit});
+ await s.mutate('1',()=>({status:'active',terms:['NocoBase'],posts:{known1:{id:'known1',subreddit:'nocode',title:'Anyone running NocoBase in production?',url:'https://www.reddit.com/r/nocode/comments/known1/x/',snippet:'',postedAt:null,firstSeenAt:'2026-09-01T00:00:00.000Z',term:'NocoBase'},
+  known2:{id:'known2',subreddit:'opensource',title:'Open source Airtable alternatives with plugins and self hosting',url:'https://www.reddit.com/r/opensource/comments/known2/x/',snippet:'',postedAt:null,firstSeenAt:'2026-09-01T00:00:00.000Z',term:'NocoBase'}}}));
+ const checked=await s.check('1');assert.deepEqual([checked.found,checked.added,checked.unresolved],[3,1,1]);
+ const st=await s.state('1');assert.equal(st.lastRun.unresolved,1);assert.equal(st.lastRun.ok,true);
+ assert.equal(st.posts.known1.snippet,'We moved our CRM to NocoBase last spring.');assert.equal(st.posts.known1.postedAt,'2026-08-02');assert.equal(st.posts.known2.url,'https://www.reddit.com/r/opensource/comments/known2/x/');
+});
+test('a search still queued at DataForSEO is read again from its own run, not paid for twice, and is not reported as a failure',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-11T00:00:00Z'));
+ try{const {s,calls}=service({reply:()=>serp([{type:'organic',url:'https://www.reddit.com/r/nocode/comments/q1abc/x/',title:'Queued one'}])});let ready=false;const get=global.fetch;
+  global.fetch=async(url,init)=>/task_get/.test(String(url))&&!ready?{ok:true,json:async()=>({status_code:20000,cost:0,tasks:[{status_code:40602}]})}:get(url,init);
+  await s.mutate('1',()=>({status:'active',terms:['NocoBase'],posts:{}}));const first=await s.check('1');
+  assert.deepEqual([first.found,first.queued,first.errors],[0,1,[]]);let st=await s.state('1');assert.equal(st.plan.entries[0].status,'queued');assert.equal(st.lastRun.ok,true);
+  assert.equal(redditSchedule(st).kind,'queued');assert.equal(redditSchedule(st).nextAt,'2026-11-11T00:05:00.000Z');
+  ready=true;vi.setSystemTime(new Date('2026-11-11T01:00:00Z'));await s.tick();st=await s.state('1');
+  assert.equal(calls.length,1,'posted once');assert.equal(st.plan.entries[0].status,'completed');assert.deepEqual(Object.keys(st.posts),['q1abc']);assert.equal(redditSchedule(st).kind,'weekly');
  }finally{vi.useRealTimers();}
 });

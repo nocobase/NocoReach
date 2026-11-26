@@ -3,13 +3,11 @@ import type { z } from 'zod';
 import {
   articleDraftSchema,
   ARTICLE_FIELDS,
-  coverKeys,
   fill,
   pagePattern,
   LOCALE,
-  SHARED_COVER,
   SLUG,
-  supportsStatus,
+  cmsStatus,
   type ArticleContent,
   type ArticleDraft,
   type ArticleSnapshot,
@@ -36,7 +34,6 @@ import {
 import {
   replaceTaskImages,
   taskImageIds,
-  taskImageOf,
 } from '../../../shared/task-images.js';
 import type { ArticleTargets } from './targets.js';
 import { bodyEdits } from './edits.js';
@@ -204,8 +201,15 @@ export function writesNone(write: string[], primary: string, value: unknown) {
     : undefined;
 }
 
+/** Covers were removed on 2026-11-12: a version saved with one still holds it, and it is neither read nor sent. */
+function withoutCover(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const { cover: _, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
+
 /**
- * Keep only the locales and fields the target maps, and drop a status the target has no field for. A new article needs
+ * Keep only the locales and fields the target maps, with the status its rule gives (cmsStatus). A new article needs
  * a title and body in `primary`: the task's primary language, by default the target's first; null asks for none (another
  * target while the task's other languages are still to be translated).
  */
@@ -215,9 +219,9 @@ export function cleanDraft(
   create: boolean,
   primary: string | null = target.locales[0],
 ): ArticleDraft {
-  const parsed = articleDraftSchema.safeParse(value);
+  const parsed = articleDraftSchema.safeParse(withoutCover(value));
   if (!parsed.success) throw schemaProblem(parsed.error.issues[0], target);
-  const draft = parsed.data;
+  let draft = parsed.data;
   for (const [locale, fields] of Object.entries(draft.locales)) {
     if (!target.locales.includes(locale))
       throw rejected(
@@ -237,12 +241,6 @@ export function cleanDraft(
           f,
         );
   }
-  // A cover only where the target keeps one (2026-11-05); a person sets it, the Agent's is dropped before.
-  const keys = coverKeys(target);
-  for (const key of Object.keys(draft.cover || {}))
-    if (!keys.includes(key))
-      throw rejected(`cover:${key}`, 'coverUnsupported', target.name);
-  if (draft.cover && !Object.keys(draft.cover).length) delete draft.cover;
   if (create) {
     if (!draft.slug || !SLUG.test(draft.slug)) throw rejected('slug', 'slug');
     const first = primary ? draft.locales[primary] : undefined;
@@ -261,9 +259,7 @@ export function cleanDraft(
         : rejected(code, 'needsPrimaryNone', language(primary));
     }
   }
-  if (draft.status && !supportsStatus(target)) delete draft.status;
-  // A new article is a draft unless someone chose to publish it, whatever the target's own default is.
-  if (create && !draft.status && supportsStatus(target)) draft.status = 'draft';
+  draft = cmsStatus(target, draft, create);
   if (target.kind === 'git-files' && draft.slug && !create) delete draft.slug;
   return draft;
 }
@@ -317,44 +313,17 @@ export function projectDraft(
       else skipped.push(`${locale}.${f}`);
     if (Object.keys(kept).length) locales[locale] = kept;
   }
-  const status = draft.status ?? (whole ? source.status : undefined);
-  if (status && !supportsStatus(target)) skipped.push('status');
+  // The status is the target's own rule (cmsStatus in cleanDraft), never the source's.
+  const { status: _, ...rest } = draft;
   const slug = draft.slug || (whole ? source.slug : undefined);
-  const { cover: _, ...rest } = draft;
-  const cover = projectCover(target, draft.cover);
-  if (draft.cover && Object.keys(draft.cover).length && !cover)
-    skipped.push('cover');
   return {
     draft: {
       ...rest,
       ...(slug ? { slug } : {}),
-      ...(status ? { status } : {}),
       locales,
-      ...(cover ? { cover } : {}),
     },
     skipped,
   };
-}
-
-/**
- * The covers another target gets from the primary's (2026-11-05): the same image, cropped to the primary's ratio. A
- * shared cover goes to each of its languages, a language's to the shared one when that is the target's only cover (the
- * first language that has one). Undefined when the target takes no covers or nothing changes.
- */
-function projectCover(target: ArticleTarget, cover: ArticleDraft['cover']) {
-  const keys = coverKeys(target),
-    given = Object.entries(cover || {});
-  if (!keys.length || !given.length) return undefined;
-  const out: Record<string, string> = {};
-  for (const key of keys) {
-    const value =
-      key === SHARED_COVER
-        ? (cover?.[SHARED_COVER] ??
-          target.locales.map((l) => cover?.[l]).find((v) => v !== undefined))
-        : (cover?.[key] ?? cover?.[SHARED_COVER]);
-    if (value !== undefined) out[key] = value;
-  }
-  return Object.keys(out).length ? out : undefined;
 }
 
 /** The task images a draft shows (2026-11-03), each once. */
@@ -362,30 +331,6 @@ export const draftImageIds = (draft: ArticleDraft) =>
   taskImageIds(
     Object.values(draft.locales).flatMap((fields) => Object.values(fields)),
   );
-/** The task images a draft sets as covers (2026-11-05), each once. */
-export const draftCoverIds = (draft: ArticleDraft) => [
-  ...new Set(
-    Object.values(draft.cover || {}).flatMap((v) => {
-      const image = taskImageOf(v);
-      return image ? [image.id] : [];
-    }),
-  ),
-];
-
-/** The proposal with each cover that is a task image at the value its target gave it when uploaded (`urls`, by id). */
-export function withCoverUrls<T extends { draft: ArticleDraft }>(
-  p: T,
-  urls: Record<string, string> | undefined,
-): T {
-  if (!urls || !p.draft.cover || !Object.keys(urls).length) return p;
-  const cover = Object.fromEntries(
-    Object.entries(p.draft.cover).map(([k, v]) => {
-      const image = taskImageOf(v);
-      return [k, (image && urls[image.id]) || v];
-    }),
-  );
-  return { ...p, draft: { ...p.draft, cover } };
-}
 
 /**
  * The proposal as a target publishes it: each task image the draft shows at the address it was uploaded to there
@@ -407,11 +352,37 @@ export function withImageUrls<T extends { draft: ArticleDraft }>(
   return { ...p, draft: { ...p.draft, locales } };
 }
 
+/**
+ * Whether an address can be an uploaded image's: http(s), with a path that names a file rather than the storage's root
+ * or a folder. A NocoBase file record that never received its file answers with its storage's base URL alone
+ * (2026-11-17: every image published to the NocoBase CMS was kept as `https://static-docs.nocobase.com/`).
+ */
+export function isImageAddress(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const u = new URL(value);
+    return ['https:', 'http:'].includes(u.protocol) && /[^/]$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** The kept addresses of one target's task images that can be an image's; the others are uploaded again. */
+export function usableImageUrls(
+  urls: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(urls || {}).filter(([, v]) => isImageAddress(v)),
+  );
+}
+
+/** Opens an image's address in a target as readers will load it; throws `image_address_unusable` when it does not. */
+export type ImageCheck = (project: string, address: string) => Promise<void>;
+
 const asChanges = (d: ArticleDraft): ArticleChanges => ({
   ...(d.slug ? { slug: d.slug } : {}),
   ...(d.status ? { status: d.status } : {}),
   locales: d.locales,
-  ...(d.cover ? { cover: d.cover } : {}),
 });
 
 /** The pages to check after publishing: the configured page of every locale the draft changes. */
@@ -520,7 +491,10 @@ export function verifyPhrase(
 }
 
 export class ArticleDelivery {
-  constructor(private readonly targets: ArticleTargets) {}
+  constructor(
+    private readonly targets: ArticleTargets,
+    private readonly checkImage: ImageCheck,
+  ) {}
   provider(project: string, targetId: string) {
     return this.targets.provider(project, targetId);
   }
@@ -534,7 +508,10 @@ export class ArticleDelivery {
   ): Promise<ArticleSnapshot> {
     return this.provider(project, targetId).get(articleId);
   }
-  /** Upload an image an approved article shows to the target (provider `uploadImage`); its address there. */
+  /**
+   * Upload an image an approved article shows to the target (provider `uploadImage`); its address there, once it opens
+   * as an image the way readers will load it (2026-11-17). An article is never written with an address that does not.
+   */
   async uploadImage(
     project: string,
     targetId: string,
@@ -543,19 +520,14 @@ export class ArticleDelivery {
     const provider = this.provider(project, targetId);
     if (!provider.capabilities.images || !provider.uploadImage)
       throw new ArticleError('invalid', 'images_unsupported');
-    return provider.uploadImage(image);
-  }
-  /** Upload a cover an approved article sets to the target (provider `uploadCover`); the value its cover field takes. */
-  async uploadCover(
-    project: string,
-    targetId: string,
-    image: ArticleImageFile,
-    opts: { slug: string; key: string },
-  ): Promise<string> {
-    const provider = this.provider(project, targetId);
-    if (!provider.uploadCover)
-      throw new ArticleError('invalid', 'cover_unsupported');
-    return provider.uploadCover(image, opts);
+    const address = await provider.uploadImage(image);
+    if (!isImageAddress(address))
+      throw new ArticleError(
+        'image_address_unusable',
+        `${address}: not the address of a file`,
+      );
+    await this.checkImage(project, address);
+    return address;
   }
   /** What the draft changes against its base, field by field. Empty when the draft repeats the base. */
   proposal(
@@ -646,6 +618,15 @@ export class ArticleDelivery {
     }
     const at = { step: 'read' as PublishStep };
     try {
+      // A version approved before 2026-11-12 may carry a status someone chose: the release follows cmsStatus all the same.
+      p = {
+        ...p,
+        draft: cmsStatus(
+          this.target(project, p.targetId),
+          p.draft,
+          !p.articleId,
+        ),
+      };
       const wanted = changesOf(base, asChanges(p.draft));
       if (!p.articleId)
         return await this.create(project, provider, p, wanted, key, at);
@@ -736,7 +717,6 @@ export class ArticleDelivery {
       slug: p.draft.slug!,
       ...(p.draft.status ? { status: p.draft.status } : {}),
       locales: p.draft.locales,
-      ...(p.draft.cover ? { cover: p.draft.cover } : {}),
     };
     const existing = await provider.findBySlug(content.slug);
     // An earlier attempt that created the article (its outcome was unknown) is adopted; anything else owns the slug.

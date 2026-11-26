@@ -1,3 +1,0 @@
-## Tasks: New task without a line of hints under the idea and the description
-
-- New task no longer shows "Paste, drop or upload images, videos and documents: PNG, JPEG, … up to 10 files, at most 20 MiB each" under the idea and the description. Files can still be pasted, dropped or added with Upload attachments; the limits show only when a file breaks them, each in its own words: "setup.exe is not a supported file type.", "demo.mp4 is larger than 20 MB." or "A task takes up to 10 files." Such a file is left out instead of waiting in the list to be removed, so it no longer holds back Create or Organize with AI.

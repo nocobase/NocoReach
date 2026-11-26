@@ -5,6 +5,8 @@ import {
   opportunityState,
   pendingOrder,
   rowsFor,
+  sameOpportunity,
+  sameSignals,
   signalDisposition,
   todaySuggestions,
 } from '../../shared/strategy-pending';
@@ -366,4 +368,99 @@ it('the opportunity of the first note is the first trending one in the list', ()
       .sort(pendingOrder)
       .map((r) => r.card.id),
   ).toEqual(['rising', 'repo', 'near']);
+});
+
+// nocoreach.nocobase.ai, project 1: O-93 was raised from 11-14 to 11-20 and came back as O-108 on 11-21, when the
+// model gave no existingId. The changes the server computes were the same every day; the Skill's finding was keyed by
+// the keywords it cited, which changed daily (skill-analysis.ts), so the cited changes never matched.
+const builtIn = [
+  'keyword-demand:dig-0280f607de7b',
+  'people-also-ask:dig-0280f607de7b',
+  'keyword-demand:产品与功能词',
+  'people-also-ask:产品与功能词',
+];
+const rbac = (id: string, digest: string, no: number) =>
+  card(id, {
+    no,
+    title: '写 RBAC 与 ABAC 权限指南',
+    target: '',
+    signalIds: [...builtIn, `skill:sk-a0aebe3f:demand-gap:${digest}`],
+  });
+it("a Skill's finding under another key each day does not make another opportunity (O-93 and O-108)", () => {
+  const o93 = rbac('o93', '5580f8b95de7', 93),
+    o108 = rbac('o108', '6239428b3385', 108);
+  expect(sameSignals(o93, o108)).toBe(true);
+  expect(sameOpportunity(o108, o93)).toBe(true);
+  // Without its built-in changes it is another opportunity, as before; with other built-in changes too.
+  expect(
+    sameOpportunity(o93, { ...o108, signalIds: builtIn.slice(0, 2) }),
+  ).toBe(false);
+  expect(
+    sameOpportunity(o93, { ...o108, signalIds: o108.signalIds!.slice(4) }),
+  ).toBe(false);
+  // As stored today, without rewriting history: O-93 reads as replaced by O-108, which alone stays on the list.
+  const s = state([o108]);
+  s.insights!.generatedAt = '2026-11-24';
+  const at = (generatedAt: string, items: Opportunity[]) => ({
+    ...batch(items),
+    generatedAt,
+  });
+  s.insightHistory = [
+    at('2026-11-21', [rbac('o108', '6239428b3385', 108)]),
+    at('2026-11-20', [rbac('o93', '5580f8b95de7', 93)]),
+    at('2026-11-19', [rbac('o93', '595f0d703fde', 93)]),
+  ];
+  const states = Object.fromEntries(
+    rowsFor(s).map((r) => [r.card.id, opportunityState(r, s)]),
+  );
+  expect(states).toEqual({
+    o108: { state: 'pending' },
+    o93: { state: 'archived', reason: 'replaced' },
+  });
+});
+
+it('cards resting on Skill findings alone are one opportunity only for the same Skill, kind and page or title', () => {
+  const found = (id: string, key: string, extra: Partial<Opportunity> = {}) =>
+    card(id, { title: '补 Gantt 对比页', signalIds: [key], ...extra });
+  const gap = 'skill:sk-a0aebe3f:demand-gap:',
+    yesterday = found('a', `${gap}595f0d703fde`);
+  // The same finding under the next day's key, in the same title apart from its numbers or about the same page.
+  expect(sameOpportunity(yesterday, found('b', `${gap}5580f8b95de7`))).toBe(
+    true,
+  );
+  expect(
+    sameOpportunity(
+      found('a', `${gap}1`, { title: 'Write 3 guides', target: '' }),
+      found('b', `${gap}2`, { title: 'Write 4 guides', target: '' }),
+    ),
+  ).toBe(true);
+  expect(
+    sameOpportunity(
+      found('a', `${gap}1`, { title: 'one', target: '/gantt' }),
+      found('b', `${gap}2`, { title: 'two', target: '/gantt' }),
+    ),
+  ).toBe(true);
+  // One Skill finds many gaps of one kind: another page and title is another opportunity.
+  expect(
+    sameOpportunity(
+      found('a', `${gap}1`, { title: '补 Gantt 对比页', target: '/gantt' }),
+      found('b', `${gap}2`, { title: '写看板教程', target: '/kanban' }),
+    ),
+  ).toBe(false);
+  // Another kind, or another Skill, is another finding.
+  expect(
+    sameOpportunity(yesterday, found('b', 'skill:sk-a0aebe3f:rising:2')),
+  ).toBe(false);
+  expect(
+    sameOpportunity(yesterday, found('b', 'skill:sk-0b1c2d3e:demand-gap:2')),
+  ).toBe(false);
+  // Built-in changes on one side only: not the same changes.
+  expect(
+    sameOpportunity(
+      yesterday,
+      found('b', `${gap}2`, { signalIds: [`${gap}2`, builtIn[0]] }),
+    ),
+  ).toBe(false);
+  // No changes cited at all decides nothing, as before.
+  expect(sameOpportunity(card('a'), card('b', { title: 'a' }))).toBe(false);
 });

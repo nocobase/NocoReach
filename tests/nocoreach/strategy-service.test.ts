@@ -176,6 +176,20 @@ test('the first observation names its opportunity, and an off-site change says w
  assert.deepEqual([first.offsite,second.offsite],[undefined,'Submit to the saas-review.example author']);
  assert.equal(state.insights.leadId,second.id);assert.ok(state.insights.items.every(c=>!('lead' in c)));
 });
+// An opportunity a Skill of the daily analysis found names that Skill (2026-11-17), from the growth change it cites.
+test('an opportunity citing a Skill\'s growth point records the Skill',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[]};
+ const gap={kind:'demand-gap',category:'new-content',figures:[{label:{key:'growth.figure.monthlySearchesTotal'},value:5800}]},near={kind:'near-first',figures:[{label:{key:'growth.figure.clicks28'},value:12}]};
+ service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'skill:content-strategy:demand-gap:abc',source:'keywords',actionable:true,growth:gap,skill:{id:'content-strategy',name:'content-strategy'}},{key:'gsc-near-first:/a',source:'gsc',actionable:true,growth:near}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const base={observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',source:'mixed',sources:['keywords']};
+ await service.saveInsights(1,{insights:[
+  {...base,title:'Approvals',objective:'a',signalIds:['skill:content-strategy:demand-gap:abc','gsc-near-first:/a'],skill:{id:'made-up',name:'x'}},
+  {...base,title:'Near',objective:'b',signalIds:['gsc-near-first:/a']}],observations:['a']});
+ const [skill,rule]=state.insights.items;
+ assert.deepEqual(skill.skill,{id:'content-strategy',name:'content-strategy'});
+ assert.deepEqual(skill.growth,gap);
+ assert.equal(rule.skill,undefined);
+});
 // Most worth a look today is the first trending opportunity on Opportunities too (2026-11-10 review): a trending lead
 // takes the highest priority of the trending ones; the others keep theirs.
 test('the first observation\'s trending opportunity ranks first among trending ones',async()=>{

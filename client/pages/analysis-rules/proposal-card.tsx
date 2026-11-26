@@ -21,6 +21,7 @@ import {
 import type { OnlineRun } from '../../../shared/online-agent.js';
 import { ruleUnitLabel } from './labels';
 import type { View } from './types';
+import { schemeName } from './scheme-name';
 
 export const isRuleProposal = (
   output: unknown,
@@ -180,7 +181,7 @@ export function RuleProposalCard({
       <div className='flex flex-wrap items-center gap-2'>
         <h3 className='font-medium'>{title}</h3>
         {(view?.schemes?.length ?? 0) > 1 ? (
-          <Tag tone='grey'>{proposal.schemeName}</Tag>
+          <Tag tone='grey'>{schemeName(proposal.schemeName)}</Tag>
         ) : null}
         {state === 'pending' ? (
           <Tag tone='violet' dot>

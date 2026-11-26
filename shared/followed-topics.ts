@@ -44,8 +44,8 @@ export function uniqueTopics(list: readonly string[]): string[] {
  * their own prices from here, so the estimate on the Memory page is what they spend. Hacker News and GitHub are free.
  */
 export const TOPIC_PRICES = {
-  /** Reddit: one Google search of site:reddit.com a week, two pages of results ($0.002 a page, ×5 for site:). */
-  redditUsd: 0.02,
+  /** Reddit: one Google search of site:reddit.com a week, two pages of results ($0.0006 a page on DataForSEO's Standard queue, ×5 for site:). */
+  redditUsd: 0.006,
   /** YouTube: one search a week ($0.002), then the details of at most three newly found videos ($0.006 each). */
   youtubeSearchUsd: 0.002,
   youtubeVideoUsd: 0.006,

@@ -3,6 +3,7 @@ import type {
   DemoModelRequest,
 } from '@nocobase/app-plugin-demo-mode/server/tokens';
 
+import { demoSavedStyle } from './card-style.js';
 import { demoContent } from './content.js';
 import { ACME_PAGES } from './acme-content.js';
 import { CRM_PAGES } from './crm-content.js';
@@ -62,6 +63,37 @@ const searchedAs = (direction: string): string[] => {
     ([, words]) => words,
   );
   return found.length ? found : [direction];
+};
+
+/** How the demo says the main keywords' words in a market's language (market-keywords); other words stay. */
+const MARKET_WORDS: Record<string, [RegExp, string][]> = {
+  ja: [
+    [/gantt charts?|甘特圖/u, 'ガントチャート'],
+    [/project management|專案管理/u, 'プロジェクト管理'],
+    [/task management|任務管理/u, 'タスク管理'],
+    [/kanban boards?|看板/u, 'カンバン'],
+    [/templates?|範本/u, 'テンプレート'],
+    [/tools?|工具/u, 'ツール'],
+    [/software|軟體/u, 'ソフト'],
+    [/free|免費/u, '無料'],
+  ],
+  de: [
+    [/gantt charts?|甘特圖/u, 'gantt diagramm'],
+    [/project management|專案管理/u, 'projektmanagement'],
+    [/task management|任務管理/u, 'aufgabenverwaltung'],
+    [/templates?|範本/u, 'vorlage'],
+    [/tools?|工具/u, 'tool'],
+    [/free|免費/u, 'kostenlos'],
+    [/crm/u, 'crm'],
+    [/sales pipeline|銷售漏斗/u, 'vertriebspipeline'],
+  ],
+  ko: [
+    [/gantt charts?|甘特圖/u, '간트 차트'],
+    [/project management|專案管理/u, '프로젝트 관리'],
+    [/task management|任務管理/u, '업무 관리'],
+    [/templates?|範本/u, '템플릿'],
+    [/tools?|工具/u, '툴'],
+  ],
 };
 
 /** What each business operation answers, written for people to read in the demo. */
@@ -177,6 +209,97 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           reason: t('演示数据样本有限。', 'The demo data is a limited sample.'),
         })),
       };
+    }
+    // A Skill in the daily analysis (skill-analysis.ts) cites what its method looks at: content-strategy the keyword
+    // group with the most searches and no page, competitors the competitor page with the most visits, ai-seo the
+    // questions whose AI answers name others and not us. Any other Skill finds nothing in the demo data.
+    case 'daily-skill': {
+      const data = object(input.data),
+        skill = str(input.skill, 80);
+      if (skill === 'content-strategy') {
+        const volume = (items: Value[]) =>
+          items.reduce((n, i) => n + (Number(i.volume) || 0), 0);
+        const best = list(data.keywords)
+          .map((g) => ({
+            group: str(g.group, 60),
+            items: list(g.items).filter((i) => i.ourPosition == null),
+          }))
+          .filter((g) => g.items.length >= 3)
+          .sort((a, b) => volume(b.items) - volume(a.items))[0];
+        return {
+          candidates: best
+            ? [
+                {
+                  title: t(
+                    `补齐“${best.group}”主题`,
+                    `Cover the "${best.group}" topic`,
+                  ),
+                  why: t(
+                    '这组词都有人搜，本站还没有对应的页面。按主题集群写一组页面，可以一起拿到这些搜索。',
+                    'People search all of these words and the site has no page for them. A cluster of pages on the topic can take these searches together.',
+                  ),
+                  keywords: best.items
+                    .slice(0, 9)
+                    .map((i) => str(i.keyword, 120)),
+                  pages: [],
+                  questions: [],
+                },
+              ]
+            : [],
+        };
+      }
+      if (skill === 'competitors') {
+        const page = list(data.competitorPages)[0];
+        return {
+          candidates: page
+            ? [
+                {
+                  title: t(
+                    `对照 ${str(page.competitor, 60)} 的页面写对比页`,
+                    `Write a comparison page against ${str(page.competitor, 60)}'s page`,
+                  ),
+                  why: t(
+                    '竞品靠这个页面拿到了本站没有覆盖的搜索，正面对比能接住比较中的读者。',
+                    'The competitor takes searches the site does not cover with this page; a direct comparison meets readers who are comparing.',
+                  ),
+                  keywords: [],
+                  pages: [str(page.url, 500)],
+                  questions: [],
+                },
+              ]
+            : [],
+        };
+      }
+      if (skill === 'ai-seo') {
+        const questions = list(data.aiQuestions)
+          .filter(
+            (q) =>
+              q.namesUs === false &&
+              Array.isArray(q.named) &&
+              q.named.length > 0,
+          )
+          .slice(0, 4);
+        return {
+          candidates: questions.length
+            ? [
+                {
+                  title: t(
+                    '让 AI 回答这些问题时提到我们',
+                    'Get named when AI answers these questions',
+                  ),
+                  why: t(
+                    'AI 回答这些问题时只提到了别的产品；补一页可被引用的对比和步骤说明，更容易被引用。',
+                    'AI answers to these questions name other products only; a citable page with comparisons and steps is more likely to be cited.',
+                  ),
+                  keywords: [],
+                  pages: [],
+                  questions: questions.map((q) => str(q.question, 300)),
+                },
+              ]
+            : [],
+        };
+      }
+      return { candidates: [] };
     }
     case 'daily-judge':
       return {
@@ -679,6 +802,73 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             ],
       };
     }
+    // The weekly reading of the topics' discussions (topic-discovery.ts): the rising phrase Memory's topic check also
+    // names, and the forum topics that ask how clients see only their own work, grouped as one question.
+    case 'topic-discovery': {
+      const followed = (
+        Array.isArray(input.followedTopics) ? input.followedTopics : []
+      ).map((x) => String(x));
+      const forum = list(input.forum).filter((f) =>
+        /客户|client|guest|访客|external|外部/iu.test(str(f.title, 200)),
+      );
+      return {
+        newTopics: [
+          {
+            phrase: crm ? 'AI sales agents' : 'AI project assistant',
+            from: followed[0] ?? '',
+            terms: crm
+              ? ['ai sales agent', 'ai sdr', 'sales agent']
+              : ['ai assistant', 'ai project assistant', 'ai pm'],
+            reason: t(
+              '近几周的讨论标题里越来越多地提到它。（演示数据）',
+              'It comes up more and more in the last weeks’ discussion titles. (Demo data.)',
+            ),
+          },
+        ],
+        questions:
+          forum.length >= 3
+            ? [
+                {
+                  theme: t(
+                    '怎么让客户只看到自己的项目',
+                    'How to let clients see only their own projects',
+                  ),
+                  query: t('客户 权限', 'client access'),
+                  ids: forum.map((f) => str(f.id, 80)),
+                },
+              ]
+            : [],
+      };
+    }
+    // Other-language markets (growth-sources.ts): the markets the demo's products would try first.
+    case 'market-suggest': {
+      const offered = new Set(list(input.markets).map((m) => str(m.id, 10)));
+      return {
+        markets: (crm ? ['de', 'fr', 'br'] : ['jp', 'de', 'kr'])
+          .filter((id) => offered.has(id))
+          .map((id) => ({
+            id,
+            reason: t(
+              '这个市场有不少同类产品的用户，网站还没有这个语言。（演示数据）',
+              'Many users of similar products are there, and the site has no pages in the language. (Demo data.)',
+            ),
+          })),
+      };
+    }
+    case 'market-keywords': {
+      const language = str(object(input.market).language, 10);
+      const words = MARKET_WORDS[language] ?? [];
+      return {
+        keywords: (Array.isArray(input.keywords) ? input.keywords : []).map(
+          (k) => {
+            const source = str(k, 100);
+            let local = source.toLowerCase();
+            for (const [from, to] of words) local = local.replace(from, to);
+            return { source, local: local.slice(0, 80) };
+          },
+        ),
+      };
+    }
     case 'competitor-suggest':
       return {
         competitors: [
@@ -701,6 +891,11 @@ function business(operation: string, input: Value, en: boolean): Value | null {
         ),
         changes: [],
       };
+    // Card style › New style: the demo's saved style (card-style.ts), whatever look was asked for.
+    case 'card-style': {
+      const { name, summary, design } = demoSavedStyle(en ? 'en' : 'zh');
+      return { name, summary, ...design };
+    }
     case 'analysis-rule-draft':
       return {
         name: t('关注文档页点击下降', 'Watch for falling clicks on docs pages'),

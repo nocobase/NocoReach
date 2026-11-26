@@ -17,6 +17,7 @@ import type { DemoContent } from './content.js';
 import type { DemoTaskStory } from './editorial.js';
 import {
   acmeGrowthBriefs,
+  acmeTopicWatch,
   crmGrowthBriefs,
   GROWTH_PRIORITY,
 } from './growth-briefs.js';
@@ -106,6 +107,8 @@ export function opportunityHistory(
     effort?: string;
     growth?: Growth;
     ignored?: number;
+    found?: number;
+    skill?: { id: string; name: string };
   }[] = [
     ...(which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
       context.clock.now,
@@ -127,6 +130,8 @@ export function opportunityHistory(
       effort: brief.effort,
       growth: brief.growth(lang),
       ...(brief.ignored ? { ignored: brief.ignored } : {}),
+      ...(brief.found ? { found: brief.found } : {}),
+      ...(brief.skill ? { skill: brief.skill } : {}),
     })),
     ...copy.briefs.map(
       ([
@@ -159,9 +164,11 @@ export function opportunityHistory(
     const task = linkedKeys.includes(key) ? linked(key) : undefined;
     const discovered = task
       ? age(task.createdAt) + 3
-      : i >= entries.length - 2
-        ? 18 + (i % 2) * 9
-        : [2, 5, 1, 8, 3, 6, 10, 4, 12, 7, 9, 11][i % 12];
+      : entry.found
+        ? entry.found
+        : i >= entries.length - 2
+          ? 18 + (i % 2) * 9
+          : [2, 5, 1, 8, 3, 6, 10, 4, 12, 7, 9, 11][i % 12];
     return {
       id: `editorial-opportunity-${key}`,
       title: entry.title,
@@ -191,6 +198,7 @@ export function opportunityHistory(
       firstSeenAt: at(discovered),
       updatedAt: at(0),
       ...(entry.growth ? { growth: entry.growth } : {}),
+      ...(entry.skill ? { skill: entry.skill } : {}),
     };
   });
   const signalFor = (card: Opportunity): Signal => ({
@@ -205,6 +213,7 @@ export function opportunityHistory(
     action: card.newPage ? 'create' : 'optimize',
     isNew: age(card.firstSeenAt!) <= 2,
     ...(card.growth ? { growth: card.growth } : {}),
+    ...(card.skill ? { skill: card.skill } : {}),
   });
   const handoff = (card: Opportunity, task: OpportunityTask) => {
     const snapshot = evidence(age(task.createdAt), [signalFor(card)]);
@@ -437,6 +446,8 @@ export function opportunityHistory(
       ...historical.map((c) => age(c.firstSeenAt!)),
     ]),
   ].sort((a, b) => b - a);
+  const topicWatch =
+    which === 'main' ? acmeTopicWatch(context.clock.now, lang) : null;
   const batches: InsightBatch[] = [];
   for (const ago of dates) {
     const signals: Signal[] = [];
@@ -474,6 +485,28 @@ export function opportunityHistory(
         reason: s.facts[0],
         waitingFor,
         decideBy: day(-remaining),
+      };
+    }
+    // A followed topic rising on Reddit alone waits in Watching with its weeks (2026-11-10 step 2b).
+    if (topicWatch && ago <= 6) {
+      const s: Signal = {
+        key: topicWatch.key,
+        type: 'timing',
+        source: 'topics',
+        title: topicWatch.title,
+        facts: [topicWatch.fact, copy.notice],
+        chip: { tone: 'green', text: topicWatch.chip },
+        strength: 40,
+        actionable: false,
+        action: 'create',
+        growth: topicWatch.growth,
+      };
+      signals.push(s);
+      batch.signalReviews![s.key] = {
+        verdict: 'watch',
+        reason: topicWatch.fact,
+        waitingFor: topicWatch.waitingFor,
+        decideBy: day(-7),
       };
     }
     for (const ending of endings) {

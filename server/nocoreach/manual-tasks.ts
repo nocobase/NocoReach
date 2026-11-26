@@ -14,9 +14,18 @@ import type { NocoReachRuntime } from '../providers/nocoreach.js';
 import type { LegacyRecord } from './legacy/database.js';
 import { projectWork } from './execution/model.js';
 import type { TaskService } from './execution/service.js';
-import type { MaterialAttachment } from './execution/task-materials.js';
+import type {
+  AgentImage,
+  MaterialAttachment,
+} from './execution/task-materials.js';
+import { pngInfo, pngSize } from './png-colors.js';
+import { isCardSize } from '../../shared/repurpose.js';
 import { roleOf } from './policy.js';
+import type { OutboundNetwork } from './outbound-network.js';
+import { download } from './public-sources.js';
+import { IMAGE_ACCEPT, imageTypeOf } from './image-bytes.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { isRepurposePlaybook } from '../../shared/playbook-catalog.js';
 import { draftTask, relevantPages, type DraftPage } from './task-draft.js';
 import {
   ManualTaskDraftInput,
@@ -37,6 +46,7 @@ import {
 import {
   isTaskImageType,
   taskImageRef,
+  type MessageDocument,
   type MessageImage,
 } from '../../shared/task-images.js';
 
@@ -79,6 +89,31 @@ const DRAFT_TIMEOUT = 90_000;
 const DRAFT_OUTPUT_TOKENS = 4000;
 const EXPIRY = 24 * 60 * 60 * 1000;
 const UNLINKED_LIMIT = 20;
+// An Agent's card images (Xiaohongshu cards, 2026-11-16) are counted per run, apart from the 10 a person attaches: a set
+// has up to 18 cards, and a card rendered again is uploaded again.
+const AGENT_FILES = 60;
+/** The owner an Agent's upload is kept under until its run's result links it: the run, never a person. */
+const runOwner = (runId: string) => `run:${runId}`;
+/** Who keeps the card images a person draws with Edit directly until the edit links them: kept apart from their uploads. */
+const cardOwner = (actorId: string) => `cards:${actorId}`;
+// A pasted image is read for at most this long (image-bytes.ts: what the read asks for and accepts).
+const IMPORT_TIMEOUT = 30_000;
+
+/** A name for an image read from an address: the last part of its path, with the extension of what it is. */
+function importedName(url: URL, type: string): string {
+  let last = url.pathname.split('/').pop() || '';
+  try {
+    last = decodeURIComponent(last);
+  } catch {
+    // A malformed escape: the name keeps it as it is.
+  }
+  last = last
+    .replace(/\.[^.]*$/, '')
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 80);
+  return `${last || 'image'}.${type === 'image/jpeg' ? 'jpg' : type.slice(6)}`;
+}
 
 function denied(
   reason: string,
@@ -277,8 +312,9 @@ export class ManualTasks {
   ): Promise<TaskMediaView> {
     await this.authorizeUpload(actor, projectId, taskId);
     const stored = await validateTaskMedia(file);
-    // A started task takes images only: a message's images and an article's are PNG, JPEG, WebP or GIF.
-    if (taskId && !isTaskImageType(stored.type))
+    // A started task takes images and documents, checked as a new task's (2026-11-15): a message carries both, an
+    // article only images, which linking checks (linkImages). Videos stay with New task.
+    if (taskId && !isTaskImageType(stored.type) && !isTaskDocument(stored.type))
       denied(
         'TASK_MEDIA_INVALID',
         'Unsupported media type or size.',
@@ -327,6 +363,296 @@ export class ManualTasks {
     });
   }
 
+  /**
+   * A card image the Agent uploads during its run (`task file`): a PNG of exactly a card size (1080×1440 or 1080×1350;
+   * which one the set needed is checked when its result links them), checked by its bytes,
+   * kept unlinked under the run as its owner, and read for its colors (png-colors.ts). The run's result links the ones
+   * it uses (TaskService.finish); the others expire like any unlinked upload.
+   */
+  async agentImage(
+    run: { id: string; projectId: string },
+    file: File,
+  ): Promise<AgentImage> {
+    const stored = await validateTaskMedia(file);
+    if (stored.type !== 'image/png')
+      denied(
+        'TASK_FILE_NOT_PNG',
+        'Upload each card as a PNG image.',
+        'INVALID_ARGUMENT',
+      );
+    const info = pngInfo(Buffer.from(await stored.arrayBuffer()));
+    if (!info || !isCardSize(info))
+      denied(
+        'TASK_FILE_SIZE',
+        `Card images must be 1080×1440 or 1080×1350 pixels; this one is ${info ? `${info.width}×${info.height}` : 'unreadable'}.`,
+        'INVALID_ARGUMENT',
+      );
+    return this.serial(`upload:${runOwner(run.id)}`, async () => {
+      if (
+        (await this.media.count({ filter: { ownerId: runOwner(run.id) } })) >=
+        AGENT_FILES
+      )
+        denied(
+          'TASK_MEDIA_QUOTA',
+          `A run can upload at most ${AGENT_FILES} images.`,
+          'RESOURCE_EXHAUSTED',
+        );
+      const repository = this.files.repository('nrTaskMedia', {
+        disk: 'local',
+        accessPath: ACCESS_PATH,
+        policy: {
+          read: true,
+          create: {
+            scope: true,
+            defaults: {
+              ownerId: runOwner(run.id),
+              sessionId: run.id,
+              projectId: run.projectId,
+              draftId: run.id,
+              taskId: null,
+              expiresAt: new Date(Date.now() + EXPIRY),
+              deleting: false,
+            },
+          },
+          update: false,
+          delete: false,
+        },
+      });
+      const uploaded = await repository.uploadOne({ file: stored });
+      return {
+        id: uploaded.record.id,
+        filename: stored.name,
+        size: stored.size,
+        width: info.width,
+        height: info.height,
+        ...(info.colors ? { colors: info.colors } : {}),
+      };
+    });
+  }
+
+  /**
+   * A card image drawn in the reviewer's browser with Edit directly (2026-11-17): a PNG of exactly a card size (the
+   * set's own is checked when the edit is saved),
+   * checked by its bytes and kept unlinked until the edit is saved (cardImages), at most AGENT_FILES at a time. Like any
+   * upload it is kept under the request it came with (`draftId`, a UUID column): never the task's ID.
+   */
+  async cardImage(
+    actor: TaskCreator,
+    projectId: string,
+    draftId: string,
+    taskId: string,
+    file: File,
+  ): Promise<TaskMediaView> {
+    await this.authorizeUpload(actor, projectId, taskId);
+    const stored = await validateTaskMedia(file);
+    const size =
+      stored.type === 'image/png'
+        ? pngSize(Buffer.from(await stored.slice(0, 64).arrayBuffer()))
+        : null;
+    if (!size || !isCardSize(size))
+      denied(
+        'TASK_FILE_SIZE',
+        'Card images must be 1080×1440 or 1080×1350 PNG images.',
+        'INVALID_ARGUMENT',
+      );
+    const owner = cardOwner(actor.id);
+    return this.serial(`upload:${owner}`, async () => {
+      if (
+        (await this.media.count({ filter: { ownerId: owner, taskId: null } })) >=
+        AGENT_FILES
+      )
+        denied(
+          'TASK_MEDIA_QUOTA',
+          'Remove unused files before uploading more.',
+          'RESOURCE_EXHAUSTED',
+        );
+      const repository = this.files.repository('nrTaskMedia', {
+        disk: 'local',
+        accessPath: ACCESS_PATH,
+        policy: {
+          read: true,
+          create: {
+            scope: true,
+            defaults: {
+              ownerId: owner,
+              sessionId: actor.sessionId,
+              projectId,
+              draftId,
+              taskId: null,
+              expiresAt: new Date(Date.now() + EXPIRY),
+              deleting: false,
+            },
+          },
+          update: false,
+          delete: false,
+        },
+      });
+      const uploaded = await repository.uploadOne({ file: stored });
+      const row = await this.media.findOne({
+        filter: { id: uploaded.record.id },
+      });
+      if (!row) throw new Error('Uploaded task media record is missing.');
+      return this.mediaView(row);
+    });
+  }
+
+  /**
+   * Link the card images an edit is saved with, in its transaction (Edit directly, TaskService), as linkImages links
+   * images: each the actor's own card image of this project, unlinked or already this task's. Answers each with the
+   * colors read from its pixels (png-colors.ts) and its height.
+   */
+  async cardImages(
+    connection: DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<(MessageImage & { colors?: string[]; height?: number })[]> {
+    const files = await this.link(
+      connection,
+      { actorId: cardOwner(actorId), projectId, taskId, ids },
+      (type) => type === 'image/png',
+      [
+        'TASK_IMAGE_UNAVAILABLE',
+        'An image is no longer available. Add it again.',
+      ],
+    );
+    const out: (MessageImage & { colors?: string[]; height?: number })[] = [];
+    for (const file of files) {
+      const info = pngInfo(await this.bytes(file));
+      out.push({
+        ...this.messageImage(file),
+        ...(info?.colors ? { colors: info.colors } : {}),
+        ...(info ? { height: info.height } : {}),
+      });
+    }
+    return out;
+  }
+
+  /** Whether every one of `ids` is an image the run uploaded that is still kept: unlinked and not expired, or linked to its task. */
+  async runImages(
+    run: { id: string; projectId: string; taskId: string },
+    ids: readonly string[],
+  ): Promise<boolean> {
+    for (const id of ids) {
+      const file = await this.media.findOne({ filter: { id } });
+      if (
+        !file ||
+        file.deleting ||
+        file.ownerId !== runOwner(run.id) ||
+        file.projectId !== run.projectId ||
+        (file.taskId
+          ? file.taskId !== run.taskId
+          : new Date(file.expiresAt).getTime() <= Date.now())
+      )
+        return false;
+    }
+    return true;
+  }
+
+  /**
+   * The demo's card images (demo-data/workshop-history.ts), kept as a finished run's are: linked to their task, owned
+   * by the run that made them.
+   */
+  async demoImages(
+    run: { id: string; projectId: string; taskId: string },
+    files: readonly File[],
+  ): Promise<{ id: string; name: string; ref: string }[]> {
+    const repository = this.files.repository('nrTaskMedia', {
+      disk: 'local',
+      accessPath: ACCESS_PATH,
+      policy: {
+        read: true,
+        create: {
+          scope: true,
+          defaults: {
+            ownerId: runOwner(run.id),
+            sessionId: run.id,
+            projectId: run.projectId,
+            draftId: run.id,
+            taskId: run.taskId,
+            expiresAt: new Date(),
+            deleting: false,
+          },
+        },
+        update: false,
+        delete: false,
+      },
+    });
+    const out: { id: string; name: string; ref: string }[] = [];
+    for (const file of files) {
+      const { record } = await repository.uploadOne({ file });
+      const row = await this.media.findOne({ filter: { id: record.id } });
+      if (row) out.push(this.messageImage(row));
+    }
+    return out;
+  }
+
+  /**
+   * An image pasted into an article from elsewhere (a web page, Feishu, WeChat, Notion), read from its address and
+   * kept as the person's upload (2026-11-12), so the article shows its own copy rather than another site's, which may
+   * expire or refuse to be shown elsewhere. It is read through the project's website egress like any public read
+   * (public-sources.ts: HTTPS, a public address checked and pinned on every hop, at most 20 MiB); an http address is
+   * read over HTTPS. What comes back is kept only when its bytes are a PNG, JPEG, WebP or GIF image.
+   */
+  async importImage(
+    actor: TaskCreator,
+    projectId: string,
+    draftId: string,
+    address: string,
+    taskId: string,
+    signal?: AbortSignal,
+  ): Promise<TaskMediaView> {
+    await this.authorizeUpload(actor, projectId, taskId);
+    const url = new URL(address);
+    if (url.protocol === 'http:') url.protocol = 'https:';
+    const network = (
+      this.runtime.plugin as unknown as { network: OutboundNetwork }
+    ).network;
+    const deadline = AbortSignal.timeout(IMPORT_TIMEOUT);
+    let read: { body: Buffer };
+    try {
+      read = await network.runProject(projectId, () =>
+        download(url, 0, {
+          network,
+          connection: 'site',
+          signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+          limit: TASK_MEDIA_LIMIT,
+          accept: IMAGE_ACCEPT,
+          anyHost: true,
+        }),
+      );
+    } catch (error) {
+      // The host and why, never the address, which may carry a signed token.
+      this.runtime.logger.warn('A pasted image could not be copied.', {
+        host: url.hostname,
+        message: (error as Error | undefined)?.message,
+      });
+      throw new ApiError({
+        status: 'UNAVAILABLE',
+        domain: 'nocoreach',
+        reason: 'TASK_MEDIA_IMPORT_FAILED',
+        message: 'The image could not be read from its address.',
+        metadata: { host: url.hostname },
+        cause: error,
+      });
+    }
+    const type = imageTypeOf(read.body);
+    if (!type)
+      denied(
+        'TASK_MEDIA_INVALID',
+        'The address is not a PNG, JPEG, WebP or GIF image.',
+        'INVALID_ARGUMENT',
+      );
+    return this.upload(
+      actor,
+      projectId,
+      draftId,
+      new File([new Uint8Array(read.body)], importedName(url, type), { type }),
+      taskId,
+    );
+  }
+
   async create(
     actor: TaskCreator,
     raw: ManualTaskInput,
@@ -355,13 +681,24 @@ export class ManualTasks {
       try {
         return await this.runtime.legacy.db.sequelize.transaction(
           async (tx) => {
-            if (input.playbookId)
-              await (
-                this.runtime.plugin as unknown as { taskExecution: TaskService }
-              ).taskExecution.playbooks.get(
-                input.projectId,
-                input.playbookId,
-                tx,
+            if (
+              input.playbookId &&
+              isRepurposePlaybook(
+                await (
+                  this.runtime.plugin as unknown as {
+                    taskExecution: TaskService;
+                  }
+                ).taskExecution.playbooks.get(
+                  input.projectId,
+                  input.playbookId,
+                  tx,
+                ),
+              )
+            )
+              denied(
+                'TASK_PLAYBOOK_DENIED',
+                'This playbook starts from Content workshop.',
+                'INVALID_ARGUMENT',
               );
             const evidence = {
               origin: 'manual',
@@ -453,12 +790,14 @@ export class ManualTasks {
       const host = this.runtime.plugin as unknown as DraftHost;
       // The project's network and simulation scope, as the generic dispatcher gives every action.
       return await host.network.runProject(input.projectId, async () => {
-        const [project, { playbooks }, pages, documents] = await Promise.all([
+        const [project, { playbooks: all }, pages, documents] = await Promise.all([
           host.project(input.projectId),
           host.taskExecution.playbooks.list(input.projectId),
           this.draftPages(host, input.projectId, input.idea),
           this.draftDocuments(actor, input),
         ]);
+        // Content workshop playbooks start from the workshop, with a source and a destination (2026-11-13).
+        const playbooks = all.filter((p) => !isRepurposePlaybook(p));
         const draft = await draftTask(
           { idea: input.idea, project, playbooks, pages, documents },
           (system, prompt) =>
@@ -559,17 +898,71 @@ export class ManualTasks {
     taskId: string,
     ids: readonly string[],
   ): Promise<MessageImage[]> {
+    const files = await this.link(
+      connection,
+      { actorId, projectId, taskId, ids },
+      isTaskImageType,
+      [
+        'TASK_IMAGE_UNAVAILABLE',
+        'An image is no longer available. Add it again.',
+      ],
+    );
+    return files.map((file) => this.messageImage(file));
+  }
+
+  /**
+   * Link the documents a message or change request carries (2026-11-15), as images are linked: the actor's own
+   * documents of this project, of a type a new task takes, not yet linked or already this task's.
+   */
+  async linkDocuments(
+    connection: DatabaseConnection,
+    actorId: string,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<MessageDocument[]> {
+    const files = await this.link(
+      connection,
+      { actorId, projectId, taskId, ids },
+      isTaskDocument,
+      ['TASK_FILE_UNAVAILABLE', 'A file is no longer available. Add it again.'],
+    );
+    return files.map((file) => ({
+      id: file.id,
+      name: file.filename,
+      ref: taskImageRef(file.id, file.ext),
+      type: file.mimeType,
+      size: Number(file.size),
+    }));
+  }
+
+  private async link(
+    connection: DatabaseConnection,
+    {
+      actorId,
+      projectId,
+      taskId,
+      ids,
+    }: {
+      actorId: string;
+      projectId: string;
+      taskId: string;
+      ids: readonly string[];
+    },
+    accepts: (type: string) => boolean,
+    [reason, message]: [string, string],
+  ): Promise<TaskMediaRecord[]> {
     const media = connection.repository<TaskMediaRecord>('nrTaskMedia');
-    const out: MessageImage[] = [];
+    const out: TaskMediaRecord[] = [];
     for (const id of ids) {
       const file = await media.findOne({ filter: { id } });
       const mine =
         file &&
         !file.deleting &&
         file.projectId === projectId &&
-        isTaskImageType(file.mimeType);
+        accepts(file.mimeType);
       if (mine && file.taskId === taskId) {
-        out.push(this.messageImage(file));
+        out.push(file);
         continue;
       }
       if (
@@ -578,22 +971,13 @@ export class ManualTasks {
         file.ownerId !== actorId ||
         new Date(file.expiresAt).getTime() <= Date.now()
       )
-        denied(
-          'TASK_IMAGE_UNAVAILABLE',
-          'An image is no longer available. Add it again.',
-          'NOT_FOUND',
-        );
+        denied(reason, message, 'NOT_FOUND');
       const linked = await media.updateMany({
         filter: { id, taskId: null, deleting: false },
         values: { taskId },
       });
-      if (linked.updatedCount !== 1)
-        denied(
-          'TASK_IMAGE_UNAVAILABLE',
-          'An image is no longer available. Add it again.',
-          'NOT_FOUND',
-        );
-      out.push(this.messageImage(file));
+      if (linked.updatedCount !== 1) denied(reason, message, 'NOT_FOUND');
+      out.push(file);
     }
     return out;
   }
@@ -656,12 +1040,15 @@ export class ManualTasks {
         .getRepository('nrTasks')
         .findOne({ filter: { id: file.taskId, projectId: file.projectId } });
       const evidence = row ? evidenceOf(row) : {};
-      // New task's attachments, or images linked once the task started (messages and Edit directly).
+      // New task's attachments, or images and documents linked once the task started (messages, change requests
+      // and Edit directly).
       const ids = evidence.attachmentIds,
-        images = (evidence.work as { images?: unknown } | undefined)?.images;
+        work = evidence.work as
+          { images?: unknown; documents?: unknown } | undefined;
       if (
-        !(Array.isArray(ids) && ids.includes(id)) &&
-        !(Array.isArray(images) && images.includes(id))
+        ![ids, work?.images, work?.documents].some(
+          (list) => Array.isArray(list) && list.includes(id),
+        )
       )
         denied('TASK_MEDIA_LINK_DENIED', 'File access denied.');
     } else if (

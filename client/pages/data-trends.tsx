@@ -33,13 +33,13 @@ import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
 import { Tag } from "#components/reach/tag";
 import { InfoTip, NotesTip } from "#components/reach/info-tip";
-import { TrendKeywords, type KeywordWatch } from "./trends-keywords";
+import { TrendKeywords, TrendsQuery, RelatedSearchesHelp, shownPlace, type KeywordWatch, type TrendsRange } from "./trends-keywords";
 import { formatDateTime } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 
 type Query = { query: string; value: number; isNew?: boolean };
 type Rival = { id: string; name: string; included: boolean };
-type View = KeywordWatch & { connected: boolean; product?: string; competitors?: Rival[]; maxRivals?: number; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
+type View = KeywordWatch & { connected: boolean; product?: string; competitors?: Rival[]; maxRivals?: number; terms?: string[]; place?: string; queryPlace?: string | null; range?: TrendsRange | null; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; relatedUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 const change = (v: number | null) => (v === null ? "—" : <Delta value={v} />);
 
@@ -89,7 +89,7 @@ export default function DataTrends() {
     </Card>
   );
   const chosen = Object.values(picked);
-  useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t('common.selectedRelatedSearchesBecomeOne'), draft: () => trendsDraft(terms[0], view!.place || $t('common.worldwide'), chosen), clear: () => setPicked({}) } : null);
+  useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t('common.selectedRelatedSearchesBecomeOne'), draft: () => trendsDraft(terms[0], shownPlace(view!.queryPlace, view!.place || $t('common.worldwide')), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.interestProductCompetitorsTopics')} actions={view?.connected || view?.keywords?.length ? <RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('common.querying') : $t('common.updateNow')} onClick={() => void check()} /> : undefined} />
@@ -108,7 +108,7 @@ export default function DataTrends() {
       {view?.connected && tab === "brand" ? (
         <>
           <Rivals projectId={project!.id} view={view} onView={setLive} />
-          <p className="nr-footnote">{$tj('common.past12Months',{0:$legacyText(view.place),1:view.checkedAt ? $t('common.checked',{0:formatDateTime(view.checkedAt)}) : ""})}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
+          <p className="nr-footnote">{$tj('common.past12Months',{0:shownPlace(view.queryPlace, view.place || $t('common.worldwide')),1:view.checkedAt ? $t('common.checked',{0:formatDateTime(view.checkedAt)}) : ""})}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
           {view.lastRun && !view.lastRun.ok && !view.checking ? <InlineError action={view.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={() => void retry()}>{$t('common.queryAgain')}</Button> : undefined}>{$tj('common.lastCheckNotComplete',{0:$legacyText(view.lastRun.errors[0])})}</InlineError> : null}
           {view.checking ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('dataTrends.checkingGoogleTrendsUsuallyMinute')}</p> : null}
           {!view.checkedAt ? (view.checking ? null : <p role="status" className="text-sm text-muted-foreground">{!view.lastRun ? $t('dataTrends.firstCheckProgressUsuallyMinute') : $t('common.noDataYet')}</p>) : (
@@ -138,7 +138,8 @@ export default function DataTrends() {
                 </div>
               </Card>
               <div>
-                <h2 className="flex items-center gap-1 text-sm font-semibold">{$tj('dataTrends.relatedSearches',{0:terms[0],1:chosen.length ? $t('dataTrends.selected',{0:chosen.length}) : ""})}<InfoTip label={$t('common.info')}>{$t('dataTrends.relatedSearchesHelp')}</InfoTip></h2>
+                <h2 className="flex items-center gap-1 text-sm font-semibold">{$tj('dataTrends.relatedSearches',{0:terms[0],1:chosen.length ? $t('dataTrends.selected',{0:chosen.length}) : ""})}<InfoTip label={$t('common.info')}><RelatedSearchesHelp term={terms[0]} /></InfoTip></h2>
+                <TrendsQuery place={shownPlace(view.queryPlace, view.place || $t('common.worldwide'))} range={view.range} url={view.relatedUrl} />
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 {list($t('common.rising'), "rising", view.rising || [], $t('common.noClearlyRisingRelatedSearches'))}

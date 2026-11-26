@@ -17,6 +17,10 @@ import { canonicalUrl, pageIdentity, pageKey } from '../../shared/page-identity.
 import * as growth from './growth-signals.js';
 import { roundEstimate } from '../../shared/growth.js';
 import { markQuestions } from './ai-questions.js';
+import * as topic from './topic-signals.js';
+import * as sources from './source-signals.js';
+import { runSkills } from './skill-analysis.js';
+import { languageOf } from './language.js';
 // Signal engine (SPEC §9): deterministic rules per data source. Reads saved data only; never calls external services.
 // A change keeps its key from day to day (no dates in keys since 2026-10-08), so a watched change can be followed.
 // Only growth points are actionable (2026-11-10, shared/growth.ts): each carries `growth`, its size and the rows behind
@@ -114,8 +118,10 @@ function hackernewsSignals({hn,now}){if(!hn?.retainedFrom)return [];const {daily
 // 排名跟踪: a tracked keyword that fell 5 or more places, dropped out of the top 100 from the top 20, or entered the top 10.
 // A page that fell so for one or more keywords is an opportunity (2026-11-10): the clicks it can win back, with every
 // keyword it fell for and the sites above it now (`rt.serps`, the latest results of those keywords).
+// An uncertain check (Google hid more than 30% of the result links, rank-tracking.ts) says nothing about the position and is skipped, so
+// it never reads as a drop or a loss.
 function rankSignals({rt,queries,identity,volumes=new Map()}){if(!rt?.keywords?.length)return [];const out=[],fell=new Map();
- for(const k of rt.keywords){const list=rt.checks?.[k.id]||[],now=list.at(-1),before=list.at(-2);if(!now||!before)continue;const a=before.position,b=now.position;
+ for(const k of rt.keywords){const list=(rt.checks?.[k.id]||[]).filter(c=>!c.uncertain),now=list.at(-1),before=list.at(-2);if(!now||!before)continue;const a=before.position,b=now.position;
   const url=(b&&now.url)||before.url||now.url;if(a&&url&&(b?b>a:a<=20)){const path=pathOf(canonicalUrl(url,identity)),e=fell.get(path)||{url,keywords:[],ruled:false};e.keywords.push({keyword:k.keyword,before:a,now:b||null,ahead:aheadOf(rt.serps?.[k.id],b)});if(b?b-a>=V('rank','dropPlaces'):true)e.ruled=true;fell.set(path,e);}
   if(a&&b&&b-a>=V('rank','dropPlaces'))out.push(signal({key:`rank-drop:${k.id}`,type:'page',source:'rank',url:now.url||before.url,title:systemMessageText('messages.dropped', { 0: k.keyword, 1: a, 2: b }),chip:chip('red',systemMessageText('messages.positions', { 0: b-a })),facts:[systemMessageText('rankTracking.positionComparison', { 0: before.at.slice(0,10), 1: a, 2: now.at.slice(0,10), 3: b }),...(now.url?[systemMessageText('messages.rankingPage', { 0: now.url })]:[])],strength:clamp((b-a)*6),action:'optimize'}));
   else if(a&&a<=20&&!b)out.push(signal({key:`rank-lost:${k.id}`,type:'page',source:'rank',url:before.url,title:systemMessageText('messages.droppedOutTop100Last', { 0: k.keyword, 1: a }),chip:chip('red',systemMessageText('analysisRules.droppedOutTop100')),facts:[systemMessageText('messages.notTop100', { 0: before.at.slice(0,10), 1: a, 2: now.at.slice(0,10) })],strength:clamp(80-a),action:'optimize'}));
@@ -203,9 +209,14 @@ function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'Ch
 // The growth points read from data other features already collected and paid for (growth-signals.ts): new searches in
 // Search Console, Keywords › AI suggestions, Competitors › Overview, AI search › Questions and GitHub hot topics.
 function growthSignals({queries,identity,ks,gaps,aq,projectName,ght,gh,now}){return [...growth.newQuerySignals({queries,identity,canonical:canonicalUrl,V}),...growth.demandSignals({ks,gaps,V}),...growth.risingKeywordSignals({ks,gaps,V}),...growth.competitorGapSignals({gaps,V}),...growth.aiMissingSignals({aq,name:projectName,V}),...growth.aiCitedSignals({aq,V}),...growth.newRepoSignals({ght,gh,now,V})];}
+// Trending topics, what people keep asking and the first batch of new data (2026-11-10 step 2b): the followed topics'
+// weekly counts and discussions (topic-signals.ts) and growth-sources.ts' saved lookups (source-signals.ts).
+function stepTwoSignals({tw,td,rd,hn,yt,ght,tr,cm,site,gs,followed,names,identity,volumes,now}){const serps=gs?.topicSerps?.items||{};
+ return [...topic.topicRiseSignals({tw,rd,hn,yt,ght,tr,volumes,serps,V}),...topic.newTopicSignals({td,tw,rd,hn,yt,ght,volumes,serps,followed,V}),...topic.hotDiscussionSignals({rd,hn,followed,names,now,V}),...topic.askedOftenSignals({td,cm,rd,hn,site,now,V}),...topic.hotVideoSignals({yt,followed,now,V}),
+  ...sources.otherMarketSignals({gs,site,V}),...sources.siteSearchSignals({gs,site,identity,V}),...sources.peopleAlsoAskSignals({gs,site,V}),...sources.linkGapSignals({gs,V})];}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
 // Every change the rules find (switched-off rules left out), counted per rule, largest first.
-function computeAll(input,config){const definitions=[...CONTENT_SOURCES,...(input.automaticDefinitions||[])],catalog=input.ruleCatalog||[...RULES,...contentRuleCatalog(input.automaticDefinitions||[])];RULESET=resolver(config||{},catalog);try{const now=input.now??Date.now(),identity=pageIdentity(input.site),gaps=growth.competitorGaps({cr:input.cr,cw:input.cw}),volumes=growth.keywordVolumes(input.ks,gaps);const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end,identity}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end,identity}),...contentSignals({...input,now,identity}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals({...input,identity,volumes}),...auditSignals({...input,identity}),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now,volumes}),...competitorSignals({...input,now}),...githubTrendsSignals(input),...xSignals({...input,now}),...chatSignals({...input,now}),...growthSignals({...input,now,identity,gaps}),...sampledContentSignals(input.contentSources||[],RULESET,now,definitions)];// A page that fell in the rankings is one opportunity: its falling clicks are not offered again on their own.
+function computeAll(input,config){const definitions=[...CONTENT_SOURCES,...(input.automaticDefinitions||[])],catalog=input.ruleCatalog||[...RULES,...contentRuleCatalog(input.automaticDefinitions||[])];RULESET=resolver(config||{},catalog);try{const now=input.now??Date.now(),identity=pageIdentity(input.site),gaps=growth.competitorGaps({cr:input.cr,cw:input.cw}),volumes=growth.keywordVolumes(input.ks,gaps);const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end,identity}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end,identity}),...contentSignals({...input,now,identity}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals({...input,identity,volumes}),...auditSignals({...input,identity}),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now,volumes}),...competitorSignals({...input,now}),...githubTrendsSignals(input),...xSignals({...input,now}),...chatSignals({...input,now}),...growthSignals({...input,now,identity,gaps}),...stepTwoSignals({...input,now,identity,volumes}),...sampledContentSignals(input.contentSources||[],RULESET,now,definitions)];// A page that fell in the rankings is one opportunity: its falling clicks are not offered again on their own.
   const fellPages=new Set(all.filter(s=>s.actionable&&s.key.startsWith('rank-page:')).map(s=>s.key.slice('rank-page:'.length)));for(const s of all)if(s.actionable&&s.key.startsWith('gsc-click-drop:')&&fellPages.has(s.key.slice('gsc-click-drop:'.length))){s.actionable=false;delete s.growth;}
   const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key,catalog))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
  const found={};for(const x of ranked){const r=ruleOf(x.key,catalog)||'other';found[r]=(found[r]||0)+1;}return {ranked,found};}finally{RULESET=null;}}
@@ -237,12 +248,22 @@ class SignalEngine{
   try{inputs.cr=await this.p.competitorResearch?.state(id);}catch{inputs.cr=null;}
   try{const s=await this.p.aiQuestions?.state(id);if(s?.topics?.length){const parties=await this.p.aiQuestions.parties(id);inputs.aq=markQuestions(s,parties);inputs.projectName=parties.name;}else inputs.aq=[];}catch{inputs.aq=[];}
   try{inputs.ai=await this.p.aiSearch?.state(id);}catch{inputs.ai=null;}coverage['ai-search']=inputs.ai&&(inputs.ai.brands.length||inputs.ai.answers.length)?systemMessageText('messages.brandMentionsPlatformsQuestions', { 0: inputs.ai.brands.length, 1: inputs.ai.answers.length }):inputs.aq.length?systemMessageText('growthSignals.aiQuestionsCoverage',{0:inputs.aq.length}):null;
+  // Step 2b (2026-11-10): YouTube's topic videos, the followed topics' weekly counts (counted again and kept here), the
+  // AI's weekly reading of their discussions, the first batch of new data and the names counted in discussions.
+  try{inputs.yt=await this.p.youtube?.state(String(id));}catch{inputs.yt=null;}
+  try{inputs.followed=(await this.p.followedTopics?.of(String(id)))||[];}catch{inputs.followed=[];}
+  try{inputs.tw=this.p.topicWeeks?await this.p.topicWeeks.update(id,{topics:inputs.followed,rd:inputs.rd,hn:inputs.hn,yt:inputs.yt,ght:inputs.ght,now:inputs.now}):null;}catch{inputs.tw=null;}
+  try{inputs.td=await this.p.topicDiscovery?.state(id);}catch{inputs.td=null;}
+  try{inputs.gs=await this.p.growthSources?.state(id);}catch{inputs.gs=null;}
+  try{const name=(await this.p.projects?.get(String(id)))?.name;inputs.names=[...(name?[{name,own:true}]:[]),...(inputs.cw?.list||[]).filter(c=>c.name).map(c=>({name:c.name,own:false}))];}catch{inputs.names=[];}
   inputs.contentSources=await contentInputs(this.p,id);
   const automatic=await this.p.automaticSources?.state(id)||[];inputs.automaticDefinitions=automatic.map(s=>s.definition);inputs.contentSources.push(...automatic.filter(s=>s.connected!==false).map(s=>s.input));
   for(const source of inputs.contentSources)coverage[source.source]=source.items.length?systemMessageText('socialSignals.coverage',{0:source.items.length}):null;
   return {inputs,coverage};}
  // Recomputed from saved data; optional custom rules use the configured model; first-seen dates persist so a signal can be marked as new.
- async current(id,keep){
+ // `skills`: the daily analysis also runs the scheme's Skills (skill-analysis.ts), which call the model; other callers
+ // keep the Skills' last runs as they were.
+ async current(id,keep,opts={}){
   const snapshot=await this.p.analysisRules?.snapshot?.(id),{inputs,coverage}=await this.inputs(id),config=snapshot?.config||await this.p.analysisRules?.config(id).catch(()=>null);
   if(snapshot)inputs.ruleCatalog=snapshot.catalog;
   const {ranked,found}=computeAll(inputs,config),settings=resolver(config,snapshot?.catalog||RULES);
@@ -252,11 +273,15 @@ class SignalEngine{
   const contentCatalog=contentRuleCatalog([...CONTENT_SOURCES,...(inputs.automaticDefinitions||[])]);
   const ruleRuns=(snapshot?.catalog||RULES).map(rule=>({ruleId:rule.id,status:!settings.on(rule.id)?'disabled':found[rule.id]?'matched':contentCatalog.some(r=>r.id===rule.id)?(contentRuleReady(contentCatalog.find(r=>r.id===rule.id),inputs.contentSources,settings,inputs.now)?'not_matched':'insufficient'):'unknown',source:rule.source}));
   for(const result of custom.runs){const run=ruleRuns.find(r=>r.ruleId===result.ruleId);if(run)Object.assign(run,result);}
-  const analysisRunId=randomUUID(),all=choose(ranked,keep),now=new Date().toISOString(),row=await this.repo().findOne({filter:{key:this.key(id)}}),prev=row?.get('payload')?.seen||{},seen={};for(const s of all)seen[s.key]=prev[s.key]||now;
-  const payload={computedAt:now,analysisRunId,schemeId:snapshot?.schemeId,schemeVersion:snapshot?.schemeVersion,seen,coverage,found,total:ranked.length,ruleRuns};if(row)await this.repo().update({filterByTk:row.id,values:{payload}});else await this.repo().create({values:{key:this.key(id),payload}});
+  const analysisRunId=randomUUID(),all=choose(ranked,keep),now=new Date().toISOString(),row=await this.repo().findOne({filter:{key:this.key(id)}}),prev=row?.get('payload')?.seen||{},seen={};
+  // What the Skills find is passed on with the rules' changes, after the 40 are chosen, and is not counted as a rule's.
+  let skillRuns=row?.get('payload')?.skillRuns;
+  if(opts.skills&&snapshot){const skills=await this.p.analysisRules.resolveSkills(snapshot.skillIds).catch(()=>[]);if(skills.length){const out=await runSkills(this.p,{skills,inputs,V:(rule,key)=>settings.value(rule,key),language:languageOf(await this.p.project(id).catch(()=>null))});const keys=new Set(all.map(s=>s.key));all.push(...out.signals.filter(s=>!keys.has(s.key)&&keys.add(s.key)));skillRuns=out.runs;}else skillRuns=[];}
+  for(const s of all)seen[s.key]=prev[s.key]||now;
+  const payload={computedAt:now,analysisRunId,schemeId:snapshot?.schemeId,schemeVersion:snapshot?.schemeVersion,seen,coverage,found,total:ranked.length,ruleRuns,...(skillRuns?{skillRuns}:{})};if(row)await this.repo().update({filterByTk:row.id,values:{payload}});else await this.repo().create({values:{key:this.key(id),payload}});
   return {...payload,analysisSnapshot:snapshot,missing:Object.entries(coverage).filter(([,v])=>!v).map(([k])=>k),items:all.map(s=>({...s,analysisRunId,ruleId:ruleOf(s.key,snapshot?.catalog||RULES),firstSeenAt:seen[s.key],isNew:seen[s.key]===now}))};}
  // The last computation (分析规则): how many changes each rule found, and which sources had no data.
- async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {analysisRunId:v.analysisRunId,ruleRuns:v.ruleRuns,schemeId:v.schemeId,schemeVersion:v.schemeVersion,computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
+ async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {analysisRunId:v.analysisRunId,ruleRuns:v.ruleRuns,skillRuns:v.skillRuns||null,schemeId:v.schemeId,schemeVersion:v.schemeVersion,computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('signals.signalCalculationNotCompleteTry'));}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }

@@ -86,11 +86,19 @@ const table = (columns, rows, unit, link) => ({
   unit: `growth.unit.${unit}`,
   link,
 });
-const growth = (kind, figures, evidence, category = GROWTH_KINDS[kind]) => ({
+// `subject`: the one keyword, topic or repository a growth is about, when it is about one (shared/growth.ts).
+const growth = (
+  kind,
+  figures,
+  evidence,
+  category = GROWTH_KINDS[kind],
+  subject = '',
+) => ({
   kind,
   category,
   figures: figures.filter(Boolean).slice(0, 4),
   ...(evidence ? { evidence } : {}),
+  ...(subject ? { subject } : {}),
 });
 // Difficulty in words, on the same tiers as the difficulty badge (client/components/seo/score-badge.tsx).
 const level = (kd) =>
@@ -557,6 +565,8 @@ function risingKeywordSignals({ ks, gaps, V }) {
               'months',
               '/keywords?tab=suggest',
             ),
+            undefined,
+            i.keyword,
           ),
         }),
       );
@@ -1014,6 +1024,8 @@ function topicHeatGrowth(ght, topic, last, avg) {
       'repositories',
       '/data/github?view=hot',
     ),
+    undefined,
+    topic,
   );
 }
 /** New hot repositories: in a followed topic, created in the last 7 days, with the most stars. */
@@ -1081,6 +1093,8 @@ function newRepoSignals({ ght, gh, now, V }) {
               : figure('topicRepositories', topicSize(ght, r.topic)),
           ],
           table(REPO_COLUMNS, r.rows, 'repositories', '/data/github?view=hot'),
+          undefined,
+          r.repo,
         ),
       }),
     );
@@ -1438,10 +1452,27 @@ function growthForModel(g) {
       [say(f.label), value(f), say(f.detail)].filter(Boolean).join(' '),
     ),
     ...(g.evidence ? { evidenceRows: g.evidence.total } : {}),
+    ...(g.topic ? { topic: g.topic } : {}),
   };
 }
 
+// The pieces growth points are made of, for the ones found elsewhere (topic-signals.ts, source-signals.ts).
+const kit = {
+  text,
+  figure,
+  col,
+  table,
+  growth,
+  signal,
+  n,
+  sum,
+  pathOf,
+  examples,
+  strengthOf,
+};
+
 export {
+  kit,
   CTR_BY_POSITION,
   growthForModel,
   expectedCtr,
@@ -1452,6 +1483,7 @@ export {
   lowCtrGrowth,
   newQuerySignals,
   suggestionGroups,
+  groupChange,
   competitorGaps,
   demandSignals,
   risingKeywordSignals,

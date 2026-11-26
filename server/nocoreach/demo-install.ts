@@ -279,18 +279,7 @@ export async function installEditorialDemo(
               mode: 'analyze',
               instruction: story.brief,
             },
-            {
-              key: 'review',
-              name: '核对事实与适用边界',
-              kind: 'review',
-              checklist: [
-                {
-                  key: 'facts',
-                  label: '核对引用、权限与不确定项',
-                  required: true,
-                },
-              ],
-            },
+            { key: 'review', name: '核对事实与适用边界', kind: 'review' },
           ],
         };
         work.stageIndex = story.state === 'doing' ? 0 : 1;

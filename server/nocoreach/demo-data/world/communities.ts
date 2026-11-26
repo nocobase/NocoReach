@@ -673,11 +673,14 @@ export function hackernews(world: World, u: URL): Response | undefined {
   if (u.hostname !== 'hn.algolia.com') return undefined;
   const phrase = (u.searchParams.get('query') || '').replaceAll('"', '');
   if (u.pathname === '/api/v1/search' && world.followedTopic(phrase)) {
-    const min = u.searchParams
-      .get('numericFilters')
-      ?.match(/created_at_i>=?(\d+)/)?.[1];
+    const filters = u.searchParams.get('numericFilters') ?? '';
+    const min = filters.match(/created_at_i>=?(\d+)/)?.[1];
+    // A week's count (topic-weeks.ts) bounds the range on both sides.
+    const max = filters.match(/created_at_i<(\d+)/)?.[1];
     const rows = hnTopicRows(world, phrase).filter(
-      (r) => !min || Number(r.created_at_i) > Number(min),
+      (r) =>
+        (!min || Number(r.created_at_i) > Number(min)) &&
+        (!max || Number(r.created_at_i) < Number(max)),
     );
     const per = Math.max(1, integer(u.searchParams.get('hitsPerPage'), 20));
     return json({
@@ -727,6 +730,44 @@ export function hackernews(world: World, u: URL): Response | undefined {
     });
   }
   const item = u.pathname.match(/^\/api\/v1\/items\/(\d+)$/);
+  // A followed topic's story, with its comments (the products named in them, hackernews-source.ts).
+  const topicStory = item
+    ? world.topicDiscussions.topics
+        .flatMap((topic) =>
+          hnTopicRows(world, topic).map((row) => ({ row, topic })),
+        )
+        .find(({ row }) => row.objectID === item[1])
+    : undefined;
+  if (topicStory) {
+    const { row } = topicStory;
+    const story = world.topicDiscussions.hn.find(
+      (s) => world.text(s.title) === row.title,
+    );
+    return json({
+      id: Number(row.objectID),
+      title: row.title,
+      url: row.url,
+      author: row.author,
+      created_at: row.created_at,
+      points: row.points,
+      type: 'story',
+      text: null,
+      parent_id: null,
+      children: (story?.comments ?? []).map(([author, hours, text], c) => ({
+        id: Number(row.objectID) + 1 + c,
+        created_at: iso(
+          Math.min(
+            world.now - 60_000,
+            Number(row.created_at_i) * 1000 + hours * HOUR,
+          ),
+        ),
+        author,
+        type: 'comment',
+        text: `<p>${escapeHtml(world.text(text))}</p>`,
+        children: [],
+      })),
+    });
+  }
   if (item) {
     const rows = hnRows(world);
     const row = rows.find((r) => r.objectID === item[1]);

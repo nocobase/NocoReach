@@ -105,6 +105,11 @@ export function DeliveryDialog({
   query?: string;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
+  /**
+   * Change playbook (2026-11-11): another article is not saved on the task when picked but goes with the choice, linked
+   * when the new start is confirmed, so Cancel leaves the task as it was.
+   */
+  deferLink?: boolean;
   onSave: (choice: DeliveryChoice) => void;
 }) {
   return (
@@ -141,6 +146,7 @@ function DeliveryForm({
   query = '',
   busy,
   link,
+  deferLink = false,
   onSave,
   onClose,
 }: {
@@ -153,6 +159,7 @@ function DeliveryForm({
   query?: string;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
+  deferLink?: boolean;
   onSave: (choice: DeliveryChoice) => void;
   onClose: () => void;
 }) {
@@ -276,6 +283,20 @@ function DeliveryForm({
         article: found,
         ...locales,
       });
+    if (deferLink)
+      return done({
+        target,
+        mode: 'existing',
+        also,
+        article: {
+          targetId: target,
+          articleId: article.id,
+          slug: article.slug,
+          title: article.title,
+          url: '',
+        },
+        ...locales,
+      });
     // Any other article is saved on the task now, as picking one always was.
     setSaving(true);
     setError('');
@@ -364,6 +385,7 @@ function DeliveryForm({
             present={
               mode === 'existing' && article ? (present ?? null) : undefined
             }
+            draft={Boolean(targets.find((t) => t.id === target)?.status)}
             disabled={disabled}
             onChange={(locales) => setDraft({ ...draft, locales })}
           />
@@ -516,6 +538,7 @@ function LanguagePicker({
   all,
   chosen,
   present,
+  draft = false,
   disabled,
   onChange,
 }: {
@@ -524,6 +547,8 @@ function LanguagePicker({
   chosen: string[];
   /** An existing article's languages (null: not known yet, every one counts as present); undefined for a new one. */
   present?: string[] | null;
+  /** The target keeps a status: a new article is pushed to the CMS as a draft (2026-11-12). */
+  draft?: boolean;
   disabled: boolean;
   onChange: (locales: string[]) => void;
 }) {
@@ -600,7 +625,9 @@ function LanguagePicker({
         {$t(
           updates
             ? 'articleTask.languagesHelpUpdate'
-            : 'articleTask.languagesHelp',
+            : draft && present === undefined
+              ? 'articleTask.languagesHelpDraft'
+              : 'articleTask.languagesHelp',
         )}
       </small>
     </div>
@@ -986,9 +1013,8 @@ export function DeliverySummary({
       false,
     );
   const url =
-    choice.article?.targetId === choice.target
-      ? choice.article.url
-      : articlePageUrl(data, choice.target, picked.slug);
+    (choice.article?.targetId === choice.target ? choice.article.url : '') ||
+    articlePageUrl(data, choice.target, picked.slug);
   return field(
     pagesLabel,
     [{ url: url || picked.slug, title: picked.title }],
@@ -1013,12 +1039,15 @@ export function HandoffLanguage({
   id,
   all,
   primary,
+  draft = false,
   busy,
   onChange,
 }: {
   id: string;
   all: string[];
   primary: string;
+  /** The new task's target keeps a status: its new article is pushed to the CMS as a draft (2026-11-12). */
+  draft?: boolean;
   busy: boolean;
   onChange: (primary: string) => void;
 }) {
@@ -1046,9 +1075,14 @@ export function HandoffLanguage({
         </SelectContent>
       </Select>
       <p className={text.muted}>
-        {$t('articleTask.handoffLanguagesHelp', {
-          0: joinList(others.map((l) => localeName(l, ui))),
-        })}
+        {$t(
+          draft
+            ? 'articleTask.handoffLanguagesHelpDraft'
+            : 'articleTask.handoffLanguagesHelp',
+          {
+            0: joinList(others.map((l) => localeName(l, ui))),
+          },
+        )}
       </p>
     </Field>
   );
@@ -1119,7 +1153,7 @@ const shortPage = (url: string) =>
 
 /**
  * Changes go to (2026-10-29, ui-references/repos-2026-10-29/multi-repo.png ④): the website repositories (a pull request)
- * and the publishing targets (published directly) in one select. The repository serving the task's pages is preselected
+ * and the publishing targets (published directly, or a new article saved there as a draft) in one select. The repository serving the task's pages is preselected
  * and the line below says from which page; when several or none serve them, the person chooses.
  */
 export function WhereField({
@@ -1143,6 +1177,13 @@ export function WhereField({
     repos = data.agent?.repos || [],
     targets = data.articleTargets || [],
     route = choice.target === REPO ? choiceRepo(data, choice) : null;
+  // A new article waits as a draft in a target that keeps a status (2026-11-12); anything else is published there.
+  const how = (t: { status?: boolean }) =>
+    $t(
+      choice.mode === 'new' && t.status
+        ? 'articleTask.asDraft'
+        : 'articleTask.publishDirect',
+    );
   const value =
     choice.target === REPO
       ? route?.repo
@@ -1155,7 +1196,7 @@ export function WhereField({
       return r ? `${r.repo} · ${$t('articleTask.viaPr')}` : '';
     }
     const t = targets.find((x) => x.id === v.slice(TARGET_VALUE.length));
-    return t ? `${t.name} · ${$t('articleTask.publishDirect')}` : '';
+    return t ? `${t.name} · ${how(t)}` : '';
   };
   return (
     <Field label={$t('articleTask.changesGoTo')} id={`${id}-where`}>
@@ -1216,9 +1257,7 @@ export function WhereField({
               {targets.map((t) => (
                 <SelectItem key={t.id} value={TARGET_VALUE + t.id}>
                   <span className='min-w-0 flex-1 truncate'>{t.name}</span>
-                  <span className='text-muted-foreground'>
-                    {$t('articleTask.publishDirect')}
-                  </span>
+                  <span className='text-muted-foreground'>{how(t)}</span>
                 </SelectItem>
               ))}
             </SelectGroup>

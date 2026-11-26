@@ -24,6 +24,7 @@ import {
   BarChart,
   CartesianGrid,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -123,12 +124,17 @@ type MarketData =
         questions: Item[];
       };
     };
+// A result whose link Google hid (`resolved: false`, serp-links.ts) keeps the Google redirect as its url, which still
+// opens the page; its domain is the site Google showed under the title, or '' when Google cut that off, and then the
+// site's name (`site`) is shown instead.
 type SerpItem = {
   position: number | null;
   title: string;
   url: string;
   domain: string;
   own: boolean;
+  resolved?: false;
+  site?: string;
 };
 type SerpData =
   | { connected: false }
@@ -163,7 +169,12 @@ type SiteData = {
   tracking: {
     id: string;
     addedAt: string;
-    history: { at: string; position: number | null; url: string | null }[];
+    history: {
+      at: string;
+      position: number | null;
+      url: string | null;
+      uncertain?: boolean;
+    }[];
   } | null;
   gsc: {
     connected: boolean;
@@ -1153,7 +1164,16 @@ function SiteQueries({ rows, market }: { rows: GscQuery[]; market: Market }) {
   );
 }
 
-function PageLink({ url, label }: { url: string; label?: string }) {
+function PageLink({
+  url,
+  label,
+  hint = url,
+}: {
+  url: string;
+  label?: string;
+  /** The hover text; a Google redirect is not worth showing. */
+  hint?: string;
+}) {
   const href = safeLink(url);
   return href ? (
     <a
@@ -1161,7 +1181,7 @@ function PageLink({ url, label }: { url: string; label?: string }) {
       href={href}
       target='_blank'
       rel='noreferrer'
-      title={url}
+      title={hint}
     >
       {label || pathOf(url)}
     </a>
@@ -1303,9 +1323,13 @@ function ContentSection({
                   {r.position ?? i + 1}
                 </span>
                 <span className='min-w-0 flex-1'>
-                  <PageLink url={r.url} label={r.title || r.url} />
+                  <PageLink
+                    url={r.url}
+                    label={r.title || r.domain || r.site || r.url}
+                    hint={r.resolved === false ? r.title : r.url}
+                  />
                   <span className='flex items-center gap-1.5 truncate text-xs text-muted-foreground'>
-                    {r.domain}
+                    {r.domain || r.site}
                     {r.own ? (
                       <Tag tone='blue'>{$t('keywordDetail.ownSite')}</Tag>
                     ) : null}
@@ -1331,20 +1355,50 @@ function RankHistory({
 }) {
   const history = tracking.history;
   const last = history.at(-1);
+  const points = history.map((c) => (c.uncertain ? null : c.position));
+  // Each run of uncertain checks between two ranked checks is crossed by a dashed segment of its own, so the trend still
+  // reads; a check that was certainly outside the top 100 stays a gap.
+  const bridges: [number, number][] = [];
+  for (let i = 1; i < history.length; i++) {
+    if (!history[i].uncertain || history[i - 1].uncertain) continue;
+    let after = i;
+    while (history[after]?.uncertain) after++;
+    if (points[i - 1] != null && points[after] != null)
+      bridges.push([i - 1, after]);
+  }
   return (
     <Section
       title={$t('keywordDetail.rankHistory')}
-      description={$tj('keywordDetail.rankHistoryDescription', {
-        0: day(tracking.addedAt),
-      })}
+      description={
+        history.some((c) => c.uncertain) ? (
+          <>
+            <p>
+              {$tj('keywordDetail.rankHistoryDescription', {
+                0: day(tracking.addedAt),
+              })}
+            </p>
+            <p>{$t('rankTracking.uncertainHelp')}</p>
+          </>
+        ) : (
+          $tj('keywordDetail.rankHistoryDescription', {
+            0: day(tracking.addedAt),
+          })
+        )
+      }
     >
       {history.length > 1 ? (
         <div className='nr-chart-box'>
           <ResponsiveContainer width='100%' height={200}>
             <LineChart
-              data={history.map((c) => ({
+              data={history.map((c, i) => ({
                 date: formatDate(c.at, { withYear: false }),
-                position: c.position,
+                position: points[i],
+                ...Object.fromEntries(
+                  bridges.map(([from, to], n) => [
+                    `bridge${n}`,
+                    i === from || i === to ? points[i] : null,
+                  ]),
+                ),
               }))}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
             >
@@ -1358,6 +1412,27 @@ function RankHistory({
                 width={32}
               />
               <Tooltip />
+              {/* An uncertain check has no position to draw: a dashed mark says so (rankTracking.uncertainHelp). */}
+              {history.map((c, i) =>
+                c.uncertain ? (
+                  <ReferenceLine
+                    key={c.at}
+                    x={formatDate(c.at, { withYear: false })}
+                    stroke='var(--muted-foreground)'
+                    strokeDasharray='3 3'
+                    label={{
+                      value: $t('rankTracking.uncertain'),
+                      // Beside the line, not across it; inward at the chart's right edge, so it is not cut off.
+                      position:
+                        i === history.length - 1
+                          ? 'insideTopRight'
+                          : 'insideTopLeft',
+                      fontSize: 10,
+                      fill: 'var(--muted-foreground)',
+                    }}
+                  />
+                ) : null,
+              )}
               <Line
                 isAnimationActive={false}
                 type='linear'
@@ -1366,6 +1441,21 @@ function RankHistory({
                 stroke='var(--chart-3)'
                 connectNulls={false}
               />
+              {bridges.map(([from], n) => (
+                <Line
+                  key={history[from].at}
+                  isAnimationActive={false}
+                  type='linear'
+                  dataKey={`bridge${n}`}
+                  stroke='var(--chart-3)'
+                  strokeDasharray='4 4'
+                  dot={false}
+                  activeDot={false}
+                  connectNulls
+                  tooltipType='none'
+                  legendType='none'
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1377,12 +1467,14 @@ function RankHistory({
       {last ? (
         <div className='space-y-1 text-sm'>
           <p>
-            {last.position
-              ? $t('keywordDetail.lastCheck', {
-                  0: day(last.at),
-                  1: last.position,
-                })
-              : $t('keywordDetail.lastCheckBeyond', { 0: day(last.at) })}
+            {last.uncertain
+              ? $t('keywordDetail.lastCheckUncertain', { 0: day(last.at) })
+              : last.position
+                ? $t('keywordDetail.lastCheck', {
+                    0: day(last.at),
+                    1: last.position,
+                  })
+                : $t('keywordDetail.lastCheckBeyond', { 0: day(last.at) })}
           </p>
           {last.url ? <PageLink url={last.url} /> : null}
         </div>

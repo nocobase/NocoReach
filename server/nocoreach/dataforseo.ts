@@ -9,13 +9,29 @@ import { hash, VisibilityError } from './research-helpers.js';
 // unreadable reply) may already be billed, so it is recorded as unknown and never retried automatically. Each page
 // registers a kind: specification(v) returns {kind,path,request,estimatedUsd,reservationUsd,...} (or
 // {kind,requests:[{path,body}],...}) and result(raw,spec) the parsed run values (raw is the list of replies for
-// `requests`).
+// `requests`). A kind may also give identity(spec): what makes two runs the same query, for the reuse, uncertain and
+// repeated-request checks, when its spec carries values that change by themselves (Trends' dates, which move daily).
 const key=id=>'NOREACH_DATAFORSEO_'+id;
 const REUSE_MS=30*86400000;
 // A forced refresh (the person asking again on purpose) still gets the same query's run from the last RECENT_MS, so a
 // double click is not billed twice; Lighthouse uses it as its whole reuse time.
 const RECENT_MS=10*60000;
 const error=(message,status=409)=>{throw new VisibilityError(message,status);};
+// The Standard queue (2026-11-11): a kind whose spec sets `queue` (e.g. 'serp/google/organic') posts its task to
+// `<queue>/task_post` and reads it from `<queue>/task_get/advanced/<task id>`, which is free for 30 days. Google throttles
+// opening its result links (google.com/goto) and only the Standard queue waits for all of them (DataForSEO update
+// 2026-11-02, see serp-links.ts); it also costs less than Live ($0.0006 against $0.002 a page of 10 results). The run is
+// billed when the task is posted and stays `queued` until a read finds it done: `run` reads once right away (a simulated
+// DataForSEO answers at once, the real one after minutes) and `collect` reads it again later. A task still not done after
+// QUEUE_WAIT_MS is given up as failed; its cost stays counted.
+const QUEUE_WAIT_MS=2*86400000;
+const TASK_ID=/^[a-zA-Z0-9_-]{1,255}$/;
+// The task a task_post created (20100 Task Created), or null: the reply is then an error the kind's `result` reads, as it
+// reads a live reply.
+function postedTask(raw){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)&&raw.cost>=0?raw.cost:null;
+ return raw?.status_code===20000&&raw.tasks?.length===1&&task?.status_code===20100&&typeof task.id==='string'&&TASK_ID.test(task.id)?{taskId:task.id,cost}:null;}
+// Task codes of a queued task that is not done yet: Task Created, Task Handed, Task in Queue.
+const WAITING=[20100,40601,40602];
 // What a run counts against the budget: its billed cost, or the reservation while the cost is unknown.
 const spent=r=>Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0);
 // The outcome of one live SERP task (Reddit's Google search, YouTube's search and video details), by DataForSEO's
@@ -38,7 +54,7 @@ function liveTask(raw){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost
  const diagnostic={providerCode,taskCode,taskId,reason:valid?'success':reason,retryable:!uncertain&&retryable,billing:cost===null?'unknown':'known'};
  return {valid,empty,page:valid&&!empty?page:null,taskId,cost,status:valid?'completed':uncertain?'unknown':'failed',reason,diagnostic};}
 class DataForSeo{
- constructor(p,kinds){this.p=p;this.p.network?.bind(this,['check', 'run', 'inspectRun'], 'dataforseo');this.kinds=kinds;}
+ constructor(p,kinds){this.p=p;this.p.network?.bind(this,['check', 'run', 'collect', 'inspectRun'], 'dataforseo');this.kinds=kinds;}
  kind(name){const k=this.kinds[name];if(!k)error(systemMessageText('aiSearch.unsupportedQueryType'),400);return k;}
  repo(){return this.p.db.getRepository('nrKeywordRuns');}
  config(id){try{return JSON.parse(this.p.env(key(id))||'null');}catch{return null;}}
@@ -66,7 +82,7 @@ class DataForSeo{
   if(hash(c)!==hash(this.config(id)))error(systemMessageText('dataforseo.settingsChangedVerifyAgain'));
   await this.p.variable(key(id),JSON.stringify({...c,verifiedAt:new Date().toISOString()}),true);return this.status(id);
  }
- queryHash(id,c,spec){const identity=[id,c?hash(c.login+':'+c.password):'',spec],mockKey=this.p.network?.mockCacheKey('dataforseo',String(id));return hash(mockKey?[...identity,mockKey]:identity);}
+ queryHash(id,c,spec){const same=this.kinds[spec?.kind]?.identity,identity=[id,c?hash(c.login+':'+c.password):'',same?same(spec):spec],mockKey=this.p.network?.mockCacheKey('dataforseo',String(id));return hash(mockKey?[...identity,mockKey]:identity);}
  async preview(id,kind,v){const spec=this.kind(kind).specification(v),c=this.config(id);if(spec.kind!==kind)error(systemMessageText('dataforseo.queryTypeNotMatch'),400);const queryHash=this.queryHash(id,c,spec);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)?old.toJSON():null};}
  async run(id,kind,v){
   const c=this.config(id);if(!c?.verifiedAt)error(systemMessageText('aiSearch.saveVerifyDataforseoDataSources'));
@@ -82,6 +98,8 @@ class DataForSeo{
    // An uncertain run of the same query blocks it for the kind's reuse time (no automatic retry that could bill twice);
    // after that the regular schedule asks again, and the user can retry at once on purpose (retryUncertain).
    // Reddit keeps this guard indefinitely, including explicit bypass flags; its collector owns bounded terminal retries.
+   // A queued run of the same query is waited for, never posted again.
+   const queued=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'queued'},sort:'-createdAt',transaction});if(queued)return queued;
    const uncertain=kind!=='reddit'&&v.retryUncertain===true?null:await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']},...(kind==='reddit'?{}:{createdAt:{$gte:new Date(Date.now()-(this.kind(kind).reuseMs??REUSE_MS)).toISOString()}})},transaction});if(uncertain)return uncertain;
    const completed=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'completed'},sort:'-createdAt',transaction});
    // A kind may reuse for a shorter time (rank checks: under a week, so the weekly check always reads anew).
@@ -96,14 +114,35 @@ class DataForSeo{
   });
   // A run this call did not start (the same request again, one still running or uncertain, a result saved within the
   // reuse time) is marked, so a page can say the person is looking at an earlier run, not a new one.
-  if(!owns)return {...row.toJSON(),reused:true};
+  if(!owns){const json=row.toJSON();if(json.status!=='queued')return {...json,reused:true};
+   // The caller's own queued run (the same request key) is read again, not reused; another request's is.
+   const read=await this.read(id,json);return read.status==='queued'||read.requestKey===requestKey?read:{...read,reused:true};}
   let stage='request';
+  if(spec.queue){try{const raw=await this.request(c,`${spec.queue}/task_post`,[spec.request]);stage='parse';const posted=postedTask(raw);stage='save';
+    if(posted){const values={status:'queued',taskId:posted.taskId,costUsd:posted.cost,reservedUsd:posted.cost===null?spec.reservationUsd:0};await this.repo().update({filterByTk:row.id,values});return this.read(id,{...row.toJSON(),...values});}
+    // Not queued: the error as the kind reads it; a reply it takes for a result cannot be one, so it is uncertain.
+    const parsed=this.kind(kind).result(raw,spec),status=parsed.status==='completed'?'unknown':parsed.status;this.p.app.logger.warn('NocoReach DataForSEO task not queued',{runId:String(row.id),path:spec.queue,status,...parsed.result?.diagnostic});
+    await this.repo().update({filterByTk:row.id,values:{...parsed,status,...(status==='unknown'&&parsed.status==='completed'?{result:null,errorCode:systemMessageText('messages.resultUncertainMayChargedNot',{0:''})}:{}),reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
+   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:systemMessageText('messages.resultUncertainMayChargedNot', { 0: stage==='request'&&e.safeCode==='timeout'?'DataForSEO 太久没有回音，':'' }),completedAt:new Date().toISOString()}});}
+   return (await this.repo().findOne({filterByTk:row.id})).toJSON();}
   // A spec with `requests` (AI 搜索's brand lookup) sends them one after another and parses the replies together; any
   // failure after the first request leaves the whole run uncertain, as the earlier ones may be billed.
   try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body],spec.timeoutMs));}else raw=await this.request(c,spec.path,[spec.request],spec.timeoutMs??this.kind(kind).timeoutMs);stage='parse';const parsed=this.kind(kind).result(raw,spec);if(kind==='reddit'&&parsed.status!=='completed')this.p.app.logger.warn('NocoReach Reddit provider diagnostic',{projectId:String(id),runId:String(row.id),path:spec.path,stage,...parsed.result?.diagnostic});stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:systemMessageText('messages.resultUncertainMayChargedNot', { 0: stage==='request'&&e.safeCode==='timeout'?'DataForSEO 太久没有回音，':'' }),completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }
+ // A queued run read again (free): its result once the task is done, else the run still queued. A kind whose queue has
+// no advanced results (Google Ads search volume) names its own task_get path (`taskGet`). A read that does not
+ // complete changes nothing and is tried again later; the post's cost is kept, as task_get replies cost nothing.
+ async collect(id,runId){const row=await this.repo().findOne({filter:{id:String(runId),projectId:id}});if(!row)error(systemMessageText('dataforseo.researchRecordNotFound'),404);return this.read(id,row.toJSON());}
+ async read(id,json){const spec=json.spec||{},c=this.config(id),kind=this.kinds[spec.kind];if(json.status!=='queued'||!spec.queue||!kind||!c)return json;
+  const stale=Date.now()-Date.parse(json.createdAt)>QUEUE_WAIT_MS,giveUp=async()=>{await this.repo().update({filterByTk:json.id,values:{status:'failed',errorCode:systemMessageText('dataforseo.queuedTaskNotFinished'),result:{diagnostic:{taskId:json.taskId,reason:'providerFailure',retryable:false,billing:'known'}},completedAt:new Date().toISOString()}});return (await this.repo().findOne({filterByTk:json.id})).toJSON();};
+  let raw;try{raw=await this.request(c,`${spec.taskGet||`${spec.queue}/task_get/advanced`}/${encodeURIComponent(json.taskId)}`,null,spec.timeoutMs??kind.timeoutMs);}catch{return stale?giveUp():json;}
+  const code=raw?.tasks?.[0]?.status_code;if(raw?.status_code===20000&&WAITING.includes(code))return stale?giveUp():json;
+  if(raw?.status_code!==20000)return stale?giveUp():json;
+  const parsed=kind.result({...raw,cost:json.costUsd},spec),status=parsed.status==='completed'?'completed':'failed';
+  await this.repo().update({filterByTk:json.id,values:{status,errorCode:parsed.errorCode??null,result:parsed.result??null,taskId:json.taskId,completedAt:new Date().toISOString()}});
+  return (await this.repo().findOne({filterByTk:json.id})).toJSON();}
  // Spending for 数据接入: this month and in total, with the runs whose cost is still a reservation.
  async spend(id){const c=this.config(id),month=new Date().toISOString().slice(0,7)+'-01',rows=await this.repo().find({filter:{projectId:id},fields:['costUsd','reservedUsd','status','createdAt'],limit:20000});
   const sum=list=>Number(list.reduce((n,r)=>n+spent(r),0).toFixed(4));const thisMonth=rows.filter(r=>new Date(r.get('createdAt')).toISOString()>=month);
@@ -121,4 +160,4 @@ class DataForSeo{
   return {runId:String(row.id),localStatus:row.get('status'),matches,complete:(task.result||[]).length<1000};
  }
 }
-export { DataForSeo, REUSE_MS, RECENT_MS, key, liveTask };
+export { DataForSeo, REUSE_MS, RECENT_MS, QUEUE_WAIT_MS, key, liveTask, postedTask };

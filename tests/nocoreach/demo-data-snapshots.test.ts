@@ -11,6 +11,7 @@ const SHARED_SNAPSHOTS = new Set([
   'nr-task-materials',
   'nr-migrations',
   'mock-demo',
+  'editing-suggestions', // Editing and suggestions' own cloud model (cloud-models.ts), application-wide.
 ]);
 // A conservative scan also encounters these non-snapshot prefixes. Keep them explicit so a new storage namespace
 // cannot silently be excluded. Signals and command IDs live inside their owning project's snapshot.
@@ -18,7 +19,9 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'demo', // Simulated runtime run ID; the persisted row remains nr-task-run.
   'page', // An opportunity's place (`page:<host/path>`), kept on a task's `evidence.part` and its proposal.
   'task', // Proposal group of a task handed off without an opportunity (`task:<id>`), kept inside the strategy snapshot.
-  'cover', // An article cover's error detail and upload idempotency key (`cover:<language or *>`), never stored.
+  'run', // Owner of an Agent's uploaded card images (`run:<runId>`), a column of nrTaskMedia.
+  'cards', // Owner of card images a person draws with Edit directly (`cards:<userId>`), a column of nrTaskMedia.
+  'workshop', // Task key of a Content workshop start (`workshop:<user>:<request>:<item>`), kept on nrTasks.
   'ai-answer',
   'ai-cited',
   'ai-dropped',
@@ -54,6 +57,18 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'trends-kw-move',
   'trends-kw-rising',
   'x-hot',
+  // Step 2b signals (topic-signals.ts, source-signals.ts) and a forum group of questions (`forum:<topic id>`).
+  'asked-often',
+  'new-topic',
+  'other-market',
+  'people-also-ask',
+  'site-search',
+  'topic-hot',
+  'topic-rise',
+  'youtube-hot',
+  // A growth point a Skill of the daily analysis found (skill-analysis.ts, `skill:<skill id>:<kind>:<hash>`).
+  'skill',
+  'forum',
   'connect',
   'content',
   'created',
@@ -119,7 +134,10 @@ it('classifies every literal snapshot prefix and the task/report namespace facto
         : ts.isTemplateExpression(node)
           ? node.head.text
           : '';
-      const prefix = /^([a-z][a-z0-9-]*):/.exec(text)?.[1];
+      // A sort value ("traffic:desc", Domain overview's keyword sorts) is not a storage namespace.
+      const prefix = /^[a-z][a-z0-9-]*:(?:asc|desc)$/.test(text)
+        ? undefined
+        : /^([a-z][a-z0-9-]*):/.exec(text)?.[1];
       if (prefix) check(prefix, file);
       // TaskService.key(kind, project, task, id) constructs nr-task-${kind}:... dynamically.
       if (

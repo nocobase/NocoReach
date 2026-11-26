@@ -2,6 +2,7 @@
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as import_analysis from './research-helpers.js';
 import * as import_provider from './research-helpers.js';
+import { googleRedirect, organicLink } from './serp-links.js';
 const RESEARCH_VERSION = "research-2026-09-08";
 const TABLE = "growthReachResearchRuns";
 const locks = /* @__PURE__ */ new WeakMap();
@@ -374,6 +375,10 @@ function parseResearch(raw, spec) {
     const serp = (0, import_analysis.object)((0, import_analysis.object)(entry.ranked_serp_element).serp_item);
     const organic = (0, import_analysis.object)((0, import_analysis.object)(entry.metrics).organic);
     const intersection = (0, import_analysis.object)(entry.first_domain_serp_element);
+    // A Google result whose link Google hid (serp-links.ts): the redirect, which still opens the page, and the site its
+    // breadcrumb shows instead of google.com.
+    const shown = spec.view === 'serp' ? entry : [serp, intersection, entry].find((e) => googleRedirect(e.url));
+    const hidden = shown && googleRedirect(shown.url) ? organicLink(shown) : null;
     return {
       id: String(index),
       keyword: (0, import_analysis.str)(keyword.keyword),
@@ -381,11 +386,12 @@ function parseResearch(raw, spec) {
       date: (0, import_analysis.str)(entry.date),
       newBacklinks: number(entry.new_backlinks),
       lostBacklinks: number(entry.lost_backlinks),
-      url: (0, import_analysis.str)(
+      url: hidden ? hidden.url : (0, import_analysis.str)(
         serp.url || (0, import_analysis.object)(entry.first_domain_serp_element).url || entry.url || entry.page_address || entry.url_from
       ),
       targetUrl: (0, import_analysis.str)(entry.url_to),
-      domain: (0, import_analysis.str)(link.domain || link.domain_from || link.target),
+      domain: hidden && spec.view === 'serp' ? hidden.domain : (0, import_analysis.str)(link.domain || link.domain_from || link.target),
+      ...hidden && !hidden.resolved ? { resolved: false } : {},
       volume: number(info.search_volume),
       cpc: number(info.cpc),
       competition: number(info.competition),

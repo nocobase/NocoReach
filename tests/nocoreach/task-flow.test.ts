@@ -140,13 +140,18 @@ for (const unavailable of ['missing', 'database-error']) {
 }
 
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
- assert.equal(SYSTEM_PLAYBOOKS.length,13);
+ assert.equal(SYSTEM_PLAYBOOKS.length,19);
  // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.
  {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### Reply/);assert.match(r.steps[0].instruction,/不发帖/);
   assert.equal(defaultPlaybookId({evidence:{insight:{signalIds:['community-unanswered']},context:{signals:{items:[{key:'community-unanswered',action:'reply'}]}}}}),'community-reply');}
- for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical'].includes(p.category));
+ for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical','repurpose'].includes(p.category));
   assert.equal(st.some(s=>s.kind==='release'),p.kind==='build',`${p.id}: only repository changes are released`);}
  assert.deepEqual(SYSTEM_PLAYBOOKS.filter(p=>p.category==='research').map(p=>p.id),['change-research','competitor-compare','keyword-research','community-summary']);
+ // Content workshop (2026-11-13): one playbook per form, the Agent adapts and you approve, which completes the task;
+ // nothing follows and nothing is saved to the knowledge base. Carousel (2026-11-24) adds Instagram's and LinkedIn's places.
+ for(const [id,form,skill] of [['xhs-cards','xhs','xhs-cards'],['instagram-carousel','instagram','instagram-carousel'],['linkedin-carousel','linkedin-carousel','linkedin-carousel'],['x-posts','x','x-posts'],['linkedin-post','linkedin','linkedin-post'],['community-post','community','community-post']]){const p=SYSTEM_PLAYBOOKS.find(x=>x.id===id);
+  assert.equal(p.category,'repurpose');assert.equal(p.form,form);assert.equal(p.kind,'plan');assert.deepEqual(p.next,[]);assert.deepEqual(stagesFor(p).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(p.steps[0].skills,[skill]);
+  for(const marker of form==='xhs'?['## Card 1','## Title','## Body','Layout: end','Sections:','task file','cards.images']:form==='instagram'?['## Card 1','## Body','## Hashtags','Layout: end','Sections:','1080×1350','task file','cards.images']:form==='linkedin-carousel'?['## Card 1','## Title','## Body','Layout: end','Sections:','1080×1350','PDF','cards.images']:form==='x'?['## Post 1','## Reply','Sections:']:form==='linkedin'?['## Post','Sections:']:['## Title','## Body','## Rules','Sections:'])assert.ok(p.steps[0].instruction.includes(marker),`${id} names ${marker}`);}
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='competitor-compare')).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]],'research is an analysis by the Agent');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')).map(s=>s.key),['build','review','release','observe'],'page work goes straight to a change you look at');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='tech-fix')).map(s=>s.key),['plan','approve-plan','build','review','release','observe'],'technical fixes show a plan first');
@@ -155,9 +160,12 @@ test('built-in playbooks: every step is the Agent or you, grouped by work; custo
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'robot'}]},ids),/类型无效/);
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'analyze',instruction:''}]},ids),/完整内容/);
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a],next:['missing']},ids),/不存在/);
- assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))}]},ids),/最多 10 项/);
+ // Review steps have no items to tick (2026-11-15): a checklist an older client sends is dropped, however long.
+ const older=validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))}]},ids);
+ assert.deepEqual(older.steps[1],{key:'step-2',name:'审核',kind:'review'});
+ for(const p of SYSTEM_PLAYBOOKS){assert.ok(p.steps.every(s=>!('checklist' in s)),p.id);assert.ok(stagesFor(p).every(s=>!('checklist' in s)),p.id);}
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'review'},a]},ids),/第一步要由 Agent/);assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review'},{kind:'review'}]},ids),/要放在 Agent 的步骤之后/);
- const mixed=validatePlaybook({name:'竞品对比后补内容',category:'optimize',steps:[a,{kind:'review',checklist:[{label:'确认要补哪些'}]},c],next:['new-doc']},ids);
+ const mixed=validatePlaybook({name:'竞品对比后补内容',category:'optimize',steps:[a,{kind:'review'},c],next:['new-doc']},ids);
  assert.deepEqual(mixed.steps.map(s=>[s.kind,s.name]),[['analyze','分析'],['review','审核'],['change','修改'],['review','审核']],'a review is added after the last change');
  assert.equal(mixed.kind,'build');assert.deepEqual(mixed.next,[],'a playbook that changes the repository is not handed on');
  assert.deepEqual(stagesFor(mixed).map(s=>s.kind),['agent','review','agent','review','release','observe']);
@@ -196,9 +204,8 @@ test('document task: the Agent analyzes without changing the repository, a chang
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});d=await f.view();assert.equal((await f.stage()).key,'accept');assert.equal(d.task.status,'待确认');
  d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});
  c=await claim(f);assert.deepEqual(c.run.input.feedback,['add examples']);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 2'});d=await f.view();assert.equal(output(d).content,'outline 2');
- await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'tech-fix'}),e=>e.status===409);
- await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/引用的数据/.test(e.message));
- d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'tech-fix'}),e=>e.status===409);
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'});
  assert.equal(d.work.stage,'done');assert.equal(d.task.status,'已完成');assert.ok(d.work.nextTaskId);assert.deepEqual(d.related.map(r=>r.relation),['next']);assert.equal(invoked,0,'no online AI call');
  const child=f.state.nrTasks.find(t=>String(t.id)===d.work.nextTaskId);
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
@@ -217,7 +224,7 @@ test('document task: the Agent analyzes without changing the repository, a chang
 const outlineAccepted=async(f,agentId)=>{
  if(agentId)await f.command('setAgent',{agentId});
  await f.command('startTask',{});const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});
- const d=await f.view();return f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ const d=await f.view();return f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'});
 };
 const outlineEvidence={insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}};
 test('Accept and start: with several Agents and no project default the new task waits for one to be chosen; the approval stands',async()=>{
@@ -239,7 +246,7 @@ test('Accept and start: a change with no repository connected waits; an unexpect
  const g=fixture(undefined,outlineEvidence);await connectAgent(g);const warned=[];g.s.p.app={logger:{warn:(m,v)=>warned.push([m,v])}};
  await g.command('startTask',{});const c=await claim(g);await finish(g,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});d=await g.view();
  g.s.p.agents.runs.enqueue=async()=>{throw Error('agents unavailable');};
- d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'});
  assert.equal(d.work.stage,'done');assert.ok(d.work.nextTaskId);
  ch=await g.view(d.work.nextTaskId);assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined,'the failed start was rolled back');
  assert.equal(warned.length,1);assert.equal(warned[0][1].taskId,d.work.nextTaskId);assert.match(warned[0][1].message,/agents unavailable/);
@@ -249,7 +256,7 @@ test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an ac
  const asked=[],saved=[];f.s.p.taskData={forRun:async(project,v)=>{asked.push([project,v.url??null,v.taskId]);return '搜索（近 28 天）：点击 40';}};f.s.p.knowledge={forAgent:async()=>[],saveDelivery:async(project,v)=>{saved.push([project,v.taskId,v.title,v.text]);}};
  await f.command('startTask',{});let c=await claim(f);assert.equal(c.run.input.data,'搜索（近 28 天）：点击 40');assert.deepEqual(asked,[['1',null,'1']]);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});let d=await f.view();assert.deepEqual(saved,[],'not before it is accepted');
- d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});assert.equal(d.work.stage,'done');
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id});assert.equal(d.work.stage,'done');
  assert.deepEqual(saved,[['1','1','Synthetic task','outline 1']]);
 });
 test('without a repository: a document task still goes to the Agent; a playbook that changes the repository waits for one',async()=>{
@@ -265,10 +272,10 @@ test('build task: Agent plan first, manual records until the Agent is connected,
  let d=await f.command('startTask',{playbookId:'tech-fix'});
  assert.equal((await f.stage()).key,'plan');assert.equal(d.runs.length,0,'a local Agent stage never starts by itself');assert.equal(d.task.status,'进行中');
  d=await f.command('recordManual',{stageKey:'plan',content:'Change docs/en/a.md intro'});assert.equal((await f.stage()).key,'approve-plan');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal((await f.stage()).key,'build');
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id});assert.equal((await f.stage()).key,'build');
  d=await f.command('recordManual',{stageKey:'build',content:'PR https://github.com/o/r/pull/1'});
- await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[],next:'new-doc'}),e=>e.status===409);
- d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[],release:{note:'Fixed the broken links'}});assert.equal((await f.stage()).kind,'release');
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,next:'new-doc'}),e=>e.status===409);
+ d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,release:{note:'Fixed the broken links'}});assert.equal((await f.stage()).kind,'release');
  assert.equal(d.work.release.state,'not_seen');assert.equal(d.work.release.reason,'manual');assert.equal(d.runs.filter(r=>r.status==='queued').length,0,'nothing to merge');
  await assert.rejects(f.command('waitLonger',{stageKey:'release'}),e=>e.status===409);
  d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');assert.ok(d.work.observeFrom);assert.equal(d.work.receipt.note,'Fixed the broken links');
@@ -286,16 +293,39 @@ test('messages reach the next run; the playbook is fixed once started; removed c
  await assert.rejects(f.command('startFlow'),e=>e.status===400);
  await assert.rejects(f.command('startSimple',{scope:'x',kind:'content'}),e=>e.status===409);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
- d=await f.view();d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id});
  await assert.rejects(f.command('comment',{comment:'late'}),e=>e.status===409);
+});
+
+// Review steps listed items to tick until 2026-11-15 (T-79 waited at Accept with "Cited data and facts are accurate"
+// required): a task started before is accepted without ticking anything, and the review no longer records them.
+test('a review whose stage snapshot still requires checklist items is accepted without them',async()=>{
+ const f=fixture();await connectAgent(f);
+ await f.command('startTask',{playbookId:'keyword-research'});
+ const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
+ const stored=f.state.nrTasks[0].evidence.work;assert.equal(stored.flow.stages[stored.stageIndex].key,'accept');
+ stored.flow.stages[stored.stageIndex].checklist=[{key:'facts',label:'引用的数据与事实准确',required:true}];
+ let d=await f.view();assert.equal(d.work.flow.stages[1].checklist.length,1,'the old snapshot is left as stored');
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'blog-post'});
+ assert.equal(d.work.stage,'done');assert.ok(d.work.nextTaskId);
+ const review=d.reviews.find(r=>r.kind==='stage'&&r.decision==='approve');assert.ok(review);assert.equal('checklist' in review,false);
+ // An older client still sending what it ticked is accepted the same way.
+ const g=fixture();await connectAgent(g);await g.command('startTask',{playbookId:'keyword-research'});
+ const c2=await claim(g);await finish(g,{taskId:'1',runId:c2.run.id,ok:true,content:'report'});
+ g.state.nrTasks[0].evidence.work.flow.stages[1].checklist=[{key:'facts',label:'引用的数据与事实准确',required:true}];
+ d=await g.view();d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
+ assert.equal(d.work.stage,'done');assert.equal('checklist' in d.reviews.find(r=>r.decision==='approve'),false);
+ // A review recorded before keeps the items ticked then, and still reads.
+ g.state.nrSnapshots.push({id:9999,key:'nr-task-review:1:1:old',payload:{kind:'stage',stageKey:'accept',stageIndex:1,decision:'approve',checklist:['facts'],reviewerId:'1',at:'2026-11-01T00:00:00.000Z'}});
+ assert.deepEqual((await g.view()).reviews.find(r=>r.at==='2026-11-01T00:00:00.000Z').checklist,['facts']);
 });
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
  const f=fixture();await connectAgent(f);
- let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,13);
+ let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,19);
  // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
- assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,13);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
+ assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,19);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
  await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
  r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建一个文档页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
@@ -313,11 +343,31 @@ test('playbooks: built-in ones are edited in place and restored; copies and new 
  f.state.nrSnapshots.find(r=>r.key==='nr-playbooks:1').payload.playbooks.push({id:'custom-old',name:'旧做法',kind:'build',instructions:'edit',planFirst:false,checklist:[],next:[],version:1});
  assert.deepEqual((await f.s.playbooks.get('1','custom-old')).steps.map(s=>s.kind),['change','review']);
 });
+
+// Review steps lost their items to tick on 2026-11-15: custom playbooks and edited built-ins saved with them read without
+// them, a save from an older client that still sends them drops them, and any save cleans them out of storage.
+test('playbooks saved with review checklists load and save without them',async()=>{
+ const f=fixture();await connectAgent(f);
+ const doc=()=>f.state.nrSnapshots.find(r=>r.key==='nr-playbooks:1');
+ let r=await f.s.playbooks.save('1',{revision:0,name:'检查内容',category:'research',steps:[{kind:'analyze',instruction:'check'},{kind:'review',name:'审核',checklist:[{label:'数据准确'}]}]});
+ const id=r.playbook.id;assert.equal('checklist' in r.playbook.steps[1],false);assert.equal('checklist' in doc().payload.playbooks[0].steps[1],false);
+ const facts={key:'facts',label:'引用的数据与事实准确',required:true};
+ doc().payload.playbooks[0].steps[1].checklist=[facts];
+ doc().payload.playbooks.push({...structuredClone(SYSTEM_PLAYBOOKS.find(p=>p.id==='keyword-research')),steps:SYSTEM_PLAYBOOKS.find(p=>p.id==='keyword-research').steps.map(s=>s.kind==='review'?{...s,checklist:[facts]}:s),edited:true,version:4});
+ const list=await f.s.playbooks.list('1');
+ for(const p of [list.playbooks.find(p=>p.id===id),list.playbooks.find(p=>p.id==='keyword-research')])assert.ok(p.steps.every(s=>!('checklist' in s)),p.id);
+ assert.equal((await f.s.playbooks.get('1','keyword-research')).edited,true);
+ const d=await f.command('startTask',{playbookId:id});assert.ok(d.work.flow.stages.every(s=>!('checklist' in s)),'a task started from it has none either');
+ r=await f.s.playbooks.save('1',{playbookId:id,revision:list.revision,name:'检查内容',category:'research',steps:[{kind:'analyze',instruction:'check'},{kind:'review',name:'审核',checklist:[facts]}]});
+ assert.equal(r.playbook.version,2);
+ for(const p of doc().payload.playbooks)assert.ok(p.steps.every(s=>!('checklist' in s)),'stored copies, the edited built-in too, lose them on any save');
+});
 test('AI drafts a playbook from one sentence; the draft is checked and not saved; an unusable answer says so',async()=>{
  const {draftPlaybook}=__playbook;const list={playbooks:SYSTEM_PLAYBOOKS};let asked;
  const answer='```json\n'+JSON.stringify({name:'同步更新日志',category:'create',description:'新版本发布后同步中英文更新日志',steps:[{kind:'analyze',name:'整理',instruction:'读 Release 说明，按新增、改进、修复整理'},{kind:'review',checklist:[{label:'版本号正确'}]},{kind:'change',instruction:'写入中英文更新日志页面'}]})+'\n```';
  const r=await draftPlaybook({request:'每个新版本发布后同步更新日志'},list,{name:'Synthetic'},async(system,user)=>{asked={system,user};return answer;});
  assert.equal(r.draft.name,'同步更新日志');assert.deepEqual(r.draft.steps.map(s=>s.kind),['analyze','review','change','review']);assert.equal(r.draft.steps[3].name,'审核');
+ assert.ok(r.draft.steps.every(s=>!('checklist' in s)),'a checklist in the answer is dropped');assert.doesNotMatch(asked.system,/checklist/,'nor asked for');
  assert.match(asked.system,/Agent/);assert.ok(JSON.parse(asked.user).existing.includes('优化现有页面'));
  await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'抱歉'),e=>e.status===422);
  await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'{"name":"x","category":"nope","steps":[]}'),e=>e.status===422&&/手动填写/.test(e.message));
@@ -347,7 +397,7 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  assert.deepEqual(await claim(f),{run:null});
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Change content/articles/a/index.md intro'});
  d=await f.view();assert.equal((await f.stage()).key,'approve-plan');assert.equal(output(d).content,'Change content/articles/a/index.md intro');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal(d.runs.filter(r=>r.status==='queued').length,1);
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id});assert.equal(d.runs.filter(r=>r.status==='queued').length,1);
  c=await claim(f);assert.equal(c.run.mode,'build');assert.equal(c.run.input.previousStages[0].output,'Change content/articles/a/index.md intro');
  const pr=(url,extra={})=>({taskId:'1',runId:c.run.id,ok:true,content:'Opened PR',pr:{url,number:3,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:'content/articles/a/index.md',additions:12,deletions:2},{path:'src/pages/x.astro',additions:1,deletions:0}],checks:{ok:true,summary:'内容检查通过'},...extra}});
  await assert.rejects(finish(f,pr('https://github.com/nocobase/website/pull/3')),e=>e.status===400,'never accept a PR on the upstream repository');
@@ -356,7 +406,7 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  await assert.rejects(finish(f,pr('https://github.com/estheryo/website/pull/3',{headSha:undefined})),e=>e.status===400);
  await finish(f,pr('https://github.com/estheryo/website/pull/3'));
  d=await f.view();assert.equal((await f.stage()).key,'review');assert.equal(output(d).pr.number,3);assert.deepEqual(output(d).pr.outOfScope,['src/pages/x.astro']);
- await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/超出允许范围/.test(e.message));
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id}),e=>e.status===409&&/超出允许范围/.test(e.message));
  d=await f.command('requestStageChanges',{stageKey:'review',artifactId:output(d).id,comment:'keep the original title'});
  c=await claim(f);assert.equal(c.run.branch,'nocoreach/task-1');assert.deepEqual(c.run.input.feedback,['keep the original title']);assert.equal(c.run.input.rejectedDraft,'Opened PR');
 });
@@ -366,7 +416,7 @@ test('stopping, manual takeover and interrupted Agent runs',async()=>{
  await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'tech-fix'});const queued=d.runs[0];
  d=await f.command('recordManual',{stageKey:'plan',content:'I will do it myself'});assert.equal(d.runs.find(r=>r.id===queued.id).error,'replaced_by_manual');assert.equal((await f.stage()).key,'approve-plan');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});const build=d.runs.find(r=>r.status==='queued');
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id});const build=d.runs.find(r=>r.status==='queued');
  const c=await claim(f);assert.equal(c.run.id,build.id);
  await assert.rejects(f.command('recordManual',{stageKey:'build',content:'x'}),e=>e.status===409);
  await f.command('cancelRun',{runId:build.id});await finish(f,{taskId:'1',runId:build.id,ok:false,error:'cancelled'});d=await f.view();assert.equal(d.runs.find(r=>r.id===build.id).error,'cancelled');assert.equal((await f.stage()).key,'build');
@@ -415,7 +465,7 @@ test('a restart never starts again a run you stopped, nor publishing',async()=>{
  await f.s.tick();d=await f.view();assert.equal(d.runs.filter(r=>r.status==='queued').length,0,'the run you asked to stop stays stopped');
  await f.command('retryStage',{stageKey:'build'});const c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Wrote it',pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2,branch:'nocoreach/task-1',headSha:'abc1234',files:[],verifyText:'新文章',pages:['https://www.example.com/blog/new']}});
- d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id});
  const merge=d.runs.find(r=>r.status==='queued');assert.equal(merge.mode,'merge');await claim(f);
  f.s.startedAt=minutes(30);lose(f,merge,'leaseExpired',20,31);
  await f.s.tick();d=await f.view();
@@ -551,7 +601,7 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
  d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
  // preview links reported by the Agent program for PRs waiting for review
- d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
+ d=await f.command('approveStage',{stageKey:'review',artifactId:out.id});
  assert.equal((await f.stage()).kind,'release');assert.equal(d.work.release.state,'merging');assert.deepEqual(d.work.release.pages,['https://www.example.com/cn/commercial']);assert.equal(d.work.release.note,'在商业服务页新增体验入口');
  c=await claim(f);assert.equal(c.run.mode,'merge');assert.deepEqual(c.run.input.pr,{number:1,url:'https://github.com/estheryo/website-test/pull/1',headSha:'abc1234'});
  await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'head_changed',message:'PR 在你看过之后又有新的提交'});
@@ -582,7 +632,7 @@ test('publish: not seen within a day asks you; you can wait longer, confirm it i
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'blog-post'});let c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Wrote it',pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2,branch:'nocoreach/task-1',headSha:'abc1234',files:[],verifyText:'新文章',pages:['https://www.example.com/blog/new']}});
- d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id});
  c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'merge_failed',message:'GitHub 没有完成合并：checks pending'});
  d=await f.command('markMerged',{stageKey:'release'});assert.equal(d.work.release.state,'verifying');assert.equal(d.task.status,'进行中');
  const w=f.state.nrTasks[0].evidence.work.release;w.deadline=new Date(Date.now()-1).toISOString();w.nextCheckAt=w.deadline;
@@ -624,7 +674,7 @@ test('effect observation runs for finished tasks once the data covers the day, a
  f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
  let d=await f.command('linkPage',{url:'https://www.example.com/docs/install'});
  d=await f.command('startTask',{playbookId:'optimize-page'});d=await f.command('recordManual',{stageKey:'build',content:'Rewrote the intro'});
- d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
+ d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
  f.state.nrTasks[0].evidence.work.observeFrom='2026-09-10T08:00:00Z';
  f.state.nrTasks.push({id:2,projectId:'1',title:'Another change',brief:'',status:'已完成',evidence:{work:{...structuredClone(f.state.nrTasks[0].evidence.work),observeFrom:'2026-09-14T08:00:00Z',observation:{results:[{day:7},{day:28}]}}}});
  let id=1;const add=(source,grain,resource,date,payload)=>f.state.nrSyncPartitions.push({id:id++,projectId:'1',source,grain,resource,date,payload});
@@ -689,7 +739,7 @@ test('cancel and archive: a cancelled task stops, its PR is closed by the Agent,
  await assert.rejects(f.command('archiveTask'),e=>e.status===409&&/先停止/.test(e.message));
  d=await f.command('cancelTask',{reason:'不做了'});assert.ok(d.work.cancelledAt);assert.equal(d.task.status,'已取消');assert.equal(d.work.prClose.state,'closing');
  const close=d.runs.find(r=>r.status==='queued');assert.equal(close.mode,'close');
- await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/已取消/.test(e.message));
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id}),e=>e.status===409&&/已取消/.test(e.message));
  c=await claim(f);assert.equal(c.run.mode,'close');assert.deepEqual(c.run.input.pr,{number:4,url:'https://github.com/estheryo/website-test/pull/4'});
  await finish(f,{taskId:'1',runId:c.run.id,ok:true});d=await f.view();assert.equal(d.work.prClose.state,'closed');
  d=await f.command('archiveTask');assert.ok(d.work.archivedAt);
@@ -747,6 +797,15 @@ test('Skills: a step names the Skills it uses; they and the ones turned on come 
  await f.command('startTask',{playbookId:'optimize-page'});const c=await claim(f);
  assert.deepEqual(c.run.input.stage.skills,['seo-title-description']);assert.deepEqual(asked,[['1',['seo-title-description']]]);assert.equal(c.run.input.skills[0].body,'标题 30–60 字符');
  const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(JSON.stringify(stored).includes('标题 30–60 字符'),'the authorized input is reproducible');
+});
+
+// The Skill of the daily analysis that found the opportunity goes to the agent with the step's own (2026-11-17).
+test('a task from an opportunity a Skill found hands that Skill to the agent with the step\'s',async()=>{
+ const f=fixture(undefined,{reason:'original',insight:{id:'i',signalIds:['skill:content-strategy:demand-gap:abc'],skill:{id:'content-strategy',name:'content-strategy'}}});const me=await connectAgent(f);const asked=[];
+ f.s.p.skills={forAgent:async(project,required)=>{asked.push([project,required]);return [];}};
+ await f.s.playbooks.save('1',{playbookId:'optimize-page',revision:0,name:'优化现有页面',category:'optimize',steps:[{kind:'change',instruction:'优化',skills:['seo-title-description']}]});
+ await f.command('startTask',{playbookId:'optimize-page'});await claim(f);
+ assert.deepEqual(asked,[['1',['seo-title-description','content-strategy']]]);void me;
 });
 
 test('discovered Runner agents deliver drafts through official runs without a repository', async () => {
@@ -826,7 +885,7 @@ test('demo runs the configured Agent and completes review without merging, publi
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
  let d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
 
- d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
+ d=await f.command('approveStage',{stageKey:'review',artifactId:out.id});
  assert.equal(d.work.stage,'done');
  assert.equal(d.work.release.state,'simulated');
  assert.equal(d.work.release.pr.number,1);
@@ -1057,7 +1116,7 @@ test('a research task hands on to its playbook\'s current next steps, or to the 
   };
   const f = await run('keyword-research', ['optimize-page', 'new-doc']);
   let d = await f.view();
-  d = await f.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' });
+  d = await f.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, next: 'blog-post' });
   assert.equal(d.work.stage, 'done');
   assert.equal(f.state.nrTasks.find(t => String(t.id) === d.work.nextTaskId).evidence.work.playbookId, 'blog-post');
   // A copy removed after the start: its own list at the start decides.
@@ -1070,8 +1129,8 @@ test('a research task hands on to its playbook\'s current next steps, or to the 
   await finish(g, { taskId: '1', runId: c.run.id, ok: true, content: 'keyword map' });
   await g.s.playbooks.remove('1', { playbookId: copy.id, revision: 1 });
   d = await g.view();
-  await assert.rejects(g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' }), e => e.status === 409);
-  d = await g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'new-doc' });
+  await assert.rejects(g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, next: 'blog-post' }), e => e.status === 409);
+  d = await g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, next: 'new-doc' });
   assert.ok(d.work.nextTaskId);
 });
 
@@ -1224,4 +1283,134 @@ test('repositories: a check asks GitHub for the repository and branch and says w
  doc=await f.s.agents.checkRepo('1',{id:doc.repos[1].id},'1');
  assert.deepEqual([doc.repos[1].check.repo,doc.repos[1].check.branch,doc.repos[1].check.detail],['unknown','unknown','GitHub is unreachable']);
  await assert.rejects(f.s.agents.checkRepo('1',{id:'gone'},'1'),e=>e.status===409);
+});
+
+// Content workshop PR 2 (2026-11-16): a Xiaohongshu cards run gets the source's numbered sections, the brand kit's
+// style and the template drawn in it; the Agent uploads each card with `task file` (manual-tasks.ts agentImage, faked
+// here), lists the images in its result, and NocoReach keeps them with the result and checks the set: sections used,
+// cover heading, number of cards, colors read from the images, overflow as the Agent reported it, length of each card.
+function fakeCardImages(height=1440){
+ const files=new Map();
+ return {files,
+  agentImage:async(run,file)=>{const id=randomUUID(),n=files.size+1;files.set(id,{run:run.id,taskId:null,name:file.name,colors:n===1?['#1e40af','#f8fafc']:['#f8fafc','#0f172a','#1e40af']});return {id,filename:file.name,size:file.size,width:1080,height:/@3x4\./.test(file.name)?1440:height,colors:files.get(id).colors};},
+  runImages:async(run,ids)=>ids.every(id=>files.get(id)?.run===run.id&&[null,run.taskId].includes(files.get(id).taskId)),
+  linkImages:async(_conn,actor,_project,taskId,ids)=>ids.map(id=>{const file=files.get(id);if(!file||`run:${file.run}`!==actor||(file.taskId&&file.taskId!==taskId))throw Object.assign(Error('unavailable'),{reason:'TASK_IMAGE_UNAVAILABLE'});file.taskId=taskId;return {id,name:file.name,ref:`/uploads/task-media/${id}.png`};}),
+  // A person's card images, drawn by Edit directly in their browser and uploaded as theirs (manual-tasks.ts cardImage).
+  personImage:(actor,name,height=1440)=>{const id=randomUUID();files.set(id,{owner:`cards:${actor}`,taskId:null,name,height,colors:['#f8fafc','#0f172a']});return id;},
+  cardImages:async(_conn,actor,_project,taskId,ids)=>ids.map(id=>{const file=files.get(id);if(!file||file.owner!==`cards:${actor}`||(file.taskId&&file.taskId!==taskId))throw Object.assign(Error('unavailable'),{status:409,reason:'TASK_IMAGE_UNAVAILABLE'});file.taskId=taskId;return {id,name:file.name,ref:`/uploads/task-media/${id}.png`,colors:file.colors,height:file.height};}),
+  forAgent:async()=>[]};
+}
+const xhsResult=(cards=7)=>['## Title','Tickets in an afternoon','## Body','Sections: 1–4','We moved support to two tables. #support',
+ ...Array.from({length:cards},(_,i)=>i===0?['## Card 1','Sections: 1–4','# Tickets in a day','From one inbox to two tables']:i===cards-1?[`## Card ${cards}`,'Layout: end','# Follow Acme','acme.example']:[`## Card ${i+1}`,`Sections: ${Math.min(i,4)}`,`# Step ${i}`,'One owner for every request.']).flat()].join('\n');
+test('Xiaohongshu cards: sections, style and template in the run; images uploaded with task file are kept with the result and checked; Edit directly saves the text with images drawn again',async()=>{
+ const repurpose={form:'xhs',source:{kind:'article',url:'https://example.com/blog/tickets',title:'Tickets in an afternoon'}},createdBy={id:'1',name:'Tester'};
+ const f=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose}});await connectAgent(f);
+ f.state.nrSnapshots.push({id:9001,key:f.s.key('source','1','1'),payload:{body:'## Why\nOne inbox.\n\n## How\nTwo tables.\n\n## What broke\nOwners.\n\n## Again\nThe form.',locale:'en-US',readAt:'2026-11-16T00:00:00Z'}});
+ f.s.p.workshop={brand:async()=>({revision:1,community:null,cards:{template:'checklist',color:'#1e40af',ending:{heading:'Follow Acme',text:'acme.example'}}})};
+ const media=fakeCardImages();f.s.p.taskAttachments=media;
+ await f.command('startTask',{playbookId:'xhs-cards'});
+ const c=await claim(f),input=c.run.input;
+ assert.equal(input.resultKind,'xhsCards');
+ assert.deepEqual(input.repurpose.sections,[{no:1,heading:'Why'},{no:2,heading:'How'},{no:3,heading:'What broke'},{no:4,heading:'Again'}]);
+ assert.deepEqual([input.repurpose.style.template,input.repurpose.style.color,input.repurpose.style.ending,input.repurpose.style.logo],['checklist','#1e40af',{heading:'Follow Acme',text:'acme.example'},false]);
+ assert.match(input.cardTemplate,/^<!doctype html>/);assert.match(input.cardTemplate,/"template":"checklist","color":"#1e40af"/);
+ const identity={kind:'run',userId:'1',displayName:'Team Agent',agent:f.s.p.agents.agent,run:{run:{id:c.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${c.run.id}`}}};
+ const ids=[];for(let i=1;i<=7;i++)ids.push((await f.s.business.file(identity,new File([Buffer.from('png')],`card-${i}.png`,{type:'image/png'}))).id);
+ // The result has to name one uploaded image per card, its own run's.
+ const submit=v=>f.s.business.submit(identity,JSON.stringify({ok:true,report:{kind:'xhsCards',sources:[],asOf:'2026-11-16',uncertainties:[]},...v}));
+ await assert.rejects(submit({content:xhsResult(),cards:{images:ids.slice(1)}}),e=>e.status===422&&/\b7\b.*\b6\b/.test(e.message));
+ await assert.rejects(submit({content:xhsResult(),cards:{images:[...ids.slice(1),randomUUID()]}}),e=>e.status===422);
+ await assert.rejects(submit({content:'## Title\nOnly a title',cards:{images:ids}}),e=>e.status===422);
+ await assert.rejects(submit({content:xhsResult(),cards:{images:ids,overflow:[9]}}),e=>e.status===422);
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:xhsResult(),cards:{images:ids,overflow:[]}});
+ let d=await f.view();const out=output(d);
+ assert.deepEqual(out.cards.images.map(x=>x.id),ids);assert.equal(out.cards.sections,4);assert.deepEqual(out.cards.colors,['#1e40af','#f8fafc','#0f172a']);assert.deepEqual(out.cards.overflow,[]);
+ assert.deepEqual(d.work.images,ids);assert.ok([...media.files.values()].every(x=>x.taskId==='1'),'linked to the task');
+ // The set is in English, so its cards are counted in words (2026-11-24).
+ assert.deepEqual(d.repurpose.checks[out.id].map(x=>[x.key,x.ok]),[['workshop.check.sectionsAll',true],['workshop.check.coverWithinWords',true],['workshop.check.cardsWithin',true],['workshop.check.colorsWithin',true],['workshop.check.noOverflow',true],['workshop.check.cardWordsWithin',true]]);
+ // The set keeps the style it was drawn in; the task page gets the brand kit's style now, with its logo, to draw edits.
+ assert.deepEqual([out.cards.style.template,out.cards.style.color,out.cards.style.logo],['checklist','#1e40af',false]);
+ assert.deepEqual([d.repurpose.cardStyle.template,d.repurpose.cardStyle.color],['checklist','#1e40af']);
+ // Edit directly: the text of card 2 changes and the reviewer's browser draws every card again.
+ const editedText=xhsResult().replace('# Step 1\nOne owner for every request.','# Step 1\nEvery request has one owner.'),drawn=Array.from({length:7},(_,i)=>media.personImage('1',`card-0${i+1}.png`));
+ const edit=body=>f.command('editStageOutput',{stageKey:'accept',artifactId:out.id,...body});
+ await assert.rejects(edit({content:xhsResult(6),cards:{images:drawn.slice(1)}}),e=>e.status===409,'a card fewer');
+ await assert.rejects(edit({content:editedText.replace('# Follow Acme','Layout: text\n# Follow Acme').replace('Layout: end\n',''),cards:{images:drawn}}),e=>e.status===409,'another layout');
+ await assert.rejects(edit({content:editedText,cards:{images:drawn.slice(1)}}),e=>e.status===409,'an image short');
+ await assert.rejects(edit({content:editedText,cards:{images:ids}}),e=>e.status===409,'the Agent’s images');
+ await assert.rejects(edit({content:editedText}),e=>e.status===409,'no images');
+ await assert.rejects(edit({content:editedText,cards:{images:Array.from({length:7},(_,i)=>media.personImage('1',`card-4-5-0${i+1}.png`,1350))}}),e=>e.status===409,'drawn at 4:5 for a Xiaohongshu set');
+ d=await edit({content:editedText,cards:{images:drawn,overflow:[2,9]}});
+ const second=output(d);assert.notEqual(second.id,out.id);
+ assert.deepEqual(second.cards.images.map(x=>x.id),drawn);assert.deepEqual(second.cards.edited,[2]);assert.deepEqual(second.cards.overflow,[2]);
+ assert.deepEqual(second.cards.colors,['#f8fafc','#0f172a']);assert.equal(second.cards.sections,4);assert.equal(second.cards.style.template,'checklist');
+ assert.ok(d.work.images.includes(drawn[0])&&d.work.images.includes(ids[0]),'both versions’ images readable');
+ assert.deepEqual(d.work.history.filter(e=>e.action==='editStageOutput').map(e=>e.cards),[[2]]);
+ assert.deepEqual(d.repurpose.checks[second.id].find(x=>x.key==='workshop.check.overflow')?.params,{0:'2'});
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:second.id});assert.equal(d.work.stage,'done');
+ // A run of another form cannot upload images.
+ const g=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose:{...repurpose,form:'x'}}});await connectAgent(g);g.s.p.taskAttachments=fakeCardImages();
+ await g.command('startTask',{playbookId:'x-posts'});const gc=await claim(g);
+ await assert.rejects(g.s.business.file({...identity,run:{run:{id:gc.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${gc.run.id}`}}},new File([Buffer.from('png')],'card.png',{type:'image/png'})),e=>e.status===409);
+});
+
+// Carousel (2026-11-24): Instagram's and LinkedIn's places run their own playbook with the template drawn at 4:5, keep
+// the set's ratio from the images' height, turn down a set of two sizes, check the place's own text, and Edit directly
+// takes only 4:5 images for them.
+test('Carousel places: Instagram and LinkedIn draw at 4:5, keep the ratio, check their own text and edit at 4:5',async()=>{
+ const caption='Five people or fewer? Start with how your team works.\n\nThe full comparison is at the link in bio.';
+ const cards=n=>Array.from({length:n},(_,i)=>i===n-1?[`## Card ${n}`,'Layout: end','# Follow Acme','acme.example']:[`## Card ${i+1}`,`Sections: ${Math.min(i+1,2)}`,`# Step ${i+1}`,'One owner for every request.']).flat();
+ for(const [form,playbookId,kind,content,n] of [['instagram','instagram-carousel','instagramCards',['## Body',caption,'## Hashtags','#projectmanagement #smallteams #acme',...cards(8)].join('\n'),8],['linkedin-carousel','linkedin-carousel','linkedinCards',['## Title','Picking a PM tool','## Body','Most small teams pick a tool by its feature list.',...cards(6)].join('\n'),6]]){
+  const repurpose={form,source:{kind:'article',url:'https://example.com/blog/tools',title:'Picking a PM tool'}},createdBy={id:'1',name:'Tester'};
+  const f=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose}});await connectAgent(f);
+  f.state.nrSnapshots.push({id:9001,key:f.s.key('source','1','1'),payload:{body:'## Why\nOne inbox.\n\n## How\nTwo tables.',locale:'en-US',readAt:'2026-11-24T00:00:00Z'}});
+  f.s.p.workshop={brand:async()=>({revision:1,community:null,cards:{template:'editorial',color:'#1e40af'}})};
+  const media=fakeCardImages(1350);f.s.p.taskAttachments=media;
+  await assert.rejects(f.command('startTask',{playbookId:'xhs-cards'}),e=>e.status===409,`${form}: another place's playbook`);
+  await f.command('startTask',{playbookId});
+  const c=await claim(f),input=c.run.input;
+  assert.equal(input.resultKind,kind);assert.match(input.cardTemplate,/<meta name="card-size" content="1080x1350">/);
+  const identity={kind:'run',userId:'1',displayName:'Team Agent',agent:f.s.p.agents.agent,run:{run:{id:c.run.pluginRunId,subjectKind:'nocoreachTask',subjectId:`1:1:${c.run.id}`}}};
+  const upload=name=>f.s.business.file(identity,new File([Buffer.from('png')],name,{type:'image/png'})).then(x=>x.id);
+  const ids=[];for(let i=1;i<=n;i++)ids.push(await upload(`card-${i}.png`));
+  // One image drawn at 3:4 among 4:5 ones: the set has two sizes.
+  await assert.rejects(f.s.acceptAgentResult('1',c.run.pluginRunId,{taskId:'1',runId:c.run.id,ok:true,content,cards:{images:[await upload('card-1@3x4.png'),...ids.slice(1)]}}),e=>e.status===409&&/1080×1350/.test(e.message),`${form}: two sizes`);
+  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content,cards:{images:ids,overflow:[]}});
+  const d=await f.view(),out=output(d);
+  assert.equal(out.cards.ratio,'4:5');assert.equal(out.cards.images.length,n);
+  const checks=d.repurpose.checks[out.id].map(x=>[x.key,x.ok]);
+  assert.ok(checks.every(([,ok])=>ok),`${form}: ${JSON.stringify(checks)}`);
+  assert.deepEqual(checks.map(([k])=>k).filter(k=>/hashtags|caption|docTitle|postText|pages|cards(Within|Out)/.test(k)),form==='instagram'?['workshop.check.cardsWithin','workshop.check.hashtagsWithin','workshop.check.captionNoLink']:['workshop.check.pagesWithin','workshop.check.docTitleWithin','workshop.check.postTextWithin']);
+  // Edit directly: drawn again at 4:5, never at 3:4.
+  const edit=images=>f.command('editStageOutput',{stageKey:'accept',artifactId:out.id,content:content.replace('# Step 1\n','# Step one\n'),cards:{images}});
+  await assert.rejects(edit(Array.from({length:n},(_,i)=>media.personImage('1',`card-0${i+1}.png`,1440))),e=>e.status===409,`${form}: 3:4 images`);
+  const second=output(await edit(Array.from({length:n},(_,i)=>media.personImage('1',`card-0${i+1}.png`,1350))));
+  assert.deepEqual([second.cards.ratio,second.cards.edited],['4:5',[1]]);
+ }
+});
+
+// Content workshop (2026-11-13): a task made from an article runs its form's playbook only, the Agent gets the source
+// and the place, NocoReach checks the text itself, approving completes it (no knowledge, no next playbook), and
+// Reopen for review takes it back to the review step.
+test('Content workshop task: the form playbook only, source in the run, checks from the text, approval completes, reopen returns to review',async()=>{
+ const repurpose={form:'community',source:{kind:'article',url:'https://example.com/blog/tickets',title:'Tickets in an afternoon'},destination:{kind:'reddit',subreddit:'selfhosted',discussions:12,weeks:4}},createdBy={id:'1',name:'Tester'};
+ const f=fixture(undefined,{createdBy,work:{...__model.projectWork({evidence:{createdBy}}),repurpose}});await connectAgent(f);
+ f.state.nrSnapshots.push({id:9001,key:f.s.key('source','1','1'),payload:{body:'## Why\nOne inbox for everything.\n\n## How\nTwo tables and a form.',locale:'en-US',readAt:'2026-11-13T00:00:00Z'}});
+ await assert.rejects(f.command('startTask',{playbookId:'x-posts'}),e=>e.status===409,'another form');
+ await assert.rejects(f.command('startTask',{playbookId:'change-research'}),e=>e.status===409,'not a workshop playbook');
+ await assert.rejects(f.command('reopenReview'),e=>e.status===409,'nothing to reopen yet');
+ let d=await f.command('startTask',{playbookId:'community-post'});assert.equal(d.work.playbook.form,'community');
+ const c=await claim(f);assert.equal(c.run.input.resultKind,'communityPost');assert.equal(c.run.input.repurpose.destination.subreddit,'selfhosted');assert.match(c.run.input.repurpose.body,/Two tables/);
+ const body='I work on Synthetic, so take this with that in mind. Our support team of four answered every request from one shared inbox, and nothing had an owner. We moved it to two tables and a public form in an afternoon; here is the setup, what broke in the first week and what we would do again.';
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:['## Title','We replaced our support inbox with a self-hosted ticket table','','## Body','Sections: 1-2',body,'','## Rules','- Disclose your affiliation','- No link-only posts'].join('\n')});
+ d=await f.view();assert.equal((await f.stage()).key,'accept');
+ assert.deepEqual(d.repurpose.checks[output(d).id].map(x=>[x.key,x.ok]),[['workshop.check.bodyComplete',true],['workshop.check.identityBrand',true],['workshop.check.titleWithin',true],['workshop.check.rulesRead',true]]);
+ await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,next:'new-doc'}),e=>e.status===409,'nothing follows');
+ const saveDelivery=vi.fn();f.s.p.knowledge={saveDelivery};
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id});
+ assert.equal(d.work.stage,'done');assert.equal(d.work.nextTaskId,undefined);assert.equal(saveDelivery.mock.calls.length,0,'not saved to the knowledge base');
+ d=await f.command('reopenReview');assert.equal(d.work.stage,'flow');assert.equal((await f.stage()).key,'accept');assert.equal(output(d).approvedAt,undefined);
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id});assert.equal(d.work.stage,'done');
+ // A task from anywhere else never runs a Content workshop playbook.
+ const g=fixture();await connectAgent(g);await assert.rejects(g.command('startTask',{playbookId:'x-posts'}),e=>e.status===409);
 });

@@ -7,7 +7,6 @@ import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
-import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import {
@@ -26,18 +25,11 @@ import { confirmAction } from '#components/reach/confirm';
 import {
   ARTICLE_FIELDS,
   type ArticleField,
-  type ArticleStatus,
 } from '../../../shared/article-publishing.js';
-import { TASK_IMAGES_PER_MESSAGE } from '../../../shared/task-images.js';
+import { TASK_FILES_PER_MESSAGE } from '../../../shared/task-images.js';
 import { localeName } from '../article-targets-api';
 import type { ArticleProposal, TaskData } from '../task-execution-types';
-import {
-  articleLanguages,
-  coverChanges,
-  joinNames,
-  valueAt,
-} from './article-model';
-import { ArticleCoverRow } from './article-cover.js';
+import { articleLanguages, joinNames, valueAt } from './article-model';
 import {
   editableLocales,
   primaryOf,
@@ -52,13 +44,18 @@ import {
   MissingLanguages,
 } from './article-review.js';
 import { useStayWithDrafts, useTaskDraft } from './draft-store.js';
-import { AddImageButton, ComposerImages, ImageProblem } from './task-images.js';
+import {
+  AttachButton,
+  ComposerDocuments,
+  ComposerImages,
+  ImageProblem,
+} from './task-images.js';
 import {
   TaskImageContext,
   imageNote,
   imageSources,
-  readImages,
-  useComposerImages,
+  readMessageFiles,
+  useComposerFiles,
   ArticleImageNotesContext,
 } from './task-images-model.js';
 import { localePageUrl } from './article-page.js';
@@ -80,6 +77,7 @@ export function ArticleEditActions({
   version,
   busy,
   approve,
+  info,
   request,
   lead,
   fullScreenTo,
@@ -95,6 +93,8 @@ export function ArticleEditActions({
     disabled: boolean;
     run: () => void;
   };
+  /** Beside Approve: what approving does, when it needs saying (ⓘ). */
+  info?: ReactNode;
   request: () => void;
   /** Before Approve: Update again, for a version that changed none of the other languages. */
   lead?: ReactNode;
@@ -126,6 +126,7 @@ export function ArticleEditActions({
           {approve.label}
         </Button>
       )}
+      {approve && info}
       <Button variant='ghost' disabled={busy || held} onClick={request}>
         {$t('taskDetail.requestChanges')}
       </Button>
@@ -173,36 +174,22 @@ function comparedArticle(
   base: ReturnType<typeof articleLanguages>['base'],
   form: EditForm,
 ): ArticleProposal {
-  const changes = [
-    ...Object.keys(form.locales).flatMap((l) =>
-      ARTICLE_FIELDS.flatMap((f) => {
-        const path = `${l}.${f}`;
-        return valueAt(base, path) !== form.locales[l][f] ? [path] : [];
-      }),
-    ),
-    // A cover against the site's (2026-11-05), shown as the two thumbnails.
-    ...coverChanges(
-      Object.fromEntries(
-        Object.keys(form.cover || {}).map((k) => [k, base?.cover?.[k] ?? '']),
-      ),
-      form.cover,
-    ),
-  ];
+  const changes = Object.keys(form.locales).flatMap((l) =>
+    ARTICLE_FIELDS.flatMap((f) => {
+      const path = `${l}.${f}`;
+      return valueAt(base, path) !== form.locales[l][f] ? [path] : [];
+    }),
+  );
   return {
     ...a,
-    draft: {
-      ...a.draft,
-      status: form.status,
-      locales: form.locales,
-      cover: form.cover,
-    },
+    draft: { ...a.draft, locales: form.locales },
     changes,
   };
 }
 
 /**
  * The article being reviewed as a form: the languages it is edited in (the others named as following on approval),
- * Compare with original, the automatic save and full screen in one row; then status, title, summary and body.
+ * Compare with original, the automatic save and full screen in one row; then title, summary and body.
  */
 export function ArticleEditFields({
   data,
@@ -226,7 +213,7 @@ export function ArticleEditFields({
   fullScreenTo?: (tab: string) => string;
 }) {
   const languages = articleLanguages(data, a);
-  const { base, target } = languages;
+  const { base } = languages;
   const editable = editableLocales(data, a);
   // The language asked for, else the one the review opens on (a version that updated others, the first of them).
   const tab =
@@ -242,8 +229,7 @@ export function ArticleEditFields({
   const scope = useContext(TaskImageContext);
   const { form, readOnly } = session;
   const create = !a.articleId,
-    primary = primaryOf(data, a),
-    withStatus = Boolean(target?.status);
+    primary = primaryOf(data, a);
   const targets = [
       a.targetId,
       ...(a.also || []).map((x) => x.targetId),
@@ -353,7 +339,7 @@ export function ArticleEditFields({
           </p>
         )}
       </div>
-      {comparing ? (
+      {comparing && (
         <ArticleLanguage
           data={data}
           article={comparedArticle(a, base, form)}
@@ -361,143 +347,105 @@ export function ArticleEditFields({
           tab={tab}
           view='changes'
         />
-      ) : (
-        <div role='tabpanel' className='flex min-w-0 flex-col gap-4'>
-          {create && (
-            <Field data-invalid={Boolean(errors.slug)}>
-              <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
-                {$t('articleTask.field.slug')} *
-              </FieldLabel>
-              <Input
-                value={form.slug}
-                readOnly={readOnly}
-                onChange={(e) => session.set({ ...form, slug: e.target.value })}
-                {...aria('slug')}
-              />
-              {err('slug')}
-            </Field>
-          )}
-          {withStatus && (
-            <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm'>
-              <span id={`${id}-status`} className={LABEL}>
-                {$t('articleTask.field.status')}
-              </span>
-              <RadioGroup
-                aria-labelledby={`${id}-status`}
-                className='flex w-auto flex-wrap gap-4'
-                value={form.status}
-                disabled={readOnly}
-                onValueChange={(v) =>
-                  session.set({ ...form, status: v as ArticleStatus })
-                }
-              >
-                {(['draft', 'published'] as const).map((v) => (
-                  <div key={v} className='flex items-center gap-2'>
-                    <RadioGroupItem id={`${id}-status-${v}`} value={v} />
-                    <Label
-                      htmlFor={`${id}-status-${v}`}
-                      className='font-normal'
-                    >
-                      {$t(
-                        v === 'draft'
-                          ? 'articleTask.statusDraft'
-                          : 'articleTask.statusPublished',
-                      )}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-              <span className='text-muted-foreground'>
-                {$t('articleEdit.statusHelp')}
-              </span>
-            </div>
-          )}
-          <ArticleCoverRow
-            data={data}
-            article={a}
-            session={session}
-            tab={tab}
-            id={id}
-            error={errors.cover}
-          />
-          {ARTICLE_FIELDS.map((f) => {
-            const key = `${tab}.${f}`,
-              required = create && tab === primary && f !== 'description';
-            const label = `${$t(`articleTask.field.${f}`)}${required ? ' *' : ''}`;
-            return (
-              <Field key={key} data-invalid={Boolean(errors[key])}>
-                <FieldLabel
-                  htmlFor={f === 'body' ? undefined : `${id}-${key}`}
-                  id={`${id}-${key}-label`}
-                  className={LABEL}
-                >
-                  {label}
-                </FieldLabel>
-                {f === 'title' ? (
-                  <Input
-                    value={form.locales[tab][f]}
-                    readOnly={readOnly}
-                    onChange={(e) => set(tab, f, e.target.value)}
-                    {...aria(key)}
-                  />
-                ) : f === 'description' ? (
-                  <Textarea
-                    value={form.locales[tab][f]}
-                    readOnly={readOnly}
-                    rows={2}
-                    className='field-sizing-content min-h-16'
-                    onChange={(e) => set(tab, f, e.target.value)}
-                    {...aria(key)}
-                  />
-                ) : (
-                  <ArticleImageNotesContext.Provider value={notes}>
-                    <ArticleBodyEditor
-                      // One editor per language, so each keeps its own undo history and source.
-                      key={tab}
-                      {...aria(key)}
-                      aria-label={label}
-                      value={form.locales[tab].body}
-                      readOnly={readOnly}
-                      takesImages={takesImages}
-                      pageUrl={pageUrl}
-                      onChange={(body) => set(tab, 'body', body)}
-                      rewrite={
-                        scope
-                          ? {
-                              stream: (request, signal) =>
-                                streamRewrite(
-                                  {
-                                    projectId: String(scope.projectId),
-                                    taskId: scope.taskId,
-                                    artifactId: session.artifactId,
-                                    locale: tab,
-                                    title: form.locales[tab].title,
-                                    description: form.locales[tab].description,
-                                    body: form.locales[tab].body,
-                                    ...request,
-                                  },
-                                  signal,
-                                ),
-                              onAccepted: session.accepted,
-                            }
-                          : undefined
-                      }
-                    />
-                  </ArticleImageNotesContext.Provider>
-                )}
-                {err(key)}
-              </Field>
-            );
-          })}
-        </div>
       )}
+      {/* Hidden rather than left out while comparing, so the editor keeps its undo history (2026-11-12). */}
+      <div
+        role='tabpanel'
+        hidden={comparing}
+        className='flex min-w-0 flex-col gap-4'
+      >
+        {create && (
+          <Field data-invalid={Boolean(errors.slug)}>
+            <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
+              {$t('articleTask.field.slug')} *
+            </FieldLabel>
+            <Input
+              value={form.slug}
+              readOnly={readOnly}
+              onChange={(e) => session.set({ ...form, slug: e.target.value })}
+              {...aria('slug')}
+            />
+            {err('slug')}
+          </Field>
+        )}
+        {ARTICLE_FIELDS.map((f) => {
+          const key = `${tab}.${f}`,
+            required = create && tab === primary && f !== 'description';
+          const label = `${$t(`articleTask.field.${f}`)}${required ? ' *' : ''}`;
+          return (
+            <Field key={key} data-invalid={Boolean(errors[key])}>
+              <FieldLabel
+                htmlFor={f === 'body' ? undefined : `${id}-${key}`}
+                id={`${id}-${key}-label`}
+                className={LABEL}
+              >
+                {label}
+              </FieldLabel>
+              {f === 'title' ? (
+                <Input
+                  value={form.locales[tab][f]}
+                  readOnly={readOnly}
+                  onChange={(e) => set(tab, f, e.target.value)}
+                  {...aria(key)}
+                />
+              ) : f === 'description' ? (
+                <Textarea
+                  value={form.locales[tab][f]}
+                  readOnly={readOnly}
+                  rows={2}
+                  className='field-sizing-content min-h-16'
+                  onChange={(e) => set(tab, f, e.target.value)}
+                  {...aria(key)}
+                />
+              ) : (
+                <ArticleImageNotesContext.Provider value={notes}>
+                  <ArticleBodyEditor
+                    // One editor per language, so each keeps its own undo history and source.
+                    key={tab}
+                    {...aria(key)}
+                    aria-label={label}
+                    value={form.locales[tab].body}
+                    readOnly={readOnly}
+                    takesImages={takesImages}
+                    pageUrl={pageUrl}
+                    onChange={(body) => set(tab, 'body', body)}
+                    rewrite={
+                      scope
+                        ? {
+                            stream: (request, signal) =>
+                              streamRewrite(
+                                {
+                                  projectId: String(scope.projectId),
+                                  taskId: scope.taskId,
+                                  artifactId: session.artifactId,
+                                  locale: tab,
+                                  title: form.locales[tab].title,
+                                  description: form.locales[tab].description,
+                                  body: form.locales[tab].body,
+                                  ...request,
+                                },
+                                signal,
+                              ),
+                            onAccepted: session.accepted,
+                          }
+                        : undefined
+                    }
+                  />
+                </ArticleImageNotesContext.Provider>
+              )}
+              {err(key)}
+            </Field>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 /**
  * Request changes for the whole article (ui-references/inline-ai-edit-2026-11-04 frame 5): what to change, with images
- * if need be. The edits are made a version first, and the Agent works from it, changing only what is asked.
+ * and documents if need be (2026-11-15). The edits are made a version first, and the Agent works from it, changing
+ * only what is asked.
  */
 export function RequestChangesBox({
   session,
@@ -510,7 +458,11 @@ export function RequestChangesBox({
   /** The version the edits become when there are any. */
   nextVersion: number;
   busy: boolean;
-  onSend: (comment: string, imageIds: string[]) => Promise<boolean>;
+  /** The files go as `imageIds` and `documentIds`, each only when there are any. */
+  onSend: (
+    comment: string,
+    files: { imageIds?: string[]; documentIds?: string[] },
+  ) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const id = useId();
@@ -519,16 +471,16 @@ export function RequestChangesBox({
     'changeRequestImages',
     '',
   );
-  const images = useComposerImages({
-    stored: readImages(stored),
+  const images = useComposerFiles({
+    stored: readMessageFiles(stored),
     store: (list) => {
       if (list.length) setStored(JSON.stringify(list));
       else clearStored();
     },
-    max: TASK_IMAGES_PER_MESSAGE,
+    max: TASK_FILES_PER_MESSAGE,
   });
   const send = async () => {
-    if (await onSend(message, images.ids)) {
+    if (await onSend(message, images.payload())) {
       clearMessage();
       images.sent();
     }
@@ -561,11 +513,18 @@ export function RequestChangesBox({
           onChange={(e) => setMessage(e.target.value)}
           onPaste={images.onPaste}
         />
-        {images.entries.length > 0 && (
-          <InputGroupAddon align='block-end' className='font-normal'>
+        {images.count > 0 && (
+          <InputGroupAddon
+            align='block-end'
+            className='flex-col items-stretch gap-2 font-normal'
+          >
             <ComposerImages
-              images={images.entries}
+              images={images.images}
               disabled={busy}
+              onRemove={images.remove}
+            />
+            <ComposerDocuments
+              documents={images.documents}
               onRemove={images.remove}
             />
           </InputGroupAddon>
@@ -574,8 +533,8 @@ export function RequestChangesBox({
           align='block-end'
           className='flex-wrap gap-x-3 gap-y-1 font-normal'
         >
-          <AddImageButton
-            disabled={busy || images.entries.length >= TASK_IMAGES_PER_MESSAGE}
+          <AttachButton
+            disabled={busy || images.count >= TASK_FILES_PER_MESSAGE}
             onFiles={images.add}
           />
           {session.changed && (

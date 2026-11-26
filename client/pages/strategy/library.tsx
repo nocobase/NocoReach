@@ -1,8 +1,8 @@
 import { useMessageState, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 import {useEffect,useState,type ReactNode} from 'react';
-import {Link,useNavigate,useSearchParams} from 'react-router';
-import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon} from 'lucide-react';
+import {Link,Outlet,useNavigate,useSearchParams} from 'react-router';
+import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon,XIcon} from 'lucide-react';
 import {Tooltip,TooltipContent,TooltipTrigger} from '#components/ui/tooltip';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag,TONE_CLASS,type Tone} from '#components/reach/tag';
@@ -30,10 +30,12 @@ import {placesOf,severalTag,standingOf,type HandOffDone} from './places-model';
 import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
-import {GrowthTags,GrowthRow,EvidenceTableView} from './growth';
+import {GrowthTags,GrowthRow,EvidenceTableView,DiscussionWeeks} from './growth';
+import {NewTopicNote} from './follow-topic';
 import {CATEGORY} from './growth-category';
 import {GROWTH_CATEGORIES,categoryOf,growthOf,isGrowthCategory,newPageOf,type GrowthCategory} from '../../../shared/growth.js';
 import {Segmented} from '#components/reach/segmented';
+import {isHot} from '../../../shared/workshop-recommend.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
@@ -74,29 +76,35 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const playbooks=localizePlaybookList(rawPlaybooks);
  useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(rows=>{setTasks(rows);cache?.replace(taskListKey(project.id),rows);}).catch(()=>undefined);},[project?.id]);
  const byId=new Map(tasks.map(t=>[String(t.id),t]));
+ // Content workshop's tasks made from an opportunity (v4): listed with its own tasks, never as its hand-off.
+ const workshopTasks=(id:string)=>tasks.filter(t=>{const s=t.evidence?.work?.repurpose?.source;return s?.kind==='opportunity'&&s.id===id;});
+ const reloadTasks=()=>{if(project)void taskRecords<WatchTask>(project.id).then(rows=>{setTasks(rows);cache?.replace(taskListKey(project.id),rows);}).catch(()=>undefined);};
  const rows:Item[]=state?rowsFor(state).map(r=>{const st=opportunityState(r,state),t=st.state==='task'&&r.taskId?byId.get(String(r.taskId)):undefined;return {...r,...st,...(t?{task:taskStanding({work:t.evidence?.work,status:t.status})}:{}),...(st.state==='task'&&r.tasks.length>1?{taskStates:r.tasks.map(x=>standingOf(byId.get(String(x.taskId))))}:{})};}):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
  usePageTab(getTabs().find(([k])=>k===tab)?.[1]);
  const askedCategory=params.get('category'),category=isGrowthCategory(askedCategory)?askedCategory:null,inCategory=(c?:GrowthCategory)=>!category||c===category;
- const allPending=rows.filter(r=>r.state==='pending').sort(pendingOrder),pending=allPending.filter(r=>inCategory(categoryOf(r.card)));
+ // `?skill=` (2026-11-17, from a Skill's detail): only what that Skill found, on every tab, until the filter is removed.
+ const skillFilter=params.get('skill'),bySkill=(x:{skill?:{id:string}})=>!skillFilter||x.skill?.id===skillFilter;
+ const keepCard=(c:Row['card'])=>inCategory(categoryOf(c))&&bySkill(c),keepSignal=(s:Signal)=>inCategory(signalCategory(s))&&bySkill(s);
+ const allPending=rows.filter(r=>r.state==='pending').sort(pendingOrder),pending=allPending.filter(r=>keepCard(r.card));
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='done'?linked:undefined;
  // 观察中: the latest analysis's changes the AI advised watching (not already an opportunity or a task), biggest first, as on 洞察.
  const judged=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})):[];
- const allWatching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)})),watching=allWatching.filter(x=>inCategory(signalCategory(x.s)));
+ const allWatching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)})),watching=allWatching.filter(x=>keepSignal(x.s));
  const ended=state?recentlyEnded(state):[];
  // 忽略 / 恢复 a watched change.
  async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);refreshNavBadges();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 已处理 also lists the latest analysis's changes that need nothing — 无需处理, ignored, or handed off without an
  // opportunity — except those an opportunity already stands for (that one is listed instead).
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(x=>x.key)));
- const allSettled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored))),settled=allSettled.filter(x=>inCategory(signalCategory(x.s)));
+ const allSettled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored))),settled=allSettled.filter(x=>keepSignal(x.s));
  const watched=watching.find(x=>x.s.key===watchKey)||settled.find(x=>x.s.key===watchKey);
- // What the category filter counts: the tab's own items, before the filter.
- const counted=tab==='pending'?allPending.map(r=>categoryOf(r.card)):tab==='watch'?allWatching.map(x=>signalCategory(x.s)):[...rows.filter(r=>r.state!=='pending').map(r=>categoryOf(r.card)),...allSettled.map(x=>signalCategory(x.s))];
- function go(next:{tab?:string;item?:string;sort?:string;order?:string;category?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
+ // What the category filter counts: the tab's own items before the category filter, within the Skill filter if any.
+ const counted=tab==='pending'?allPending.filter(r=>bySkill(r.card)).map(r=>categoryOf(r.card)):tab==='watch'?allWatching.filter(x=>bySkill(x.s)).map(x=>signalCategory(x.s)):[...rows.filter(r=>r.state!=='pending'&&bySkill(r.card)).map(r=>categoryOf(r.card)),...allSettled.filter(x=>bySkill(x.s)).map(x=>signalCategory(x.s))];
+ function go(next:{tab?:string;item?:string;sort?:string;order?:string;category?:string;skill?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts. An
  // opportunity with several places asks which ones first, makes a task for each and stays here on its task list.
@@ -107,13 +115,18 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  function handed(row:Row,r:HandOffDone){setHanding(undefined);setState(r.state);setError('');refreshNavBadges();go({tab:'done',item:row.card.id});
   setNotice({ok:true,text:()=>$t('opportunityTasks.created',{0:r.taskIds.length})});if(project)void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else go({item:r.card.id});}
- const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
+ // Adapt into short posts (v4): a live Trending now opportunity opens Content workshop's step 2 over this page.
+ const repurpose=(r:Item)=>{const p=new URLSearchParams(params);p.set('opportunity',r.card.id);void navigate({pathname:'repurpose',search:`?${p}`});};
+ const hot=(r:Item)=>Boolean(state)&&isHot(r,state!,taskId=>standingOf(byId.get(String(taskId))));
+ const detail=(r:Item)=><Detail key={r.card.id} row={r} project={project} tasks={byId} workshop={workshopTasks(r.card.id)} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)} onRepurpose={hot(r)?()=>repurpose(r):undefined}/>;
+ const feedback=<>{(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}<HandOffNotice result={notice}/></>;
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.growthOpportunitiesDescription')}/>
-  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
-  <HandOffNotice result={notice}/>
+  {/* An open drawer covers the page, so what an action in it did or why it failed is said in the drawer instead. */}
+  {!opened&&feedback}
   <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?allPending.length:k==='watch'?allWatching.length:rows.length-allPending.length+allSettled.length}`:''}</button>)}</nav>
   {state&&<CategoryFilter value={category} categories={counted} onChange={c=>go({category:c??'',item:''})}/>}
-  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>inCategory(categoryOf(r.card)))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
+  {skillFilter&&<p className="flex flex-wrap items-center gap-2 text-sm" data-skill-filter={skillFilter}><span className="text-muted-foreground">{$t('strategy.skillFilter')}</span><Tag tone="violet" className="font-mono">{rows.find(r=>r.card.skill?.id===skillFilter)?.card.skill?.name||skillFilter}<button type="button" className="ml-0.5 rounded-full hover:opacity-70" aria-label={$t('strategy.removeSkillFilter')} onClick={()=>go({skill:'',item:''})}><XIcon/></button></Tag></p>}
+  {!state?(error||projectError?null:<ListSkeleton rows={6} label={$t('strategy.loadingOpportunities')}/>):tab==='done'?<DoneTable rows={rows.filter(r=>keepCard(r.card))} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
   :!allPending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
   :!pending.length?<p className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>{$t('strategy.nothingMatches')}</p>
@@ -128,14 +141,15 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
    </div>
    {selected&&detail(selected)}
   </div>}
-  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
+  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} error={error} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
   {handing&&project&&state?<OpportunityHandOffDialog projectId={project.id} state={state} row={handing} playbooks={playbooks?.playbooks} onClose={()=>setHanding(undefined)} onDone={r=>handed(handing,r)}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
-   <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
+   <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className='flex flex-col gap-3 p-4 pt-12'>{opened&&<>{feedback}{detail(opened)}</>}</div></SheetContent>
   </Sheet>
+  <Outlet context={{onCreated:()=>{reloadTasks();refreshNavBadges();}}}/>
  </PageContainer>;
 }
-type WatchTask={id:number;title?:string;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
+type WatchTask={id:number;title?:string;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work&{repurpose?:{source?:{kind?:string;id?:string}}}}};
 // 观察中: one line per change — what changed, its numbers when watching started and now, what the AI waits for and the
 // day it must decide by; 忽略 ends it. Below, 最近结束: how the watches of the last 7 days ended.
 const short=(d?:string)=>formatDate(d);
@@ -260,7 +274,7 @@ const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.pr
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
-function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+function Detail({row,project,tasks,workshop,busy,onGive,onIgnore,onRestore,onOpen,onRepurpose}:{row:Item;project?:Project;tasks:Map<string,WatchTask>;workshop:WatchTask[];busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void;onRepurpose?:()=>void}){
  const card=row.card,c=leadChip(row),growth=growthOf(card.growth),newPage=newPageOf(card.newPage),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
  const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
@@ -271,21 +285,23 @@ function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;task
    {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
    <div className="flex flex-wrap items-center gap-1">{growth?<GrowthTags growth={growth}/>:<>{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</>}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
-   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?several?$t('strategy.handedOffAgent'):`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
+   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?several?$t('strategy.handedOffAgent'):`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}{growth?.topic&&!growth.topic.followed&&project&&<> · <NewTopicNote projectId={project.id} topic={growth.topic} followed={project.memory?.topics??[]}/></>}</p>
   </div>
   {growth&&<GrowthRow growth={growth}/>}
+  {growth?.weeks&&<DiscussionWeeks weeks={growth.weeks}/>}
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
-  {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
+  {(card.meaning||card.skill)&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}{card.skill&&<Link to={`/skills?skill=${encodeURIComponent(card.skill.id)}`} className="mt-1 block w-fit text-xs text-primary hover:underline" data-found-by-skill={card.skill.id}>{$t('analysisSkills.foundBy',{0:card.skill.name})} ›</Link>}</Block>}
   {growth?.evidence&&<EvidenceTableView evidence={growth.evidence}/>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
   {/* Where says which of the three it is (2026-11-10): a new page, an existing page or off the site. */}
   {newPage?<Block title={$t('strategy.briefWhere')}><span className="block break-words">{$t('growth.where.newPage',{0:newPage.section})}</span>{newPage.linkFrom.length>0&&<span className="block break-words">{$t('growth.where.linkFrom',{0:newPage.linkFrom.join(' · ')})}</span>}</Block>
    :card.target?.trim()?<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='existing'>{$t('growth.where.existing',{0:card.target})}</span></Block>
    :card.offsite?.trim()&&<Block title={$t('strategy.briefWhere')}><span className='break-words' data-where='offsite'>{$t('growth.where.offsite',{0:card.offsite})}</span></Block>}
-  {several&&<OpportunityTasks row={row} tasks={tasks}/>}
+  {(several||workshop.length>0)&&<OpportunityTasks row={row} tasks={tasks} extra={workshop}/>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-   {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}
+   {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button>{onRepurpose&&<Button variant="outline" onClick={onRepurpose}>{$t('workshop.repurposeOpportunity')}</Button>}<Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}
    {row.state==='task'&&!several&&<Button variant="outline" onClick={onOpen}>{$tj('strategy.openTask',{0:row.taskNo?` ${taskNo(row.taskNo)}`:''})}<ArrowRightIcon/></Button>}
+   {row.state==='task'&&onRepurpose&&<Button variant="outline" onClick={onRepurpose}>{$t('workshop.repurposeOpportunity')}</Button>}
    {row.state==='task'&&several&&places>open&&<Button variant="outline" disabled={busy} onClick={onGive}>{handOffLabel()}</Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>{$t('strategy.restorePending')}</Button>}
    {card.limitation&&<span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">{$t('strategy.briefLimitation')}<InfoTip label={$t('strategy.briefLimitation')} side="left"><p>{card.limitation}</p></InfoTip></span>}

@@ -8,10 +8,15 @@ import {
 import { GROWTH_CATEGORIES, GROWTH_KINDS } from '../../shared/growth';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
 import { World } from '../../server/nocoreach/demo-data/world/world';
+import { propertyId } from '../../server/nocoreach/demo-data/world/google';
 import {
   result as backlinksResult,
   specification as backlinksSpec,
 } from '../../server/nocoreach/backlinks-service';
+import {
+  result as domainResult,
+  specification as domainSpec,
+} from '../../server/nocoreach/domain-service';
 import {
   compare,
   type Partition,
@@ -92,7 +97,7 @@ describe.each(['zh-CN', 'en-US'])(
         const growth = (which === 'main' ? acmeGrowthBriefs : crmGrowthBriefs)(
           new Date(now),
         );
-        expect(growth).toHaveLength(which === 'main' ? 18 : 10);
+        expect(growth).toHaveLength(which === 'main' ? 25 : 14);
         const lang = language === 'en-US' ? 'en' : 'zh';
         const kinds = growth.map((brief) => brief.growth(lang).kind);
         // Acme has two or more of each category; with Acme CRM every kind is shown.
@@ -207,6 +212,96 @@ describe.each(['zh-CN', 'en-US'])(
       ]);
     });
 
+    it('answers Google with a page and title of its own for every result, in the market script', async () => {
+      const market =
+        language === 'zh-CN'
+          ? { location_code: 2158, language_code: 'zh-TW' }
+          : { location_code: 2840, language_code: 'en' };
+      for (const which of ['main', 'second'] as const) {
+        const project = { id: which, ...content.projects[which], language };
+        for (const k of new World(project, now).research.slice(0, 15)) {
+          const response = await worldResponse(
+            project,
+            'https://api.dataforseo.com/v3/serp/google/organic/live/advanced',
+            {
+              method: 'POST',
+              body: JSON.stringify([
+                { keyword: k.keyword, depth: 10, ...market },
+              ]),
+            },
+            now,
+          );
+          const items: {
+            domain: string;
+            url: string;
+            title: string;
+            breadcrumb: string;
+            website_name: string;
+          }[] = (await response.json()).tasks[0].result[0].items.filter(
+            (i: { type: string }) => i.type === 'organic',
+          );
+          const label = `${which}: ${k.keyword}`;
+          expect(new Set(items.map((i) => i.title)).size, label).toBe(
+            items.length,
+          );
+          expect(new Set(items.map((i) => i.url)).size, label).toBe(
+            items.length,
+          );
+          for (const i of items) {
+            expect(i.website_name, label).toBeTruthy();
+            expect(i.breadcrumb.startsWith(`https://${i.domain}`), label).toBe(
+              true,
+            );
+          }
+          // The Chinese demo's market is Taiwan: no Simplified-only characters in its titles.
+          if (language === 'zh-CN')
+            expect(items.map((i) => i.title).join(' '), label).not.toMatch(
+              /[与项务团队时间说导个们发会录评论实际费历区]/,
+            );
+        }
+      }
+    });
+
+    it("pages through a site's ranking keywords in the sort Domain overview asks for", async () => {
+      const project = { id: 'main', ...content.projects.main, language };
+      const market =
+        language === 'zh-CN'
+          ? { locationCode: 2158, language: 'zh-TW' }
+          : { locationCode: 2840, language: 'en' };
+      const read = async (offset: number, sort?: string) => {
+        const spec = domainSpec({
+          view: 'keywords',
+          target: 'nocobase.com',
+          ...market,
+          offset,
+          sort,
+        });
+        const raw = await (
+          await worldResponse(
+            project,
+            `https://api.dataforseo.com/v3/${spec.path}`,
+            { method: 'POST', body: JSON.stringify([spec.request]) },
+            now,
+          )
+        ).json();
+        return domainResult(raw, spec).result;
+      };
+      const first = await read(0);
+      const total = first.totalCount;
+      expect(total).toBeGreaterThan(100);
+      const all = [...first.items];
+      for (let offset = 100; offset < total; offset += 100)
+        all.push(...(await read(offset)).items);
+      expect(all).toHaveLength(total);
+      expect(new Set(all.map((i: any) => i.keyword)).size).toBe(total);
+      const traffic = all.map((i: any) => i.traffic);
+      expect(traffic).toEqual([...traffic].sort((a, b) => b - a));
+      const volume = (await read(0, 'volume:asc')).items.map(
+        (i: any) => i.volume,
+      );
+      expect(volume).toEqual([...volume].sort((a, b) => a - b));
+    });
+
     it('answers every Search & market › Backlinks lookup the way the service reads it', async () => {
       const project = { id: 'main', ...content.projects.main, language };
       const ask = async (path: string, body: unknown) =>
@@ -263,6 +358,88 @@ describe.each(['zh-CN', 'en-US'])(
         gap.result.items.some((r: any) => r.competitors.length === 1),
       ).toBe(true);
       expect(runs.pages.result.items.length).toBeGreaterThan(0);
+    });
+
+    it('answers the step 2b lookups: site search, Google Ads search volume and topic stories', async () => {
+      const ask = async (
+        which: 'main' | 'second',
+        url: string,
+        body?: unknown,
+      ) => {
+        const project = { id: which, ...content.projects[which], language };
+        return (
+          await worldResponse(
+            project,
+            url,
+            body ? { method: 'POST', body: JSON.stringify(body) } : {},
+            now,
+          )
+        ).json();
+      };
+      const siteSearch = async (which: 'main' | 'second') => {
+        const world = new World(
+          { id: which, ...content.projects[which], language },
+          now,
+        );
+        return ask(
+          which,
+          `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId(world)}:runReport`,
+          {
+            dateRanges: [{ startDate: '28daysAgo', endDate: 'yesterday' }],
+            dimensions: [{ name: 'searchTerm' }],
+            metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+            dimensionFilter: {
+              filter: {
+                fieldName: 'eventName',
+                stringFilter: { value: 'view_search_results' },
+              },
+            },
+          },
+        );
+      };
+      // Acme's site has site search off, so GA4 answers no terms; Acme CRM's visitors search for a few.
+      expect((await siteSearch('main')).rows ?? []).toHaveLength(0);
+      const crm = await siteSearch('second');
+      expect(crm.rows.length).toBeGreaterThanOrEqual(5);
+      expect(crm.rows[0].dimensionValues[0].value).toBe(
+        language === 'en-US' ? 'merge duplicate contacts' : '合并重复联系人',
+      );
+      // Google Ads search volume on the Standard queue: posting returns a task, reading it twelve months a keyword.
+      const posted = await ask(
+        'main',
+        'https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/task_post',
+        [
+          {
+            keywords: ['ガントチャート', 'タスク管理'],
+            location_code: 2392,
+            language_code: 'ja',
+          },
+        ],
+      );
+      expect(posted.tasks[0].cost).toBe(0.06);
+      const read = await ask(
+        'main',
+        `https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/task_get/${posted.tasks[0].id}`,
+      );
+      const volumes = read.tasks[0].result;
+      expect(volumes.map((r: { keyword: string }) => r.keyword)).toEqual([
+        'ガントチャート',
+        'タスク管理',
+      ]);
+      expect(volumes[0].search_volume).toBeGreaterThan(0);
+      expect(volumes[0].monthly_searches).toHaveLength(12);
+      // A followed topic's Hacker News story opens with its comments, which name products.
+      const stories = await ask(
+        'main',
+        'https://hn.algolia.com/api/v1/search?query=%22project%20management%22&tags=story&hitsPerPage=20',
+      );
+      expect(stories.hits.length).toBeGreaterThan(0);
+      const story = await ask(
+        'main',
+        `https://hn.algolia.com/api/v1/items/${stories.hits[0].objectID}`,
+      );
+      expect(story.title).toBe(stories.hits[0].title);
+      expect(story.children.length).toBeGreaterThan(0);
     });
 
     it('keeps CRM sources and GitHub scoped to CRM, offline and in the imported language', async () => {

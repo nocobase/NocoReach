@@ -42,6 +42,15 @@ test('记忆 is saved on the project next to its older fields; the Agent gets th
  const wait=()=>new Promise(r=>setTimeout(r,5));await k.add('1',{text:'a'.repeat(AGENT_BUDGET/2),title:'旧报告'});await wait();await k.add('1',{text:'c'.repeat(AGENT_BUDGET/2),title:'新报告'});await wait();await k.add('1',{text:'b'.repeat(100),title:'小资料'});
  const out=await k.forAgent('1');assert.deepEqual(out.map(i=>[i.title,Boolean(i.text),Boolean(i.omitted)]),[['小资料',true,false],['新报告',true,false],['旧报告',false,true]],'newest first; what does not fit is listed by title');
 });
+test('Add to followed topics (2026-11-10 step 2b): one topic appended to Memory once, within the limit',async()=>{
+ const {k}=harness(async()=>'');
+ await k.saveMemory('1',{topics:['project management']});
+ assert.deepEqual(await k.followTopic('1',{topic:' AI project assistant '}),{topics:['project management','AI project assistant'],added:true});
+ assert.deepEqual(await k.followTopic('1',{topic:'ai project ASSISTANT'}),{topics:['project management','AI project assistant'],added:false},'already followed');
+ await assert.rejects(k.followTopic('1',{topic:'  '}),e=>e.status===400);
+ await k.saveMemory('1',{topics:Array.from({length:10},(_,i)=>`topic ${i}`)});
+ await assert.rejects(k.followTopic('1',{topic:'one more'}),e=>e.status===409);
+});
 test('Agent 交付 (2026-10-08): an accepted document is kept once per task, with its task, in its own category',async()=>{
  const {k}=harness();
  const item=await k.saveDelivery('1',{taskId:'12',title:'内容选题与大纲：Block 显隐',text:'# 大纲\n1. 什么时候隐藏区块'});

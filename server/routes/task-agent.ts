@@ -20,6 +20,8 @@ import {
   type AppApiRouteContribution,
 } from '@nocobase/app-server/router';
 import { Hono, type MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { TASK_MEDIA_LIMIT } from '../../shared/manual-task.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import type { TaskService } from '../nocoreach/execution/service.js';
 import { TASK_DRAFT, TASK_READ } from '../nocoreach/execution/task-business.js';
@@ -30,7 +32,16 @@ import {
   TaskAgentDraft,
   TaskAgentResultInput,
   TaskAgentResult,
+  TaskAgentFile,
 } from './schemas.js';
+
+const invalidFile = (message: string) =>
+  new ApiError({
+    status: 'INVALID_ARGUMENT',
+    domain: 'nocoreach',
+    reason: 'INVALID_TASK_FILE',
+    message,
+  });
 
 export const taskAgentRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
@@ -188,6 +199,80 @@ export const taskAgentRoutes: AppApiRouteContribution<Application> =
               throw error;
             }),
         }),
+    );
+    routes.post(
+      '/file',
+      allow(TASK_DRAFT),
+      describeRoute({
+        tags: ['NocoReach Tasks'],
+        summary: 'Upload an image for the current task result',
+        operationId: 'uploadCurrentTaskFile',
+        description: `For a run making cards (Xiaohongshu, Instagram or LinkedIn): one PNG of the run's card size (1080×1440 for Xiaohongshu, 1080×1350 for Instagram and LinkedIn) per call, at most 20 MiB. Put the returned id in the result's cards.images, in the cards' order. An image the result does not use expires after a day.`,
+        security: [{ runToken: [] }],
+        // One file as `file`; the CLI sends the local path given as --file.
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file'],
+                properties: {
+                  file: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'A 1080×1440 or 1080×1350 PNG card image.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: dataResponse(TaskAgentFile),
+          ...apiErrorResponses,
+          409: apiErrorResponse(409),
+          413: apiErrorResponse(413),
+          429: apiErrorResponse(429),
+        },
+        ...cliRoute({
+          command: 'task file',
+          action: TASK_DRAFT,
+          examples: ['task file --file card-01.png'],
+        }),
+      }),
+      bodyLimit({
+        maxSize: TASK_MEDIA_LIMIT + 65536,
+        onError: () => {
+          throw new ApiError({
+            status: 'INVALID_ARGUMENT',
+            httpStatus: 413,
+            domain: 'nocoreach',
+            reason: 'TASK_MEDIA_TOO_LARGE',
+            message: 'Files must be at most 20 MiB.',
+          });
+        },
+      }),
+      async (context) => {
+        let body: Record<string, unknown>;
+        try {
+          body = await context.req.parseBody();
+        } catch {
+          throw invalidFile('Send one file as multipart form data, as `file`.');
+        }
+        const file = body.file;
+        if (!(file instanceof File))
+          throw invalidFile('Send one file as multipart form data, as `file`.');
+        return context.json(
+          {
+            data: await business().file(
+              runIdentityOf(context.get('auth'))!,
+              file,
+            ),
+          },
+          201,
+        );
+      },
     );
     router.route('/nocoreachAgent', routes);
     return router;

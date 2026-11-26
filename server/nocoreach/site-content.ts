@@ -26,16 +26,42 @@ const BLOG=new Set(['blog','blogs','posts','post','news','articles','article','c
 function classify(url){let u;try{u=new URL(url);}catch{return 'page';}if(/^(docs|doc|developer|developers|help)\./.test(u.hostname))return 'docs';if(/^blog\./.test(u.hostname))return 'blog';const parts=u.pathname.split('/').filter(Boolean).map(p=>p.toLowerCase());const first=/^[a-z]{2}(-[a-z0-9]{2,4})?$/.test(parts[0]||'')&&parts.length>1?parts[1]:parts[0];return BLOG.has(first)?'blog':DOCS.has(first)?'docs':'page';}
 const baseHost=h=>h.replace(/^www\./,'');
 function sameSite(url,origin){try{const h=new URL(url).hostname,b=baseHost(new URL(origin).hostname);return baseHost(h)===b||h.endsWith('.'+b);}catch{return false;}}
+// The day an article says it was published, YYYY-MM-DD ('' when none reads as one): article:published_time, a JSON-LD
+// or microdata datePublished, a <time datetime> inside its <article>, else the first date written within 1,500
+// characters after its <h1>, as nocobase.com writes only "Nov 11, 2026" under the title. Content workshop's Library
+// orders articles by it; a sitemap has no publish date (lastmod is the last change, and many sitemaps have none).
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function ymd(y,m,d){const t=Date.UTC(y,m-1,d),day=new Date(t);if(y<1995||day.getUTCMonth()!==m-1||day.getUTCDate()!==d||t>Date.now()+2*86400000)return '';return day.toISOString().slice(0,10);}
+const isoDay=v=>{const m=String(v||'').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);return m?ymd(+m[1],+m[2],+m[3]):'';};
+function writtenDay(text){const found=[];const add=(m,y,mo,d)=>{if(m){const v=ymd(+y,+mo,+d);if(v)found.push([m.index,v]);}};
+ let m=text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i);add(m,m?.[3],MONTHS[m?.[1]?.toLowerCase()],m?.[2]);
+ m=text.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})\b/i);add(m,m?.[3],MONTHS[m?.[2]?.toLowerCase()],m?.[1]);
+ m=text.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);add(m,m?.[1],m?.[2],m?.[3]);
+ m=text.match(/\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/);add(m,m?.[1],m?.[2],m?.[3]);
+ return found.sort((a,b)=>a[0]-b[0])[0]?.[1]||'';}
+function publishedOf(html){
+ const meta=html.match(/<meta[^>]+(?:property|name)=["']article:published_time["'][^>]*>/i)?.[0];const fromMeta=isoDay(meta?.match(/content=["']([^"']+)["']/i)?.[1]);if(fromMeta)return fromMeta;
+ const ld=isoDay(html.match(/"datePublished"\s*:\s*"([^"]+)"/)?.[1]);if(ld)return ld;
+ const micro=html.match(/<[^>]+itemprop=["']datePublished["'][^>]*>/i)?.[0];const fromMicro=isoDay(micro?.match(/(?:content|datetime)=["']([^"']+)["']/i)?.[1]);if(fromMicro)return fromMicro;
+ const article=html.match(/<article\b[\s\S]*?<\/article>/i)?.[0];const time=isoDay(article?.match(/<time\b[^>]*datetime=["']([^"']+)["']/i)?.[1]);if(time)return time;
+ const h1=html.search(/<h1\b/i);return h1<0?'':writtenDay(plain(html.slice(h1,h1+4000)).slice(0,1500));}
+// The page's language (<html lang>) and its translations (<link rel="alternate" hreflang>), at most 12, by language.
+function languagesOf(html,url){const lang=html.match(/<html\b[^>]*\blang=["']([^"']+)["']/i)?.[1]||null,alternates={};
+ for(const m of html.matchAll(/<link\b[^>]*>/gi)){const tag=m[0];if(!/\brel=["']?alternate\b/i.test(tag))continue;const hreflang=tag.match(/\bhreflang=["']([^"']+)["']/i)?.[1],href=tag.match(/\bhref=["']([^"']+)["']/i)?.[1];if(!hreflang||!href)continue;try{alternates[hreflang.toLowerCase()]=new URL(decode(href),url).href;}catch{/* ignore malformed links */}if(Object.keys(alternates).length>=12)break;}
+ return {lang,alternates:Object.keys(alternates).length?alternates:null};}
+// Pages read before these fields existed (META_VERSION) are read again, a few per tick like any other read.
+const META_VERSION=2;
 // What a page tells about itself (titles, description, words, links) and, for 网站审计, its indexing and markup:
 // noindex, canonical, H1 count, images without alt text, and up to 100 internal link targets (host and path).
 // The list leaves out each page's outgoing links: only Site audit reads them (audit.ts, from the stored pages), and on
-// 2026-11-06 they were 3.6 MB of the 4.5 MB list of a site with 1,610 pages.
-const listed=(pages:Record<string,unknown>[]):Record<string,unknown>[]=>pages.map(({links:_links,...page})=>page);
+// 2026-11-06 they were 3.6 MB of the 4.5 MB list of a site with 1,610 pages. Translations (`alternates`) are left
+// out too: only Content workshop reads them, from the stored pages.
+const listed=(pages:Record<string,unknown>[]):Record<string,unknown>[]=>pages.map(({links:_links,alternates:_alternates,metaVersion:_version,...page})=>page);
 function pageMeta(html,url){const title=plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,300),description=decode(html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i)?.[1]||'').slice(0,500),body=plain(html),words=(body.match(/[一-鿿]|[A-Za-z0-9]+/g)||[]).length;let internal=0;const host=baseHost(new URL(url).hostname),links=new Set();for(const m of html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["']/gi)){try{const t=new URL(decode(m[1]),url);if(baseHost(t.hostname)===host&&t.pathname!==new URL(url).pathname){internal++;if(links.size<100)links.add(`${baseHost(t.hostname)}${t.pathname.replace(/\/+$/,'')||'/'}`);}}catch{/* ignore malformed links */}}
  const robots=(html.match(/<meta[^>]+name=["']robots["'][^>]*content=["']([^"']*)["']/i)?.[1]||'').toLowerCase(),canonicalHref=html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1]||html.match(/<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i)?.[1];
  let canonical=null;try{canonical=canonicalHref?new URL(decode(canonicalHref),url).href:null;}catch{canonical=null;}
  const h1=(html.match(/<h1\b/gi)||[]).length,imagesNoAlt=[...html.matchAll(/<img\b[^>]*>/gi)].filter(m=>!/\balt\s*=\s*["'][^"']+["']/i.test(m[0])).length;
- return {title,description,words,internalLinks:internal,noindex:/noindex/.test(robots),canonical,h1,imagesNoAlt,links:[...links]};}
+ return {title,description,words,internalLinks:internal,noindex:/noindex/.test(robots),canonical,h1,imagesNoAlt,links:[...links],published:publishedOf(html)||null,...languagesOf(html,url)};}
 function counts(pages){return pages.reduce((a,p)=>(a[p.type]=(a[p.type]||0)+1,a),{});}
 function pathOf(url){try{return new URL(url).pathname.replace(/\/$/,'')||'/';}catch{return String(url||'').replace(/\/$/,'')||'/';}}
 function hostOf(url){try{return baseHost(new URL(url).hostname.toLowerCase());}catch{return '';}}
@@ -143,8 +169,8 @@ class SiteContent{
  // current.
  async enrich(id){const s=await this.state(id);if(!s)return 0;
   const stale=Date.now()-REREAD_MS,unread=s.pages.filter(p=>!p.fetchedAt),outside=unread.length<ENRICH_PER_TICK?await this.outsideToRead(id,s):[],known=new Map((s.outsidePages||[]).map(p=>[p.url,p]));
-  const old=[...s.pages.filter(p=>p.fetchedAt&&Date.parse(p.fetchedAt)<stale),...outside.map(url=>known.get(url)).filter(p=>p&&Date.parse(p.fetchedAt)<stale).map(p=>({...p,outside:true}))].sort((a,b)=>a.fetchedAt.localeCompare(b.fetchedAt));
-  const todo=[...unread,...outside.filter(url=>!known.has(url)).map(url=>({url,outside:true})),...old].slice(0,ENRICH_PER_TICK);if(!todo.length)return 0;const results=[];for(const p of todo){try{const r=await this.read(p.url);results.push({url:p.url,outside:p.outside,...(/text\/html/.test(r.type)?pageMeta(r.text,p.url):{}),fetchError:undefined,fetchedAt:new Date().toISOString()});}catch(e){results.push({url:p.url,outside:p.outside,fetchError:String(e.message||systemMessageText('publicSources.readFailed')).slice(0,120),fetchedAt:new Date().toISOString()});}}
+  const old=[...s.pages.filter(p=>p.fetchedAt&&(Date.parse(p.fetchedAt)<stale||(!p.fetchError&&p.metaVersion!==META_VERSION))),...outside.map(url=>known.get(url)).filter(p=>p&&Date.parse(p.fetchedAt)<stale).map(p=>({...p,outside:true}))].sort((a,b)=>a.fetchedAt.localeCompare(b.fetchedAt));
+  const todo=[...unread,...outside.filter(url=>!known.has(url)).map(url=>({url,outside:true})),...old].slice(0,ENRICH_PER_TICK);if(!todo.length)return 0;const results=[];for(const p of todo){try{const r=await this.read(p.url);results.push({url:p.url,outside:p.outside,...(/text\/html/.test(r.type)?pageMeta(r.text,p.url):{}),fetchError:undefined,fetchedAt:new Date().toISOString(),...(p.outside?{}:{metaVersion:META_VERSION})});}catch(e){results.push({url:p.url,outside:p.outside,fetchError:String(e.message||systemMessageText('publicSources.readFailed')).slice(0,120),fetchedAt:new Date().toISOString()});}}
   const read=results.filter(r=>r.outside).map(r=>({url:r.url,canonical:r.canonical??null,fetchedAt:r.fetchedAt,...(r.fetchError?{fetchError:r.fetchError}:{})}));
   await this.mutate(id,cur=>{if(!cur)return cur;const by=new Map(results.filter(r=>!r.outside).map(({outside:_outside,...r})=>[r.url,r]));cur.pages=cur.pages.map(p=>by.has(p.url)?{...p,...by.get(p.url)}:p);
    if(read.length){const keep=Date.now()-OUTSIDE_KEEP_MS,fresh=new Set(read.map(r=>r.url));cur.outsidePages=[...read,...(cur.outsidePages||[]).filter(p=>!fresh.has(p.url)&&Date.parse(p.fetchedAt)>=keep)].slice(0,OUTSIDE_KEEP);}

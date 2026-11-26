@@ -11,6 +11,7 @@ import { $t, useNocoReachLocale } from '#i18n';
 import { PageContainer } from '#components/reach/page';
 import { RouteChildPage } from '#components/route-child-page';
 import { Button } from '#components/ui/button';
+import { InfoTip } from '#components/reach/info-tip';
 import { cn } from '#lib/utils';
 import { mockSettingsAvailable } from '../../../app-plugins/nocoreach-mock/client/index.js';
 import {
@@ -36,7 +37,6 @@ import { useStickyHead } from './sticky-head.js';
 import { nextVersion } from '../../../shared/article-versions.js';
 import { TaskDraftScope } from './drafts.js';
 import type { TaskPageContext } from './reader-context.js';
-import { Checklist } from './review-parts.js';
 import { text } from './styles.js';
 
 // The article on a page of its own (2026-10-24 user request, as Ghost's full-screen preview and Notion's "open as
@@ -84,7 +84,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
     : [...w.results].reverse().find((r) => r?.article);
   // Under review, whoever may review edits it here as in the card, with the same edits (2026-11-04 user request).
   const editing = Boolean(reviewing && allowed && session);
-  const [checked, setChecked] = useState<string[]>([]);
   const [asking, setAsking] = useState(false);
   const { clear } = useTaskDraftStatus();
   const barRef = useStickyHead<HTMLDivElement>();
@@ -161,7 +160,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
   };
   // The edits made a version first; the command then acts on that version.
   const versioned = async (command: string, body: object) => {
-    const v = await submit.prepare(command === 'approveStage');
+    const v = await submit.prepare();
     return v
       ? act(command, {
           ...body,
@@ -170,9 +169,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
         })
       : undefined;
   };
-  const missingChecks = (stage.checklist || []).some(
-    (c) => c.required && !checked.includes(c.key),
-  );
   const targetGone = !(data.articleTargets || []).some(
     (t) => t.id === article.targetId,
   );
@@ -239,14 +235,19 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                             : 'taskDetail.approveAndPublish',
                         ),
                       primary: !nothing,
-                      disabled: missingChecks || session.readOnly,
+                      disabled: session.readOnly,
                       run: () =>
-                        void versioned('approveStage', { checked }).then(
-                          (d) => {
-                            if (d) setLeave(true);
-                          },
-                        ),
+                        void versioned('approveStage', {}).then((d) => {
+                          if (d) setLeave(true);
+                        }),
                     }
+              }
+              info={
+                round.toCms ? (
+                  <InfoTip label={$t('taskDetail.aboutPublishing')}>
+                    {$t('articleTask.pushDraftHint')}
+                  </InfoTip>
+                ) : undefined
               }
             />
           )}
@@ -273,13 +274,13 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
         {editing && session && asking && (
           <RequestChangesBox
             session={session}
-            nextVersion={nextVersion(versionsList, out.stepId)}
+            nextVersion={nextVersion(versionsList, out)}
             busy={busy}
             onCancel={() => setAsking(false)}
-            onSend={async (comment, imageIds) => {
+            onSend={async (comment, files) => {
               const d = await versioned('requestStageChanges', {
                 comment,
-                ...(imageIds.length ? { imageIds } : {}),
+                ...files,
               });
               if (d) setLeave(true);
               return Boolean(d);
@@ -299,12 +300,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
               onTab={(l) => show(l)}
               id={submit.id}
               errors={submit.errors}
-            />
-            <Checklist
-              stage={stage}
-              checked={checked}
-              setChecked={setChecked}
-              busy={busy}
             />
           </>
         ) : (

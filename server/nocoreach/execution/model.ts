@@ -2,6 +2,7 @@
 import type { TaskResultSource } from '../../../shared/task-result.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { taskState } from '../../../shared/task-pending.js';
+import { sameAttempt } from '../../../shared/playbook-change.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
 import type { FlowSnapshot } from './flow';
@@ -13,7 +14,7 @@ export function text(v: unknown, max = 30000): string {
 }
 export type Step = { id: string; title: string; owner: 'human' | 'local'; instruction: string; acceptance: string };
 export type Plan = { deliverable: string; verification: string; steps: Step[] };
-export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo; article?: any; restoredFrom?: import('../../../shared/article-versions.js').RestoredFrom; edits?: import('../../../shared/article-edit.js').ArticleEdits };
+export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo; article?: any; restoredFrom?: import('../../../shared/article-versions.js').RestoredFrom; edits?: import('../../../shared/article-edit.js').ArticleEdits; attempt?: number; cards?: import('../../../shared/repurpose.js').CardSet };
 // What the local Agent program reports for a build step: the PR it opened or updated, the files and the checks.
 // release/verifyText/pages come from the Agent's change note; changes hold before/after text of changed text files.
 export type FileChange = { path: string; before: string; after: string; truncated?: boolean };
@@ -22,15 +23,16 @@ export type VisibleChange = { page: string; label: string; before: string; after
 export type PullRequestInfo = { url: string; number: number; branch: string; headSha?: string; files: { path: string; additions: number; deletions: number }[]; checks?: { ok: boolean; summary: string }; outOfScope?: string[]; release?: string; verifyText?: string; pages?: string[]; changes?: FileChange[]; visibleChanges?: VisibleChange[]; previewUrl?: string };
 // Release (SPEC §6.0): after you publish, the local Agent merges the reviewed commit and the system checks the live pages.
 // Article releases (article-flow.ts) publish to a target instead of merging: publishing, then exporting when the target
-// exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person.
-export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
+// exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person. A new
+// article saved as a CMS draft waits in awaiting_cms for a person to publish it there (2026-11-12), with no deadline.
+export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late' | 'awaiting_cms'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
 // sortOrder is a board position from before 2026-11-02, when each column came to run newest activity first; it is no
 // longer written or read and stays only on tasks moved before then.
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
   agentId?: string; agentName?: string;
-  humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
+  humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string; stopped?: boolean }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; snooze?: import('../../../shared/task-pending.js').TaskSnooze | null; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
   // The pages a task was started to change when it left some of its pages to other tasks (2026-10-29).
@@ -41,26 +43,32 @@ export type Work = {
   // The website repository the task changes, kept at its start (2026-10-29, shared/repo-routing.ts); null when it
   // changes none. Tasks started before then have none kept.
   repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
+  // How many times the playbook was changed after the start (2026-11-11, shared/playbook-change.ts): runs, reviews and
+  // versions keep the attempt they belong to. None before the first change.
+  attempt?: number;
+  // Content workshop (2026-11-13): what the task adapts, into which form and for where (shared/repurpose.ts).
+  repurpose?: import('../../../shared/repurpose.js').Repurpose;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Images linked once the task started (2026-11-03): sent with messages and change requests, or pasted into Edit
-  // directly. `imageUrls` is where each was uploaded when an article that uses it was published, per target;
-  // `coverUrls` the value each target's cover field took for an image set as the cover (2026-11-05).
+  // directly. `imageUrls` is where each was uploaded when an article that uses it was published, per target.
   images?: string[];
+  // Documents sent with messages and change requests (2026-11-15), kept apart from images: never placed in an article.
+  documents?: string[];
   imageUrls?: Record<string, Record<string, string>>;
-  coverUrls?: Record<string, Record<string, string>>;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
   article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string; locales?: string[] };
   // `locales`: the languages chosen at start, primary first (2026-10-24); the Agent writes the primary, and once a person
   // approves it, `translateFrom` holds that approved version while the Agent translates it into the others. A
   // translation playbook (2026-10-25) sets `translateFrom` at start from the article as published (`published`).
-  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[]; locales?: string[]; translateFrom?: { artifactId: string | null; at: string; by: string; draft: any; text: { title: string; description: string; body: string }; fields: string[]; published?: boolean } };
+  // `drafts`: targets where the task's new article already waits as a draft, which a rebase updates in place (2026-11-12).
+  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[]; locales?: string[]; drafts?: string[]; translateFrom?: { artifactId: string | null; at: string; by: string; draft: any; text: { title: string; description: string; body: string }; fields: string[]; published?: boolean } };
 };
 /** A transcript event of a demo run, as the demo Agent plays it back (`demo-data/demo-agent.ts`). */
 export type RunEvent = { seq: number; at: string; type: string; content?: string; tool?: string; input?: unknown; output?: unknown; meta?: Record<string, unknown> };
 // A failed run keeps the official reason (`failureReason`), and `partialAt` says the content the Agent got before it
 // stopped was kept under the `partial` key (TaskService.finish).
-export type Run = { demoAgentId?: string; simulated?: boolean; transcript?: RunEvent[]; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; restartedAt?: string; autoRetry?: { of: string; restartedAt: string }; failureReason?: string; partialAt?: string; };
+export type Run = { demoAgentId?: string; simulated?: boolean; transcript?: RunEvent[]; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; restartedAt?: string; autoRetry?: { of: string; restartedAt: string }; failureReason?: string; partialAt?: string; attempt?: number; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail(systemMessageText('taskWork.planNeeds16Steps'));
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
@@ -103,14 +111,15 @@ export function makeArtifact(w: Work, content: unknown, actor: string, now: stri
 }
 export function canApplyRun(w: Work, run: Run): boolean {
   if (w.cancelledAt || run.cancelRequested) return false;
-  if (run.flowStage !== undefined) return w.stage === 'flow' && w.stageIndex === run.flowStage && w.flow?.stages[run.flowStage]?.key === run.stepId && w.humanOwnerId === run.ownerId && (w.results[run.flowStage]?.id || null) === run.baseArtifactId && w.results[run.flowStage]?.rejectedAt === run.baseRejectedAt;
+  if (run.flowStage !== undefined) return w.stage === 'flow' && sameAttempt(run, w) && w.stageIndex === run.flowStage && w.flow?.stages[run.flowStage]?.key === run.stepId && w.humanOwnerId === run.ownerId && (w.results[run.flowStage]?.id || null) === run.baseArtifactId && w.results[run.flowStage]?.rejectedAt === run.baseRejectedAt;
   return w.stage === 'work' && w.planVersion === run.planVersion && w.approvedPlanVersion === run.planVersion && w.plan?.steps[w.step]?.id === run.stepId && w.humanOwnerId === run.ownerId && (w.results[w.step]?.id || null) === run.baseArtifactId && w.results[w.step]?.rejectedAt === run.baseRejectedAt;
 }
 
 export type BoardState = 'todo' | 'doing' | 'review' | 'done';
 // The pages' rule (shared/task-pending.ts `taskState`), so the status text, notifications and the online agent agree
 // with the task list and the Tasks badge. Flow tasks: an Agent at work is in progress; a step waiting on a person (a
-// review, publishing, a failed run or merge, a step to start again, a change not seen online) needs confirmation; once
+// review, publishing, a failed run or merge, a step to start again, a change not seen online, a draft to publish in the
+// CMS) needs confirmation; once
 // live, watching the effect is the system's job and the task counts as done for you.
 export function boardState(w: Work): BoardState {
   if (w.cancelledAt) return 'done';

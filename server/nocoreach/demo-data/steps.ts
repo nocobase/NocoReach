@@ -14,7 +14,9 @@ import { secretKey } from '../policy.js';
 import { projectWork, type Artifact } from '../execution/model.js';
 import { compare, type Partition } from '../execution/effect.js';
 import { opportunityHistory } from './opportunities.js';
+import { demoAnalysisRun } from './analysis-run.js';
 import { taskHistory } from './task-history.js';
+import { writeWorkshop } from './workshop-history.js';
 import { BUSINESS_MEMBER } from '../../access/service.js';
 import type { RoleAccess } from '../../../shared/access-capabilities.js';
 import {
@@ -28,6 +30,7 @@ import {
   type DemoPerson,
 } from './content.js';
 import { writeActivity } from './activity.js';
+import { DEMO_CMS, demoCmsTarget } from './cms-article.js';
 import { backdateYouTube } from './youtube-history.js';
 import { backdateGitHubStars } from './github-history.js';
 import { ACME_TOPICS, CRM_TOPICS } from './world/script/topics.js';
@@ -165,6 +168,10 @@ export function demoSteps(host: DemoHost, language: string): DemoStep[] {
       key: 'tasks',
       weight: 2,
       run: (context) => writeTasks(host, content, context),
+    },
+    {
+      key: 'workshop',
+      run: (context) => writeWorkshop(host, content, context),
     },
     {
       key: 'opportunities',
@@ -412,6 +419,19 @@ async function connectSources(
       },
     ],
   ];
+  if (which === 'main')
+    phases.push([
+      // The blog CMS the demo's article task pushed its draft to (cms-article.ts), checked once as on connecting it.
+      'article-target',
+      async () => {
+        await p.articleTargets.save(id, {
+          revision: p.articleTargets.list(id).revision,
+          secret: 'demo-only-cms-api-key',
+          target: demoCmsTarget(spec.domain, en ? 'en' : 'zh'),
+        });
+        await p.articleTargets.test(id, DEMO_CMS.id);
+      },
+    ]);
   phases.push(
     // Followed topics in Memory before the sources that search them: Reddit, Hacker News, YouTube, Trends, GitHub
     // hot topics and AI questions read them on their next run.
@@ -735,6 +755,17 @@ async function connectSources(
         await p.aiQuestions.refresh(id);
       },
     ],
+    [
+      // Opportunities' new data (2026-11-10 step 2b): the week's reading of the topics' discussions, then site
+      // search, People also ask, the link gap and other-language markets as their reads leave them. The second read
+      // collects the Standard queue's search volumes.
+      'growth-sources',
+      async () => {
+        await p.topicDiscovery.run(id);
+        await p.growthSources.update(id);
+        await p.growthSources.update(id);
+      },
+    ],
   );
   await p.network.runProject(id, async () => {
     for (const [index, [name, run]] of phases.entries()) {
@@ -773,6 +804,75 @@ async function writeKnowledge(
         },
         data(context).people?.editor ?? context.actorId,
       );
+  await writeTeamSkill(host, context);
+}
+
+/**
+ * A Skill the team wrote itself (2026-11-17), beside the built-in ones: Skills and Add Skill in Analysis rules show
+ * what a user-written one looks like. Skill definitions are shared by every project and kept when the demo is cleared
+ * (clear-all.ts), so an import adds it only once.
+ */
+async function writeTeamSkill(host: DemoHost, context: DemoImportContext) {
+  const en = context.language === 'en-US';
+  const library = await host.skills.library(undefined, true);
+  if (
+    library.skills.some((s: { name: string }) => s.name === 'comparison-pages')
+  )
+    return;
+  await host.skills.add(
+    {
+      name: 'comparison-pages',
+      description: en
+        ? 'Use when writing or updating a page that compares Acme with a competitor: the structure we use, the six things we compare and how every claim cites its source.'
+        : '写或更新 Acme 和竞品的对比页时用：我们的页面结构、固定比较的 6 项，以及每条结论怎么注明来源。',
+      body: en
+        ? [
+            '# Comparison pages',
+            '',
+            'How our team writes a page comparing Acme with one competitor (Nimbus, Example Tasks).',
+            '',
+            '## Structure',
+            '',
+            '1. Who each product suits, in two sentences, before any table.',
+            '2. A table of the six things we always compare: views (board, list, Gantt), guest access, automation, integrations, price per seat, data export.',
+            '3. Where the competitor is stronger, said plainly; readers trust the page more for it.',
+            '4. How to move from the competitor, linking to the migration guide.',
+            '',
+            '## Rules',
+            '',
+            '- Every claim about the competitor cites its own documentation or pricing page, with the date it was read.',
+            '- Prices are per seat per month, billed yearly, in US dollars.',
+            '- Re-check the page when the competitor ships a major release.',
+            '',
+            '## Finding opportunities',
+            '',
+            'Look for keywords that name a competitor with "alternative", "vs" or "pricing", competitor pages that rank where we do not, and AI answers that recommend a competitor without naming Acme.',
+          ].join('\n')
+        : [
+            '# 对比页',
+            '',
+            '我们团队写 Acme 和单个竞品（Nimbus、Example Tasks）对比页的做法。',
+            '',
+            '## 结构',
+            '',
+            '1. 先用两句话说清两款产品各适合谁，再放表格。',
+            '2. 表格固定比较 6 项：视图（看板、列表、甘特图）、访客权限、自动化、集成、每席位价格、数据导出。',
+            '3. 竞品更强的地方直接写出来，读者反而更相信这一页。',
+            '4. 最后讲怎么从竞品迁移过来，链接到迁移指南。',
+            '',
+            '## 规则',
+            '',
+            '- 关于竞品的每条说法都注明来源：它自己的文档或价格页，以及查看日期。',
+            '- 价格统一按年付、每席位每月、美元。',
+            '- 竞品发布大版本后重新核对一遍。',
+            '',
+            '## 找机会',
+            '',
+            '留意带竞品名加“替代”“对比”“价格”的搜索词、竞品排上而我们没排上的页面，以及 AI 回答推荐了竞品却没提到 Acme 的问题。',
+          ].join('\n'),
+    },
+    data(context).people?.editor ?? context.actorId,
+  );
 }
 
 function storyTask(
@@ -851,12 +951,7 @@ function storyTask(
           mode: 'analyze',
           instruction: story.brief,
         },
-        {
-          key: 'review',
-          name: flow.review,
-          kind: 'review',
-          checklist: [{ key: 'facts', label: flow.checklist, required: true }],
-        },
+        { key: 'review', name: flow.review, kind: 'review' },
       ],
     };
     work.stageIndex = 1;
@@ -1068,21 +1163,21 @@ async function writeOpportunities(
         })),
         partitions,
       );
-      const row = await repo.findOne({
-        filter: { key: `strategy:${id}` },
-        transaction,
-      });
-      if (row)
-        await repo.update({
-          filterByTk: row.id,
-          values: { payload: state },
-          transaction,
-        });
-      else
-        await repo.create({
-          values: { key: `strategy:${id}`, payload: state },
-          transaction,
-        });
+      // The last analysis's rule and Skill counts, for Analysis rules (analysis-run.ts).
+      const run = demoAnalysisRun(state, which, String(id));
+      for (const [key, payload] of [
+        [`strategy:${id}`, state],
+        [`signals:${id}`, run],
+      ] as const) {
+        const row = await repo.findOne({ filter: { key }, transaction });
+        if (row)
+          await repo.update({
+            filterByTk: row.id,
+            values: { payload },
+            transaction,
+          });
+        else await repo.create({ values: { key, payload }, transaction });
+      }
     });
   }
 }

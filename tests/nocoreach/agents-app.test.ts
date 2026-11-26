@@ -625,6 +625,41 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     );
     expect(JSON.parse(rejectedCli.stdout)).toMatchObject({ ok: false });
     expect(rejectedCli.stdout).toContain('report.sources.0');
+    // `task file` sends the local file as multipart form data; only a Xiaohongshu cards run may upload images.
+    await writeFile(
+      join(directory, 'card-01.png'),
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6n6AAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    );
+    const fileCli = await promisify(execFile)(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        cli.replace(
+          "['task','draft','--content-file','draft.md','--json']",
+          "['task','file','--file','card-01.png','--json']",
+        ),
+      ],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          NOCOREACH_TEST_CLI_HOME: join(directory, 'state'),
+        },
+        timeout: 30000,
+      },
+    ).then(
+      () => null,
+      (error) => error,
+    );
+    expect(JSON.parse(fileCli.stdout)).toMatchObject({
+      ok: false,
+      command: 'task file',
+      error: { details: { httpStatus: 409 } },
+    });
   } finally {
     await new Promise<void>((resolve) => listener.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });
@@ -1391,9 +1426,6 @@ test('conversation runners discover business commands, query tasks and execute a
       requestId: randomUUID(),
       stageKey: reviewStage.key,
       artifactId: review.work.results[review.work.stageIndex - 1].id,
-      checked: (reviewStage.checklist || []).map(
-        (item: { key: string }) => item.key,
-      ),
       state: 'done',
       confirm: true,
       confirmOutOfScope: true,
@@ -1422,9 +1454,6 @@ test('conversation runners discover business commands, query tasks and execute a
       requestId: randomUUID(),
       stageKey: reviewStage.key,
       artifactId: review.work.results[review.work.stageIndex - 1].id,
-      checked: (reviewStage.checklist || []).map(
-        (item: { key: string }) => item.key,
-      ),
     }),
   });
   expect(humanApproval.status).toBe(200);

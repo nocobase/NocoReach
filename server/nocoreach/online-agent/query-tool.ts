@@ -835,10 +835,13 @@ const SOURCES: Record<string, Source> = {
               position: latest.position ?? null,
               url: latest.url ?? null,
               checkedAt: latest.at ?? null,
+              // Google hid more than 30% of the result links in that check: a null position there is unknown, not beyond 100.
+              ...(latest.uncertain ? { uncertain: true } : {}),
               previousPosition: previous.position ?? null,
               history: list(k.history).map((h) => ({
                 at: h.at,
                 position: h.position ?? null,
+                ...(h.uncertain ? { uncertain: true } : {}),
               })),
               nextCheckAt: k.nextCheckAt ?? null,
             };
@@ -1572,7 +1575,7 @@ pages: every site page with visits, search clicks and impressions, last modified
 audit: site audit (issues, pages). indexing: Google indexing of site pages (pages).
 github: repository (daily, referrers, paths, contributors, issues, pulls, releases, top_issues, discussions, languages). github_trends: repositories gaining stars (topics, gainers_week, gainers_day, gainers_month, new_hot, trending_daily, trending_weekly, trending_monthly).
 downloads: npm, PyPI, Docker and release files (packages, daily, versions, tags, assets).
-keywords: saved keywords with volume and the site's own rank. rank_tracking: tracked Google positions. keyword_suggestions: AI keyword suggestions.
+keywords: saved keywords with volume and the site's own rank. rank_tracking: tracked Google positions (an uncertain check's null position is unknown, not beyond 100). keyword_suggestions: AI keyword suggestions.
 trends: Google Trends (terms, rising, top, weekly, keywords). competitors: competitor watch (events, competitors); ranges 7, 28, 90.
 ai_search: saved AI search lookups (brands, answers, lookups).
 forum (topics, unanswered, categories, daily), hackernews (stories, comments, daily), reddit (posts, subreddits), x (posts, daily), discord and slack (messages, open, busiest, channels, daily), youtube and bilibili (videos, groups, daily), xiaohongshu (notes, groups, daily).

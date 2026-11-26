@@ -34,6 +34,10 @@ export const PROJECT_SNAPSHOTS = new Set([
   'analysis-rules',
   'automatic-content',
   'bilibili',
+  // The Content workshop's brand kit (`brand-kit:<project>`, workshop.ts).
+  'brand-kit',
+  // Its card styles made with AI (`card-styles:<project>`, card-styles.ts).
+  'card-styles',
   'chat',
   'community',
   'competitor-research',
@@ -49,6 +53,10 @@ export const PROJECT_SNAPSHOTS = new Set([
   'gsc-reports',
   'gsc-sitemaps',
   'google-local-reports',
+  // Opportunities' step 2b data (2026-11-10): growth-sources.ts, topic-discovery.ts and topic-weeks.ts.
+  'growth-sources',
+  'topic-discovery',
+  'topic-weeks',
   'hackernews',
   'keyword-suggest',
   'keyword-tags',
@@ -86,6 +94,10 @@ export const PROJECT_SNAPSHOTS = new Set([
   'nr-task-review',
   'nr-task-result',
   'nr-task-run',
+  // The colors read from an Agent's uploaded card images, per run (`nr-task-files:<project>:<task>:<run>`).
+  'nr-task-files',
+  // What a Content workshop task adapts, kept when the task is created.
+  'nr-task-source',
   'nr-task-sources',
   'packages',
   'rank-tracking',
@@ -97,6 +109,8 @@ export const PROJECT_SNAPSHOTS = new Set([
   'strategy',
   'task-numbers',
   'trends',
+  // Trending now opportunities skipped in Content workshop (`workshop-skips:<project>`, workshop.ts).
+  'workshop-skips',
   'x',
   'xiaohongshu',
   'youtube',

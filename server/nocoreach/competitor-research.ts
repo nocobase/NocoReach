@@ -3,6 +3,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
+import { googleRedirect } from './serp-links.js';
 // 竞品 › 总览 (2026-10-05, after Semrush's Domain Overview and Keyword Gap and Similarweb's side-by-side benchmark; user
 // choice: updated by itself once a month). For our site and each competitor with a website, DataForSEO Labs (one market):
 // the estimated organic traffic and ranking keywords month by month over the past year (historical_rank_overview); for
@@ -36,7 +37,8 @@ const history={specification(v){const {target,m,request}=base(v),from=new Date(D
 const gap={specification(v){const {target,m,request}=base(v),ours=hostOf(v.ours);if(!ours)fail(systemMessageText('competitorResearch.missingSiteDomain'));
   return {kind:'competitor-gap',target,ours,...m,path:'dataforseo_labs/google/domain_intersection/live',request:{target1:target,target2:ours,intersections:false,...request,limit:200},estimatedUsd:0.03,reservationUsd:0.06,priceVersion:'official-list-2026-07'};},
  result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:systemMessageText('competitorResearch.keywordGapLookupFailed'),result:null,costUsd:cost(raw,t)};
-  const items=(t.result?.[0]?.items||[]).map(i=>{const e=i?.first_domain_serp_element||{},k=i?.keyword_data||{};return {keyword:String(k.keyword||'').toLowerCase(),volume:num(k.keyword_info?.search_volume),difficulty:num(k.keyword_properties?.keyword_difficulty),intent:k.search_intent_info?.main_intent||null,position:num(e.rank_group??e.rank_absolute),url:typeof e.url==='string'?e.url:null,traffic:num(e.etv)===null?null:Math.round(e.etv)};}).filter(x=>x.keyword);
+  // A ranking page Google hid behind its redirect (serp-links.ts) is not known, so none is shown.
+  const items=(t.result?.[0]?.items||[]).map(i=>{const e=i?.first_domain_serp_element||{},k=i?.keyword_data||{};return {keyword:String(k.keyword||'').toLowerCase(),volume:num(k.keyword_info?.search_volume),difficulty:num(k.keyword_properties?.keyword_difficulty),intent:k.search_intent_info?.main_intent||null,position:num(e.rank_group??e.rank_absolute),url:typeof e.url==='string'&&!googleRedirect(e.url)?e.url:null,traffic:num(e.etv)===null?null:Math.round(e.etv)};}).filter(x=>x.keyword);
   return {status:'completed',errorCode:null,result:{items},costUsd:cost(raw,t)};}};
 // The competitor's pages that draw the most search traffic.
 const pages={specification(v){const {target,m,request}=base(v);

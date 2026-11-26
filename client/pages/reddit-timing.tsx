@@ -4,7 +4,13 @@ import { InfoTip } from '#components/reach/info-tip';
 import type { ReactNode } from 'react';
 
 export type RedditTimingState = {
-  lastRun?: { at: string; ok: boolean; lastSuccessAt?: string | null } | null;
+  lastRun?: {
+    at: string;
+    ok: boolean;
+    lastSuccessAt?: string | null;
+    /** Results whose links Google hid and that matched no known thread (reddit-source.ts), skipped. */
+    unresolved?: number;
+  } | null;
   schedule?: { kind: string; nextAt: string | null };
   diagnostics?: {
     term: string;
@@ -41,18 +47,25 @@ export function RedditTiming({
           ? 'redditTiming.nextQuery'
           : state.schedule.kind === 'budget'
             ? 'redditTiming.nextBudgetCheck'
-            : 'redditTiming.nextRetry',
+            : state.schedule.kind === 'queued'
+              ? 'redditTiming.nextRead'
+              : 'redditTiming.nextRetry',
         { 0: date(state.schedule.nextAt) },
       )
     : null;
+  // A search still in DataForSEO's queue is waiting, not failing.
   const failed = (state.diagnostics ?? []).filter(
-    (d) => d.reason !== 'success',
+    (d) => d.reason !== 'success' && d.reason !== 'queued',
   );
+  const skipped = state.lastRun?.unresolved ?? 0;
   return (
     <div className='flex flex-col gap-2'>
       <p className='nr-footnote flex flex-wrap items-center gap-1'>
         {lead ? <>{lead} · </> : null}
         {$t('redditTiming.lastSuccess', { 0: date(success) })}
+        {skipped ? (
+          <> · {$t('redditTiming.unresolvedSkipped', { 0: skipped })}</>
+        ) : null}
         <InfoTip label={$t('redditTiming.details')}>
           <span className='flex flex-col gap-1'>
             {next ? <span>{next}</span> : null}
@@ -60,6 +73,7 @@ export function RedditTiming({
               {$t('redditTiming.lastAttempt', { 0: date(state.lastRun?.at) })}
             </span>
             <span>{$t('redditTiming.hourlyScan')}</span>
+            {skipped ? <span>{$t('redditTiming.unresolvedHelp')}</span> : null}
           </span>
         </InfoTip>
         {trailing}

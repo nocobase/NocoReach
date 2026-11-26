@@ -1,15 +1,14 @@
 import { systemMessageText } from './i18n/messages.js';
+import type { RepurposeForm } from './repurpose.js';
 // Pure canonical types and definitions shared by the server and snapshot display.
 export type StageKind = 'agent' | 'review' | 'publish' | 'release' | 'observe';
 export type AgentMode = 'analyze' | 'change';
-export type ChecklistItem = { key: string; label: string; required: boolean };
 export type Stage = {
   key: string;
   name: string;
   kind: StageKind;
   mode?: AgentMode;
   instruction?: string;
-  checklist?: ChecklistItem[];
   skills?: string[];
 };
 export type PlaybookKind = 'plan' | 'build';
@@ -19,10 +18,14 @@ export type Step = {
   name: string;
   kind: StepKind;
   instruction?: string;
-  checklist?: ChecklistItem[];
   skills?: string[];
 };
-export type Category = 'research' | 'create' | 'optimize' | 'technical';
+export type Category =
+  | 'research'
+  | 'create'
+  | 'optimize'
+  | 'technical'
+  | 'repurpose';
 export type Playbook = {
   id: string;
   name: string;
@@ -36,13 +39,10 @@ export type Playbook = {
   version: number;
   updatedAt?: string;
   copiedFrom?: string;
+  /** What a Content workshop playbook makes (shared/repurpose.ts); its result is read by this, never by the id. */
+  form?: RepurposeForm;
 };
 
-const facts: ChecklistItem = {
-  key: 'facts',
-  label: systemMessageText('playbooks.citedDataFactsAccurate'),
-  required: true,
-};
 const analyze = (
   instruction: string,
   name = systemMessageText('common.analyze'),
@@ -58,11 +58,11 @@ const change = (
   kind: 'change',
   instruction,
 });
-const review = (
-  name: string,
-  checklist: ChecklistItem[] = [],
-  key = 'review',
-): Step => ({ key, name, kind: 'review', checklist });
+const review = (name: string, key = 'review'): Step => ({
+  key,
+  name,
+  kind: 'review',
+});
 // The Skills a built-in step always gives the Agent (skills-builtin.ts ids; at most five).
 const withSkills = (step: Step, skills: string[]): Step =>
   skills.length ? { ...step, skills } : step;
@@ -89,7 +89,7 @@ const doc = (
     description,
     steps: [
       withSkills(analyze(instructions, step), skills),
-      review(systemMessageText('common.review'), [facts], 'accept'),
+      review(systemMessageText('common.review'), 'accept'),
     ],
     next,
     system: true,
@@ -121,11 +121,7 @@ const work = (
               ),
               skills,
             ),
-            review(
-              systemMessageText('playbook.reviewPlan'),
-              [],
-              'approve-plan',
-            ),
+            review(systemMessageText('playbook.reviewPlan'), 'approve-plan'),
           ]
         : []),
       withSkills(change(instructions, step), skills),
@@ -134,6 +130,35 @@ const work = (
     next: [],
     system: true,
     version: 3,
+  });
+
+// Content workshop (2026-11-13): the Agent adapts an article or a topic into one form, and the person's approval completes
+// the task. Nothing is saved to Knowledge and nothing continues from it; the source and the destination come from the
+// workshop, so New task does not offer these.
+const adapt = (
+  id: string,
+  form: RepurposeForm,
+  name: string,
+  description: string,
+  instructions: string,
+  skills: string[],
+): Playbook =>
+  withKind({
+    id,
+    name,
+    category: 'repurpose',
+    description,
+    steps: [
+      withSkills(
+        analyze(instructions, systemMessageText('playbooks.adaptStep')),
+        skills,
+      ),
+      review(systemMessageText('common.review'), 'accept'),
+    ],
+    next: [],
+    system: true,
+    version: 3,
+    form,
   });
 
 // The playbook that translates a page or an article into other languages, and copies of it: an article task linked to
@@ -277,19 +302,69 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     ['seo-audit', 'schema', 'site-architecture'],
     true,
   ),
+  adapt(
+    'xhs-cards',
+    'xhs',
+    systemMessageText('playbooks.xhsCards'),
+    systemMessageText('playbooks.xhsCardsDescription'),
+    systemMessageText('playbooks.xhsCardsInstruction'),
+    ['xhs-cards'],
+  ),
+  // Carousel's other places (2026-11-24): Instagram's 4:5 cards with a caption and hashtags, and LinkedIn's 4:5 pages
+  // downloaded as one PDF with the document's title and the post.
+  adapt(
+    'instagram-carousel',
+    'instagram',
+    systemMessageText('playbooks.instagramCarousel'),
+    systemMessageText('playbooks.instagramCarouselDescription'),
+    systemMessageText('playbooks.instagramCarouselInstruction'),
+    ['instagram-carousel'],
+  ),
+  adapt(
+    'linkedin-carousel',
+    'linkedin-carousel',
+    systemMessageText('playbooks.linkedinCarousel'),
+    systemMessageText('playbooks.linkedinCarouselDescription'),
+    systemMessageText('playbooks.linkedinCarouselInstruction'),
+    ['linkedin-carousel'],
+  ),
+  adapt(
+    'x-posts',
+    'x',
+    systemMessageText('playbooks.xPosts'),
+    systemMessageText('playbooks.xPostsDescription'),
+    systemMessageText('playbooks.xPostsInstruction'),
+    ['x-posts'],
+  ),
+  adapt(
+    'linkedin-post',
+    'linkedin',
+    systemMessageText('playbooks.linkedinPost'),
+    systemMessageText('playbooks.linkedinPostDescription'),
+    systemMessageText('playbooks.linkedinPostInstruction'),
+    ['linkedin-post'],
+  ),
+  adapt(
+    'community-post',
+    'community',
+    systemMessageText('playbooks.communityPost'),
+    systemMessageText('playbooks.communityPostDescription'),
+    systemMessageText('playbooks.communityPostInstruction'),
+    ['community-post'],
+  ),
 ];
+
+/** The playbooks the workshop starts; New task and a task's playbook picker leave them out. */
+export const isRepurposePlaybook = (
+  p?: Pick<Playbook, 'category' | 'form'> | null,
+) => Boolean(p && (p.form || p.category === 'repurpose'));
 
 // The stages a playbook runs through (the shared stage engine in service.ts executes them): its steps, then 上线 and 观察
 // when a step changes the repository.
 export function stagesFor(p: Pick<Playbook, 'steps'>): Stage[] {
   const stages: Stage[] = p.steps.map((s) =>
     s.kind === 'review'
-      ? {
-          key: s.key,
-          name: s.name,
-          kind: 'review',
-          checklist: s.checklist || [],
-        }
+      ? { key: s.key, name: s.name, kind: 'review' }
       : {
           key: s.key,
           name: s.name,

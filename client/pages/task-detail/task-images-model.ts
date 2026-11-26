@@ -12,12 +12,15 @@ import { $t } from '#i18n';
 import { formatDate } from '#lib/format';
 import {
   TASK_MEDIA_LIMIT,
+  isTaskDocument,
   type TaskMediaView,
 } from '../../../shared/manual-task.js';
 import {
   isTaskImageType,
+  messageFileKind,
   taskImageOf,
   taskImageRef,
+  type MessageDocument,
   type MessageImage,
 } from '../../../shared/task-images.js';
 import type { TaskData } from '../task-execution-types';
@@ -25,7 +28,8 @@ import type { TaskData } from '../task-execution-types';
 // Images on a started task (2026-11-03 user request): added to a message or change request in Activity, or pasted
 // into Edit directly. They upload as the person adds them and are linked to the task when the message is sent or the
 // edit saved; an article shows one by its task media path, which publishing replaces with the target's address.
-// The parts that show them are in task-images.tsx.
+// A message or change request takes documents as well (2026-11-15), which only inform the Agent. The parts that show
+// them are in task-images.tsx.
 
 /** Where the page's uploads go: the task the images are for. */
 export type TaskImageScope = { projectId: number; taskId: string };
@@ -43,7 +47,7 @@ export const ArticleImageNotesContext = createContext<ReadonlyMap<
   string
 > | null>(null);
 
-/** Why a picked file was not added: the type, the size or the message's limit. */
+/** Why a picked file was not added to an image-only input (the article's body and Edit directly): type, size or limit. */
 export function imageProblem(file: File, count: number, max: number) {
   if (!isTaskImageType(file.type))
     return $t('taskImages.typeRejected', { 0: file.name });
@@ -52,6 +56,36 @@ export function imageProblem(file: File, count: number, max: number) {
   if (count >= max) return $t('taskImages.tooMany', { 0: max });
   return '';
 }
+
+/**
+ * Why a picked file was not added to a message or change request (2026-11-15): a type a new task does not take, a
+ * legacy Office format, the size, or the message's limit, counting images and documents together.
+ */
+export function messageFileProblem(file: File, count: number, max: number) {
+  const kind = messageFileKind(file.name, file.type);
+  if (kind?.kind === 'legacy')
+    return $t('taskFiles.legacyFormat', { 0: file.name });
+  if (!kind) return $t('taskFiles.typeRejected', { 0: file.name });
+  if (file.size > TASK_MEDIA_LIMIT)
+    return $t('taskImages.tooLarge', { 0: file.name });
+  if (count >= max) return $t('taskFiles.tooMany', { 0: max });
+  return '';
+}
+
+/** A refused task media request, with the reason and the reader's words the server gave when it gave them. */
+class MediaError extends Error {
+  constructor(
+    readonly status: number,
+    readonly reason?: string,
+    readonly text?: string,
+  ) {
+    super(`Task media request failed: ${status}`);
+  }
+}
+
+/** What the server said when it refused a task media request, in the reader's language, or nothing. */
+export const mediaErrorText = (error: unknown) =>
+  error instanceof MediaError ? error.text || '' : '';
 
 // The task media endpoints (server/routes/manual-tasks.ts) take a file as multipart form data, which the pages' JSON
 // client does not send; the request carries the sign-in cookie as that client's do.
@@ -64,55 +98,156 @@ async function media(path: string, init: RequestInit) {
       ...init,
     },
   );
-  if (!response.ok)
-    throw new Error(`Task media request failed: ${response.status}`);
+  if (!response.ok) {
+    const body = (await Promise.resolve()
+      .then(() => response.json())
+      .catch(() => null)) as {
+      error?: {
+        reason?: unknown;
+        message?: unknown;
+        localizedMessage?: { message?: unknown };
+      };
+    } | null;
+    const reason = body?.error?.reason,
+      text = body?.error?.localizedMessage?.message ?? body?.error?.message;
+    throw new MediaError(
+      response.status,
+      typeof reason === 'string' ? reason : undefined,
+      typeof text === 'string' ? text : undefined,
+    );
+  }
   return response;
+}
+
+/** A file uploaded for the task, as a message keeps it: an image, or a document with its type and size. */
+type Uploaded = MessageImage & { type: string; size: number };
+
+/** The file a media request stored, by the address a message and an article keep (without the app's base path). */
+async function storedFile(response: Response): Promise<Uploaded> {
+  const { data } = (await response.json()) as { data: TaskMediaView };
+  const stored = taskImageOf(data.contentUrl);
+  return {
+    id: data.id,
+    name: data.filename,
+    ref: taskImageRef(data.id, stored?.ext),
+    type: data.mimeType,
+    size: data.size,
+  };
+}
+const imageOf = ({ id, name, ref }: Uploaded): MessageImage => ({
+  id,
+  name,
+  ref,
+});
+
+const mediaQuery = (scope: TaskImageScope, requestId: string) =>
+  new URLSearchParams({
+    projectId: String(scope.projectId),
+    requestId,
+    taskId: scope.taskId,
+  });
+
+/** Upload one image or document for the task; the server keeps it unlinked until a message or an edit uses it. */
+function useTaskFileUpload() {
+  const scope = useContext(TaskImageContext);
+  return async (file: File, requestId: string): Promise<Uploaded> => {
+    if (!scope) throw new Error('Task images need the task page.');
+    const body = new FormData();
+    body.set('file', file);
+    return storedFile(
+      await media(`?${mediaQuery(scope, requestId)}`, { method: 'POST', body }),
+    );
+  };
 }
 
 /** Upload one image for the task; the server keeps it unlinked until a message or an edit uses it. */
 export function useImageUpload() {
+  const upload = useTaskFileUpload();
+  return async (file: File, requestId: string): Promise<MessageImage> =>
+    imageOf(await upload(file, requestId));
+}
+
+/**
+ * Upload one Xiaohongshu card image drawn in the browser with Edit directly (2026-11-17); the server keeps it unlinked
+ * until the edit is saved with it.
+ */
+export function useCardImageUpload() {
   const scope = useContext(TaskImageContext);
-  return async (file: File, requestId: string): Promise<MessageImage> => {
+  return async (
+    image: Blob,
+    name: string,
+    requestId: string,
+  ): Promise<MessageImage> => {
     if (!scope) throw new Error('Task images need the task page.');
     const body = new FormData();
-    body.set('file', file);
-    const query = new URLSearchParams({
-      projectId: String(scope.projectId),
-      requestId,
-      taskId: scope.taskId,
-    });
-    const { data } = (await (
-      await media(`?${query}`, { method: 'POST', body })
-    ).json()) as { data: TaskMediaView };
-    // The stored file's address without the application's base path: what a message and an article keep.
-    const stored = taskImageOf(data.contentUrl);
-    return {
-      id: data.id,
-      name: data.filename,
-      ref: taskImageRef(data.id, stored?.ext),
-    };
+    body.set('file', new File([image], name, { type: 'image/png' }));
+    return imageOf(
+      await storedFile(
+        await media(`/card?${mediaQuery(scope, requestId)}`, {
+          method: 'POST',
+          body,
+        }),
+      ),
+    );
   };
 }
 
-/** Discard an image the person removed before sending; it was never linked. */
-const discard = (image: MessageImage) =>
-  media(`/${encodeURIComponent(image.id)}`, { method: 'DELETE' }).catch(
+/**
+ * Copy an image pasted from another site into the task (2026-11-12): the server reads its address and keeps it as an
+ * upload, like one picked from a file.
+ */
+export function useImageImport() {
+  const scope = useContext(TaskImageContext);
+  return async (url: string, requestId: string): Promise<MessageImage> => {
+    if (!scope) throw new Error('Task images need the task page.');
+    return imageOf(
+      await storedFile(
+        await media(`/import?${mediaQuery(scope, requestId)}`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ url }),
+        }),
+      ),
+    );
+  };
+}
+
+/** Discard a file the person removed before sending; it was never linked. */
+const discard = (file: { id: string }) =>
+  media(`/${encodeURIComponent(file.id)}`, { method: 'DELETE' }).catch(
     () => undefined,
   );
 
-/** The images a message's draft keeps (JSON), or none when it holds anything else. */
-export function readImages(stored: string): MessageImage[] {
+/** A file a message's draft keeps: an image, or a document, which also keeps its type. */
+export type MessageFile = MessageImage | MessageDocument;
+export const isMessageDocument = (file: MessageFile): file is MessageDocument =>
+  'type' in file && typeof file.type === 'string' && isTaskDocument(file.type);
+
+/**
+ * The files a message's draft keeps (JSON) in the order they were added, or none when it holds anything else. A draft
+ * from before documents (2026-11-15) holds images only.
+ */
+export function readMessageFiles(stored: string): MessageFile[] {
   if (!stored) return [];
   try {
     const value: unknown = JSON.parse(stored);
     return Array.isArray(value)
-      ? value.filter(
-          (i): i is MessageImage =>
-            Boolean(i) &&
-            typeof (i as MessageImage).id === 'string' &&
-            typeof (i as MessageImage).name === 'string' &&
-            typeof (i as MessageImage).ref === 'string',
-        )
+      ? value.filter((i): i is MessageFile => {
+          const file = i as Partial<MessageDocument> | null;
+          return (
+            Boolean(file) &&
+            typeof file!.id === 'string' &&
+            typeof file!.name === 'string' &&
+            typeof file!.ref === 'string' &&
+            (file!.type === undefined ||
+              (typeof file!.type === 'string' &&
+                isTaskDocument(file!.type) &&
+                typeof file!.size === 'number'))
+          );
+        })
       : [];
   } catch {
     return [];
@@ -126,30 +261,53 @@ export type ComposerImage = {
   preview: string;
   image?: MessageImage;
 };
+export type ComposerDocument = {
+  key: string;
+  name: string;
+  size: number;
+  document?: MessageDocument;
+};
+type ComposerEntry =
+  | ({ kind: 'image' } & ComposerImage)
+  | ({ kind: 'document' } & ComposerDocument);
+const storedOf = (entry: ComposerEntry): MessageFile | undefined =>
+  entry.kind === 'image' ? entry.image : entry.document;
 
 /**
- * The images a message to the Agent or a change request may carry, as Activity's message box adds them: by paste,
- * drop or Add image, uploaded at once and sent with the message. `stored` keeps the uploaded ones with the message's
- * draft, so leaving the page and coming back keeps them.
+ * The files a message to the Agent or a change request may carry, as Activity's message box adds them: by paste,
+ * drop or Add attachment, uploaded at once and sent with the message. Images are numbered among themselves (Image 1,
+ * Image 2); documents show by name (2026-11-15). `stored` keeps the uploaded ones with the message's draft, so leaving
+ * the page and coming back keeps them.
  */
-export function useComposerImages({
+export function useComposerFiles({
   stored,
   store,
   max,
 }: {
-  stored: MessageImage[];
-  store: (images: MessageImage[]) => void;
+  stored: MessageFile[];
+  store: (files: MessageFile[]) => void;
   max: number;
 }) {
-  const upload = useImageUpload();
+  const upload = useTaskFileUpload();
   const [requestId, setRequestId] = useState(() => createUuid());
-  const [entries, setEntries] = useState<ComposerImage[]>(() =>
-    stored.map((image) => ({
-      key: image.id,
-      name: image.name,
-      preview: taskImageSrc(image.ref),
-      image,
-    })),
+  const [entries, setEntries] = useState<ComposerEntry[]>(() =>
+    stored.map((file) =>
+      isMessageDocument(file)
+        ? {
+            kind: 'document',
+            key: file.id,
+            name: file.name,
+            size: file.size,
+            document: file,
+          }
+        : {
+            kind: 'image',
+            key: file.id,
+            name: file.name,
+            preview: taskImageSrc(file.ref),
+            image: { id: file.id, name: file.name, ref: file.ref },
+          },
+    ),
   );
   const [problem, setProblem] = useState('');
   const entriesRef = useRef(entries);
@@ -160,79 +318,129 @@ export function useComposerImages({
       activeRef.current = false;
     };
   }, []);
-  const change = (next: ComposerImage[]) => {
+  const change = (next: ComposerEntry[]) => {
     entriesRef.current = next;
     if (!activeRef.current) return;
     setEntries(next);
-    store(next.flatMap((e) => (e.image ? [e.image] : [])));
+    store(next.flatMap((e) => storedOf(e) ?? []));
   };
   function add(files: File[]) {
     const problems: string[] = [];
     for (const file of files) {
-      const why = imageProblem(file, entriesRef.current.length, max);
+      const why = messageFileProblem(file, entriesRef.current.length, max);
       if (why) {
         if (!problems.includes(why)) problems.push(why);
         continue;
       }
       const key = createUuid(),
-        preview = URL.createObjectURL(file);
-      change([...entriesRef.current, { key, name: file.name, preview }]);
+        image = messageFileKind(file.name, file.type)?.kind === 'image',
+        preview = image ? URL.createObjectURL(file) : '';
+      change([
+        ...entriesRef.current,
+        image
+          ? { kind: 'image', key, name: file.name, preview }
+          : { kind: 'document', key, name: file.name, size: file.size },
+      ]);
       upload(file, requestId).then(
-        (image) => {
+        (done) => {
           if (!entriesRef.current.some((e) => e.key === key)) {
-            void discard(image);
+            void discard(done);
             return;
           }
+          const { id, name, ref } = done;
           change(
             entriesRef.current.map((e) =>
-              e.key === key ? { ...e, image } : e,
+              e.key !== key
+                ? e
+                : e.kind === 'image'
+                  ? { ...e, image: { id, name, ref } }
+                  : { ...e, document: done },
             ),
           );
         },
-        () => {
-          URL.revokeObjectURL(preview);
+        (failure: unknown) => {
+          if (preview) URL.revokeObjectURL(preview);
           change(entriesRef.current.filter((e) => e.key !== key));
+          // A document the server read and refused says why, as New task does.
+          const reason =
+            failure instanceof MediaError ? failure.reason : undefined;
           if (activeRef.current)
-            setProblem($t('taskImages.uploadFailed', { 0: file.name }));
+            setProblem(
+              $t(
+                reason === 'TASK_MEDIA_TEXT_ENCODING'
+                  ? 'taskFiles.textEncoding'
+                  : reason === 'TASK_MEDIA_LEGACY_FORMAT'
+                    ? 'taskFiles.legacyFormat'
+                    : 'taskImages.uploadFailed',
+                { 0: file.name },
+              ),
+            );
         },
       );
     }
     setProblem(problems.join(' '));
   }
-  const release = (entry: ComposerImage) => {
-    if (entry.preview.startsWith('blob:')) URL.revokeObjectURL(entry.preview);
+  const release = (entry: ComposerEntry) => {
+    if (entry.kind === 'image' && entry.preview.startsWith('blob:'))
+      URL.revokeObjectURL(entry.preview);
   };
   function remove(key: string) {
     const entry = entriesRef.current.find((e) => e.key === key);
     if (!entry) return;
     release(entry);
-    if (entry.image) void discard(entry.image);
+    const file = storedOf(entry);
+    if (file) void discard(file);
     change(entriesRef.current.filter((e) => e.key !== key));
   }
-  /** After sending: the images are the task's now, and the next message starts empty. */
+  /** After sending: the files are the task's now, and the next message starts empty. */
   function sent() {
     entriesRef.current.forEach(release);
     change([]);
     setProblem('');
     setRequestId(createUuid());
   }
-  const imageFiles = (list: FileList | null | undefined) =>
-    Array.from(list ?? []).filter(
-      (f) => f.type.startsWith('image/') || !f.type,
-    );
+  const images = entries.filter(
+    (e): e is { kind: 'image' } & ComposerImage => e.kind === 'image',
+  );
+  const documents = entries.filter(
+    (e): e is { kind: 'document' } & ComposerDocument => e.kind === 'document',
+  );
   return {
-    entries,
+    images,
+    documents,
+    /** Images and documents together, which the message's limit counts. */
+    count: entries.length,
     problem,
-    uploading: entries.some((e) => !e.image),
-    ids: entries.flatMap((e) => (e.image ? [e.image.id] : [])),
+    uploading: entries.some((e) => !storedOf(e)),
+    /** What the message sends: `imageIds`, numbered as added, and `documentIds` when it has documents. */
+    payload: (): { imageIds?: string[]; documentIds?: string[] } => {
+      const imageIds = images.flatMap((e) => (e.image ? [e.image.id] : [])),
+        documentIds = documents.flatMap((e) =>
+          e.document ? [e.document.id] : [],
+        );
+      return {
+        ...(imageIds.length ? { imageIds } : {}),
+        ...(documentIds.length ? { documentIds } : {}),
+      };
+    },
     add,
     remove,
     sent,
     onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      const files = imageFiles(event.clipboardData.files);
+      const files = Array.from(event.clipboardData.files ?? []);
       if (!files.length) return;
-      // A screenshot pastes as an image; copied text that also carries an image stays text as well.
-      if (!event.clipboardData.getData('text/plain')) event.preventDefault();
+      // A screenshot or a copied file pastes as a file, not its name as well; copied text that also carries an image
+      // stays text as well.
+      const text = event.clipboardData.getData('text/plain'),
+        names = files.map((f) => f.name);
+      if (
+        !text ||
+        text
+          .split(/[\r\n]+/)
+          .filter((line) => line.trim())
+          .every((line) => names.includes(line.trim()))
+      )
+        event.preventDefault();
       add(files);
     },
     onDrop: (event: DragEvent<HTMLElement>) => {

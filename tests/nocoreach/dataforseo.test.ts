@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { DataForSeo, REUSE_MS, RECENT_MS } from '../../server/nocoreach/dataforseo.js';
 const test=__vitest_test;
 const DAY=86400000;
-// In-memory nrKeywordRuns with just the filters the service uses.
-function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
+// In-memory nrKeywordRuns with just the filters the service uses (ids compared as the database's string keys).
+function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):k==='id'?String(r[k])===String(v):r[k]===v);
  const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};
  return {rows,repo:{findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),
   create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)}};}
@@ -66,4 +66,22 @@ test('修改预算: the monthly budget changes on its own, the credentials and t
  const {d}=service();assert.deepEqual(await d.setBudget('1',20),{configured:true,verifiedAt:'t',monthlyBudgetUsd:20});
  assert.equal(d.config('1').login,'a');assert.equal(d.config('1').password,'b');
  await assert.rejects(d.setBudget('1',0),/预算/);await assert.rejects(d.setBudget('1',101),/预算/);await assert.rejects(d.setBudget('2',10),/凭证|API/);
+});
+// The Standard queue (2026-11-11): billed when posted, read back for free until DataForSEO has done the task.
+test('a queued kind posts once, stays queued until the task is done, keeps the post cost and is never posted again meanwhile',async()=>{
+ let posts=0,gets=0,ready=false;const fetchImpl=async(url,init)=>{if(String(url).endsWith('/task_post')){posts++;assert.equal(init.method,'POST');return {ok:true,json:async()=>({status_code:20000,cost:0.006,tasks:[{id:'0b6c-task',status_code:20100,result:null}]})};}
+  gets++;assert.match(String(url),/demo\/queue\/task_get\/advanced\/0b6c-task$/);assert.equal(init.method,'GET');return {ok:true,json:async()=>ready?{status_code:20000,cost:0,tasks:[{id:'0b6c-task',status_code:20000,result:[7]}]}:{status_code:20000,cost:0,tasks:[{id:'0b6c-task',status_code:40602}]}};};
+ const {d,m}=service({fetchImpl});d.kinds.queued={specification:v=>({kind:'queued',queue:'demo/queue',path:'demo/queue/task_post',request:{target:v.target},estimatedUsd:0.006,reservationUsd:0.01}),result:raw=>({status:'completed',result:{items:raw.tasks[0].result},costUsd:raw.cost})};
+ const first=await d.run('1','queued',{target:'crm',requestKey:'request-queued01'});assert.deepEqual([first.status,first.taskId,first.costUsd,first.reservedUsd,posts,gets],['queued','0b6c-task',0.006,0,1,1]);
+ const other=await d.run('1','queued',{target:'crm',requestKey:'request-queued02',forceRefresh:true});assert.deepEqual([other.id,other.status,posts],[first.id,'queued',1],'the same query is waited for');
+ ready=true;const done=await d.collect('1',String(first.id));assert.deepEqual([done.status,done.result.items,done.costUsd,posts],['completed',[7],0.006,1]);
+ assert.equal((await d.run('1','queued',{target:'crm',requestKey:'request-queued01'})).status,'completed');assert.equal(posts,1);
+ // A task never done is given up after two days; its cost stays counted.
+ ready=false;m.rows.length=0;const late=await d.run('1','queued',{target:'erp',requestKey:'request-queued03'});m.rows[0].createdAt=new Date(Date.now()-3*DAY).toISOString();
+ const gone=await d.collect('1',String(late.id));assert.deepEqual([gone.status,gone.costUsd],['failed',0.006]);assert.deepEqual(await d.spend('1').then(s=>[s.monthRuns,s.monthUsd]),[1,0.006]);
+});
+test('a queued kind whose post is refused records the refusal as the kind reads it',async()=>{
+ const {d}=service({fetchImpl:async()=>({ok:true,json:async()=>({status_code:20000,cost:0,tasks:[{status_code:40501,result:null}]})})});
+ d.kinds.queued={specification:v=>({kind:'queued',queue:'demo/queue',path:'demo/queue/task_post',request:{target:v.target},estimatedUsd:0.006,reservationUsd:0.01}),result:raw=>raw.tasks[0].status_code===20000?{status:'completed',result:{},costUsd:raw.cost}:{status:'failed',errorCode:'refused',result:null,costUsd:raw.cost}};
+ const r=await d.run('1','queued',{target:'crm',requestKey:'request-refused1'});assert.deepEqual([r.status,r.errorCode,r.costUsd,r.reservedUsd],['failed','refused',0,0]);
 });

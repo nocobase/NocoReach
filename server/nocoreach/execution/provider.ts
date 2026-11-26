@@ -2,12 +2,15 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type { DemoDataService, DemoModels } from '@nocobase/app-plugin-demo-mode/server/tokens';
 import type { Agents, ModelMessage } from '@nocobase/app-plugin-agents/server/tokens';
 import type { DatabaseConnection } from '@nocobase/db';
+import { generateText } from 'ai';
 import {
   MOCK_AI_MODEL,
   simulateAi,
   type MockAiOperation,
 } from '../../../app-plugins/nocoreach-mock/server/ai';
 import { mockDelay, type MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
+import type { OnlineModel } from '../../../shared/online-agent.js';
+import { cloudModelWork } from '../cloud-models.js';
 
 /** Raised only before a gateway request has started. */
 export class ModelPreparationError extends Error {
@@ -76,17 +79,26 @@ function answerText(answer: string, plain: boolean): string {
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
   constructor(
-    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; demoConfiguration?: { readonly enabled: boolean }; network?: { inDemoProject(): Promise<boolean> } },
+    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; demoConfiguration?: { readonly enabled: boolean }; network?: { inDemoProject(): Promise<boolean> }; editingModel?: { get(): Promise<OnlineModel | null> } },
   ) {}
-  async prepare(connection?: DatabaseConnection) {
+  /**
+   * The model the operation runs on: Editing and suggestions' own model for what a person asks for on a page, when one
+   * is chosen, else the default chat model (`cloud-models.ts`). An own model that can no longer answer fails in
+   * `connect` rather than quietly falling back, as the chat panel's does.
+   */
+  async prepare(operation?: string, connection?: DatabaseConnection) {
     if (this.p.mock?.enabled) {
       this.p.mock.context();
       return MOCK_AI_MODEL;
     }
     let model;
     try {
-      model = (await this.p.agents.models.services.defaults(connection))
-        .effectiveChat;
+      model =
+        (cloudModelWork(operation) === 'editing'
+          ? await this.p.editingModel?.get()
+          : null) ??
+        (await this.p.agents.models.services.defaults(connection))
+          .effectiveChat;
     } catch (cause) {
       throw new ModelPreparationError('precondition', cause);
     }
@@ -107,7 +119,7 @@ export class OnlineProvider {
       if (!this.p.demoModels) throw new ModelPreparationError('precondition', 'Demo model adapter unavailable');
       return this.p.demoModels.complete({ system, prompt, tag: operation });
     }
-    const chosen = await this.prepare();
+    const chosen = await this.prepare(operation);
     await this.p.demoData?.load();
     // The demo's simulated model answers in process, where it can tell which operation asks.
     if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService }))
@@ -121,6 +133,58 @@ export class OnlineProvider {
       ...(maxOutputTokens ? { maxOutputTokens } : {}),
       source: 'nocoreach',
       signal: signal ?? AbortSignal.timeout(240000),
+    });
+    return result.text;
+  }
+  /**
+   * Whether the operation's model is set up, and whether it reads images of `mediaType` (the model catalog's
+   * `imageMediaTypes`; a model that does not say reads none): what a page says beside a reference image field. A
+   * simulated or demo model reads none.
+   */
+  async imageInput(operation: MockAiOperation, mediaType = 'image/png'): Promise<{ configured: boolean; images: boolean }> {
+    if (this.p.mock?.enabled || this.p.demoConfiguration?.enabled || await this.p.network?.inDemoProject())
+      return { configured: true, images: false };
+    let chosen;
+    try {
+      chosen = await this.prepare(operation);
+    } catch (error) {
+      if (error instanceof ModelPreparationError && error.reason === 'model_configuration') return { configured: false, images: false };
+      throw error;
+    }
+    if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService })) return { configured: true, images: false };
+    const catalog = await this.p.agents.models.gateway.catalog('chat');
+    const option = catalog.services.find((s) => s.name === chosen.llmService)?.models.find((m) => m.value === chosen.model);
+    return { configured: true, images: Boolean(option?.capabilities?.imageMediaTypes?.includes(mediaType)) };
+  }
+  /**
+   * As `complete`, with an image the model reads (a reference card, Card style › New style). The gateway's own `generate`
+   * takes text only, so the call goes through its language model, which the model usage report does not count. Only a
+   * model that reads the image's type is asked (`imageInput`); a simulated or demo model answers without the image.
+   */
+  async completeWithImage(
+    system: string,
+    prompt: string,
+    image: { data: string; mediaType: string },
+    operation: MockAiOperation,
+    signal?: AbortSignal,
+    maxOutputTokens?: number,
+  ): Promise<string> {
+    if (this.p.mock?.enabled || this.p.demoConfiguration?.enabled || await this.p.network?.inDemoProject())
+      return this.complete(system, prompt, operation, signal, maxOutputTokens);
+    const chosen = await this.prepare(operation);
+    await this.p.demoData?.load();
+    if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService }))
+      return this.complete(system, prompt, operation, signal, maxOutputTokens);
+    const model = { modelService: chosen.llmService, model: chosen.model };
+    await this.connect(model);
+    if (!(await this.imageInput(operation, image.mediaType)).images)
+      throw new ModelPreparationError('precondition', Object.assign(new Error('The model does not read images.'), { status: 409 }));
+    const result = await generateText({
+      model: await this.p.agents.models.gateway.languageModel(model),
+      instructions: system,
+      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image', image: image.data, mediaType: image.mediaType }] }],
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      abortSignal: signal ?? AbortSignal.timeout(240000),
     });
     return result.text;
   }
@@ -143,7 +207,7 @@ export class OnlineProvider {
   }
   /**
    * The answer as the model writes it, a piece of text at a time, routed as `complete` routes: the simulation, then a
-   * demo project's model, then the default chat model. Throws `ModelPreparationError` before the first piece when no
+   * demo project's model, then the operation's model (`prepare`). Throws `ModelPreparationError` before the first piece when no
    * model can answer, and `ModelStreamError` when the answer was cut off or filtered.
    */
   async *stream(
@@ -161,7 +225,7 @@ export class OnlineProvider {
       yield* pieces(answerText(await this.p.demoModels.complete({ system, prompt, tag: operation }), true), signal);
       return;
     }
-    const chosen = await this.prepare();
+    const chosen = await this.prepare(operation);
     await this.p.demoData?.load();
     if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService })) {
       yield* pieces(answerText(await this.p.demoModels.complete({ system, prompt, tag: operation }), true), signal);

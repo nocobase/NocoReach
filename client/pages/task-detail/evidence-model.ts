@@ -3,6 +3,7 @@ import { joinList } from '#lib/format';
 import type { ResultSource } from '../results/types.js';
 import type { TaskData } from '../task-execution-types.js';
 import { taskSignals } from '../../../shared/opportunity-parts.js';
+import { namedPlaybook, type PlaybookOrigin } from '../playbook-snapshot';
 
 export type Signal = {
   key: string;
@@ -16,7 +17,11 @@ type Evidence = {
   insight?: { signalIds?: string[] };
   part?: { signalIds?: string[] } | null;
   context?: { signals?: { items?: Signal[] } };
-  handoff?: { playbook?: string; content?: string };
+  handoff?: {
+    playbook?: string;
+    playbookOrigin?: PlaybookOrigin;
+    content?: string;
+  };
   resultSource?: ResultSource;
   attachmentIds?: unknown[];
 };
@@ -51,7 +56,9 @@ export function taskEvidence(data: TaskData) {
   );
   const brief = ev.handoff?.content || data.task.brief || '';
   const briefTitle = ev.handoff?.content
-    ? $t('taskDetail.documentDelivered', { 0: ev.handoff.playbook })
+    ? $t('taskDetail.documentDelivered', {
+        0: namedPlaybook(ev.handoff.playbook, ev.handoff.playbookOrigin),
+      })
     : $t('taskDetail.taskBrief');
   return {
     signals,
@@ -105,8 +112,25 @@ export function whyText(data: TaskData): {
   fact?: string;
   more: number;
   /** Where the line comes from, so a page that already shows the brief need not repeat it. */
-  from?: 'why' | 'signal' | 'result' | 'objective' | 'brief';
+  from?: 'why' | 'signal' | 'result' | 'objective' | 'brief' | 'workshop';
 } {
+  // A Content workshop task says where it was made and from what, never its brief (which, in the demo, opens with
+  // the demo's notice).
+  const repurpose = data.work.repurpose?.source;
+  if (repurpose)
+    return {
+      text:
+        repurpose.kind === 'article'
+          ? $t('workshop.whyArticle', { 0: repurpose.title })
+          : repurpose.kind === 'topic'
+            ? $t('workshop.whyTopic', { 0: repurpose.topic })
+            : $t('workshop.whyHot', {
+                0: repurpose.no ? `O-${repurpose.no}` : '',
+                1: repurpose.headline,
+              }),
+      more: 0,
+      from: 'workshop',
+    };
   const { signals, brief, resultSource } = taskEvidence(data);
   const ev = (data.task.evidence || {}) as {
     why?: unknown;
