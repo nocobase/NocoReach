@@ -150,7 +150,7 @@ while [ "$#" -gt 0 ]; do
 done
 case "$output" in
   */resolve) cp "$FIXTURE_ROOT/resolve" "$output"; printf 200 ;;
-  *.tar.gz) cp "$FIXTURE_ROOT/artifact.tar.gz" "$output"; printf 'download\\n' >> "$FIXTURE_ROOT/downloads" ;;
+  *.tar.gz) cp "$FIXTURE_ROOT/artifact.tar.gz" "$output"; printf 'download\\n' >> "$FIXTURE_ROOT/downloads"; printf 200 ;;
   *) exit 1 ;;
 esac
 `,

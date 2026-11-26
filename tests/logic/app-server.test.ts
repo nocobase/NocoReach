@@ -1231,12 +1231,14 @@ interface CreateTestAppOptions {
 function createTestQueueConfig(): AppQueueConfig {
   return {
     default: 'memory',
-    memory: {
-      adapter: 'inMemory',
-      persistence: {
-        path: mkdtempSync(
-          path.join(tmpdir(), 'nocobase-app-template-default-queue-'),
-        ),
+    backends: {
+      memory: {
+        adapter: 'inMemory',
+        persistence: {
+          path: mkdtempSync(
+            path.join(tmpdir(), 'nocobase-app-template-default-queue-'),
+          ),
+        },
       },
     },
   };
@@ -1301,7 +1303,15 @@ function createTestApp(options: CreateTestAppOptions = {}): TestApp {
     },
   };
   const config = createTestConfig(configValues);
-  const paths = createAppPaths({ rootDir: '/test/app-template-default' });
+  // App Server takes a lock under storage when an application starts, so storage must be writable.
+  const storageDir = mkdtempSync(
+    path.join(tmpdir(), 'app-template-default-storage-'),
+  );
+  tempDirs.push(storageDir);
+  const paths = createAppPaths({
+    rootDir: '/test/app-template-default',
+    storageDir,
+  });
   const database =
     options.database === false
       ? undefined
@@ -1612,17 +1622,21 @@ async function writeRuntimeTestConfig(
       // another suite may be using at the same time.
       jobs: {
         default: 'memory',
-        memory: {
-          adapter: 'memory',
-          persistence: { path: path.join(directory, 'jobs') },
+        backends: {
+          memory: {
+            adapter: 'memory',
+            persistence: { path: path.join(directory, 'jobs') },
+          },
         },
       },
       // Queue state files likewise stay beside the test database.
       queue: {
         default: 'memory',
-        memory: {
-          adapter: 'inMemory',
-          persistence: { path: path.join(directory, 'queue') },
+        backends: {
+          memory: {
+            adapter: 'inMemory',
+            persistence: { path: path.join(directory, 'queue') },
+          },
         },
       },
       database: {

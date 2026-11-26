@@ -18,6 +18,10 @@ const appRuntime = defineAppRuntime({
   locales,
   reactProviders,
   routes,
+  // NocoReach's Settings group is its own (client/nocoreach-routes.ts); plugins' System settings and Personal settings
+  // pages would add a second settings tree to the sidebar.
+  systemSettingsRoutes: false,
+  personalSettingsRoutes: false,
   plugins,
   routeComponentOverrides,
   sourceExtensions,

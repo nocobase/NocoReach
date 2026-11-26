@@ -98,7 +98,7 @@ test('uses plugin cookies and keeps presentation choices with each visitor acros
   );
   const saved = await preferences.list(session.user.id);
   const choices = {
-    locale: 'zh-CN',
+    'i18n.locale': 'zh-CN',
     'theme.mode': 'dark',
     'theme.preset': 'compact',
   };
@@ -131,13 +131,13 @@ test('uses plugin cookies and keeps presentation choices with each visitor acros
   expect(switched.status).toBe(200);
   visitor = keepCookies(switched, visitor);
   expect(await read(visitor)).toMatchObject(choices);
-  const reset = await testApp.request('/users/me/preferences/locale', {
+  const reset = await testApp.request('/users/me/preferences/i18n.locale', {
     method: 'DELETE',
     headers: { ...json, cookie: visitor },
   });
   expect(reset.status).toBe(204);
   visitor = keepCookies(reset, visitor);
-  expect((await read(visitor)).locale).toBe(defaults.locale);
+  expect((await read(visitor))['i18n.locale']).toBe(defaults['i18n.locale']);
 });
 
 for (const scenario of [

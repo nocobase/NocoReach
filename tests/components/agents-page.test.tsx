@@ -19,8 +19,8 @@ vi.mock('../../client/pages/agents/roles', () => ({
 }));
 
 const access = vi.hoisted(() => ({ can: true, isPending: false }));
-// Resource ids denied on top of `access`: `agents` (the Local agents tab), `runtimes`, `usage` (pages) and
-// `agents.services` (settings) guard the tabs.
+// Resource ids denied on top of `access` guard the tabs: `agents.agents` (the Local agents tab), the `runtimes` page
+// (Runtimes), and the `agents.services` (Model services) and `agents.prices` (Usage) settings items.
 const denied = vi.hoisted(() => new Set<string>());
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useCan: (request?: { resource: { id: string } }) =>
@@ -128,8 +128,8 @@ test('switches tabs in the URL and keeps the usage filters to the usage tab', as
 });
 
 test('shows only the tabs the reader may open, and opens the first of them', async () => {
-  denied.add('agents');
-  denied.add('usage');
+  denied.add('agents.agents');
+  denied.add('agents.prices');
   const router = mount();
   expect(await screen.findByText('Models page')).toBeInTheDocument();
   expect(router.state.location.pathname).toBe('/agents/models');

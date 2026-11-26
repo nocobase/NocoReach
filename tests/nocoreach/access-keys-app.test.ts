@@ -806,7 +806,7 @@ for (const failure of ['actor', 'owner', 'preparation'] as const) {
     expect(await agents.runs.get(run.pluginRunId!)).toMatchObject({
       status: 'cancelled',
       attempt: queued.attempt,
-      failureDetail: expect.stringContaining('authorization_revoked'),
+      failureDetail: expect.stringContaining('access_revoked'),
     });
   });
 }

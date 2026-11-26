@@ -241,9 +241,27 @@ describe('additional interface languages', () => {
             for (const [key, value] of leaves(overrides[plugin] ?? {}))
               source.set(key, value);
           }
-          const translation = leaves(resources[plugin] ?? {});
+          // The supplement is merged over the plugin's own catalog for the locale, which the plugins ship for Korean
+          // and Russian since the releases beside Agents 2.0.0-beta.7 (Mail does not yet). Together they must cover
+          // every English key, and the supplement must not keep keys the plugin no longer has.
+          const supplement = leaves(resources[plugin] ?? {});
+          const ownFile = `${root}node_modules/${plugin}/dist/${side}/locales/${locale}.js`;
+          const own = fs.existsSync(ownFile)
+            ? leaves(
+                (await import(/* @vite-ignore */ pathToFileURL(ownFile).href))
+                  .default,
+              )
+            : new Map<string, string>();
+          const translation = new Map([...own, ...supplement]);
           expect(
-            differences(source, translation, locale),
+            [
+              ...differences(source, translation, locale).filter(
+                (difference) => !difference.startsWith('extra '),
+              ),
+              ...differences(source, supplement, locale).filter((difference) =>
+                difference.startsWith('extra '),
+              ),
+            ],
             `${side}: ${plugin}`,
           ).toEqual([]);
           for (const key of source.keys()) {

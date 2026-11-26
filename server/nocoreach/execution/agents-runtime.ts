@@ -223,7 +223,9 @@ export class TaskAgentsRuntime {
         },
         admit: async (conn, claim, prepared) => {
           const rejection = {
-            reason: 'authorization_revoked',
+            // The plugin stores this as the run's failureDetail and, since Agents 2.0.0-beta.18, replaces any
+            // 20-character or longer random-looking word in it with [REDACTED]; `authorization_revoked` was one.
+            reason: 'access_revoked',
             detail: systemMessageText(
               'taskExecution.executionAuthorizationExpired',
             ),

@@ -14,10 +14,12 @@ import { isolateMockMailRuntime } from '../../server/routes/mock-external-guard.
 afterEach(() => vi.restoreAllMocks());
 
 const configurations = {
-  memory: { adapter: 'memory' },
-  redis: {
-    adapter: 'redis',
-    connection: { host: 'redis-must-not-be-contacted.invalid', port: 6379 },
+  backends: {
+    memory: { adapter: 'memory' },
+    redis: {
+      adapter: 'redis',
+      connection: { host: 'redis-must-not-be-contacted.invalid', port: 6379 },
+    },
   },
 };
 

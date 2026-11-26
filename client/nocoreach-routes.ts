@@ -59,6 +59,7 @@ import {
 } from '@nocobase/app-client/plugins';
 
 import { useNocoReachLocale } from './i18n/index.js';
+import { RUNTIMES_ACCESS } from './pages/agents/access.js';
 
 type Loader = () => Promise<{ default: ComponentType<object> }>;
 
@@ -203,7 +204,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     // a dialog over the page.
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
       { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
-      { ...runtimesRoute, path: 'runtimes', componentLoader: gated(withRuntimesSharing) },
+      { ...runtimesRoute, path: 'runtimes', authz: RUNTIMES_ACCESS, componentLoader: gated(withRuntimesSharing) },
       { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
       { ...usageRoute, path: 'usage', componentLoader: gated(usageRoute.componentLoader) },
       page('online-agent-new', 'chat/new', () => import('./online-agent/edit.js')),

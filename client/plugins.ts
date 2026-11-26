@@ -33,12 +33,16 @@ const clientPlugins: AppClientPlugins = defineClientPlugins([
   users(),
   apiKeys(),
   i18n(),
-  notificationInApp(),
+  // NocoReach owns the /inbox page (client/pages/inbox.tsx) and its header button (InboxHeaderButton).
+  notificationInApp({ inboxRoute: false, headerButton: false }),
   notification(),
   file(),
   scheduler(),
-  mail(),
-  agents(),
+  // NocoReach has no mailbox pages; Mail stays registered for its accounts and sending only.
+  mail({ workspaceRoutes: false }),
+  // NocoReach renders its own Agent panel, chat pages and header (client/extensions/nocobase-agent-chat/ and
+  // client/layouts/), so the plugin's header button, panel and conversation pages stay out.
+  agents({ headerAction: false, panel: false, chatRoutes: false }),
   nocoreachMock({
     page: MockSettingsPage,
     parent: 'nocoreach:nav-settings',
