@@ -18,7 +18,36 @@
       "imapMoveUnsupported": "이 서버는 메시지를 안전하게 이동할 수 없습니다. 메일 클라이언트를 사용하세요.",
       "imapTrashNotFound": "이 계정에는 휴지통 폴더가 없습니다. 메일 클라이언트를 사용하세요.",
       "imapMoveOutcomeUnknown": "이동이 완료되지 않았거나 결과를 알 수 없습니다. 다시 시도하기 전에 편지함을 확인하세요.",
-      "invalidRecipient": "보내기 전에 수신자 이메일 주소와 표시 이름을 수정하세요."
+      "invalidRecipient": "보내기 전에 수신자 이메일 주소와 표시 이름을 수정하세요.",
+      "originalNotFound": "메일 제공업체에서 더 이상 원본 메시지를 사용할 수 없습니다.",
+      "originalTooLarge": "원본 메시지가 40MiB 다운로드 제한을 초과합니다.",
+      "operationUnsupported": "이 메일 작업은 사용할 수 없습니다.",
+      "connectionAuthenticationFailed": "{{protocol}} 인증에 실패했습니다. 로그인 이름과 비밀번호 또는 앱 비밀번호를 확인하세요.",
+      "connectionHostNotFound": "{{protocol}} 호스트를 찾을 수 없습니다. 서버 호스트 이름을 확인하세요.",
+      "connectionConnectionRefused": "{{protocol}} 연결이 거부되었습니다. 호스트, 포트, 서버 가용성을 확인하세요.",
+      "connectionConnectionTimeout": "{{protocol}} 연결 시간이 초과되었습니다. 서버 및 네트워크 설정을 확인하세요.",
+      "connectionCertificateInvalid": "{{protocol}} 인증서 검증에 실패했습니다. 인증서와 호스트 이름을 확인하세요.",
+      "connectionTlsFailed": "{{protocol}} TLS 협상에 실패했습니다. SSL/STARTTLS 설정과 포트를 확인하세요.",
+      "connectionConnectionFailed": "{{protocol}} 연결에 실패했습니다. 서버 및 네트워크 설정을 확인하세요.",
+      "connectionConnectionLost": "{{protocol}} 연결이 끊어졌습니다. 다시 시도하세요."
+    },
+    "access": {
+      "section": "메일",
+      "team": {
+        "title": "팀 메일",
+        "description": "구성원이 동기화한 메일(읽기 전용).",
+        "actions": {
+          "view": "보기",
+          "process": "처리(읽음 표시, 별표, 보관)"
+        }
+      },
+      "settings": {
+        "title": "메일",
+        "actions": {
+          "read": "보기",
+          "manage": "관리(구성원의 동기화 및 발송 재시도·취소)"
+        }
+      }
     }
   },
   "@nocobase/app-plugin-agents": {
@@ -100,7 +129,6 @@
       "actions": {
         "assign": "할당 관리",
         "configure": "설정",
-        "inspect": "권한 검사",
         "read": "읽기",
         "create": "만들기",
         "update": "업데이트",
@@ -115,7 +143,6 @@
         "allDescription": "나중에 추가된 페이지를 포함하여 모든 페이지에 대한 액세스를 허용합니다."
       },
       "settings": {
-        "inspector": "권한 검사 도구",
         "permission-sets": "권한 세트"
       },
       "subjectTypes": {
@@ -145,7 +172,6 @@
   },
   "@nocobase/app-plugin-notification": {
     "errors": {
-      "logsForbidden": "알림 로그 접근 권한이 필요합니다.",
       "logNotFound": "알림 로그를 찾을 수 없습니다."
     }
   },

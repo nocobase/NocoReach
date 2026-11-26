@@ -22,6 +22,9 @@ export default createReactVitestConfig({
           /@nocobase\/app-plugin-(?:authentication|api-keys|users)\/(?:dist\/)?client\//u,
           /@nocobase\/app-plugin-agents\/(?:dist\/)?client\//u,
           /@nocobase\/app-plugin-authorization\/(?:dist\/)?client\//u,
+          // The data rule plugins add their tabs to the Authorization client's settings registry, so they resolve its
+          // token from the same inlined copy.
+          /@nocobase\/app-plugin-authz-[^/]+\/(?:dist\/)?client\//u,
           /@nocobase\/app-plugin-(?:lifecycle-example|office-flows-example)\/(?:dist\/)?client\//u,
           /@nocobase\/app-plugin-notification-in-app\/(?:dist\/)?client\//u,
         ],

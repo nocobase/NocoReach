@@ -54,4 +54,6 @@ export const TEAM_SETTINGS = [
   'agents.runners',
   'agents.prices',
   'agents.services',
+  // Split from agents.agents in Agents 2.0.0-beta.19: the skill library and an agent's default skills.
+  'agents.skills',
 ] as const;

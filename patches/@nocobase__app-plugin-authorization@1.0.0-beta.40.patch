@@ -1,8 +1,8 @@
 diff --git a/dist/client/authorization-client.d.ts b/dist/client/authorization-client.d.ts
-index a6704da05d8ae3fdc0aa107a12bde387bd20006f..31b64949fe7e020d5d01a0d39a85fb1627ac72c0 100644
+index 857478cf587e438e9f8660947caf3a396f0538e7..e26d79fbc853a4119185418172dac22158ed5efc 100644
 --- a/dist/client/authorization-client.d.ts
 +++ b/dist/client/authorization-client.d.ts
-@@ -296,6 +296,8 @@ export declare class AuthorizationClient {
+@@ -329,6 +329,8 @@ export declare class AuthorizationClient {
      /** Drop the previous identity's queue without waiting for its HTTP response. */
      resetSession(): void;
      invalidate(): void;
@@ -12,7 +12,7 @@ index a6704da05d8ae3fdc0aa107a12bde387bd20006f..31b64949fe7e020d5d01a0d39a85fb16
      listPermissionSets(): Promise<readonly PermissionSet[]>;
      getPermissionSet(key: string): Promise<PermissionSet>;
 diff --git a/dist/client/authorization-client.js b/dist/client/authorization-client.js
-index 453fd024b267527414410543cf4609de56b2d705..fc86b13f0290f630b3b4c83bc63b58994850a491 100644
+index 2cfcd0a514ede8e435419e500c6a664012574245..728f774a19321d4d18ee90c2356f411357ee5aaa 100644
 --- a/dist/client/authorization-client.js
 +++ b/dist/client/authorization-client.js
 @@ -64,6 +64,33 @@ export class AuthorizationClient {
@@ -50,22 +50,24 @@ index 453fd024b267527414410543cf4609de56b2d705..fc86b13f0290f630b3b4c83bc63b5899
          this.invalidationListeners.add(listener);
          return () => {
 diff --git a/dist/client/service-provider.js b/dist/client/service-provider.js
-index f3f706095de650d94820e7330551cbe855d3c4c1..8ec2466d37d23e19e56817daeba31f24d1b2700e 100644
+index ea6330a2cba3297f6578046f2f83ba07c2c3a41c..17ab6e6cf0c611a6f9a504cee1f84fc3060b8849 100644
 --- a/dist/client/service-provider.js
 +++ b/dist/client/service-provider.js
-@@ -1,8 +1,10 @@
+@@ -1,10 +1,12 @@
 -import { apiClientToken, realtimeClientToken, watchReadiness, } from '@nocobase/app-client';
 +import { apiClientToken, realtimeClientToken, } from '@nocobase/app-client';
  import { ServiceProvider } from '@nocobase/service-provider';
  import { AuthorizationClient } from './authorization-client.js';
- import { authorizationClientToken } from './tokens.js';
- import { AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, } from '../shared.js';
+ import { AuthorizationSettings, } from './settings/extensions.js';
+ import { authorizationClientToken, authorizationSettingsToken, } from './tokens.js';
+ import { DATA_RULES_TAB, PERMISSION_CHECK_TAB, ROLES_TAB, } from './settings/tab-keys.js';
+ import { AUTHORIZATION_NAMESPACE, AUTHORIZATION_GLOBAL_PERMISSIONS_CHANGED_TOPIC, AUTHORIZATION_PERMISSIONS_CHANGED_TOPIC, } from '../shared.js';
 +/** NocoReach patch: how long after a permission topic is ready the snapshot is read again. */
 +const REVALIDATE_DELAY_MS = 50;
  export class AuthorizationServiceProvider extends ServiceProvider {
      name = '@nocobase/app-plugin-authorization/client';
      unsubscribePermissionsChanged;
-@@ -15,16 +17,39 @@ export class AuthorizationServiceProvider extends ServiceProvider {
+@@ -17,16 +19,39 @@ export class AuthorizationServiceProvider extends ServiceProvider {
              return Promise.resolve();
          const authz = this.app.container.resolve(authorizationClientToken);
          const realtime = this.app.container.resolve(realtimeClientToken);

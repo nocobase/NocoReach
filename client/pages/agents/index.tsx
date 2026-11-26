@@ -4,7 +4,6 @@ import { useCan } from '@nocobase/app-plugin-authorization/client';
 import {
   agentsRoute,
   modelsRoute,
-  runtimesRoute,
   usageRoute,
 } from '@nocobase/app-plugin-agents/client/routes';
 import { $t } from '#i18n';
@@ -13,7 +12,7 @@ import { Skeleton } from '#components/ui/skeleton';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import type { AgentSettingsContext } from '../../online-agent/edit.js';
 import { AgentRoles } from './roles.js';
-import { routeAccess } from './access.js';
+import { RUNTIMES_ACCESS, routeAccess } from './access.js';
 
 const runnerAccess = routeAccess(agentsRoute);
 
@@ -50,7 +49,7 @@ export default function AgentsPage() {
 
 function useTabs() {
   const runner = useCan(runnerAccess);
-  const runtimes = useCan(routeAccess(runtimesRoute));
+  const runtimes = useCan(RUNTIMES_ACCESS);
   const models = useCan(routeAccess(modelsRoute));
   const usage = useCan(routeAccess(usageRoute));
   // A tab whose check is pending or failed stays hidden; its route still checks a URL opened directly.

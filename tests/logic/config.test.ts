@@ -74,15 +74,19 @@ describe('application config', () => {
     expect(runtime.config.get('logging.file.name')).toBe('app');
     // No default: queues run on the built-in memory configuration until one is named.
     expect(runtime.config.get<AppQueueConfig>('queue')).toEqual({
-      memory: {
-        adapter: 'inMemory',
-        persistence: { path: runtime.paths.storage('queue') },
+      backends: {
+        memory: {
+          adapter: 'inMemory',
+          persistence: { path: runtime.paths.storage('queue') },
+        },
       },
     });
     expect(runtime.config.get<AppJobsConfig>('jobs')).toEqual({
-      memory: {
-        adapter: 'memory',
-        persistence: { path: runtime.paths.storage('jobs') },
+      backends: {
+        memory: {
+          adapter: 'memory',
+          persistence: { path: runtime.paths.storage('jobs') },
+        },
       },
     });
     expect(runtime.config.get<AppSessionConfigInput>('session')!.default).toBe(

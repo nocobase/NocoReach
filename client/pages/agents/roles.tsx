@@ -3,10 +3,7 @@ import { Link, useLocation } from 'react-router';
 import { ApiClientError } from '@nocobase/app-client';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useRunnerOptions } from '@nocobase/app-plugin-agents/client/kit';
-import {
-  modelsRoute,
-  runtimesRoute,
-} from '@nocobase/app-plugin-agents/client/routes';
+import { modelsRoute } from '@nocobase/app-plugin-agents/client/routes';
 import type { ModelRef } from '@nocobase/app-plugin-agents/shared/models';
 import { Check } from 'lucide-react';
 import { $t, $legacyText, useMessageState } from '#i18n';
@@ -42,7 +39,7 @@ import {
 import { TOOL_NAMES } from '../../../shared/agent-readiness.js';
 import type { OnlineAgentDefinition } from '../../../shared/online-agent.js';
 import { useProject } from '../reach-data.js';
-import { routeAccess } from './access.js';
+import { RUNTIMES_ACCESS, routeAccess } from './access.js';
 
 /** How the agent's latest tasks ended (`nrAgent.status` for the Agent page). */
 export type AgentHealth =
@@ -175,7 +172,7 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const models = useOnlineResource<Catalog>('models', refresh);
   const online = useOnlineResource<OnlineAgent[]>('definitions', refresh);
   const modelsPage = useCan(routeAccess(modelsRoute));
-  const runtimesPage = useCan(routeAccess(runtimesRoute));
+  const runtimesPage = useCan(RUNTIMES_ACCESS);
   const { can: canManageChat } = useBusinessAccess('nrOnline.manage');
   const { can: canSetModel } = useBusinessAccess('nrOnlineAI.setModel');
   const [dialog, setDialog] = useState<

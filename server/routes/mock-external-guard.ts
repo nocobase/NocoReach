@@ -13,10 +13,16 @@ import {
 import { Hono, type MiddlewareHandler } from 'hono';
 import type { MockConfig } from '../../app-plugins/nocoreach-mock/server/types';
 
+/** The `jobs` configuration: the selected name and the named configurations under `backends`. */
+interface MockJobsConfig {
+  readonly default?: string;
+  readonly backends?: Readonly<Record<string, unknown>>;
+}
+
 /** NocoReach jobs and Scheduler firings must never reach a differently configured live worker. */
 export function assertMockJobsIsolation(
   mock: MockConfig | undefined,
-  jobs: Readonly<Record<string, unknown>> | undefined,
+  jobs: MockJobsConfig | undefined,
   scheduler: { jobs?: string } | undefined,
 ): void {
   if (!mock?.enabled) return;
@@ -29,7 +35,9 @@ export function assertMockJobsIsolation(
     if (name === undefined) continue;
     // `default` is a selector, not a named configuration; Scheduler explicitly rejects it.
     const selected =
-      typeof name === 'string' && name !== 'default' ? jobs?.[name] : undefined;
+      typeof name === 'string' && name !== 'default'
+        ? jobs?.backends?.[name]
+        : undefined;
     if (
       !selected ||
       typeof selected !== 'object' ||
@@ -55,7 +63,7 @@ export function assertMockNotificationIsolation(
         jobs?: string;
       }
     | undefined,
-  jobs?: Readonly<Record<string, unknown>>,
+  jobs?: MockJobsConfig,
 ): void {
   if (!mock?.enabled) return;
   if (
@@ -73,7 +81,8 @@ export function assertMockNotificationIsolation(
   // Built-in memory is process-local; persisted delivery snapshots are revalidated by the manager.
   const name = notification?.jobs ?? jobs?.default;
   if (name !== undefined) {
-    const selected = typeof name === 'string' ? jobs?.[name] : undefined;
+    const selected =
+      typeof name === 'string' ? jobs?.backends?.[name] : undefined;
     if (
       !selected ||
       typeof selected !== 'object' ||
@@ -96,7 +105,7 @@ export function assertMockMailIsolation(
         jobs?: string;
       }
     | undefined,
-  jobs: Readonly<Record<string, unknown>> | undefined,
+  jobs: MockJobsConfig | undefined,
 ): void {
   if (!mock?.enabled) return;
   if (
@@ -111,7 +120,9 @@ export function assertMockMailIsolation(
   const name = mail?.jobs ?? jobs?.default;
   if (name === undefined) return;
   const selected =
-    typeof name === 'string' && name !== 'default' ? jobs?.[name] : undefined;
+    typeof name === 'string' && name !== 'default'
+      ? jobs?.backends?.[name]
+      : undefined;
   if (
     !selected ||
     typeof selected !== 'object' ||

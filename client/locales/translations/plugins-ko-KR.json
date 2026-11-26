@@ -238,7 +238,9 @@
       "imapTrashMissing": "이 계정에는 휴지통 폴더가 없습니다. 메일 클라이언트를 사용하세요.",
       "deleteUnsupported": "이 계정은 삭제를 지원하지 않습니다. 메일 클라이언트를 사용하세요.",
       "imapScheduled": "이 초안을 삭제하려면 먼저 예약된 발송을 취소하세요.",
-      "invalidRecipient": "이메일 주소 또는 표시 이름을 수정하세요: {{value}}. 필드마다 수신자는 최대 100명입니다."
+      "invalidRecipient": "이메일 주소 또는 표시 이름을 수정하세요: {{value}}. 필드마다 수신자는 최대 100명입니다.",
+      "downloadOriginal": "원본 다운로드",
+      "downloadOriginalFailed": "원본 메시지를 다운로드할 수 없습니다."
     },
     "templates": {
       "list": "템플릿",
@@ -378,6 +380,36 @@
         "eyebrow": "메일",
         "title": "발송 로그",
         "description": "최근 메일 발송 요청과 결과를 확인합니다."
+      },
+      "syncFolders": {
+        "title": "동기화 범위 확인",
+        "descriptionFirst": "계정이 연결되었습니다. 범위를 확인하면 첫 동기화가 시작됩니다.",
+        "description": "동기화할 폴더를 확인하세요. 자동 동기화에도 같은 범위가 적용됩니다.",
+        "scope": "동기화 범위",
+        "allFolders": "사서함 전체",
+        "allFoldersHint": "나중에 만든 폴더를 포함해 모든 폴더를 동기화합니다.",
+        "someFolders": "선택한 폴더",
+        "someFoldersHint": "선택한 폴더만 동기화합니다. 새 폴더는 직접 추가하세요.",
+        "loading": "폴더 불러오는 중…",
+        "listingFailed": "메일 서버에서 폴더 목록을 읽을 수 없습니다.",
+        "retry": "다시 시도",
+        "waiting": "메일 서버에서 폴더 목록을 가져오는 중…",
+        "selectedCount": "폴더 {{total}}개 중 {{count}}개 선택됨",
+        "selectAll": "모두 선택",
+        "clearAll": "모두 선택 해제",
+        "emptySelection": "폴더를 하나 이상 선택하세요.",
+        "sentHint": "보낸편지함이 선택되지 않아 대화에 내가 보낸 답장이 빠질 수 있습니다. 메일 발송은 계속 가능합니다.",
+        "removeTitle": "범위 밖의 로컬 메시지를 삭제할까요?",
+        "removeDescription": "이 변경으로 로컬 메시지 {{count}}개와 해당 로컬 데이터가 삭제됩니다. 메일 서버의 메시지는 삭제되지 않으며, 선택한 폴더에 남아 있는 메시지는 유지됩니다.",
+        "back": "뒤로",
+        "confirm": "로컬 메시지 삭제 후 동기화",
+        "saving": "저장 중…",
+        "cancel": "취소",
+        "submit": "확인 후 동기화",
+        "outcomeInitial": "{{date}} 이후 받은 메시지를 동기화합니다.",
+        "outcomeIncremental": "마지막 동기화 이후 새로 받거나 변경된 메시지를 동기화합니다.",
+        "outcomeRescan": "새 범위로 다시 동기화합니다. 기존 메시지는 중복으로 추가되지 않습니다.",
+        "pending": "폴더를 선택해 동기화를 시작하세요"
       }
     },
     "dev": {
@@ -499,7 +531,8 @@
       "labels": "제공업체 라벨",
       "drafts": "초안",
       "moveMessage": "메시지 이동",
-      "aliases": "별칭"
+      "aliases": "별칭",
+      "downloadOriginal": "원본 다운로드"
     },
     "status": {
       "account": {
@@ -558,6 +591,187 @@
       "timeout": "메일 서비스가 제때에 응답하지 않았습니다. 다시 시도하기 전에 메일함 상태를 확인하세요.",
       "provider": "메일 제공업체가 작업을 거부했습니다. 제공업체 설정과 아래 오류 코드를 확인하세요.",
       "unknown": "예상치 못한 이유로 메일 작업이 실패했습니다. 아래 오류 코드를 메일 관리자에게 공유하세요."
+    },
+    "navigation": {
+      "mail": "메일",
+      "mailTeam": "팀 메일",
+      "mailAccounts": "메일 계정",
+      "mailAccountsDescription": "사서함을 연결하고 서명, 템플릿, 라벨을 관리합니다.",
+      "mailSettings": "메일",
+      "mailSettingsDescription": "메일 제공업체, 모든 계정의 상태, 동기화 및 발송 로그."
+    },
+    "access": {
+      "section": "메일",
+      "team": {
+        "title": "팀 메일",
+        "description": "구성원이 동기화한 메일(읽기 전용).",
+        "actions": {
+          "view": "보기",
+          "process": "처리(읽음 표시, 별표, 보관)"
+        }
+      },
+      "settings": {
+        "title": "메일",
+        "actions": {
+          "read": "보기",
+          "manage": "관리(구성원의 동기화 및 발송 재시도·취소)"
+        }
+      }
+    },
+    "pages": {
+      "loading": "불러오는 중…",
+      "empty": "표시할 항목이 없습니다.",
+      "member": "구성원",
+      "allMembers": "모든 구성원",
+      "workspace": {
+        "reauthorizationNotice": "다시 연결해야 하는 계정: {{addresses}}. 다시 연결하기 전까지 동기화와 발송이 중지됩니다.",
+        "reauthorize": "메일 계정에서 다시 연결",
+        "needsReauthorization": "재승인 필요"
+      },
+      "accounts": {
+        "title": "메일 계정",
+        "description": "사서함을 연결하면 메일에서 메시지를 주고받을 수 있습니다. 내 메일은 나만 볼 수 있으며, 팀 메일 권한이 있는 사용자는 변경 없이 읽기만 할 수 있습니다.",
+        "reauthorizationNotice": "더 이상 승인이 유효하지 않은 계정: {{addresses}}. 같은 제공업체로 다시 연결하기 전까지 동기화와 발송이 중지됩니다.",
+        "reauthorize": "다시 연결",
+        "tabs": {
+          "accounts": "계정",
+          "signatures": "서명",
+          "templates": "템플릿",
+          "labels": "라벨",
+          "activity": "활동"
+        }
+      },
+      "activity": {
+        "sends": "발송",
+        "syncs": "동기화"
+      },
+      "logs": {
+        "started": "시작 시각",
+        "time": "시간",
+        "account": "계정",
+        "accountMember": "계정 · 구성원",
+        "mode": "방식",
+        "initial": "첫 동기화",
+        "incremental": "증분",
+        "result": "결과",
+        "allResults": "모든 결과",
+        "detail": "세부정보",
+        "reason": "사유",
+        "processed": "메시지 {{count}}개",
+        "subject": "제목",
+        "recipients": "수신자",
+        "recipientCount": "수신자",
+        "bulk": "대량 발송",
+        "bulkCount": "{{count}}(대량)",
+        "showRecipients": "수신자 표시",
+        "hideRecipients": "수신자 숨기기",
+        "scheduled": "예약됨",
+        "retry": "재시도",
+        "cancel": "취소",
+        "window": "기간",
+        "windows": {
+          "day": "최근 24시간",
+          "week": "최근 7일",
+          "month": "최근 30일",
+          "all": "전체 기간"
+        }
+      },
+      "team": {
+        "title": "팀 메일",
+        "description": "인수인계나 컴플라이언스 점검을 위해 구성원이 동기화한 메일을 읽습니다. 메시지를 열어도 읽음으로 표시되지 않으며 답장할 수 없습니다.",
+        "account": "계정",
+        "allAccounts": "모든 계정",
+        "participant": "주소 또는 @domain",
+        "keyword": "제목 키워드",
+        "memberAccount": "구성원 · 계정",
+        "counterpart": "상대방",
+        "view": "보기",
+        "selectAll": "이 페이지 모두 선택",
+        "empty": "일치하는 동기화된 메일이 없습니다.",
+        "readOnly": "읽기 전용입니다. 열어도 읽음으로 표시되지 않습니다.",
+        "applied": "{{succeeded}}개 업데이트됨, {{failed}}개 실패.",
+        "actions": {
+          "markRead": "읽음으로 표시",
+          "star": "별표 표시",
+          "archive": "보관"
+        }
+      },
+      "settings": {
+        "title": "메일",
+        "description": "구성원이 연결할 수 있는 메일 제공업체와 모든 계정의 연결, 동기화, 발송 상태를 보여 줍니다. 메시지 내용은 여기에 표시되지 않습니다. 시스템 알림 메일은 알림에서 설정합니다.",
+        "tabs": {
+          "providers": "제공업체",
+          "accounts": "계정",
+          "syncRuns": "동기화 로그",
+          "submissions": "발송 로그",
+          "runtime": "런타임 구성"
+        },
+        "sources": {
+          "environment": "환경 변수",
+          "config": "config.yml",
+          "default": "기본값",
+          "code": "코드",
+          "unknown": "알 수 없음"
+        },
+        "providers": {
+          "name": "이름",
+          "type": "유형",
+          "capabilities": "기능",
+          "accounts": "계정",
+          "source": "출처",
+          "attention": "재승인 필요 {{count}}개",
+          "howTo": "제공업체 추가 방법",
+          "howToDescription": "애플리케이션 구성의 mail.providers 아래에 항목을 추가하고 비밀 값은 환경 변수에 보관하세요. 적용하려면 애플리케이션을 다시 시작하세요.",
+          "callbackHint": "Google 또는 Microsoft에 다음 OAuth 리디렉션 URL을 등록하세요:"
+        },
+        "accounts": {
+          "filter": {
+            "all": "전체",
+            "attention": "재승인 필요",
+            "suspended": "비활성화됨"
+          },
+          "provider": "제공업체",
+          "allProviders": "모든 제공업체",
+          "search": "구성원 또는 주소",
+          "lastSynced": "마지막 동기화",
+          "status": "상태",
+          "showRuns": "동기화 실행",
+          "note": "관리자는 구성원의 계정을 승인하거나 삭제할 수 없습니다. 구성원이 개인 설정 › 메일 계정에서 직접 다시 연결해야 합니다."
+        },
+        "runtime": {
+          "setting": "설정",
+          "value": "현재 값",
+          "effect": "영향",
+          "automaticSyncInterval": "자동 동기화 간격",
+          "automaticSyncIntervalEffect": "푸시 알림이 없는 계정에서 새 메일을 확인하는 주기입니다.",
+          "syncBatchSize": "동기화 배치당 메시지 수",
+          "syncBatchSizeEffect": "배치가 클수록 첫 동기화가 빨리 끝나지만 제공업체의 요청 한도에 더 쉽게 도달합니다.",
+          "oauthCallbackUrl": "OAuth 리디렉션 URL",
+          "oauthCallbackUrlEffect": "Google 또는 Microsoft 개발자 콘솔에 등록하세요.",
+          "oauthReturnUrl": "승인 후 페이지",
+          "oauthReturnUrlEffect": "OAuth 계정을 연결한 뒤 돌아갈 페이지입니다.",
+          "pushWebhook": "푸시 웹훅",
+          "pushWebhookEffect": "설정하지 않으면 Gmail과 Microsoft 365도 동기화 간격마다 확인합니다.",
+          "jobs": "백그라운드 작업",
+          "jobsEffect": "인스턴스가 여러 개인 배포에는 공유 큐가 필요합니다.",
+          "logRetention": "로그 보존 기간",
+          "logRetentionEffect": "이 기간이 지난 완료된 동기화 실행과 발송 기록은 자동으로 삭제됩니다.",
+          "credentialVault": "자격 증명 저장소",
+          "credentialVaultEffect": "연결된 계정의 OAuth 토큰과 비밀번호를 보관하는 곳입니다.",
+          "minutes": "{{count}}분",
+          "days": "{{count}}일",
+          "keepForever": "영구 보존",
+          "notConfigured": "구성되지 않음",
+          "secretConfigured": "비밀 값 구성됨",
+          "secretMissing": "비밀 값 없음",
+          "jobsDefault": "jobs.default를 따름",
+          "vaultBuiltin": "기본 제공(애플리케이션 데이터베이스)",
+          "vaultApplication": "애플리케이션에서 등록",
+          "copy": "복사",
+          "copied": "복사됨",
+          "readOnly": "읽기 전용: 이 설정은 config.yml과 MAIL_* 환경 변수에서 가져오며 다시 시작한 후 적용됩니다."
+        }
+      }
     }
   },
   "@nocobase/app-plugin-agents": {
@@ -793,9 +1007,7 @@
       "empty": "아직 스킬이 없습니다.",
       "save": "스킬 저장",
       "descriptionOnline": "서버의 읽기 전용 샌드박스에서 작업이 설명과 일치할 때 에이전트가 읽는 매뉴얼입니다.",
-      "onlineScripts": "채팅 에이전트에 대해서는 스크립트가 실행되지 않습니다. 에이전트는 스크립트를 읽을 수는 있지만 실행할 수는 없습니다.",
-      "skippedScripts": ": {{paths}}",
-      "pathSeparator": ", "
+      "onlineScripts": "채팅 에이전트에 대해서는 스크립트가 실행되지 않습니다. 에이전트는 스크립트를 읽을 수는 있지만 실행할 수는 없습니다."
     },
     "brief": {
       "preview": "전체 프롬프트 미리보기",
@@ -1165,7 +1377,6 @@
         "confirm": "이 표시를 해제할까요? {{target}}에서 다시 작업을 받을 수 있게 됩니다.",
         "observed": "마지막 보고: {{time}}",
         "usedPercent": "{{percent}}% 사용됨",
-        "ok": "정상",
         "hint": "초기화 시각이 확인된 경우 해당 시각이 되면 자동으로 실행이 허용됩니다. 초기화 시각을 모르는 경우 할당량을 복구한 후 표시를 해제하세요. 실행 환경 소유자와 관리자만 표시를 해제할 수 있습니다."
       },
       "workspaces": {
@@ -1228,10 +1439,6 @@
         "low_disk": "디스크 공간 부족 {{active}}/{{slots}}",
         "offline": "오프라인 · {{time}}",
         "offlineNever": "오프라인"
-      },
-      "toolUsage": {
-        "label": "코딩 도구별 실행 수",
-        "item": "{{tool}} {{used}}/{{limit}}"
       },
       "toolSlots": {
         "label": "코딩 도구당 한도",
@@ -1923,7 +2130,6 @@
       "actions": {
         "assign": "권한 할당 관리",
         "configure": "설정",
-        "inspect": "권한 검사",
         "read": "읽기",
         "create": "만들기",
         "update": "업데이트",
@@ -1938,7 +2144,6 @@
         "allDescription": "나중에 추가된 페이지를 포함하여 모든 페이지에 대한 액세스를 허용합니다."
       },
       "settings": {
-        "inspector": "권한 검사 도구",
         "permission-sets": "권한 세트"
       },
       "subjectTypes": {
@@ -1994,35 +2199,14 @@
   },
   "@nocobase/app-plugin-notification-in-app": {
     "inbox": {
-      "eyebrow": "개인 받은편지함",
       "title": "메시지 센터",
       "unreadCount": "읽지 않음 {{count}}개",
       "description": "사용 중인 애플리케이션과 워크플로의 업데이트를 확인하세요.",
-      "markAllRead": "모두 읽은 것으로 표시",
-      "messagesTitle": "메시지",
-      "messagesDescription": "앱 내 메시지의 읽음 상태는 사용자별로 따로 관리됩니다.",
-      "unreadFilter": "읽지 않음",
-      "unavailable": "받은편지함을 사용할 수 없음",
       "retry": "다시 시도",
       "loading": "알림 로드 중…",
-      "emptyTitle": "모두 확인했습니다",
       "emptyDescription": "여기에 새로운 알림이 표시됩니다.",
-      "loadingMore": "불러오는 중…",
       "loadMore": "더 불러오기",
-      "scrollMore": "더 로드하려면 아래로 스크롤하세요.",
-      "noMore": "더 이상 메시지가 없습니다",
-      "expand": "더 보기",
-      "collapse": "간단히 보기",
-      "channel": "인앱",
-      "open": "열기",
-      "markUnread": "읽지 않은 것으로 표시",
-      "markRead": "읽은 것으로 표시",
-      "delete": "알림 삭제",
-      "errors": {
-        "update": "받은편지함 업데이트에 실패했습니다.",
-        "loadMore": "더 많은 알림을 로드할 수 없습니다.",
-        "markAllRead": "알림을 읽음으로 표시할 수 없습니다."
-      }
+      "open": "열기"
     }
   },
   "@nocobase/app-plugin-notification": {
@@ -2087,7 +2271,6 @@
       "trigger": "트리거",
       "recipients": "수신자 규칙",
       "businessRule": "업무 활성화 조건",
-      "contributor": "출처",
       "languagePolicy": "언어 동작",
       "status": "채널 구성",
       "statusHelp": "정의가 등록되어 있어도 발송이 활성화된 것은 아닙니다. 구성이 있어도 연결이 확인된 것은 아닙니다.",
@@ -2095,7 +2278,6 @@
       "unconfigured": "구성되지 않음",
       "enabled": "사용",
       "disabled": "사용 안 함",
-      "unknown": "알 수 없음",
       "variables": "사용 가능한 변수",
       "language": "콘텐츠 언어",
       "synthetic": "합성 예시 데이터만 사용합니다. 미리보기는 알림을 보내지 않으며 구성을 변경하지 않습니다.",
