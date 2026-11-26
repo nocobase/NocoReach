@@ -17,10 +17,10 @@ import {
 import { expect, test } from 'vitest';
 
 /**
- * The command's JSON output without the warning knex prints to stdout for every `.returning()` on MySQL. DB
- * 1.0.0-beta.30 asks for returned rows on every insert, and Agents 2.0.0-beta.20's `202611210010_ag_gpt_62_model_prices`
- * seed inserts through the repository, so `db apply --json` starts with one such line per price. Any other text before
- * the JSON still fails the parse.
+ * The command's JSON output without the warning knex prints to stdout for every `.returning()` on MySQL. The DB
+ * repository asks for returned rows on every insert, and Agents 2.0.0-beta.20 added a seed that inserts through it
+ * (`202611210010_ag_gpt_62_model_prices`), so `db apply --json` starts with one such line per price. Any other text
+ * before the JSON still fails the parse.
  */
 function withoutKnexReturningWarnings(stdout: string): string {
   return stdout.replace(
