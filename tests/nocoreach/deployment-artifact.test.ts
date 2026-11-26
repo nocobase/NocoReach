@@ -16,6 +16,20 @@ import {
 } from '@nocobase/app-plugin-authentication/testing';
 import { expect, test } from 'vitest';
 
+/**
+ * The command's JSON output without the warning knex prints to stdout for every `.returning()` on MySQL. DB
+ * 1.0.0-beta.30 asks for returned rows on every insert, and Agents 2.0.0-beta.20's `202611210010_ag_gpt_62_model_prices`
+ * seed inserts through the repository, so `db apply --json` starts with one such line per price. Any other text before
+ * the JSON still fails the parse.
+ */
+function withoutKnexReturningWarnings(stdout: string): string {
+  return stdout.replace(
+    // eslint-disable-next-line no-control-regex
+    /^(?:\u001b\[[0-9;]*m)*\.returning\(\) is not supported by mysql and will not have any effect\.(?:\u001b\[[0-9;]*m)*\r?\n/gmu,
+    '',
+  );
+}
+
 // Run after building with the selected dialect in production dependencies.
 test.runIf(process.env.NOCOREACH_TEST_DIST === '1')(
   'the production artifact serves assets, authenticates, writes to the selected database and survives restart',
@@ -142,7 +156,7 @@ test.runIf(process.env.NOCOREACH_TEST_DIST === '1')(
             maxBuffer: 4 * 1024 * 1024,
           },
         );
-        expect(JSON.parse(stdout).ok).toBe(true);
+        expect(JSON.parse(withoutKnexReturningWarnings(stdout)).ok).toBe(true);
       }
       await boot();
       const page = await fetch(`${origin}${basePath}/`);
