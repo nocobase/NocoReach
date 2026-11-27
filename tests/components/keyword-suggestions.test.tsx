@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { $t, getCurrentLocale, setDictionary } from '../../client/i18n';
@@ -13,6 +14,7 @@ import { OnlineChatProvider } from '../../client/online-agent/context.js';
 import { OnlineChatView } from '../../client/online-agent/chat.js';
 import { notifyPageChange } from '../../client/online-agent/page-changes.js';
 import { KeywordSuggestions } from '../../client/pages/keyword-suggestions';
+import { countryLabel, languageLabel } from '../../client/pages/keyword-api';
 
 const { api, action, panel } = vi.hoisted(() => ({
   api: vi.fn(),
@@ -586,8 +588,18 @@ test('another market from the query bar opens Edit seed words to find the list a
   fireEvent.click(
     within(bar).getByRole('button', { name: $t('common.unitedStatesEnglish') }),
   );
+  // The same market list as Find keywords: search a country, its main language comes with it.
+  const country = await screen.findByRole('combobox', {
+    name: $t('keywordMarket.country'),
+  });
+  const user = userEvent.setup();
+  await user.clear(country);
+  await user.type(country, countryLabel(2392));
+  await user.click(
+    await screen.findByRole('option', { name: countryLabel(2392) }),
+  );
   fireEvent.click(
-    await screen.findByRole('menuitem', { name: $t('keyword.japanJapanese') }),
+    screen.getByRole('button', { name: $t('keywordMarket.useMarket') }),
   );
   const dialog = await screen.findByRole('dialog');
   expect(dialog.textContent).toContain(
@@ -932,4 +944,33 @@ test('group tabs stay on one line: those that do not fit go under More, and the 
     width.mockRestore();
     room.mockRestore();
   }
+});
+
+test('the market menu resets the language to the new country’s default after another language was chosen', async () => {
+  const user = userEvent.setup();
+  mount();
+  await screen.findByText('open source low code platform');
+  const bar = document.querySelector('[data-query-bar]') as HTMLElement;
+  await user.click(
+    within(bar).getByRole('button', { name: $t('common.unitedStatesEnglish') }),
+  );
+  const country = await screen.findByRole('combobox', {
+    name: $t('keywordMarket.country'),
+  });
+  const language = () =>
+    screen.getByRole('combobox', { name: $t('keywordMarket.language') });
+  const pick = async (code: number) => {
+    await user.clear(country);
+    await user.type(country, countryLabel(code));
+    await user.click(
+      await screen.findByRole('option', { name: countryLabel(code) }),
+    );
+  };
+  await pick(2702);
+  await user.click(language());
+  await user.click(
+    await screen.findByRole('option', { name: languageLabel('zh-CN') }),
+  );
+  await pick(2458);
+  expect(language()).toHaveTextContent(languageLabel('ms'));
 });

@@ -71,7 +71,7 @@ test('DataForSEO requests: suggestions per seed and ideas for all seeds ask only
 test('AI suggestions: AI seeds, real keywords for them, only ≥50 searches, the AI picks from those alone, ranked by opportunity',async()=>{
  const calls=fetchFor();const {s,prompts}=setup();const built=await finish(s,{});
  const seedAsk=prompts.find(x=>x.tag==='keyword-seeds').input;
- assert.equal(seedAsk.market.language,'英语');assert.equal(seedAsk.market.place,'United States');assert.equal(seedAsk.memory['项目'],'NocoBase');assert.equal(seedAsk.searchConsole[0].keyword,'open source low code platform');assert.deepEqual(seedAsk.competitors,['Retool']);
+ assert.equal(seedAsk.market.language,'English');assert.equal(seedAsk.market.place,'United States');assert.equal(seedAsk.memory['项目'],'NocoBase');assert.equal(seedAsk.searchConsole[0].keyword,'open source low code platform');assert.deepEqual(seedAsk.competitors,['Retool']);
  assert.deepEqual(calls.map(c=>c.path.split('/')[2]),['keyword_suggestions','keyword_suggestions','keyword_suggestions','keyword_ideas','keyword_overview'],'one request a seed, one for ideas, one for the Search Console queries');
  assert.deepEqual(calls.find(c=>c.path.includes('keyword_overview')).body.keywords,['open source low code platform','nocobase login']);
  const pick=prompts.find(x=>x.tag==='keyword-curate').input;

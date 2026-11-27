@@ -1,0 +1,323 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { $t, setDictionary } from '../../client/i18n';
+import KeywordResearch from '../../client/pages/keyword-research';
+import { countryLabel, languageLabel } from '../../client/pages/keyword-api';
+
+const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+vi.mock('../../client/pages/reach-data.js', () => ({
+  useProject: () => ({ project: { id: 2, name: 'Project B' } }),
+}));
+vi.mock('../../client/pages/keyword-hand-off', () => ({
+  KeywordHandOffDialog: () => null,
+}));
+vi.mock('../../client/pages/strategy/hand-off', () => ({
+  HandOffNotice: () => null,
+}));
+vi.mock('#lib/nocoreach-api', () => ({
+  nocobaseClient: { action, wrapRequests: vi.fn() },
+  resolvePortalUrl: (path: string) => path,
+}));
+
+const item = (id: string, keyword: string, volume: number) => ({
+  id,
+  keyword,
+  volume,
+  difficulty: 20,
+  cpc: 1,
+  competition: 0.3,
+  intent: 'commercial',
+  position: null,
+  url: '',
+  monthlySearches: [],
+});
+const ITEMS: Record<string, ReturnType<typeof item>[]> = {
+  suggestions: [item('0', '低代码平台', 900), item('1', '低代码 开源', 300)],
+  related: [item('0', '低代码平台', 900), item('1', '无代码工具', 500)],
+};
+let runs: Record<string, unknown>[] = [];
+// Runs answered as reused (an earlier result, no new charge), and ways the server refuses.
+let reuse = false;
+let refuse: string[] = [];
+const { csv } = vi.hoisted(() => ({ csv: vi.fn(() => true) }));
+vi.mock('#components/seo/csv', () => ({ downloadCsv: csv }));
+
+beforeEach(() => {
+  setDictionary(null);
+  vi.clearAllMocks();
+  runs = [];
+  reuse = false;
+  refuse = [];
+  action.mockImplementation(
+    async (
+      _resource: string,
+      name: string,
+      options: { body: Record<string, unknown> },
+    ) => {
+      const body = options.body;
+      if (name === 'status')
+        return {
+          configured: true,
+          verifiedAt: '2026-11-01',
+          monthlyBudgetUsd: 5,
+        };
+      if (name === 'list') return [];
+      if (name === 'ranks') return { connected: false, ranks: {} };
+      if (name === 'run') {
+        const view = String(body.view);
+        if (refuse.includes(view)) throw new Error('Monthly budget used up');
+        const run = {
+          id: String(runs.length + 1),
+          status: 'completed',
+          spec: {
+            view,
+            target: body.target,
+            locationCode: body.locationCode,
+            language: body.language,
+            limit: body.limit,
+            estimatedUsd: 0.024,
+            reservationUsd: 0.05,
+          },
+          result: { items: ITEMS[view] ?? [], totalCount: null },
+          costUsd: 0.024,
+          createdAt: '2026-11-25T08:00:00Z',
+          completedAt: '2026-11-25T08:00:01Z',
+          ...(reuse && !body.forceRefresh ? { reused: true } : {}),
+        };
+        runs.push(run);
+        return run;
+      }
+      if (name === 'getRun') return runs.find((r) => r.id === body.runId);
+      return null;
+    },
+  );
+});
+
+test('Singapore in Simplified Chinese with two methods: two queries, shown before, and one merged list naming the methods of each row', async () => {
+  const user = userEvent.setup();
+  render(
+    <MemoryRouter initialEntries={['/keywords?tab=research']}>
+      <KeywordResearch embedded />
+    </MemoryRouter>,
+  );
+  const country = await screen.findByRole('combobox', {
+    name: $t('keywordMarket.country'),
+  });
+  await user.clear(country);
+  await user.type(country, countryLabel(2702));
+  await user.click(
+    await screen.findByRole('option', { name: countryLabel(2702) }),
+  );
+  // A country comes with its main language, and offers only the languages DataForSEO has for it.
+  const language = screen.getByRole('combobox', {
+    name: $t('keywordMarket.language'),
+  });
+  expect(language).toHaveTextContent(languageLabel('en'));
+  await user.click(language);
+  expect(
+    (await screen.findAllByRole('option')).map((o) => o.textContent),
+  ).toEqual([languageLabel('en'), languageLabel('zh-CN')]);
+  await user.click(
+    screen.getByRole('option', { name: languageLabel('zh-CN') }),
+  );
+
+  const plan = () => document.querySelector('[data-query-plan]')?.textContent;
+  expect(plan()).toContain(
+    $t('keywordResearch.queryPlan', { 0: 1, 1: '0.03' }),
+  );
+  await user.click(
+    screen
+      .getAllByRole('button', { name: $t('keywordResearch.method') })
+      .find((b) => b.getAttribute('aria-haspopup') === 'menu')!,
+  );
+  await user.click(
+    await screen.findByRole('menuitemcheckbox', {
+      name: $t('keyword.relatedSearches'),
+    }),
+  );
+  await user.keyboard('{Escape}');
+  expect(plan()).toContain(
+    $t('keywordResearch.queryPlan', { 0: 2, 1: '0.05' }),
+  );
+  // Nothing is looked up before Query is clicked.
+  expect(action.mock.calls.filter((c) => c[1] === 'run')).toHaveLength(0);
+
+  await user.type(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+    '低代码',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await waitFor(() =>
+    expect(document.querySelectorAll('[data-found-by]')).toHaveLength(3),
+  );
+  const calls = action.mock.calls
+    .filter((c) => c[1] === 'run')
+    .map((c) => (c[2] as { body: Record<string, unknown> }).body);
+  expect(calls.map((b) => [b.view, b.locationCode, b.language])).toEqual([
+    ['suggestions', 2702, 'zh-CN'],
+    ['related', 2702, 'zh-CN'],
+  ]);
+  const row = (keyword: string) =>
+    screen.getByText(keyword).closest('tr') as HTMLElement;
+  expect(
+    within(row('低代码平台')).getByText($t('keyword.containsTerm')),
+  ).toBeTruthy();
+  expect(
+    within(row('低代码平台')).getByText($t('keyword.relatedSearches')),
+  ).toBeTruthy();
+  expect(
+    row('低代码 开源')
+      .querySelector('[data-found-by]')
+      ?.getAttribute('data-found-by'),
+  ).toBe('suggestions');
+  expect(
+    row('无代码工具')
+      .querySelector('[data-found-by]')
+      ?.getAttribute('data-found-by'),
+  ).toBe('related');
+});
+
+const runCalls = () =>
+  action.mock.calls
+    .filter((c) => c[1] === 'run')
+    .map((c) => (c[2] as { body: Record<string, unknown> }).body);
+const mount = (url = '/keywords?tab=research') =>
+  render(
+    <MemoryRouter initialEntries={[url]}>
+      <KeywordResearch embedded />
+    </MemoryRouter>,
+  );
+const pickMethod = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) => {
+  await user.click(
+    screen
+      .getAllByRole('button', { name: $t('keywordResearch.method') })
+      .find((b) => b.getAttribute('aria-haspopup') === 'menu')!,
+  );
+  await user.click(await screen.findByRole('menuitemcheckbox', { name }));
+  await user.keyboard('{Escape}');
+};
+
+test('Query again on a reused result looks up that result again, as many queries as it says, whatever the form says now', async () => {
+  const user = userEvent.setup();
+  reuse = true;
+  mount();
+  await pickMethod(user, $t('keyword.relatedSearches'));
+  await user.type(
+    await screen.findByRole('textbox', { name: $t('common.keywords') }),
+    '低代码',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await screen.findByText($t('common.queryAgain'));
+  // The form changes to one way and another keyword; the shown result still had two.
+  await pickMethod(user, $t('keyword.relatedSearches'));
+  await user.clear(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+    'crm',
+  );
+  expect(document.querySelector('[data-query-plan]')?.textContent).toContain(
+    $t('keywordResearch.queryPlan', { 0: 1, 1: '0.03' }),
+  );
+  expect(document.querySelector('[data-refresh-plan]')?.textContent).toBe(
+    $t('keywordResearch.queryPlan', { 0: 2, 1: '0.05' }),
+  );
+  action.mockClear();
+  await user.click(screen.getByText($t('common.queryAgain')));
+  await waitFor(() => expect(runCalls()).toHaveLength(2));
+  expect(
+    runCalls().map((b) => [
+      b.view,
+      b.target,
+      b.locationCode,
+      b.language,
+      b.forceRefresh,
+    ]),
+  ).toEqual([
+    ['suggestions', '低代码', 2840, 'en', true],
+    ['related', '低代码', 2840, 'en', true],
+  ]);
+});
+
+test('every row names its ways, for one way and when another way failed, in the table and the CSV', async () => {
+  const user = userEvent.setup();
+  mount();
+  await user.type(
+    await screen.findByRole('textbox', { name: $t('common.keywords') }),
+    '低代码',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await waitFor(() =>
+    expect(
+      [...document.querySelectorAll('[data-found-by]')].map((e) =>
+        e.getAttribute('data-found-by'),
+      ),
+    ).toEqual(['suggestions', 'suggestions']),
+  );
+
+  refuse = ['related'];
+  await pickMethod(user, $t('keyword.relatedSearches'));
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    $t('keyword.relatedSearches'),
+  );
+  expect(
+    [...document.querySelectorAll('[data-found-by]')].map((e) =>
+      e.getAttribute('data-found-by'),
+    ),
+  ).toEqual(['suggestions', 'suggestions']);
+  await user.click(
+    screen.getByRole('button', { name: $t('common.exportCsv') }),
+  );
+  const [, header, rows] = csv.mock.calls.at(-1) as unknown as [
+    string,
+    string[],
+    unknown[][],
+  ];
+  expect(header.at(-1)).toBe($t('keywordResearch.foundBy'));
+  expect(rows.map((r) => r.at(-1))).toEqual([
+    $t('keyword.containsTerm'),
+    $t('keyword.containsTerm'),
+  ]);
+});
+
+test('switching country resets the language to the new country’s default, also after another language was chosen', async () => {
+  const user = userEvent.setup();
+  mount();
+  const country = await screen.findByRole('combobox', {
+    name: $t('keywordMarket.country'),
+  });
+  const language = () =>
+    screen.getByRole('combobox', { name: $t('keywordMarket.language') });
+  const pick = async (code: number) => {
+    await user.clear(country);
+    await user.type(country, countryLabel(code));
+    await user.click(
+      await screen.findByRole('option', { name: countryLabel(code) }),
+    );
+  };
+  await pick(2702);
+  await user.click(language());
+  await user.click(
+    await screen.findByRole('option', { name: languageLabel('zh-CN') }),
+  );
+  expect(language()).toHaveTextContent(languageLabel('zh-CN'));
+  await pick(2458);
+  expect(language()).toHaveTextContent(languageLabel('ms'));
+  await user.type(
+    screen.getByRole('textbox', { name: $t('common.keywords') }),
+    'crm',
+  );
+  await user.click(screen.getByRole('button', { name: $t('common.query') }));
+  await waitFor(() => expect(runCalls()).toHaveLength(1));
+  expect([runCalls()[0].locationCode, runCalls()[0].language]).toEqual([
+    2458,
+    'ms',
+  ]);
+});

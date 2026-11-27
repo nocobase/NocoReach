@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { VisibilityError } from './research-helpers.js';
-import { markets, languages } from './keyword-policy.js';
+import { isKeywordMarket } from '../../shared/keyword-markets.js';
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
 import { hash as candidateKey } from './research-helpers.js';
@@ -25,7 +25,7 @@ const ownDomain=(domain,domains)=>{const d=bare(domain);return domains.some(o=>d
 const LIST=50,QUESTION=/^(how|what|why|when|where|which|who|is|are|can|could|should|does|do|did|will|would)\b|\?$|^(怎么|如何|什么|为什么|哪)|吗$/i;
 function market(v){const keyword=str(v.keyword,100),locationCode=Number(v.locationCode),language=String(v.language||'');
  if(keyword.length<2||/[:%\p{C}]/u.test(keyword))fail(systemMessageText('keywordPolicy.keywords2100CharactersWithout'));
- if(!markets.includes(locationCode)||!languages.includes(language))fail(systemMessageText('aiSearch.pickSupportedRegionLanguage'));
+ if(!isKeywordMarket(locationCode,language))fail(systemMessageText('aiSearch.pickSupportedRegionLanguage'));
  return {keyword,locationCode,language};}
 // One keyword as DataForSEO Labs describes it, keeping what the page shows.
 function keywordItem(r){const ki=r?.keyword_info||{},kp=r?.keyword_properties||{},si=r?.search_intent_info||{},serp=r?.serp_info||null,bl=r?.avg_backlinks_info||null,t=ki.search_volume_trend||null;
