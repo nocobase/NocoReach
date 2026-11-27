@@ -57,6 +57,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
+      # Manual recovery checks out an older release, which may predate the retry helper the registry steps use; take it
+      # from the commit this workflow runs from instead.
+      - name: Load the registry retry helper
+        run: git show "$GITHUB_SHA:scripts/ci/retry.mjs" > "$RUNNER_TEMP/retry.mjs"
       - name: Verify published release and registry configuration
         id: release
         env:
@@ -113,10 +117,10 @@ jobs:
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
-          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- \
+          node "$RUNNER_TEMP/retry.mjs" --attempts 3 --minutes 2 -- \
             bash -c 'printf "%s" "$ACR_PASSWORD" | docker login "$REGISTRY" --username "$ACR_USERNAME" --password-stdin'
-          node scripts/ci/retry.mjs --attempts 3 --minutes 10 -- docker push "$IMAGE"
-          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- docker pull "$IMAGE"
+          node "$RUNNER_TEMP/retry.mjs" --attempts 3 --minutes 10 -- docker push "$IMAGE"
+          node "$RUNNER_TEMP/retry.mjs" --attempts 3 --minutes 2 -- docker pull "$IMAGE"
           digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           test -n "$digest"
           printf 'digest=%s\n' "${digest##*@}" >> "$GITHUB_OUTPUT"
@@ -134,10 +138,10 @@ jobs:
         run: |
           latest="${IMAGE%:*}:latest"
           digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
-          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- \
+          node "$RUNNER_TEMP/retry.mjs" --attempts 3 --minutes 2 -- \
             docker buildx imagetools create --prefer-index=false --tag "$latest" "$digest"
           manifest="$RUNNER_TEMP/latest-manifest.json"
-          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- \
+          node "$RUNNER_TEMP/retry.mjs" --attempts 3 --minutes 2 -- \
             bash -c 'docker buildx imagetools inspect "$1" --format "{{json .Manifest}}" > "$2"' inspect "$latest" "$manifest"
           actual=$(jq -r .digest "$manifest")
           test "$actual" = "${digest##*@}"

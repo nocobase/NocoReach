@@ -7,7 +7,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 // login can be reset and a layer upload can stall for an hour without failing.
 // Each attempt is stopped after its limit and the command runs again. Only
 // pass commands that are safe to repeat: pushing an image again uploads only
-// the layers the registry does not have yet.
+// the layers the registry does not have yet. The image job copies this file
+// out of the workflow's own commit, so import only Node's built-ins.
 
 export const RETRY_DELAY = 30_000;
 // Time a stopped attempt gets to exit after SIGTERM before SIGKILL.
