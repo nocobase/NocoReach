@@ -7,6 +7,16 @@ import { agentsOverridesZhCN } from './overrides/agents.js';
 
 const zhCN: AppResource = {
   'nocoreach.nav.apiKeys': 'API 密钥',
+  'aiSearch.trendMonth': '月份',
+  'aiSearch.trendTitle': 'AI 提及新增与流失',
+  'aiSearch.trendHelp': '按需付费查询 DataForSEO 的 LLM Mentions 历史数据，按平台分别查询，最多显示最近 12 个完整自然月。',
+  'aiSearch.trendCheck': '查看历史',
+  'aiSearch.trendRefresh': '重新查询',
+  'aiSearch.trendNew': '新增提及',
+  'aiSearch.trendLost': '流失提及',
+  'aiSearch.trendReused': '已复用保存的结果，没有新增服务商费用。',
+  'aiSearch.trendMonthlyNote': 'DataForSEO 估算的各期新增和流失提及，不代表网站访问量或品牌提及总量。',
+  'aiSearch.trendNoData': '该品牌暂无可用的提及历史数据。',
   ...businessMessages,
   schedules,
   ...systemZhCN,
