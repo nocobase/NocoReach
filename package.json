@@ -215,7 +215,7 @@
     "undici": "^7.30.0",
     "word-extractor": "^1.0.4",
     "xlsx": "^0.18.5",
-    "zod": "^4.6.5",
+    "zod": "^4.6.7",
     "@nocobase/lifecycle": "^0.1.0-beta.7",
     "@nocobase/app-plugin-mail": "1.0.0-beta.29",
     "@nocobase/app-plugin-template-print": "0.0.2-beta.3",
