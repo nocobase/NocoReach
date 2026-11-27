@@ -87,6 +87,7 @@ jobs:
           pnpm test --maxWorkers=2 --passWithNoTests=false
           pnpm build --target linux-x64 --node-version 24
       - name: Build and verify the production image
+        timeout-minutes: 15
         env:
           IMAGE: ${{ steps.release.outputs.image }}
           REVISION: ${{ steps.release.outputs.sha }}
@@ -100,16 +101,22 @@ jobs:
             --tag "$IMAGE" .
           docker run --rm --network none --workdir /app/dist "$IMAGE" \
             node --input-type=module -e "await import('@nocobase/db-postgres'); await import('@nocobase/db-sqlite');"
+      # The registry is reached across borders from GitHub's runners: its token request has been reset and a layer
+      # upload has stalled for an hour. Every registry call here and in latest is safe to repeat, so each attempt gets a
+      # limit and three tries (scripts/ci/retry.mjs); a push tried again uploads only the layers still missing. This step
+      # normally takes about a minute.
       - name: Authenticate and push the versioned image
         id: push
+        timeout-minutes: 45
         env:
           IMAGE: ${{ steps.release.outputs.image }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
-          printf '%s' "$ACR_PASSWORD" | docker login "$REGISTRY" --username "$ACR_USERNAME" --password-stdin
-          docker push "$IMAGE"
-          docker pull "$IMAGE"
+          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- \
+            bash -c 'printf "%s" "$ACR_PASSWORD" | docker login "$REGISTRY" --username "$ACR_USERNAME" --password-stdin'
+          node scripts/ci/retry.mjs --attempts 3 --minutes 10 -- docker push "$IMAGE"
+          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- docker pull "$IMAGE"
           digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           test -n "$digest"
           printf 'digest=%s\n' "${digest##*@}" >> "$GITHUB_OUTPUT"
@@ -121,13 +128,18 @@ jobs:
         run: node scripts/ci/image-release.mjs latest
       - name: Publish and verify latest
         if: steps.latest.outputs.publish == 'true'
+        timeout-minutes: 15
         env:
           IMAGE: ${{ steps.release.outputs.image }}
         run: |
           latest="${IMAGE%:*}:latest"
           digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
-          docker buildx imagetools create --prefer-index=false --tag "$latest" "$digest"
-          actual=$(docker buildx imagetools inspect "$latest" --format '{{json .Manifest}}' | jq -r .digest)
+          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- \
+            docker buildx imagetools create --prefer-index=false --tag "$latest" "$digest"
+          manifest="$RUNNER_TEMP/latest-manifest.json"
+          node scripts/ci/retry.mjs --attempts 3 --minutes 2 -- \
+            bash -c 'docker buildx imagetools inspect "$1" --format "{{json .Manifest}}" > "$2"' inspect "$latest" "$manifest"
+          actual=$(jq -r .digest "$manifest")
           test "$actual" = "${digest##*@}"
           printf 'Latest: `%s`\n\nDigest: `%s`\n' "$latest" "$actual" >> "$GITHUB_STEP_SUMMARY"
       - name: Report skipped latest update
